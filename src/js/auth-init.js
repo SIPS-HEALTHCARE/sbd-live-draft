@@ -510,6 +510,9 @@ function l3BuildMarkBtn(type, id, idx){
 function showWelcomeOverlay(){
   const u = ST.user;
   if(!u) return;
+  // IMMEDIATELY mark as skipped so it never pops up again
+  setOnboardingState(u.id, { tourSkipped: true, tourSkippedAt: new Date().toISOString() });
+
   const role = getTourRole();
   const roleLabels = {
     admin:'SBD OSBIP Admin Portal', hospital:'SBD OSBIP Department Portal', facility_admin:'SBD OSBIP Facility Admin Portal',
