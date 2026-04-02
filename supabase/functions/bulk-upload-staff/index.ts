@@ -38,7 +38,7 @@ serve(async (req) => {
     // Require specific roles for bulk imports
     const { data: profile } = await supabaseClient.from('sbd_portal_users').select('role').eq('auth_uid', user.id).single()
     const role = profile?.role || 'staff_member';
-    if (!['master_admin', 'system_admin', 'staff_admin', 'hospital'].includes(role)) {
+    if (!['master_admin', 'system_admin', 'admin', 'staff_admin', 'hospital', 'facility_admin'].includes(role)) {
        return new Response(JSON.stringify({ error: 'Forbidden', detail: 'Role insufficient for bulk imports.' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 

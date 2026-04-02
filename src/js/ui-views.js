@@ -9811,38 +9811,25 @@ function renderAUpload(){
   document.getElementById('a-upload').innerHTML=`
     <div class="g2">
       <div>
-        <div class="upload-zone" onclick="simulateUpload()">
+        <div class="upload-zone" onclick="document.getElementById('bulkStaffInput2').click()">
           <div style="width:48px;height:48px;margin:0 auto;opacity:.3"><svg viewBox="0 0 48 48" fill="none" width="48" height="48"><path d="M24 32V16m0 0L16 24m8-8l8 8" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 34v4a2 2 0 002 2h28a2 2 0 002-2v-4" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></div>
-          <div class="upload-ttl">Upload Staff Roster</div>
-          <div class="upload-desc">Drag and drop a CSV file, or click to browse.<br>Up to 500 records per upload. All facilities supported.</div>
-          <button class="btn btn-gold btn-sm">${ICO.plus} Browse Files</button>
+          <div class="upload-ttl" id="pageUploadFileName">Upload Staff Roster</div>
+          <div class="upload-desc">Click to browse or drop CSV file.<br>Up to 500 records per upload. All facilities supported.</div>
+          <button class="btn btn-gold btn-sm" id="btnPageUpload" onclick="processBulkUpload(); event.stopPropagation();" style="margin-top:12px; pointer-events: none; opacity: 0.5;">Select File First</button>
         </div>
+        <input type="file" id="bulkStaffInput2" accept=".csv" style="display:none" onchange="handleBulkStaffFile(event)">
         <div class="card mt16">
           <div class="card-hd"><div class="card-ttl">CSV Template Format</div><button class="btn btn-ghost btn-sm" onclick="downloadCSVTemplate()">${ICO.dl} Download Template</button></div>
           <div class="card-body">
             <div style="background:var(--s2);border-radius:var(--rs);padding:12px;font-family:monospace;font-size:11px;color:var(--txt2);line-height:1.8;border:1px solid var(--bdr)">
-              first_name*, last_name*, role*,<br>
+              facility_name*, first_name*, last_name*,<br>
               belt_level* [White/Yellow/Green/Blue/Brown/Black],<br>
-              belt_start_date* [YYYY-MM-DD], facility_id*,<br>
-              department, ps_enrolled [true/false],<br>
-              ps_track, comp_status, sim_status, obs_status<br>
-              [Status values: pass / fail / blank]
+              role* [e.g. SPD Tech],<br>
+              belt_start_date [YYYY-MM-DD]
             </div>
-            <div style="font-size:11.5px;color:var(--txt3);margin-top:10px;line-height:1.6">Fields marked * are required. Assessment status fields accept: pass, fail, or leave blank for not started.</div>
+            <div style="font-size:11.5px;color:var(--txt3);margin-top:10px;line-height:1.6">Fields marked * are required. Facility name must correspond to an existing or new facility.</div>
           </div>
         </div>
-      </div>
-      <div class="card">
-        <div class="card-hd"><div class="card-ttl">Upload History</div></div>
-        <div style="overflow-x:auto"><table class="tbl tbl-static" style="min-width:320px"><thead><tr><th>Date</th><th>Facility</th><th>Records</th><th>Status</th></tr></thead>
-        <tbody>
-          <tr><td style="font-size:12px;color:var(--txt3)">Oct 10, 2024</td><td>Test Facility A</td><td>42</td><td><span class="pill p-ok">Success</span></td></tr>
-          <tr><td style="font-size:12px;color:var(--txt3)">Oct 08, 2024</td><td>Test Facility B</td><td>87</td><td><span class="pill p-ok">Success</span></td></tr>
-          <tr><td style="font-size:12px;color:var(--txt3)">Oct 01, 2024</td><td>Test Facility D</td><td>63</td><td><span class="pill p-ok">Success</span></td></tr>
-          <tr><td style="font-size:12px;color:var(--txt3)">Sep 28, 2024</td><td>Test Facility C</td><td>51</td><td><span class="pill p-ok">Success</span></td></tr>
-          <tr><td style="font-size:12px;color:var(--txt3)">Sep 15, 2024</td><td>Test Facility E</td><td>36</td><td><span class="pill p-warn">2 errors</span></td></tr>
-        </tbody>
-        </table>
       </div>
     </div>`;
 }
@@ -10315,7 +10302,16 @@ function handleBulkStaffFile(e){
   const file = e.target.files[0];
   if(!file) return;
   _bulkStaffFile = file;
-  document.getElementById('bulkUploadFileName').textContent = file.name;
+  const modalLabel = document.getElementById('bulkUploadFileName');
+  if(modalLabel) modalLabel.textContent = file.name;
+  const pageLabel = document.getElementById('pageUploadFileName');
+  if(pageLabel) pageLabel.textContent = file.name;
+  const pageBtn = document.getElementById('btnPageUpload');
+  if(pageBtn) {
+    pageBtn.textContent = 'Process Upload';
+    pageBtn.style.pointerEvents = 'auto';
+    pageBtn.style.opacity = '1';
+  }
 }
 
 // ============================================================ DOWNLOAD REPORT
@@ -12094,15 +12090,14 @@ function downloadCSVTemplate(){
   const notes=[
     '# SBD Staff Upload Template – SIPS Healthcare Solutions',
     '# Belt levels: White / Yellow / Green / Blue / Brown / Black',
-    '# Status values for gates: pass / fail / (leave blank = not started)',
-    '# Facility IDs: '+DB.facilities.map(f=>f.id+' ('+f.name+')').join(' | '),
+    '# Facility names: '+DB.facilities.slice(0, 10).map(f=>f.name).join(' | '),
     '',
   ];
-  const header='first_name,last_name,role,belt_level,belt_start_date,facility_id,comp_status,sim_status,obs_status';
+  const header='facility_name,first_name,last_name,role,belt_level,belt_start_date';
   const examples=[
-    'John,Smith,SPD Technician III,Green,2024-01-15,test-a,pass,pass,pass',
-    'Maria,Johnson,Lead Technician,Blue,2023-06-20,test-b,pass,pass,',
-    'Kevin,Williams,Shift Supervisor,Brown,2023-03-10,test-a,pass,pass,pass',
+    `${DB.facilities[0]?.name||'General Hospital'},John,Smith,SPD Technician III,Green,2024-01-15`,
+    `${DB.facilities[1]?.name||'City Medical Center'},Maria,Johnson,Lead Technician,Blue,2023-06-20`,
+    `${DB.facilities[0]?.name||'General Hospital'},Kevin,Williams,Shift Supervisor,Brown,2023-03-10`,
   ];
   const csv=[...notes, header, ...examples].join('\n');
   const blob=new Blob([csv],{type:'text/csv'});
@@ -12281,7 +12276,7 @@ function processBulkUpload(){
   const reader = new FileReader();
   reader.onload = async (e) => {
     const text = e.target.result;
-    const lines = text.split('\\n');
+    const lines = text.split(/\r?\n/);
     if(lines.length < 2) {
       toast('CSV appears empty or missing headers.', 'warn');
       return;
@@ -12294,7 +12289,7 @@ function processBulkUpload(){
     const colLast = headers.findIndex(h => h.includes('last'));
     const colBelt = headers.findIndex(h => h.includes('belt'));
     const colRole = headers.findIndex(h => h.includes('role'));
-    const colSince = headers.findIndex(h => h.includes('since'));
+    const colSince = headers.findIndex(h => h.includes('since') || h.includes('start'));
 
     if(colFirst === -1 || colLast === -1) {
       toast('CSV must contain "First" and "Last" columns.', 'err');
