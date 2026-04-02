@@ -1,0 +1,29 @@
+{
+  "name": "sips-video-editor",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "remotion studio src/index.ts",
+    "render": "remotion render src/index.ts SIPSVideo out/sips-final.mp4"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@remotion/animation-utils": "^4.0.440",
+    "@remotion/captions": "^4.0.440",
+    "@remotion/cli": "^4.0.440",
+    "@remotion/layout-utils": "^4.0.440",
+    "@remotion/media-utils": "^4.0.440",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "remotion": "^4.0.440",
+    "zod": "^4.3.6"
+  }
+}

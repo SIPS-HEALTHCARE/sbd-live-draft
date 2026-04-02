@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SBD Belt Intelligence Platform | SIPS Healthcare Solutions</title>
+  
+  <!-- EXTERNAL ASSETS -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,300&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+
+  <!-- MODULAR CSS -->
+  <link rel="stylesheet" href="src/css/index.css">
+</head>
+<body>
+  <!-- MAIN APP CONTAINER -->
+  <div id="sbd-root">
+    <!-- LOGIN OVERLAY -->
+    <div id="login">
+      <div class="lg-bg"></div>
+      <div class="lg-glow"></div>
+      <div class="lg-wrap" style="max-width:460px">
+        <div class="lg-brand">
+          <div class="lg-mark">SBD</div>
+          <div class="lg-name">SIPS HEALTHCARE SOLUTIONS</div>
+        </div>
+        <div class="lg-sub">Sterile By Design OS &bull; Belt Intelligence Platform</div>
+        <div style="background:var(--s1);border:1px solid var(--bdr2);border-radius:var(--r);overflow:hidden;margin-top:32px">
+          <div style="display:flex;border-bottom:1px solid var(--bdr)">
+            <div id="tab-signin" class="auth-tab active" onclick="switchAuthTab('signin')">Sign In</div>
+            <div id="tab-register" class="auth-tab" onclick="switchAuthTab('register')">Request Access</div>
+          </div>
+          <!-- SIGN IN FORM -->
+          <div id="auth-signin" style="padding:28px">
+            <div style="font-size:18px;font-weight:700;margin-bottom:4px">Welcome back</div>
+            <div style="font-size:12px;color:var(--txt3);margin-bottom:22px">Sign in to your SBD OS workspace</div>
+            <div id="auth-error" style="display:none;background:var(--err-bg);border:1px solid var(--err-bd);border-radius:var(--rs);padding:10px 12px;font-size:12px;color:var(--err);margin-bottom:14px"></div>
+            <div class="form-group"><label class="form-label">Email Address</label><input class="form-input" id="si-email" type="email" placeholder="you@yourhospital.com" autocomplete="email"></div>
+            <div class="form-group" style="position: relative;">
+              <label class="form-label">Password</label>
+              <input class="form-input" id="si-pass" type="password" placeholder="Enter your password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()" style="padding-right: 36px;">
+              <span class="pw-toggle" onclick="togglePasswordVisibility('si-pass', this)" style="position: absolute; right: 12px; bottom: 8px; cursor: pointer; color: var(--txt3); display: flex; align-items: center; justify-content: center; height: 24px; width: 24px; border-radius: 4px; transition: .15s;" title="Toggle password visibility">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+              </span>
+            </div>
+            <button class="btn btn-gold" style="width:100%;justify-content:center;padding:11px;margin-top:4px" onclick="doLogin()">Sign In</button>
+            <div style="text-align:right;margin-top:8px"><span style="font-size:11px;color:var(--txt3);cursor:pointer;transition:.15s" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='var(--txt3)'" onclick="showForgotPassword()">Forgot your password?</span></div>
+            <div id="auth-success" style="display:none;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);border-radius:var(--rs);padding:10px 12px;font-size:12px;color:#22c55e;margin-top:8px"></div>
+            <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--bdr);font-size:11.5px;color:var(--txt3);text-align:center">New facility? <span style="color:var(--gold);cursor:pointer;font-weight:600" onclick="switchAuthTab('register')">Request portal access</span></div>
+          </div>
+          <!-- REGISTER FORM -->
+          <div id="auth-register" style="padding:28px;display:none">
+            <div style="font-size:18px;font-weight:700;margin-bottom:4px">Request Portal Access</div>
+            <div style="font-size:12px;color:var(--txt3);margin-bottom:22px">Submit your facility information. SIPS will review and activate your account.</div>
+            <div id="reg-error" style="display:none;background:var(--err-bg);border:1px solid var(--err-bd);border-radius:var(--rs);padding:10px 12px;font-size:12px;color:var(--err);margin-bottom:14px"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px" class="reg-grid">
+              <div class="form-group"><label class="form-label">Facility Name *</label><input class="form-input" id="reg-fname" placeholder="Hospital or Health System Name"></div>
+              <div class="form-group"><label class="form-label">City, State *</label><input class="form-input" id="reg-loc" placeholder="Dallas, TX"></div>
+            </div>
+            <div class="form-group"><label class="form-label">Department *</label><input class="form-input" id="reg-dept" placeholder="Sterile Processing Department"></div>
+            <div class="g2" style="gap:10px">
+              <div class="form-group"><label class="form-label">Contact Name *</label><input class="form-input" id="reg-contact" placeholder="Full name"></div>
+              <div class="form-group"><label class="form-label">Work Email *</label><input class="form-input" id="reg-email" type="email" placeholder="contact@hospital.com"></div>
+            </div>
+            <div class="g2" style="gap:10px">
+              <div class="form-group" style="position: relative;">
+                <label class="form-label">Password *</label>
+                <input class="form-input" id="reg-pass" type="password" placeholder="Create a password" style="padding-right: 36px;">
+                <span class="pw-toggle" onclick="togglePasswordVisibility('reg-pass', this)" style="position: absolute; right: 12px; bottom: 8px; cursor: pointer; color: var(--txt3); display: flex; align-items: center; justify-content: center; height: 24px; width: 24px; border-radius: 4px; transition: .15s;" title="Toggle password visibility">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                </span>
+              </div>
+              <div class="form-group" style="position: relative;">
+                <label class="form-label">Confirm Password *</label>
+                <input class="form-input" id="reg-pass2" type="password" placeholder="Confirm password" style="padding-right: 36px;">
+                <span class="pw-toggle" onclick="togglePasswordVisibility('reg-pass2', this)" style="position: absolute; right: 12px; bottom: 8px; cursor: pointer; color: var(--txt3); display: flex; align-items: center; justify-content: center; height: 24px; width: 24px; border-radius: 4px; transition: .15s;" title="Toggle password visibility">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                </span>
+              </div>
+            </div>
+            <button class="btn btn-gold" style="width:100%;justify-content:center;padding:11px;margin-top:4px" onclick="doRegister()">Submit Registration Request</button>
+            <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--bdr);font-size:11.5px;color:var(--txt3);text-align:center">Already have an account? <span style="color:var(--gold);cursor:pointer;font-weight:600" onclick="switchAuthTab('signin')">Sign in here</span></div>
+          </div>
+          <!-- FORGOT PASSWORD FORM -->
+          <div id="auth-forgot" style="padding:28px;display:none">
+            <div style="font-size:18px;font-weight:700;margin-bottom:4px">Reset Your Password</div>
+            <div style="font-size:12px;color:var(--txt3);margin-bottom:22px">Enter your work email and we&rsquo;ll send you a reset link.</div>
+            <div id="fp-error" style="display:none;background:var(--err-bg);border:1px solid var(--err-bd);border-radius:var(--rs);padding:10px 12px;font-size:12px;color:var(--err);margin-bottom:14px"></div>
+            <div class="form-group"><label class="form-label">Email Address</label><input class="form-input" id="fp-email" type="email" placeholder="you@yourhospital.com" autocomplete="email" onkeydown="if(event.key==='Enter')doForgotPassword()"></div>
+            <button class="btn btn-gold" id="fp-btn" style="width:100%;justify-content:center;padding:11px;margin-top:4px" onclick="doForgotPassword()">Send Reset Link</button>
+            <div style="margin-top:16px;text-align:center;font-size:11.5px"><span style="color:var(--gold);cursor:pointer;font-weight:600" onclick="backToSignIn()">&larr; Back to Sign In</span></div>
+          </div>
+          <!-- EMAIL SENT SCREEN -->
+          <div id="auth-forgot-sent" style="padding:28px;display:none;text-align:center">
+            <div style="width:52px;height:52px;border-radius:50%;background:var(--gold-bg);border:2px solid var(--gold-bd);display:flex;align-items:center;justify-content:center;margin:0 auto 18px">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c49a20" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+            </div>
+            <div style="font-size:18px;font-weight:700;margin-bottom:8px">Check Your Inbox</div>
+            <div style="font-size:12px;color:var(--txt3);line-height:1.7;margin-bottom:22px">If that email is registered, a reset link has been sent. Check your spam folder if it doesn&rsquo;t arrive within 2 minutes.</div>
+            <div style="padding-top:14px;border-top:1px solid var(--bdr);font-size:11.5px"><span style="color:var(--gold);cursor:pointer;font-weight:600" onclick="backToSignIn()">&larr; Back to Sign In</span></div>
+          </div>
+        </div>
+
+
+      </div>
+    </div>
+
+    <!-- MAIN PORTALS (Dynamically loaded) -->
+    <!-- Removed duplicate empty portal elements -->
+    <!-- OVERLAYS -->
+    <div id="modal-overlay" class="modal-overlay" onclick="closeModal(event)">
+      <div id="modal-box" class="modal">
+        <div class="modal-hdr">
+          <div id="modal-title" class="modal-title"></div>
+          <div class="modal-close" onclick="closeModal()">×</div>
+        </div>
+        <div id="modal-content" class="modal-body"></div>
+      </div>
+    </div>
+    <div id="toast" class="toast-wrap"></div>
+    <div id="pending-screen" class="hidden" style="position:fixed;top:0;left:0;width:100%;height:100%;background:var(--bg);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px">
+      <div style="max-width:400px;text-align:center">
+        <div style="font-size:32px;color:var(--gold);margin-bottom:20px">✓</div>
+        <div style="font-size:20px;font-weight:700;margin-bottom:10px">Application Received</div>
+        <div style="font-size:14px;color:var(--txt3);line-height:1.6">Your facility registration is pending review. We will contact you once your portal is active.</div>
+        <div id="pending-details" style="margin-top:24px;padding:16px;background:var(--s1);border:1px solid var(--bdr);border-radius:var(--r);text-align:left"></div>
+        <button class="btn btn-gold" style="margin-top:32px;width:100%;justify-content:center" onclick="showLogin()">Back to Login</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PASSWORD RESET OVERLAY -->
+  <div id="auth-reset-overlay" class="hidden" style="position:fixed;top:0;left:0;width:100%;height:100%;z-index:10001;overflow-y:auto;display:flex;align-items:center;justify-content:center;padding:24px">
+    <div class="lg-bg"></div>
+    <div style="position:relative;z-index:1;width:100%;max-width:460px">
+      <div class="lg-brand" style="justify-content:center;margin-bottom:6px"><div class="lg-mark">SBD</div><div class="lg-name">SIPS HEALTHCARE SOLUTIONS</div></div>
+      <div class="lg-sub" style="text-align:center;margin-bottom:28px">Sterile By Design OS &bull; Belt Intelligence Platform</div>
+      <div style="background:var(--s1);border:1px solid var(--bdr2);border-radius:var(--r);padding:28px">
+        <div style="font-size:18px;font-weight:700;margin-bottom:4px">Set New Password</div>
+        <div style="font-size:12px;color:var(--txt3);margin-bottom:22px">Enter your new password below.</div>
+        <div id="reset-error" style="display:none;background:var(--err-bg);border:1px solid var(--err-bd);border-radius:var(--rs);padding:10px 12px;font-size:12px;color:var(--err);margin-bottom:14px"></div>
+        <div class="form-group" style="position:relative">
+          <label class="form-label">New Password</label>
+          <input class="form-input" id="reset-pass" type="password" placeholder="Enter new password" style="padding-right:36px" oninput="updateResetStrengthBar(this.value)">
+          <span class="pw-toggle" onclick="togglePasswordVisibility('reset-pass',this)" style="position:absolute;right:12px;bottom:8px;cursor:pointer;color:var(--txt3);display:flex;align-items:center;justify-content:center;height:24px;width:24px;border-radius:4px;transition:.15s">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </span>
+        </div>
+        <div style="margin-bottom:14px">
+          <div style="height:3px;background:var(--bdr);border-radius:2px;overflow:hidden"><div id="reset-strength-bar" style="height:100%;width:0%;border-radius:2px;transition:width .3s,background .3s"></div></div>
+          <div id="reset-strength-label" style="font-size:10px;color:var(--txt3);margin-top:3px;min-height:14px"></div>
+        </div>
+        <div class="form-group" style="position:relative;margin-bottom:8px">
+          <label class="form-label">Confirm New Password</label>
+          <input class="form-input" id="reset-pass2" type="password" placeholder="Confirm new password" onkeydown="if(event.key==='Enter')doResetPassword()" style="padding-right:36px">
+          <span class="pw-toggle" onclick="togglePasswordVisibility('reset-pass2',this)" style="position:absolute;right:12px;bottom:8px;cursor:pointer;color:var(--txt3);display:flex;align-items:center;justify-content:center;height:24px;width:24px;border-radius:4px;transition:.15s">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </span>
+        </div>
+        <div style="font-size:11px;color:var(--txt3);line-height:1.6;margin-bottom:16px">Requires: 8+ characters &bull; Uppercase letter &bull; Number</div>
+        <button class="btn btn-gold" id="reset-btn" style="width:100%;justify-content:center;padding:11px" onclick="doResetPassword()">Set New Password</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODULAR SCRIPTS (Ordered) -->
+
+<!-- PLACEMENT ASSESSMENT OVERLAY -->
+<div id="placement-overlay" class="hidden" style="position:fixed;top:0;left:0;width:100%;height:100%;background:#070d1f;z-index:9999;overflow-y:auto;display:flex;align-items:flex-start;justify-content:center;padding:0">
+  <div style="width:100%;max-width:720px;padding:32px 20px 80px;box-sizing:border-box">
+    <div id="placement-content"></div>
+  </div>
+</div>
+
+<div id="pending-screen" class="hidden" style="min-height:100vh;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden">
+  <div class="lg-bg"></div>
+  <div style="position:relative;z-index:1;text-align:center;max-width:480px;padding:0 24px">
+    <div class="lg-brand" style="justify-content:center;margin-bottom:8px">
+      <div class="lg-mark">SBD</div>
+      <div class="lg-name">SIPS HEALTHCARE SOLUTIONS</div>
+    </div>
+    <div style="width:64px;height:64px;border-radius:50%;background:var(--gold-bg);border:2px solid var(--gold-bd);display:flex;align-items:center;justify-content:center;margin:28px auto 18px">
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><path d="M14 5v9l5 3" stroke="#c49a20" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="14" cy="14" r="11" stroke="#c49a20" stroke-width="1.8"/></svg>
+    </div>
+    <div style="font-size:22px;font-weight:800;margin-bottom:8px">Registration Submitted</div>
+    <div style="font-size:13px;color:var(--txt2);line-height:1.7;margin-bottom:24px">Your facility registration is pending review by the SIPS Healthcare team. You will be notified once your account is activated. Typical review time is 1 to 2 business days.</div>
+    <div style="background:var(--s1);border:1px solid var(--bdr2);border-radius:var(--r);padding:14px 18px;text-align:left;margin-bottom:22px" id="pending-details"></div>
+    <button class="btn btn-ghost" onclick="showLogin()">Back to Sign In</button>
+  </div>
+</div>
+
+<!-- WELCOME OVERLAY (first-login) -->
+<div id="welcome-overlay" class="welcome-overlay">
+  <div class="welcome-box">
+    <div class="welcome-glow"></div>
+    <div class="welcome-icon"><svg viewBox="0 0 24 24" fill="none" width="28" height="28"><path d="M9.663 17h4.674M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l.146.146A3 3 0 0118 21H6a3 3 0 01-2.682-4.362l.146-.146z" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="welcome-title" id="welcome-title">Welcome to Sterile By Design OS</div>
+    <div class="welcome-sub" id="welcome-sub">Your SBD OSBIP portal is ready. Take a quick guided tour to discover every feature available to you, or jump right in.</div>
+    <div class="welcome-role" id="welcome-role">--</div>
+    <div class="welcome-actions">
+      <button class="welcome-btn-start" onclick="onboardingStartTour()"><svg viewBox="0 0 18 18" fill="none" width="16" height="16"><polygon points="6,3 15,9 6,15" fill="#000"/></svg>Start Your Tour</button>
+      <button class="welcome-btn-skip" onclick="onboardingSkipTour()">Skip for Now</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOUR SPOTLIGHT OVERLAY -->
+<div id="tour-overlay" class="tour-overlay">
+  <div class="tour-backdrop" onclick="tourSkip()"></div>
+  <div class="tour-spotlight" id="tour-spotlight"></div>
+  <div class="tour-tooltip" id="tour-tooltip">
+    <div class="tour-progress-bar"><div class="tour-progress-fill" id="tour-progress-fill" style="width:0%"></div></div>
+    <div class="tour-step-badge" id="tour-step-badge">Step 1 of 10</div>
+    <div class="tour-title" id="tour-title">--</div>
+    <div class="tour-desc" id="tour-desc">--</div>
+    <div class="tour-nav">
+      <div class="tour-dots" id="tour-dots"></div>
+      <div class="tour-btns">
+        <button class="tour-btn-skip" onclick="tourSkip()">Skip</button>
+        <button class="tour-btn-back" id="tour-btn-back" onclick="tourPrev()">Back</button>
+        <button class="tour-btn-next" id="tour-btn-next" onclick="tourNext()">Next</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SKIP REMINDER BANNER -->
+<div id="skip-reminder" class="skip-reminder">
+  <svg viewBox="0 0 18 18" fill="none" width="16" height="16" style="flex-shrink:0;color:var(--gold)"><path d="M9.663 15h-1.326M9 3v.5m4.95 1.05l-.354.354M15 9h-.5M4 9h-.5m2.404-4.096l-.354-.354M7 13a3 3 0 116 0" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+  <span class="skip-reminder-text">Ready to explore? </span>
+  <span class="skip-reminder-link" onclick="onboardingLaunchTourFromReminder()">Take the guided tour</span>
+</div>
+
+<!-- HOSPITAL PORTAL -->
+<div id="h-portal" class="portal hidden">
+  <div class="sb-overlay" id="h-overlay" onclick="closeSidebar('h')"></div>
+  <aside class="sidebar" id="h-sidebar">
+    <div class="sb-hd">
+      <div class="sb-logo"><div class="sb-mark">SBD</div><div><div class="sb-nm">SIPS</div><div class="sb-ctx">Belt Intelligence</div></div></div>
+      <div class="sb-org" id="h-sb-orgname">--</div>
+    </div>
+    <nav class="sb-nav">
+      <div class="nav-lbl">Overview</div>
+      <div class="nav-item active" data-view="h-dashboard" onclick="hNav(this,'h-dashboard','Department Dashboard')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><rect x="1.5" y="1.5" width="6.5" height="6.5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="10" y="1.5" width="6.5" height="6.5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="1.5" y="10" width="6.5" height="6.5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="10" y="10" width="6.5" height="6.5" rx="1" stroke="currentColor" stroke-width="1.4"/></svg></span>Dashboard
+      </div>
+      <div class="nav-lbl">People</div>
+      <div class="nav-item" data-view="h-staff" onclick="hNav(this,'h-staff','Staff Directory')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><circle cx="9" cy="6" r="3.5" stroke="currentColor" stroke-width="1.4"/><path d="M3 16c0-3 2.7-5.5 6-5.5s6 2.5 6 5.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>Staff Directory
+      </div>
+      <div class="nav-lbl">Development</div>
+      <div class="nav-item" data-view="h-milestones" onclick="hNav(this,'h-milestones','Facility Milestones')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.4"/><circle cx="9" cy="9" r="3.5" stroke="currentColor" stroke-width="1.4"/><circle cx="9" cy="9" r="1" fill="currentColor"/></svg></span>Milestones
+      </div>
+      <div class="nav-item" data-view="h-posschool" onclick="hNav(this,'h-posschool','Position School')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><path d="M9 2L3 5.5v3C3 12 5.7 14.5 9 16c3.3-1.5 6-4 6-7.5v-3L9 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M6 9l2.5 2.5L13 7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Position School
+      </div>
+      <div class="nav-item" data-view="h-scoreboard" onclick="hNav(this,'h-scoreboard','Staff Scoreboard')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><path d="M9 2l2.1 4.3 4.7.7-3.4 3.3.8 4.7L9 12.8l-4.2 2.2.8-4.7L2.2 7l4.7-.7z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></span>Scoreboard
+      </div>
+      <div class="nav-item" data-view="h-schedule" onclick="hNav(this,'h-schedule','Schedule')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><rect x="2" y="3" width="14" height="13" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M2 7h14M6 1v3M12 1v3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M5 10.5h3M10 10.5h3M5 13h3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg></span>Schedule
+      </div>
+      <div class="nav-item" data-view="h-attendance" onclick="hNav(this,'h-attendance','Attendance')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><circle cx="7" cy="6" r="3" stroke="currentColor" stroke-width="1.4"/><path d="M2 16c0-3 2.2-5 5-5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M11 12l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Attendance
+      </div>
+      <div class="nav-item" data-view="h-reports" onclick="hNav(this,'h-reports','Reports')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><rect x="2" y="9" width="3.5" height="7" rx=".5" fill="currentColor"/><rect x="7.25" y="6" width="3.5" height="10" rx=".5" fill="currentColor"/><rect x="12.5" y="2" width="3.5" height="14" rx=".5" fill="currentColor"/></svg></span>Reports
+      </div>
+      <!-- Facility Admin only nav items -->
+      <div class="nav-lbl" id="h-nav-fadmin-lbl" style="display:none">Administration</div>
+      <div class="nav-item" data-view="h-assessments" id="h-nav-assessments" onclick="hNav(this,'h-assessments','Assessment Queue')" style="display:none">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><rect x="2" y="2" width="14" height="13" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M5 6h8M5 9h6M5 12h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>Assessment Queue
+      </div>
+      <div class="nav-item" data-view="h-progression" id="h-nav-progression" onclick="hNav(this,'h-progression','Staff Progression')" style="display:none">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.4"/><path d="M6 9l2.5 2.5L13 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Staff Progression
+      </div>
+      <div class="nav-lbl" style="margin-top:6px">Support</div>
+      <div class="nav-item" data-view="h-settings" onclick="hNav(this,'h-settings','Account &amp; Settings')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="2.5" stroke="currentColor" stroke-width="1.3"/><path d="M9 2v2M9 14v2M2 9h2M14 9h2M4.1 4.1l1.4 1.4M12.5 12.5l1.4 1.4M12.5 5.5l1.4-1.4M4.1 13.9l1.4-1.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>Account &amp; Settings
+      </div>
+      <div class="nav-item" data-view="h-guide" onclick="hNav(this,'h-guide','Platform Guide')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.4"/><path d="M7 7.5a2 2 0 013.5 1.5c0 1-1.5 1.5-1.5 1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="9" cy="13" r=".75" fill="currentColor"/></svg></span>Platform Guide
+      </div>
+    </nav>
+    <div class="sb-ft">
+      <div class="user-row">
+        <div class="uav" id="h-uav-initials">--</div>
+        <div style="min-width:0;flex:1"><div class="uname" id="h-uav-name">--</div><div class="urole" id="h-uav-role">Dept. Manager</div></div>
+        <div class="logout-ico" onclick="logout()" title="Log out"><svg viewBox="0 0 18 18" fill="none" width="16" height="16"><path d="M12 14H15a1 1 0 001-1V5a1 1 0 00-1-1H12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M9 12l3-3-3-3M12 9H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      </div>
+    </div>
+  </aside>
+  <div class="main">
+    <div class="topbar">
+      <div class="tb-left">
+        <div class="hamburger" id="h-hamburger" onclick="toggleSidebar('h')"><span></span><span></span><span></span></div>
+        <div class="tb-title" id="h-topbar-title">Department Dashboard</div>
+        <span class="pill p-blue topbar-pill-hide" id="h-topbar-role-pill">Hospital Portal</span>
+      </div>
+      <div style="font-size:11px;color:var(--txt3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px" id="h-topbar-sub">--</div>
+    </div>
+    <div class="attn-bar" id="h-attn-bar"><span class="attn-bar-icon"><svg viewBox="0 0 18 18" fill="none" width="16" height="16"><path d="M9 2L2 16h14L9 2z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M9 7v4M9 13v.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span><span class="attn-bar-text" id="h-attn-text">--</span><button class="attn-bar-action" id="h-attn-action" onclick="">Go</button><span class="attn-bar-close" onclick="dismissAttn('h')"><svg viewBox="0 0 14 14" fill="none" width="14" height="14"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span></div>
+    <div class="view-body">
+      <div id="h-dashboard" class="fade-in"></div>
+      <div id="h-staff" class="hidden"></div>
+      <div id="h-profile" class="hidden"></div>
+      <div id="h-milestones" class="hidden"></div>
+      <div id="h-posschool" class="hidden"></div>
+      <div id="h-scoreboard" class="hidden"></div>
+      <div id="h-schedule" class="hidden"></div>
+      <div id="h-attendance" class="hidden"></div>
+      <div id="h-reports" class="hidden"></div>
+      <div id="h-assessments" class="hidden"></div>
+      <div id="h-progression" class="hidden"></div>
+      <div id="h-guide" class="hidden"></div>
+      <div id="h-settings" class="hidden"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ADMIN PORTAL -->
+<div id="a-portal" class="portal hidden">
+  <div class="sb-overlay" id="a-overlay" onclick="closeSidebar('a')"></div>
+  <aside class="sidebar" id="a-sidebar">
+    <div class="sb-hd">
+      <div class="sb-logo"><div class="sb-mark">SBD</div><div><div class="sb-nm">SIPS</div><div class="sb-ctx">Admin Platform</div></div></div>
+      <div class="sb-org" style="background:var(--gold-bg);border-color:var(--gold-bd);color:var(--gold)" id="a-sb-role-label">SIPS Internal Admin</div>
+    </div>
+    <nav class="sb-nav">
+      <div class="nav-lbl">Network</div>
+      <div class="nav-item active" data-view="a-overview" onclick="aNav(this,'a-overview','Network Overview')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><rect x="1.5" y="1.5" width="6.5" height="6.5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="10" y="1.5" width="6.5" height="6.5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="1.5" y="10" width="6.5" height="6.5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="10" y="10" width="6.5" height="6.5" rx="1" stroke="currentColor" stroke-width="1.4"/></svg></span>Network Overview
+      </div>
+      <div class="nav-item" data-view="a-leaderboard" onclick="aNav(this,'a-leaderboard','Facility Leaderboard')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><path d="M5 9h8M9 5l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Leaderboard
+      </div>
+      <div class="nav-lbl">Facility Management</div>
+      <div class="nav-item" data-view="a-allstaff" onclick="aNav(this,'a-allstaff','All Staff')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><circle cx="9" cy="6" r="3.5" stroke="currentColor" stroke-width="1.4"/><path d="M3 16c0-3 2.7-5.5 6-5.5s6 2.5 6 5.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M13 8a3 3 0 010 6M14.5 8.5A3 3 0 0115 16" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>All Staff
+      </div>
+      <div class="nav-item" data-view="a-scoreboard" onclick="aNav(this,'a-scoreboard','Staff Scoreboard')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><path d="M9 2l2.1 4.3 4.7.7-3.4 3.3.8 4.7L9 12.8l-4.2 2.2.8-4.7L2.2 7l4.7-.7z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></span>Staff Scoreboard
+      </div>
+      <div class="nav-item" data-view="a-facilities" onclick="aNav(this,'a-facilities','Facilities')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><rect x="3" y="3" width="12" height="14" rx="1.2" stroke="currentColor" stroke-width="1.4"/><path d="M7 3v14M11 3v14M3 10h12" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg></span>All Facilities
+      </div>
+      <div class="nav-item" data-view="a-registrations" onclick="aNav(this,'a-registrations','Registrations')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><path d="M9 3v12M3 9h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>Registrations
+        <span class="nb" id="reg-nb" style="display:none">0</span>
+      </div>
+      <div class="nav-lbl">Operations</div>
+      <div class="nav-item" data-view="a-placementreviews" id="nav-placementreviews" onclick="aNav(this,'a-placementreviews','Placement Reviews')" style="display:none">
+        <svg viewBox="0 0 20 20" fill="none" width="16" height="16"><rect x="3" y="3" width="14" height="14" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M7 7h6M7 10h6M7 13h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        Placement Reviews <span id="badge-placement" style="display:none;background:#8b5cf6;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-left:4px">0</span>
+      </div>
+      <div class="nav-item" data-view="a-assessments" onclick="aNav(this,'a-assessments','Assessment Queue')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><rect x="3" y="2" width="12" height="14" rx="1.2" stroke="currentColor" stroke-width="1.4"/><path d="M6 6h6M6 9h4M6 12h5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg></span>Assessment Queue
+        <span class="nb" id="assess-nb" style="display:none">0</span>
+      </div>
+      <div class="nav-item" data-view="a-progression" onclick="aNav(this,'a-progression','Staff Progression')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><path d="M2 14l4-5 3 3 3-4 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="14" cy="5" r="2.5" stroke="currentColor" stroke-width="1.3"/></svg></span>Staff Progression
+        <span class="nb" id="prog-req-nb" style="display:none">0</span>
+      </div>
+      <div class="nav-item" data-view="a-upload" onclick="aNav(this,'a-upload','Bulk Upload')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><path d="M9 11V4m0 0L6 7m3-3l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 12v2a1 1 0 001 1h10a1 1 0 001-1v-2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>Bulk Upload
+      </div>
+      <div class="nav-lbl">Analytics</div>
+      <div class="nav-item" data-view="a-reports" onclick="aNav(this,'a-reports','Reports')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><rect x="2" y="9" width="3.5" height="7" rx=".5" fill="currentColor"/><rect x="7.25" y="6" width="3.5" height="10" rx=".5" fill="currentColor"/><rect x="12.5" y="2" width="3.5" height="14" rx=".5" fill="currentColor"/></svg></span>Reports
+      </div>
+      <div class="nav-lbl" id="admin-mgmt-lbl" style="display:none">Admin Management</div>
+      <div class="nav-item" data-view="a-adminusers" onclick="aNav(this,'a-adminusers','Admin Users')" id="nav-adminusers" style="display:none">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><circle cx="7" cy="6.5" r="3" stroke="currentColor" stroke-width="1.4"/><path d="M2 16c0-3 2.2-5 5-5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M13 11v4M11 13h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>Admin Users
+      </div>
+      <div class="nav-item" data-view="a-promoqueue" onclick="aNav(this,'a-promoqueue','Promotion Approvals')" id="nav-promoqueue" style="display:none">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><path d="M9 2l2.1 4.3 4.7.7-3.4 3.3.8 4.7L9 12.8l-4.2 2.2.8-4.7L2.2 7l4.7-.7z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></span>Promotion Approvals
+        <span class="nb" id="promo-nb" style="display:none">0</span>
+      </div>
+      <div class="nav-item" data-view="a-freeagents" onclick="aNav(this,'a-freeagents','Free Agent Registry')" id="nav-freeagents" style="display:none">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><circle cx="9" cy="6" r="3.5" stroke="currentColor" stroke-width="1.4"/><path d="M3 16c0-3 2.7-5.5 6-5.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M13 11l3 3m0-3l-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>Free Agent Registry
+        <span class="nb" id="fa-nb" style="display:none">0</span>
+      </div>
+      <div class="nav-lbl" style="margin-top:6px">Support</div>
+      <div class="nav-item" data-view="a-settings" onclick="aNav(this,'a-settings','Account &amp; Settings')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="2.5" stroke="currentColor" stroke-width="1.3"/><path d="M9 2v2M9 14v2M2 9h2M14 9h2M4.1 4.1l1.4 1.4M12.5 12.5l1.4 1.4M12.5 5.5l1.4-1.4M4.1 13.9l1.4-1.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>Account &amp; Settings
+      </div>
+      <div class="nav-item" data-view="a-guide" onclick="aNav(this,'a-guide','Platform Guide')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.4"/><path d="M7 7.5a2 2 0 013.5 1.5c0 1-1.5 1.5-1.5 1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="9" cy="13" r=".75" fill="currentColor"/></svg></span>Platform Guide
+      </div>
+    </nav>
+    <div class="sb-ft">
+      <div class="user-row">
+        <div class="uav" id="a-uav-initials">JJ</div>
+        <div style="min-width:0;flex:1"><div class="uname" id="a-uav-name">Dr. Jake T. Jacobs</div><div class="urole" id="a-uav-role">SIPS Healthcare &bull; COO</div></div>
+        <div class="logout-ico" onclick="logout()" title="Log out"><svg viewBox="0 0 18 18" fill="none" width="16" height="16"><path d="M12 14H15a1 1 0 001-1V5a1 1 0 00-1-1H12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M9 12l3-3-3-3M12 9H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      </div>
+    </div>
+  </aside>
+  <div class="main">
+    <div class="topbar">
+      <div class="tb-left">
+        <div class="hamburger" id="a-hamburger" onclick="toggleSidebar('a')"><span></span><span></span><span></span></div>
+        <div class="tb-title" id="a-topbar-title">Network Overview</div>
+        <span class="pill p-gold topbar-pill-hide" id="a-topbar-pill">SIPS Admin</span>
+        <div class="fac-switcher hidden" id="fac-switcher">
+          <svg width="12" height="12" viewBox="0 0 18 18" fill="none"><rect x="3" y="3" width="12" height="14" rx="1.2" stroke="currentColor" stroke-width="1.5"/></svg>
+          <span class="fac-switcher-text" id="fac-switcher-name">Facility</span>
+          <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M3 5l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <select id="fac-switcher-sel" onchange="switchFacility(this.value)"></select>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+        <button class="btn btn-ghost btn-sm" id="download-btn" onclick="downloadReport()" style="display:none">
+          <svg width="13" height="13" viewBox="0 0 18 18" fill="none"><path d="M9 3v8m0 0l-3-3m3 3l3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 12v2a1 1 0 001 1h10a1 1 0 001-1v-2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+          <span class="topbar-pill-hide">Download</span>
+        </button>
+      </div>
+    </div>
+    <div class="attn-bar" id="a-attn-bar"><span class="attn-bar-icon"><svg viewBox="0 0 18 18" fill="none" width="16" height="16"><path d="M9 2L2 16h14L9 2z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M9 7v4M9 13v.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span><span class="attn-bar-text" id="a-attn-text">--</span><button class="attn-bar-action" id="a-attn-action" onclick="">Go</button><span class="attn-bar-close" onclick="dismissAttn('a')"><svg viewBox="0 0 14 14" fill="none" width="14" height="14"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span></div>
+    <div class="view-body">
+      <div id="a-overview" class="fade-in"></div>
+      <div id="a-leaderboard" class="hidden"></div>
+      <div id="a-allstaff" class="hidden"></div>
+      <div id="a-scoreboard" class="hidden"></div>
+      <div id="a-facilities" class="hidden"></div>
+      <div id="a-facility" class="hidden"></div>
+      <div id="a-registrations" class="hidden"></div>
+      <div id="a-assessments" class="hidden"></div>
+      <div id="a-progression" class="hidden"></div>
+      <div id="a-upload" class="hidden"></div>
+      <div id="a-reports" class="hidden"></div>
+      <div id="a-adminusers" class="hidden"></div>
+      <div id="a-promoqueue" class="hidden"></div>
+      <div id="a-freeagents" class="hidden"></div>
+      <div id="a-placementreviews" class="hidden"></div>
+      <div id="a-guide" class="hidden"></div>
+      <div id="a-settings" class="hidden"></div>
+    </div>
+  </div>
+</div>
+
+<!-- STAFF PORTAL (individual belt holder) -->
+<div id="s-portal" class="portal hidden">
+  <div class="sb-overlay" id="s-overlay" onclick="closeSidebar('s')"></div>
+  <aside class="sidebar" id="s-sidebar">
+    <div class="sb-hd">
+      <div class="sb-logo"><div class="sb-mark">SBD</div><div><div class="sb-nm">SIPS</div><div class="sb-ctx">My Belt Journey</div></div></div>
+      <div class="sb-org" id="s-sb-orgname">--</div>
+    </div>
+    <nav class="sb-nav">
+      <div class="nav-lbl">My Progress</div>
+      <div class="nav-item active" data-view="s-dashboard" onclick="sNav(this,'s-dashboard','My Dashboard')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><rect x="1.5" y="1.5" width="6.5" height="6.5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="10" y="1.5" width="6.5" height="6.5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="1.5" y="10" width="6.5" height="6.5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="10" y="10" width="6.5" height="6.5" rx="1" stroke="currentColor" stroke-width="1.4"/></svg></span>My Dashboard
+      </div>
+      <div class="nav-item" data-view="s-belt" onclick="sNav(this,'s-belt','Belt Progress')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.4"/><circle cx="9" cy="9" r="3.5" stroke="currentColor" stroke-width="1.4"/><circle cx="9" cy="9" r="1" fill="currentColor"/></svg></span>Belt Progress
+      </div>
+      <div class="nav-item" data-view="s-window" onclick="sNav(this,'s-window','My Window')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><rect x="2" y="3" width="14" height="13" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M2 7h14M6 1v4M12 1v4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>Assessment Window
+      </div>
+      <div class="nav-item" data-view="s-scoreboard" onclick="sNav(this,'s-scoreboard','Scoreboard')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><path d="M9 2l2.1 4.3 4.7.7-3.4 3.3.8 4.7L9 12.8l-4.2 2.2.8-4.7L2.2 7l4.7-.7z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></span>Scoreboard
+      </div>
+      <div class="nav-item" data-view="s-posschool" onclick="sNav(this,'s-posschool','Position School')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><path d="M9 2l1.8 4 4.2.4-3 2.8.8 4.2L9 11.4l-3.8 2 .8-4.2-3-2.8 4.2-.4z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></span>Position School
+      </div>
+      <div class="nav-item" data-view="s-report" onclick="sNav(this,'s-report','My Report')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><path d="M5 2h8l2 2v12H3V2h2" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M6 7h6M6 10h6M6 13h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>My Report
+      </div>
+      <div class="nav-item" data-view="s-oip" onclick="sNav(this,'s-oip','My Profile')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><circle cx="9" cy="7" r="3.5" stroke="currentColor" stroke-width="1.4"/><path d="M9 12c-4 0-5.5 2-5.5 3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M13 14l1.5 1.5L17 13" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>My Profile
+      </div>
+      <div class="nav-item" data-view="s-schedule" onclick="sNav(this,'s-schedule','My Schedule')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><rect x="2" y="3" width="14" height="13" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M2 7h14M6 1v3M12 1v3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>My Schedule
+      </div>
+      <div class="nav-item" data-view="s-history" onclick="sNav(this,'s-history','My History')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.4"/><path d="M9 5v4l3 2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>History &amp; Projection
+      </div>
+      <div class="nav-item" data-view="s-study" onclick="sNav(this,'s-study','Study &amp; Practice')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><rect x="2" y="2" width="14" height="14" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M6 6h6M6 9h4M6 12h5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>Study &amp; Practice
+      </div>
+      <div class="nav-lbl" style="margin-top:6px">Support</div>
+      <div class="nav-item" data-view="s-settings" onclick="sNav(this,'s-settings','Account &amp; Settings')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="2.5" stroke="currentColor" stroke-width="1.3"/><path d="M9 2v2M9 14v2M2 9h2M14 9h2M4.1 4.1l1.4 1.4M12.5 12.5l1.4 1.4M12.5 5.5l1.4-1.4M4.1 13.9l1.4-1.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>Account &amp; Settings
+      </div>
+      <div class="nav-item" data-view="s-guide" onclick="sNav(this,'s-guide','Platform Guide')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.4"/><path d="M7 7.5a2 2 0 013.5 1.5c0 1-1.5 1.5-1.5 1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="9" cy="13" r=".75" fill="currentColor"/></svg></span>Platform Guide
+      </div>
+    </nav>
+    <div class="sb-ft">
+      <div class="user-row">
+        <div class="uav" id="s-uav-initials">--</div>
+        <div style="min-width:0;flex:1"><div class="uname" id="s-uav-name">--</div><div class="urole" id="s-uav-role">--</div></div>
+        <div class="logout-ico" onclick="logout()" title="Log out"><svg viewBox="0 0 18 18" fill="none" width="16" height="16"><path d="M12 14H15a1 1 0 001-1V5a1 1 0 00-1-1H12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M9 12l3-3-3-3M12 9H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      </div>
+    </div>
+  </aside>
+  <div class="main">
+    <div class="topbar">
+      <div class="tb-left">
+        <div class="hamburger" id="s-hamburger" onclick="toggleSidebar('s')"><span></span><span></span><span></span></div>
+        <div class="tb-title" id="s-topbar-title">My Dashboard</div>
+        <span class="pill p-blue topbar-pill-hide">Staff Portal</span>
+      </div>
+      <div id="s-topbar-pts" style="font-size:12px;font-weight:700;color:var(--gold);white-space:nowrap"></div>
+    </div>
+    <div class="attn-bar" id="s-attn-bar"><span class="attn-bar-icon"><svg viewBox="0 0 18 18" fill="none" width="16" height="16"><path d="M9 2L2 16h14L9 2z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M9 7v4M9 13v.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span><span class="attn-bar-text" id="s-attn-text">--</span><button class="attn-bar-action" id="s-attn-action" onclick="">Go</button><span class="attn-bar-close" onclick="dismissAttn('s')"><svg viewBox="0 0 14 14" fill="none" width="14" height="14"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span></div>
+    <div class="view-body">
+      <div id="s-dashboard" class="fade-in"></div>
+      <div id="s-belt" class="hidden"></div>
+      <div id="s-window" class="hidden"></div>
+      <div id="s-scoreboard" class="hidden"></div>
+      <div id="s-report" class="hidden"></div>
+      <div id="s-schedule" class="hidden"></div>
+      <div id="s-oip" class="hidden"></div>
+      <div id="s-posschool" class="hidden"></div>
+      <div id="s-history" class="hidden"></div>
+      <div id="s-study" class="hidden"></div>
+      <div id="s-guide" class="hidden"></div>
+      <div id="s-settings" class="hidden"></div>
+    </div>
+  </div>
+</div>
+
+<!-- SYSTEM ADMIN PORTAL (hospital system  --  multi-facility) -->
+<div id="x-portal" class="portal hidden">
+  <div class="sb-overlay" id="x-overlay" onclick="closeSidebar('x')"></div>
+  <aside class="sidebar" id="x-sidebar">
+    <div class="sb-hd">
+      <div class="sb-logo"><div class="sb-mark">SBD</div><div><div class="sb-nm">SIPS</div><div class="sb-ctx">System Admin</div></div></div>
+      <div class="sb-org" style="background:var(--blue-bg);border-color:var(--blue-bd);color:var(--blue)" id="x-sb-sysname">--</div>
+    </div>
+    <nav class="sb-nav">
+      <div class="nav-lbl">System Overview</div>
+      <div class="nav-item active" data-view="x-dashboard" onclick="xNav(this,'x-dashboard','System Overview')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><rect x="1.5" y="1.5" width="6.5" height="6.5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="10" y="1.5" width="6.5" height="6.5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="1.5" y="10" width="6.5" height="6.5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="10" y="10" width="6.5" height="6.5" rx="1" stroke="currentColor" stroke-width="1.4"/></svg></span>System Dashboard
+      </div>
+      <div class="nav-item" data-view="x-facilities" onclick="xNav(this,'x-facilities','Facilities')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><rect x="3" y="3" width="12" height="14" rx="1.2" stroke="currentColor" stroke-width="1.4"/><path d="M7 3v14M11 3v14M3 10h12" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg></span>My Facilities
+      </div>
+      <div class="nav-item" data-view="x-staff" onclick="xNav(this,'x-staff','All Staff')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><circle cx="9" cy="6" r="3.5" stroke="currentColor" stroke-width="1.4"/><path d="M3 16c0-3 2.7-5.5 6-5.5s6 2.5 6 5.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>All Staff
+      </div>
+      <div class="nav-item" data-view="x-schedule" onclick="xNav(this,'x-schedule','Schedule & Attendance')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><rect x="2" y="3" width="14" height="13" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M2 7h14M6 1v3M12 1v3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>Schedule
+      </div>
+      <div class="nav-item" data-view="x-reports" onclick="xNav(this,'x-reports','Reports')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><rect x="2" y="9" width="3.5" height="7" rx=".5" fill="currentColor"/><rect x="7.25" y="6" width="3.5" height="10" rx=".5" fill="currentColor"/><rect x="12.5" y="2" width="3.5" height="14" rx=".5" fill="currentColor"/></svg></span>Reports
+      </div>
+      <div class="nav-lbl" style="margin-top:6px">Support</div>
+      <div class="nav-item" data-view="x-settings" onclick="xNav(this,'x-settings','Account &amp; Settings')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="2.5" stroke="currentColor" stroke-width="1.3"/><path d="M9 2v2M9 14v2M2 9h2M14 9h2M4.1 4.1l1.4 1.4M12.5 12.5l1.4 1.4M12.5 5.5l1.4-1.4M4.1 13.9l1.4-1.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>Account &amp; Settings
+      </div>
+      <div class="nav-item" data-view="x-guide" onclick="xNav(this,'x-guide','Platform Guide')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.4"/><path d="M7 7.5a2 2 0 013.5 1.5c0 1-1.5 1.5-1.5 1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="9" cy="13" r=".75" fill="currentColor"/></svg></span>Platform Guide
+      </div>
+    </nav>
+    <div class="sb-ft">
+      <div class="user-row">
+        <div class="uav" id="x-uav-initials">--</div>
+        <div style="min-width:0;flex:1"><div class="uname" id="x-uav-name">--</div><div class="urole" id="x-uav-role">System Admin</div></div>
+        <div class="logout-ico" onclick="logout()" title="Log out"><svg viewBox="0 0 18 18" fill="none" width="16" height="16"><path d="M12 14H15a1 1 0 001-1V5a1 1 0 00-1-1H12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M9 12l3-3-3-3M12 9H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      </div>
+    </div>
+  </aside>
+  <div class="main">
+    <div class="topbar">
+      <div class="tb-left">
+        <div class="hamburger" id="x-hamburger" onclick="toggleSidebar('x')"><span></span><span></span><span></span></div>
+        <div class="tb-title" id="x-topbar-title">System Overview</div>
+        <span class="pill" style="background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue-bd);font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:20px;white-space:nowrap" class="topbar-pill-hide">System Admin</span>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="downloadSystemReportV2()">
+        <svg width="13" height="13" viewBox="0 0 18 18" fill="none"><path d="M9 3v8m0 0l-3-3m3 3l3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 12v2a1 1 0 001 1h10a1 1 0 001-1v-2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        <span class="topbar-pill-hide">Export</span>
+      </button>
+    </div>
+    <div class="attn-bar" id="x-attn-bar"><span class="attn-bar-icon"><svg viewBox="0 0 18 18" fill="none" width="16" height="16"><path d="M9 2L2 16h14L9 2z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M9 7v4M9 13v.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span><span class="attn-bar-text" id="x-attn-text">--</span><button class="attn-bar-action" id="x-attn-action" onclick="">Go</button><span class="attn-bar-close" onclick="dismissAttn('x')"><svg viewBox="0 0 14 14" fill="none" width="14" height="14"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span></div>
+    <div class="view-body">
+      <div id="x-dashboard" class="fade-in"></div>
+      <div id="x-facilities" class="hidden"></div>
+      <div id="x-facility" class="hidden"></div>
+      <div id="x-staff" class="hidden"></div>
+      <div id="x-schedule" class="hidden"></div>
+      <div id="x-reports" class="hidden"></div>
+      <div id="x-guide" class="hidden"></div>
+      <div id="x-settings" class="hidden"></div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div id="modal-overlay" onclick="closeModal(event)">
+  <div id="modal-box" class="modal" onclick="event.stopPropagation()">
+    <div class="modal-hd">
+      <div class="modal-title" id="modal-title">Modal</div>
+      <div class="modal-close" onclick="closeModal()"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></div>
+    </div>
+    <div id="modal-content"></div>
+  </div>
+</div>
+
+<!-- OIP QUIZ OVERLAY  --  dedicated full-screen overlay to prevent answer/footer overlap -->
+<div id="oip-quiz-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:2000;-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);align-items:center;justify-content:center;padding:16px">
+  <div id="oip-quiz-box" style="background:#0e1328;border:1px solid rgba(255,255,255,.1);border-radius:16px;width:100%;max-width:600px;display:flex;flex-direction:column;max-height:calc(100dvh - 32px);box-shadow:0 20px 60px rgba(0,0,0,.7);animation:slideUp .2s ease">
+    <!-- Header -->
+    <div id="oip-quiz-hd" style="padding:16px 20px 14px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
+      <div>
+        <div style="font-size:12px;font-weight:700;color:#c49a20;letter-spacing:.08em;margin-bottom:2px">OPERATOR INTELLIGENCE PROFILE</div>
+        <div id="oip-quiz-progress-label" style="font-size:11px;color:#64748b">Question 1 of 30</div>
+      </div>
+      <div style="cursor:pointer;width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:6px;color:#64748b;transition:.12s" onclick="closeOIPQuiz()" title="Close">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </div>
+    </div>
+    <!-- Progress Bar -->
+    <div style="height:3px;background:#1a2035;flex-shrink:0"><div id="oip-quiz-pbar" style="height:100%;background:#c49a20;transition:width .3s;border-radius:0 2px 2px 0;width:5%"></div></div>
+    <!-- Scrollable Question + Answers -->
+    <div id="oip-quiz-body" style="flex:1;overflow-y:auto;padding:20px;-webkit-overflow-scrolling:touch">
+      <div id="oip-quiz-question" style="font-size:14.5px;font-weight:600;color:#dde3f0;line-height:1.6;margin-bottom:18px"></div>
+      <div id="oip-quiz-answers" style="display:flex;flex-direction:column;gap:9px"></div>
+    </div>
+    <!-- Sticky Footer  --  always visible, never overlaps -->
+    <div id="oip-quiz-ft" style="padding:14px 20px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-shrink:0;background:#0e1328;border-radius:0 0 16px 16px">
+      <button id="oip-quiz-back" class="btn btn-ghost btn-sm" onclick="oipNav(-1)" style="display:none">
+        <svg viewBox="0 0 14 14" fill="none" width="13" height="13"><path d="M9 3L5 7l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg> Back
+      </button>
+      <div id="oip-quiz-remaining" style="font-size:11px;color:#64748b;margin-left:auto"></div>
+      <button id="oip-quiz-next" class="btn btn-ghost btn-sm" onclick="oipNavNext()" style="display:none">
+        Next <svg viewBox="0 0 14 14" fill="none" width="13" height="13"><path d="M5 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+      <button id="oip-quiz-submit" class="btn btn-gold" onclick="oipSubmitFromOverlay()" style="display:none">
+        Submit Assessment
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+
+  <script src="src/js/utils.js?v=5"></script>
+  <script src="src/js/api-supabase.js?v=5"></script>
+  <script src="src/js/auth-password.js?v=1"></script>
+  <script src="src/js/logic.js?v=5"></script>
+  <script src="src/js/ui-views.js?v=5"></script>
+  <script src="src/js/settings.js?v=1"></script>
+  <script src="src/js/onboarding.js?v=5"></script>
+  <script src="src/js/auth-init.js?v=5"></script>
+
+  <!-- EARLY SESSION CHECK REMOVED FOR PRODUCTION AUTH -->
+</body>
+</html>

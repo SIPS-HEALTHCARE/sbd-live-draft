@@ -1,0 +1,9 @@
+node_modules/
+.git/
+.env*
+.agent/
+.claude/
+Anti Gravity MCP:Skills/
+tmp/
+WHEALTHY/
+Frameworks/

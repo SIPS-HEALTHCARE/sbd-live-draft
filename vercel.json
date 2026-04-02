@@ -1,0 +1,5 @@
+{
+  "buildCommand": "mkdir -p public && cp -r index.html src SBD_GOD_SOG.html *.png public/ || true",
+  "installCommand": "echo 'No install'",
+  "outputDirectory": "public"
+}
