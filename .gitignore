@@ -1,2 +1,15 @@
-.vercel
+node_modules/
+.env
+.env.local
 .env*.local
+out.json
+test*.js
+test*.sh
+test_*.js
+test_*.txt
+tmp/
+tmp_*.js
+simulate_*.js
+package-lock.json
+.DS_Store
+*.log
