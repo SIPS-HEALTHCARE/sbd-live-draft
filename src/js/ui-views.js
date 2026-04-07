@@ -2867,7 +2867,7 @@ function renderSReport(){
   el.innerHTML=`
     <!-- Report Header -->
     <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
-      <button class="btn btn-gold btn-sm" onclick="downloadStaffReport(${s.id})">${ICO.dl} Download My Report</button>
+      <button class="btn btn-gold btn-sm" onclick="downloadStaffReport('${s.id}')">${ICO.dl} Download My Report</button>
     </div>
     <div style="background:var(--s1);border:1px solid var(--bdr);border-radius:var(--r);padding:18px;margin-bottom:16px">
       <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">
@@ -3140,8 +3140,8 @@ function openPSTrackDetail(tid, staffId){
           bothPassed ? `<button class="btn btn-ok" style="width:100%;justify-content:center" onclick="requestPSCompletion('${tid}');closeModal()">Request Track Completion &#10003;</button>` : ''}
       </div>` : '';
     
-    if(status==='eligible') actionBtn=practiceSection + `<button class="btn btn-gold" style="margin-top:10px;width:100%" onclick="beginPSTrack(${s.id},'${tid}');closeModal()">Begin ${t.name}</button>`;
-    else if(status==='active') actionBtn=practiceSection + `<button class="btn btn-gold" style="margin-top:10px;width:100%" onclick="readyToTestPS(${s.id},'${tid}');closeModal()">Mark Ready to Test</button>`;
+    if(status==='eligible') actionBtn=practiceSection + `<button class="btn btn-gold" style="margin-top:10px;width:100%" onclick="beginPSTrack('${s.id}','${tid}');closeModal()">Begin ${t.name}</button>`;
+    else if(status==='active') actionBtn=practiceSection + `<button class="btn btn-gold" style="margin-top:10px;width:100%" onclick="readyToTestPS('${s.id}','${tid}');closeModal()">Mark Ready to Test</button>`;
     else if(status==='complete') actionBtn=`<div style="display:flex;align-items:center;gap:8px;margin-top:12px;padding:12px 14px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:var(--rs)"><span style="color:var(--ok);font-size:18px">★</span><span style="font-size:13px;font-weight:700;color:var(--ok)">Track Complete – Star Earned</span></div>`;
     else actionBtn = practiceSection;
   }
@@ -3619,8 +3619,8 @@ function renderSPosSchool(){
           ${_actK>0||_actS>0?`<span style="font-size:10.5px;color:var(--txt3);margin-left:4px">K:${_actK||'--'}% S:${_actS||'--'}%</span>`:''}
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-gold btn-sm" onclick="readyToTestPS(${s.id},'${tid}')">Mark Ready to Test</button>
-          <button class="btn btn-sm" style="background:rgba(34,197,94,.12);border:1.5px solid rgba(34,197,94,.4);color:var(--ok);font-weight:700" onclick="openPSTrackDetail('${tid}',${s.id})">&#9679; Study & Practice</button>
+          <button class="btn btn-gold btn-sm" onclick="readyToTestPS('${s.id}','${tid}')">Mark Ready to Test</button>
+          <button class="btn btn-sm" style="background:rgba(34,197,94,.12);border:1.5px solid rgba(34,197,94,.4);color:var(--ok);font-weight:700" onclick="openPSTrackDetail('${tid}','${s.id}')">&#9679; Study & Practice</button>
       </div>`;
       timeline=`<div style="font-size:10.5px;color:var(--txt3);margin-top:4px">Started ${td.startedAt||'--'}${td.promptedAt?' &bull; Available since '+td.promptedAt:''}</div>`;
     } else if(isEligible){
@@ -3631,8 +3631,8 @@ function renderSPosSchool(){
       actionBtns=`<div style="margin-top:10px">
         ${(_eligK > 0 || _eligS > 0) ? '<div style="display:flex;gap:8px;margin-bottom:8px"><span style="font-size:10.5px;color:var(--txt3)">Practice:</span><span style="font-size:10.5px;color:'+(_eligK>=80?'var(--ok)':'var(--warn)')+'">K:'+(_eligK||'--')+'%</span><span style="font-size:10.5px;color:'+(_eligS>=80?'var(--ok)':'var(--warn)')+'">S:'+(_eligS||'--')+'%</span></div>' : ''}
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-gold btn-sm" onclick="beginPSTrack(${s.id},'${tid}')">Begin ${t.name}</button>
-          <button class="btn btn-ghost btn-sm" onclick="openPSTrackDetail('${tid}',${s.id})">Study & Practice</button>
+          <button class="btn btn-gold btn-sm" onclick="beginPSTrack('${s.id}','${tid}')">Begin ${t.name}</button>
+          <button class="btn btn-ghost btn-sm" onclick="openPSTrackDetail('${tid}','${s.id}')">Study & Practice</button>
         </div>
       </div>`;
       timeline=td.promptedAt?`<div style="font-size:10.5px;color:var(--txt3);margin-top:4px">Available since ${td.promptedAt}</div>`:'';
@@ -3672,7 +3672,7 @@ function renderSPosSchool(){
         ${cur.modules.length>3?`<div style="font-size:10px;color:var(--txt3);margin-top:6px;padding-top:5px;border-top:1px solid var(--bdr)">+${cur.modules.length-3} more modules – view full curriculum below</div>`:''}
       </div>`:''}
       ${actionBtns}
-      ${isLocked ? `<div style="margin-top:8px"><button class="btn btn-ghost btn-sm" style="font-size:10.5px;opacity:.6" onclick="openPSTrackPreview('${tid}')">Preview (Locked)</button></div>` : isDone ? `<div style="margin-top:8px"><button class="btn btn-ghost btn-sm" style="font-size:10.5px" onclick="openPSTrackDetail('${tid}',${s.id})">Review Curriculum</button></div>` : ''}
+      ${isLocked ? `<div style="margin-top:8px"><button class="btn btn-ghost btn-sm" style="font-size:10.5px;opacity:.6" onclick="openPSTrackPreview('${tid}')">Preview (Locked)</button></div>` : isDone ? `<div style="margin-top:8px"><button class="btn btn-ghost btn-sm" style="font-size:10.5px" onclick="openPSTrackDetail('${tid}','${s.id}')">Review Curriculum</button></div>` : ''}
     </div>`;
   }
 
@@ -3744,7 +3744,7 @@ function renderSOIP(){
               <div><div style="font-size:12.5px;font-weight:700">${t.color==='#60a5fa'?'<span style="color:'+t.color+'">'+t.name+'</span>':t.key==='St'?'<span style="color:'+t.color+'">'+t.name+'</span>':t.key==='Su'?'<span style="color:'+t.color+'">'+t.name+'</span>':'<span style="color:'+t.color+'">'+t.name+'</span>'}</div><div style="font-size:11px;color:var(--txt3)">${t.label}</div></div>
             </div>`).join('')}
           </div>
-          <button class="btn btn-gold" style="width:100%;justify-content:center;padding:14px" onclick="openOIPModal(${s.id})">
+          <button class="btn btn-gold" style="width:100%;justify-content:center;padding:14px" onclick="openOIPModal('${s.id}')">
             <svg viewBox="0 0 18 18" fill="none" width="16" height="16" style="margin-right:6px"><path d="M9 2l1.8 4 4.2.4-3 2.8.8 4.2L9 11.4l-3.8 2 .8-4.2-3-2.8 4.2-.4z" stroke="currentColor" stroke-width="1.4"/></svg>
             Begin Assessment
           </button>
@@ -3807,7 +3807,7 @@ function renderSOIP(){
       })()}
 
       <div style="text-align:center;margin-top:16px">
-        <button class="btn btn-ghost btn-sm" onclick="openOIPModal(${s.id})">Retake Assessment</button>
+        <button class="btn btn-ghost btn-sm" onclick="openOIPModal('${s.id}')">Retake Assessment</button>
         <div style="font-size:10px;color:var(--txt3);margin-top:6px">Retaking replaces your current results</div>
       </div>
     </div>`;
@@ -3855,7 +3855,7 @@ function renderSDashboard(){
         </div>
       </div>
       <div style="display:flex;flex-direction:column;gap:10px">
-        <div style="background:rgba(139,92,246,.1);border:1px solid rgba(139,92,246,.25);border-radius:8px;padding:12px 14px;display:flex;align-items:center;gap:12px;cursor:pointer" onclick="showPlacementAssessment(getStaff(${s.id}))">
+        <div style="background:rgba(139,92,246,.1);border:1px solid rgba(139,92,246,.25);border-radius:8px;padding:12px 14px;display:flex;align-items:center;gap:12px;cursor:pointer" onclick="showPlacementAssessment(getStaff('${s.id}'))">
           <div style="width:28px;height:28px;background:#7c3aed;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:13px;font-weight:800;color:#fff">1</div>
           <div style="flex:1">
             <div style="font-size:12.5px;font-weight:700;color:#e2e8f0">Placement Assessment</div>
@@ -3951,7 +3951,7 @@ function renderSDashboard(){
             <div style="font-size:12px;color:var(--txt3);margin-top:4px">${win.cfg?win.cfg.label:''}</div>
           </div>
           <div class="prog mt8 mb12" style="height:10px"><div class="prog-fill" style="width:${win.pct||0}%;background:${win.status==='open'?'var(--ok)':'var(--warn)'}"></div></div>
-          ${win.status==='open'&&nb?`<button class="btn btn-gold" style="width:100%;justify-content:center;margin-top:8px" onclick="openApplyModal(${s.id})">${ICO.record} Apply for ${nb} Belt Assessment</button>`:''}
+          ${win.status==='open'&&nb?`<button class="btn btn-gold" style="width:100%;justify-content:center;margin-top:8px" onclick="openApplyModal('${s.id}')">${ICO.record} Apply for ${nb} Belt Assessment</button>`:''}
           ${win.status==='closed'?`<div style="padding:10px;background:var(--err-bg);border:1px solid var(--err-bd);border-radius:var(--rs);font-size:12px;color:var(--err);text-align:center;margin-top:8px">Window closed. Keep training – it reopens automatically.</div>`:''}
           `}
         </div>
@@ -4076,7 +4076,7 @@ function renderSWindow(){
             <div style="font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:.08em">Window Closed</div>
           </div>
         </div>`:''}
-        ${win.status==='open'&&nb?`<button class="btn btn-gold btn-sm" style="margin-top:4px" onclick="openApplyModal(${s.id})">${ICO.record} Apply for ${nb} Belt Assessment</button>`:''}
+        ${win.status==='open'&&nb?`<button class="btn btn-gold btn-sm" style="margin-top:4px" onclick="openApplyModal('${s.id}')">${ICO.record} Apply for ${nb} Belt Assessment</button>`:''}
       </div>
     </div>
     <div class="card">
@@ -5907,7 +5907,7 @@ function renderXStaff(){
           <td style="color:${wc};font-size:11px;font-weight:600">${win.status==='open'?'Open':win.status==='closed'?'Closed':win.status}</td>
           <td style="font-size:11.5px;color:var(--txt2)">${s.proj.projectedWeeks>0?s.proj.projectedWeeks+'w → '+s.proj.nextBelt:'Max belt'}</td>
           <td>${s.promo?'<span class="pill p-gold">Yes</span>':'<span style="font-size:10px;color:var(--txt3)">--</span>'}</td>
-          <td onclick="event.stopPropagation()"><button class="btn btn-blue btn-xs" onclick="openPromoteModal(${s.id},'x')" title="Promote">⬆ Promote</button></td>
+          <td onclick="event.stopPropagation()"><button class="btn btn-blue btn-xs" onclick="openPromoteModal('${s.id}','x')" title="Promote">⬆ Promote</button></td>
         </tr>`;}).join('')}</tbody>
       </table></div>`}
     </div>`;
@@ -6142,7 +6142,7 @@ function renderHDashboard(){
     <div class="card">
       <div class="card-hd"><div class="card-ttl">Recent Staff Activity</div><button class="btn btn-ghost btn-sm" onclick="hNav(document.querySelector('[data-view=h-staff]'),'h-staff','Staff Directory')">View All</button></div>
       <div style="overflow-x:auto"><table class="tbl" style="min-width:380px"><thead><tr><th>Name</th><th class="hide-sm">Role</th><th>Belt</th><th class="hide-sm">Days</th><th>Adv. Gates</th><th class="hide-sm">Pos School</th></tr></thead>
-      <tbody>${st.slice(0,6).map(s=>`<tr onclick="openHProfile(${s.id})"><td class="fw7" style="white-space:nowrap">${fullName(s)}</td><td class="tc-dim hide-sm">${s.role}</td><td style="white-space:nowrap">${beltBadge(s.belt)}</td><td class="hide-sm" style="font-size:12px;color:var(--txt3)">${daysAt(s.since)}d</td><td>${gateDots(s.nxt)}</td><td class="hide-sm">${(()=>{const st2=calcTotalPSStars(s);const et=getEligibleTracks(s);const at=[...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].filter(t=>['active','testing'].includes(getTrackStatus(s,t)));return at.length>0?'<span class="pill p-warn" style="font-size:9px">In Progress</span>':st2>0?'<span class="pill p-ok" style="font-size:9px">'+Array(st2).fill('★').join('')+'</span>':et.length>0?'<span class="pill p-gold" style="font-size:9px">Available</span>':'<span style="font-size:11px;color:var(--txt3)">--</span>';})()}</td></tr>`).join('')}</tbody>
+      <tbody>${st.slice(0,6).map(s=>`<tr onclick="openHProfile('${s.id}')"><td class="fw7" style="white-space:nowrap">${fullName(s)}</td><td class="tc-dim hide-sm">${s.role}</td><td style="white-space:nowrap">${beltBadge(s.belt)}</td><td class="hide-sm" style="font-size:12px;color:var(--txt3)">${daysAt(s.since)}d</td><td>${gateDots(s.nxt)}</td><td class="hide-sm">${(()=>{const st2=calcTotalPSStars(s);const et=getEligibleTracks(s);const at=[...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].filter(t=>['active','testing'].includes(getTrackStatus(s,t)));return at.length>0?'<span class="pill p-warn" style="font-size:9px">In Progress</span>':st2>0?'<span class="pill p-ok" style="font-size:9px">'+Array(st2).fill('★').join('')+'</span>':et.length>0?'<span class="pill p-gold" style="font-size:9px">Available</span>':'<span style="font-size:11px;color:var(--txt3)">--</span>';})()}</td></tr>`).join('')}</tbody>
       </table></div>
     </div>`;
 }
@@ -6161,7 +6161,7 @@ function renderHStaff(){
     </div>
     <div class="card">
       <table class="tbl"><thead><tr><th>Name</th><th>Role</th><th>Belt</th><th class="hide-sm">Days at Belt</th><th>Current Gates</th><th>Next Belt</th><th>Promo</th>${facAdmin?'<th>Actions</th>':''}</tr></thead>
-      <tbody>${st.map(s=>{const nb=nextBelt(s.belt);return`<tr onclick="openHProfile(${s.id})">
+      <tbody>${st.map(s=>{const nb=nextBelt(s.belt);return`<tr onclick="openHProfile('${s.id}')">
         <td class="fw7" style="white-space:nowrap">${fullName(s)}</td>
         <td class="tc-dim" style="font-size:11.5px;white-space:nowrap">${s.role}</td>
         <td style="white-space:nowrap">${beltBadge(s.belt)}</td>
@@ -6170,8 +6170,8 @@ function renderHStaff(){
         <td>${nb?gateDots(s.nxt):'<span style="font-size:10px;color:var(--txt3)">Max</span>'}</td>
         <td>${s.promo?'<span class="pill p-gold">Eligible</span>':[...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].some(t=>['active','testing'].includes(getTrackStatus(s,t)))?'<span class="pill p-warn">PS Active</span>':calcTotalPSStars(s)>0?'<span class="pill p-ok" style="font-size:9px">'+Array(calcTotalPSStars(s)).fill('★').join('')+'</span>':'<span style="font-size:10.5px;color:var(--txt3)">--</span>'}</td>
         ${facAdmin?`<td onclick="event.stopPropagation()" style="white-space:nowrap">
-          <button class="btn btn-ghost btn-xs" style="margin-right:3px" onclick="openRecordModal(${s.id})">${ICO.record}</button>
-          <button class="btn btn-blue btn-xs" onclick="openPromoteModal(${s.id},'admin')" title="Promote">⬆</button>
+          <button class="btn btn-ghost btn-xs" style="margin-right:3px" onclick="openRecordModal('${s.id}')">${ICO.record}</button>
+          <button class="btn btn-blue btn-xs" onclick="openPromoteModal('${s.id}','admin')" title="Promote">⬆</button>
         </td>`:''}
       </tr>`}).join('')}</tbody>
       </table>
@@ -6219,10 +6219,10 @@ function renderHProfile(sid,context){
         <div class="prof-meta"><span class="pmeta"><svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="2" y="3" width="10" height="10" rx="1" stroke="currentColor" stroke-width="1.3"/><path d="M5 1v3M9 1v3M2 7h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>Since ${s.since}</span><span class="pmeta">${daysAt(s.since)} days at current belt</span>${s.stars>0?`<span class="pmeta tc-gold">${'* '.repeat(s.stars).trim()}</span>`:''}</div>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
-        ${context==='admin'?`<button class="btn btn-gold btn-sm" onclick="openRecordModal(${s.id})">${ICO.record} Record Assessment</button>`:''}
-        ${context==='admin'||context==='h'?`<button class="btn btn-blue btn-sm" onclick="openPromoteModal(${s.id},'${context}')">&#x2B06; Promote</button>`:''}
-        <button class="btn btn-ghost btn-sm" onclick="downloadStaffReport(${s.id})">${ICO.dl} Report</button>
-        ${context==='admin'&&(ST.user&&ST.user.role==='master_admin')?`<button class="btn btn-err btn-sm" onclick="releaseToFreeAgent(${s.id})" title="Release staff member to Free Agent Registry" style="margin-left:auto"><svg width="13" height="13" viewBox="0 0 18 18" fill="none"><path d="M12 14H15a1 1 0 001-1V5a1 1 0 00-1-1H12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M9 12l3-3-3-3M12 9H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Release</button>`:''}
+        ${context==='admin'?`<button class="btn btn-gold btn-sm" onclick="openRecordModal('${s.id}')">${ICO.record} Record Assessment</button>`:''}
+        ${context==='admin'||context==='h'?`<button class="btn btn-blue btn-sm" onclick="openPromoteModal('${s.id}','${context}')">&#x2B06; Promote</button>`:''}
+        <button class="btn btn-ghost btn-sm" onclick="downloadStaffReport('${s.id}')">${ICO.dl} Report</button>
+        ${context==='admin'&&(ST.user&&ST.user.role==='master_admin')?`<button class="btn btn-err btn-sm" onclick="releaseToFreeAgent('${s.id}')" title="Release staff member to Free Agent Registry" style="margin-left:auto"><svg width="13" height="13" viewBox="0 0 18 18" fill="none"><path d="M12 14H15a1 1 0 001-1V5a1 1 0 00-1-1H12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M9 12l3-3-3-3M12 9H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Release</button>`:''}
       </div>
     </div>
     <div class="g2 mb16">
@@ -6243,7 +6243,7 @@ function renderHProfile(sid,context){
   return allT.map(tid=>{
     const t=PS_TRACKS[tid]; const st2=getTrackStatus(s,tid); const td=s.ps&&s.ps.tracks?s.ps.tracks[tid]||{}:{};
     const statusBadge=st2==='complete'?'<span class="pill p-ok">Complete ★</span>':st2==='testing'?'<span class="pill p-blue">Ready to Test</span>':st2==='active'?'<span class="pill p-warn">In Progress</span>':st2==='eligible'?'<span class="pill p-gold">Available</span>':'<span class="pill p-muted">Locked</span>';
-    const action=st2==='testing'?`<button class="btn btn-ok btn-xs" style="margin-left:8px" onclick="completePSTrack(${s.id},'${tid}')">Award Star</button>`:st2==='active'?`<span style="font-size:10.5px;color:var(--txt3);margin-left:8px">Since ${td.startedAt||'--'}</span>`:'';
+    const action=st2==='testing'?`<button class="btn btn-ok btn-xs" style="margin-left:8px" onclick="completePSTrack('${s.id}','${tid}')">Award Star</button>`:st2==='active'?`<span style="font-size:10.5px;color:var(--txt3);margin-left:8px">Since ${td.startedAt||'--'}</span>`:'';
     return `<div class="irow" style="${st2==='locked'?'opacity:.5':''}"><div class="ilbl" style="font-size:11.5px">${t.name}</div><div class="ival" style="display:flex;align-items:center;gap:6px">${statusBadge}${action}</div></div>`;
   }).join('')+'<div class="irow" style="border:none"><div class="ilbl">Promotion Eligible</div><div class="ival">'+( s.promo?'<span class="pill p-gold">Yes</span>':'<span style="color:var(--txt3);font-size:12px">Not yet</span>' )+'</div></div>';
 })()}</div></div>
@@ -6263,7 +6263,7 @@ function buildOIPLeaderPanel(s, canAdminAward){
     return `<div class="card mb16">
       <div class="card-hd">
         <div class="card-ttl">Operator Intelligence Profile</div>
-        ${canAdminAward?`<button class="btn btn-ghost btn-xs" onclick="adminSendOIPPrompt(${s.id})">Send Prompt</button>`:''}
+        ${canAdminAward?`<button class="btn btn-ghost btn-xs" onclick="adminSendOIPPrompt('${s.id}')">Send Prompt</button>`:''}
       </div>
       <div class="card-body" style="text-align:center;padding:16px">
         <div style="font-size:28px;margin-bottom:8px">&#9670;</div>
@@ -6705,11 +6705,11 @@ function openShiftEditModal(fid, date, shift){
             const sugZone = suggestZone(s);
             return `<div class="se-row" data-sid="${s.id}" style="display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--bdr);background:${isOn?'rgba(34,197,94,.03)':''}">
               <!-- Checkbox -->
-              <div style="width:22px;height:22px;border-radius:5px;border:2px solid ${isOn?'var(--ok)':'var(--bdr2)'};background:${isOn?'var(--ok)':'transparent'};display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:.15s" id="se-chk-${s.id}" onclick="toggleShiftStaff(${s.id},document.querySelector('.se-row[data-sid=\\'${s.id}\\']'))">
+              <div style="width:22px;height:22px;border-radius:5px;border:2px solid ${isOn?'var(--ok)':'var(--bdr2)'};background:${isOn?'var(--ok)':'transparent'};display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:.15s" id="se-chk-${s.id}" onclick="toggleShiftStaff('${s.id}',document.querySelector('.se-row[data-sid=\\'${s.id}\\']'))">
                 ${isOn?'<svg viewBox="0 0 10 10" fill="none" width="10"><path d="M2 5l2.5 2.5L8 3" stroke="#07091c" stroke-width="1.5" stroke-linecap="round"/></svg>':''}
               </div>
               <!-- Staff info -->
-              <div onclick="toggleShiftStaff(${s.id},document.querySelector('.se-row[data-sid=\\'${s.id}\\']'))" style="cursor:pointer;min-width:0">
+              <div onclick="toggleShiftStaff('${s.id}',document.querySelector('.se-row[data-sid=\\'${s.id}\\']'))" style="cursor:pointer;min-width:0">
                 <div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${fullName(s)}</div>
                 <div style="font-size:10px;color:var(--txt3)">${s.role} &bull; ${s.belt} Belt</div>
               </div>
@@ -6910,9 +6910,9 @@ function buildAttendanceTab(fid, shifts){
       </td>
       <td>
         <div style="display:flex;gap:4px;flex-wrap:wrap">
-          ${['present','late','absent'].map(st2=>`<button style="padding:4px 9px;font-size:10.5px;background:${status===st2?ATTEND_COLORS[st2]+'20':'var(--s3)'};color:${status===st2?ATTEND_COLORS[st2]:'var(--txt2)'};border:1.5px solid ${status===st2?ATTEND_COLORS[st2]:'var(--bdr)'};border-radius:20px;cursor:pointer;font-weight:600;transition:.15s" onclick="markAttend('${fid}','${attDate}','${attShift}',${s.id},'${st2}')">${st2==='present'?'✓':st2==='late'?'⏰':'✗'} ${st2.charAt(0).toUpperCase()+st2.slice(1)}</button>`).join('')}
+          ${['present','late','absent'].map(st2=>`<button style="padding:4px 9px;font-size:10.5px;background:${status===st2?ATTEND_COLORS[st2]+'20':'var(--s3)'};color:${status===st2?ATTEND_COLORS[st2]:'var(--txt2)'};border:1.5px solid ${status===st2?ATTEND_COLORS[st2]:'var(--bdr)'};border-radius:20px;cursor:pointer;font-weight:600;transition:.15s" onclick="markAttend('${fid}','${attDate}','${attShift}','${s.id}','${st2}')">${st2==='present'?'✓':st2==='late'?'⏰':'✗'} ${st2.charAt(0).toUpperCase()+st2.slice(1)}</button>`).join('')}
           <span style="color:var(--bdr3);margin:0 3px;font-size:11px">|</span>
-          ${['pto','excused'].map(st2=>`<button style="padding:4px 9px;font-size:10.5px;background:${status===st2?ATTEND_COLORS[st2]+'20':'var(--s3)'};color:${status===st2?ATTEND_COLORS[st2]:'var(--txt3)'};border:1.5px solid ${status===st2?ATTEND_COLORS[st2]:'var(--bdr)'};border-radius:20px;cursor:pointer;font-weight:600;transition:.15s" title="No point deduction" onclick="markAttend('${fid}','${attDate}','${attShift}',${s.id},'${st2}')">${st2==='pto'?'🏖 PTO':'✔ Excused'}</button>`).join('')}
+          ${['pto','excused'].map(st2=>`<button style="padding:4px 9px;font-size:10.5px;background:${status===st2?ATTEND_COLORS[st2]+'20':'var(--s3)'};color:${status===st2?ATTEND_COLORS[st2]:'var(--txt3)'};border:1.5px solid ${status===st2?ATTEND_COLORS[st2]:'var(--bdr)'};border-radius:20px;cursor:pointer;font-weight:600;transition:.15s" title="No point deduction" onclick="markAttend('${fid}','${attDate}','${attShift}','${s.id}','${st2}')">${st2==='pto'?'🏖 PTO':'✔ Excused'}</button>`).join('')}
         </div>
       </td>
       <td style="font-size:11.5px;font-weight:700;color:${status?ATTEND_COLORS[status]:'var(--txt3)'}">
@@ -7622,7 +7622,7 @@ function renderHPosSchool(){
     } else {
       psCell='<span style="font-size:11px;color:var(--txt3)">--</span>';
     }
-    return `<tr onclick="openHProfile(${s.id})" style="cursor:pointer">
+    return `<tr onclick="openHProfile('${s.id}')" style="cursor:pointer">
       <td class="fw7" style="white-space:nowrap">${fullName(s)}</td>
       <td>${beltBadge(s.belt,s)}</td>
       <td style="font-size:11.5px;color:var(--txt2)">${s.role}</td>
@@ -7691,11 +7691,11 @@ function renderHPosSchool(){
       <div style="overflow-x:auto"><table class="tbl" style="min-width:400px">
         <thead><tr><th>Staff Member</th><th>Belt</th><th>Track</th><th>Started</th><th>Action</th></tr></thead>
         <tbody>${testQueue.map(({s,tid,startedAt})=>`<tr>
-          <td class="fw7" onclick="openHProfile(${s.id})" style="cursor:pointer">${fullName(s)}</td>
+          <td class="fw7" onclick="openHProfile('${s.id}')" style="cursor:pointer">${fullName(s)}</td>
           <td>${beltBadge(s.belt,s)}</td>
           <td style="font-size:12px">${PS_TRACKS[tid].name}</td>
           <td style="font-size:11.5px;color:var(--txt3)">${startedAt||'--'}</td>
-          <td><button class="btn btn-ok btn-xs" onclick="completePSTrack(${s.id},'${tid}')">Award Star</button></td>
+          <td><button class="btn btn-ok btn-xs" onclick="completePSTrack('${s.id}','${tid}')">Award Star</button></td>
         </tr>`).join('')}</tbody>
       </table></div>
     </div>`:''}
@@ -7844,7 +7844,7 @@ function renderHReports(){
     <div class="card mb16">
       <div style="overflow-x:auto"><table class="tbl" style="min-width:380px">
         <thead><tr><th>Name</th><th>Current Belt</th><th>Role</th><th>Points</th><th>PS Stars</th></tr></thead>
-        <tbody>${promoReady.map(s=>`<tr onclick="openHProfile(${s.id})" style="cursor:pointer">
+        <tbody>${promoReady.map(s=>`<tr onclick="openHProfile('${s.id}')" style="cursor:pointer">
           <td class="fw7">${fullName(s)}</td><td>${beltBadge(s.belt,s)}</td>
           <td style="font-size:12px;color:var(--txt2)">${s.role}</td>
           <td style="color:var(--gold);font-weight:700">${calcPoints(s).toLocaleString()}</td>
@@ -7857,7 +7857,7 @@ function renderHReports(){
     <div class="card mb16">
       <div style="overflow-x:auto"><table class="tbl" style="min-width:380px">
         <thead><tr><th>Name</th><th>Belt</th><th>Days at Belt</th><th>Expected Max</th><th>Over by</th></tr></thead>
-        <tbody>${stagnation.slice(0,8).map(({s,actual,expected,over})=>`<tr onclick="openHProfile(${s.id})" style="cursor:pointer">
+        <tbody>${stagnation.slice(0,8).map(({s,actual,expected,over})=>`<tr onclick="openHProfile('${s.id}')" style="cursor:pointer">
           <td class="fw7">${fullName(s)}</td><td>${beltBadge(s.belt)}</td>
           <td style="color:var(--err);font-weight:600">${actual}d</td>
           <td style="color:var(--txt3)">${expected}d</td>
@@ -7929,7 +7929,7 @@ function renderHReports(){
     <div class="card">
       <div style="overflow-x:auto"><table class="tbl" style="min-width:600px">
         <thead><tr><th>Name</th><th>Role</th><th>Belt</th><th>Days</th><th>Gates</th><th>Points</th><th>PS Stars</th><th>OIP Type</th></tr></thead>
-        <tbody>${[...st].sort((a,b)=>beltIdx(b.belt)-beltIdx(a.belt)||calcPoints(b)-calcPoints(a)).map(s=>`<tr onclick="openHProfile(${s.id})" style="cursor:pointer">
+        <tbody>${[...st].sort((a,b)=>beltIdx(b.belt)-beltIdx(a.belt)||calcPoints(b)-calcPoints(a)).map(s=>`<tr onclick="openHProfile('${s.id}')" style="cursor:pointer">
           <td class="fw7" style="white-space:nowrap">${fullName(s)}</td>
           <td style="font-size:11.5px;color:var(--txt2)">${s.role}</td>
           <td style="white-space:nowrap">${beltBadge(s.belt,s)}</td>
@@ -8048,7 +8048,7 @@ function renderHAssessments(){
               const nb=nextBelt(s.belt);
               const winColor=win.status==='open'?'#22c55e':win.status==='closed'?'#ef4444':'#64748b';
               const winLabel=win.status==='open'?'Open':win.status==='closed'?'Closed':win.status==='max'?'Max':'Locked';
-              return`<tr onclick="openHProfile(${s.id})" style="cursor:pointer">
+              return`<tr onclick="openHProfile('${s.id}')" style="cursor:pointer">
                 <td class="fw7" style="white-space:nowrap">${fullName(s)}</td>
                 <td style="white-space:nowrap">${beltBadge(s.belt)}</td>
                 <td>${gateDots(s.cur)}</td>
@@ -8056,8 +8056,8 @@ function renderHAssessments(){
                 <td style="font-size:11.5px;font-weight:600;color:${winColor}">${winLabel}</td>
                 <td>${s.promo?'<span class="pill p-gold">Eligible</span>':'<span style="font-size:10.5px;color:#64748b">--</span>'}</td>
                 <td onclick="event.stopPropagation()" style="white-space:nowrap">
-                  <button class="btn btn-ghost btn-xs" style="margin-right:4px" onclick="openRecordModal(${s.id})">${ICO.record} Record</button>
-                  <button class="btn btn-blue btn-xs" onclick="openPromoteModal(${s.id},'admin')">&#x2B06; Promote</button>
+                  <button class="btn btn-ghost btn-xs" style="margin-right:4px" onclick="openRecordModal('${s.id}')">${ICO.record} Record</button>
+                  <button class="btn btn-blue btn-xs" onclick="openPromoteModal('${s.id}','admin')">&#x2B06; Promote</button>
                 </td>
               </tr>`;
             }).join(''):`<tr><td colspan="7" style="text-align:center;padding:20px;color:#64748b">No staff found in this facility.</td></tr>`}
@@ -8082,7 +8082,7 @@ function renderHAssessments(){
               <td style="white-space:nowrap">${beltBadge(s.belt)}</td>
               <td style="font-size:12px">${PS_TRACKS[tid].name}</td>
               <td><span class="pill p-blue">Ready to Test</span></td>
-              <td><button class="btn btn-ok btn-sm" onclick="completePSTrack(${s.id},'${tid}');renderHAssessments()">${ICO.check} Award Star</button></td>
+              <td><button class="btn btn-ok btn-sm" onclick="completePSTrack('${s.id}','${tid}');renderHAssessments()">${ICO.check} Award Star</button></td>
             </tr>`).join('')}
           </tbody>
         </table>
@@ -8106,7 +8106,7 @@ function renderHProgression(){
     const wb=win.status==='open'?`<span class="pill p-ok" style="font-size:9px">Open</span>`:`<span class="pill p-muted" style="font-size:9px">${win.status==='max'?'Max':'Closed'}</span>`;
     const proj=generateProjection(s);
     const pt=proj&&proj.nextBeltDate?`<span style="font-size:11px;color:var(--txt3)">${proj.nextBeltDate}</span>`:`<span style="color:var(--txt3);font-size:11px">--</span>`;
-    return `<tr onclick="openHStaffProfile(${s.id})" style="cursor:pointer"><td><span style="font-weight:600">${fullName(s)}</span></td><td>${beltBadge(s.belt)}</td><td>${gc(s.cur.c,s.cur.s,s.cur.o)}</td><td>${gc(s.nxt.c,s.nxt.s,s.nxt.o)}</td><td>${wb}</td><td>${pt}</td><td>${s.promo?'<span class="pill p-gold" style="font-size:9px">Promo</span>':''}</td></tr>`;
+    return `<tr onclick="openHStaffProfile('${s.id}')" style="cursor:pointer"><td><span style="font-weight:600">${fullName(s)}</span></td><td>${beltBadge(s.belt)}</td><td>${gc(s.cur.c,s.cur.s,s.cur.o)}</td><td>${gc(s.nxt.c,s.nxt.s,s.nxt.o)}</td><td>${wb}</td><td>${pt}</td><td>${s.promo?'<span class="pill p-gold" style="font-size:9px">Promo</span>':''}</td></tr>`;
   }).join('');
   el.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><div style="font-size:17px;font-weight:800">${fac?fac.name:''} &bull; Staff Progression</div><div style="font-size:12px;color:var(--txt3);margin-top:2px">${staff.length} staff members &bull; C=Competency S=Simulation O=Observation</div></div><button class="btn btn-gold btn-sm" onclick="openAddStaffModal('${fid}')">${ICO.plus} Add Staff</button></div><div class="card"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Name</th><th>Belt</th><th>Current Gates</th><th>Next Belt</th><th>Window</th><th>Proj.</th><th>Flags</th></tr></thead><tbody>${rows||'<tr><td colspan="7" style="text-align:center;color:var(--txt3);padding:24px">No staff.</td></tr>'}</tbody></table></div></div>`;
   labelMobileTables(el);
@@ -8168,7 +8168,7 @@ function renderAOverview(){
               <span style="font-size:12px;font-weight:600">${fullName(s)}</span>
               <span style="font-size:11px;color:var(--txt3)">${getFac(s.fid)?.name||'--'}</span>
               <span class="pill p-muted" style="font-size:9px">${PS_TRACKS[tid].name}</span>
-              <button class="btn btn-ok btn-xs" style="margin-left:auto" onclick="completePSTrack(${s.id},'${tid}')">Award Star</button>
+              <button class="btn btn-ok btn-xs" style="margin-left:auto" onclick="completePSTrack('${s.id}','${tid}')">Award Star</button>
             </div>`).join('')}
             ${psTestReady.length>5?`<div style="font-size:11px;color:var(--txt3);text-align:center;padding:8px">+${psTestReady.length-5} more – check individual facilities</div>`:''}
           </div>`:''}
@@ -8561,7 +8561,7 @@ function renderAAllStaff(){
           const nb=nextBelt(s.belt);
           const pts=calcPoints(s);
           const fac=getFac(s.fid);
-          return`<tr onclick="openAdminProfile(${s.id})" style="cursor:pointer">
+          return`<tr onclick="openAdminProfile('${s.id}')" style="cursor:pointer">
             <td class="fw7" style="white-space:nowrap">${fullName(s)}</td>
             <td class="hide-sm tc-dim" style="font-size:11.5px;white-space:nowrap">${fac?fac.name:'--'}</td>
             <td class="hide-sm tc-dim" style="font-size:11.5px">${s.role}</td>
@@ -8577,8 +8577,8 @@ function renderAAllStaff(){
             })()} </td>
             <td>${s.promo?'<span class="pill p-gold" style="font-size:9px">Yes</span>':'<span style="font-size:10px;color:var(--txt3)">--</span>'}</td>
             <td onclick="event.stopPropagation()">
-              <button class="btn btn-ghost btn-xs" onclick="openRecordModal(${s.id})">${ICO.record}</button>
-              <button class="btn btn-blue btn-xs" style="margin-left:3px" onclick="openPromoteModal(${s.id},'admin')" title="Promote">⬆</button>
+              <button class="btn btn-ghost btn-xs" onclick="openRecordModal('${s.id}')">${ICO.record}</button>
+              <button class="btn btn-blue btn-xs" style="margin-left:3px" onclick="openPromoteModal('${s.id}','admin')" title="Promote">⬆</button>
             </td>
           </tr>`;}).join('')}
         </tbody>
@@ -8933,7 +8933,7 @@ function renderFacIntel(el){
       <div class="card-hd"><div class="card-ttl">Progression Velocity – Full Roster</div></div>
       <div style="overflow-x:auto"><table class="tbl" style="min-width:520px">
         <thead><tr><th>Name</th><th>Belt</th><th>Days</th><th>Gates/Mo</th><th>Window</th><th>ETA</th><th>Promo</th></tr></thead>
-        <tbody>${staffWithVelocity.map(({s,proj,win,velocity})=>{const wc=win.status==='open'?'var(--ok)':win.status==='closed'?'var(--err)':'var(--txt3)';const vc=velocity>=1.5?'var(--ok)':velocity>=0.5?'var(--txt2)':'var(--warn)';return`<tr onclick="openAdminProfile(${s.id})"><td class="fw7" style="white-space:nowrap">${fullName(s)}</td><td>${beltBadge(s.belt)}</td><td style="color:var(--txt3);font-size:12px">${daysAt(s.since)}d</td><td style="font-weight:700;color:${vc}">${velocity}</td><td style="color:${wc};font-size:11.5px;font-weight:600">${win.status==='open'?'Open':win.status==='closed'?'Closed':'Locked'}</td><td style="font-size:11.5px;color:var(--txt2)">${proj.nextBelt?'~'+proj.projectedWeeks+'w':'Max'}</td><td>${s.promo?'<span class="pill p-gold" style="font-size:9px">Yes</span>':'–'}</td></tr>`;}).join('')}
+        <tbody>${staffWithVelocity.map(({s,proj,win,velocity})=>{const wc=win.status==='open'?'var(--ok)':win.status==='closed'?'var(--err)':'var(--txt3)';const vc=velocity>=1.5?'var(--ok)':velocity>=0.5?'var(--txt2)':'var(--warn)';return`<tr onclick="openAdminProfile('${s.id}')"><td class="fw7" style="white-space:nowrap">${fullName(s)}</td><td>${beltBadge(s.belt)}</td><td style="color:var(--txt3);font-size:12px">${daysAt(s.since)}d</td><td style="font-weight:700;color:${vc}">${velocity}</td><td style="color:${wc};font-size:11.5px;font-weight:600">${win.status==='open'?'Open':win.status==='closed'?'Closed':'Locked'}</td><td style="font-size:11.5px;color:var(--txt2)">${proj.nextBelt?'~'+proj.projectedWeeks+'w':'Max'}</td><td>${s.promo?'<span class="pill p-gold" style="font-size:9px">Yes</span>':'–'}</td></tr>`;}).join('')}
         </tbody>
       </table></div>
     </div>`;
@@ -9165,7 +9165,7 @@ function renderFacStaff(el){
       ${st.length===0?`<div class="empty-state"><div class="empty-ttl">No staff match this filter</div><div class="empty-desc">Try adjusting the belt or search filter above.</div></div>`:`
       <div style="overflow-x:auto"><table class="tbl" style="min-width:520px">
         <thead><tr><th>Name</th><th class="hide-sm">Role</th><th>Belt</th><th class="hide-sm">Days</th><th>Cur Gates</th><th>Nxt Gates</th><th>Promo</th><th>Action</th></tr></thead>
-        <tbody>${st.map(s=>{const nb=nextBelt(s.belt);return`<tr onclick="openAdminProfile(${s.id})">
+        <tbody>${st.map(s=>{const nb=nextBelt(s.belt);return`<tr onclick="openAdminProfile('${s.id}')">
           <td class="fw7" style="white-space:nowrap">${fullName(s)}</td>
           <td class="tc-dim hide-sm" style="font-size:11.5px">${s.role}</td>
           <td style="white-space:nowrap">${beltBadge(s.belt)}</td>
@@ -9173,7 +9173,7 @@ function renderFacStaff(el){
           <td>${gateDots(s.cur)}</td>
           <td>${nb?gateDots(s.nxt):'<span style="font-size:10px;color:var(--txt3)">Max</span>'}</td>
           <td>${s.promo?'<span class="pill p-gold">Yes</span>':'<span style="font-size:10px;color:var(--txt3)">--</span>'}</td>
-          <td onclick="event.stopPropagation()"><button class="btn btn-ghost btn-xs" onclick="openRecordModal(${s.id})">${ICO.record}</button></td>
+          <td onclick="event.stopPropagation()"><button class="btn btn-ghost btn-xs" onclick="openRecordModal('${s.id}')">${ICO.record}</button></td>
         </tr>`}).join('')}</tbody>
       </table></div>`}
     </div>`;
@@ -9258,7 +9258,7 @@ function renderFacReports(el){
     </div>
     ${stagnation.length?`${rptSection('Stagnation Alerts',stagnation.length+' flagged')}
     <div class="card mb16"><div style="overflow-x:auto"><table class="tbl" style="min-width:360px"><thead><tr><th>Name</th><th>Belt</th><th>Days at Belt</th><th>Expected</th><th>Overage</th></tr></thead>
-    <tbody>${stagnation.slice(0,8).map(({s,actual,expected,over})=>`<tr onclick="openAdminProfile(${s.id})" style="cursor:pointer"><td class="fw7">${fullName(s)}</td><td>${beltBadge(s.belt)}</td><td style="color:var(--err);font-weight:600">${actual}d</td><td style="color:var(--txt3)">${expected}d</td><td><span class="pill p-err" style="font-size:9px">+${over}d</span></td></tr>`).join('')}</tbody></table></div></div>`:''}
+    <tbody>${stagnation.slice(0,8).map(({s,actual,expected,over})=>`<tr onclick="openAdminProfile('${s.id}')" style="cursor:pointer"><td class="fw7">${fullName(s)}</td><td>${beltBadge(s.belt)}</td><td style="color:var(--err);font-weight:600">${actual}d</td><td style="color:var(--txt3)">${expected}d</td><td><span class="pill p-err" style="font-size:9px">+${over}d</span></td></tr>`).join('')}</tbody></table></div></div>`:''}
     ${rptSection('Trend Charts')}
     <div class="g2 mb16">
       <div class="card"><div class="card-hd"><div class="card-ttl">Progressions</div></div><div class="card-body"><div class="chart-wrap" style="height:160px"><canvas id="fac-prog-c"></canvas></div></div></div>
@@ -9268,7 +9268,7 @@ function renderFacReports(el){
     <div class="card">
       <div style="overflow-x:auto"><table class="tbl" style="min-width:560px">
         <thead><tr><th>Name</th><th>Role</th><th>Belt</th><th>Days</th><th>Cur Gates</th><th>Points</th><th>PS Stars</th><th>OIP</th></tr></thead>
-        <tbody>${[...st].sort((a,b)=>beltIdx(b.belt)-beltIdx(a.belt)||calcPoints(b)-calcPoints(a)).map(s=>`<tr onclick="openAdminProfile(${s.id})" style="cursor:pointer">
+        <tbody>${[...st].sort((a,b)=>beltIdx(b.belt)-beltIdx(a.belt)||calcPoints(b)-calcPoints(a)).map(s=>`<tr onclick="openAdminProfile('${s.id}')" style="cursor:pointer">
           <td class="fw7">${fullName(s)}</td>
           <td style="font-size:11.5px;color:var(--txt2)">${s.role}</td>
           <td>${beltBadge(s.belt,s)}</td>
@@ -9918,13 +9918,13 @@ function renderAReports(){
       ${promoReady.length>0?`<div class="card" style="border-color:rgba(196,154,32,.4)">
         <div class="card-hd"><div class="card-ttl" style="color:var(--gold)">Promotion Reviews Pending</div><span class="pill p-gold">${promoReady.length}</span></div>
         <div style="overflow-x:auto"><table class="tbl" style="min-width:340px"><thead><tr><th>Name</th><th>Facility</th><th>Belt</th><th>Action</th></tr></thead>
-        <tbody>${promoReady.slice(0,6).map(s=>`<tr><td class="fw7">${fullName(s)}</td><td style="font-size:11px;color:var(--txt3)">${getFac(s.fid)?.name||'--'}</td><td>${beltBadge(s.belt,s)}</td><td><button class="btn btn-ghost btn-xs" onclick="openAdminProfile(${s.id})">View</button></td></tr>`).join('')}</tbody></table></div>
+        <tbody>${promoReady.slice(0,6).map(s=>`<tr><td class="fw7">${fullName(s)}</td><td style="font-size:11px;color:var(--txt3)">${getFac(s.fid)?.name||'--'}</td><td>${beltBadge(s.belt,s)}</td><td><button class="btn btn-ghost btn-xs" onclick="openAdminProfile('${s.id}')">View</button></td></tr>`).join('')}</tbody></table></div>
         ${promoReady.length>6?`<div style="font-size:11px;color:var(--txt3);text-align:center;padding:8px">+${promoReady.length-6} more in All Staff view</div>`:''}
       </div>`:''}
       ${psTestQueueAll.length>0?`<div class="card" style="border-color:rgba(59,130,246,.4)">
         <div class="card-hd"><div class="card-ttl" style="color:var(--blue)">PS Test Queue: Network</div><span class="pill p-blue">${psTestQueueAll.length}</span></div>
         <div style="overflow-x:auto"><table class="tbl" style="min-width:340px"><thead><tr><th>Name</th><th>Facility</th><th>Track</th><th>Action</th></tr></thead>
-        <tbody>${psTestQueueAll.slice(0,6).map(({s,tid})=>`<tr><td class="fw7">${fullName(s)}</td><td style="font-size:11px;color:var(--txt3)">${getFac(s.fid)?.name||'--'}</td><td style="font-size:11px">${PS_TRACKS[tid].name}</td><td><button class="btn btn-ok btn-xs" onclick="completePSTrack(${s.id},'${tid}')">Award Star</button></td></tr>`).join('')}</tbody></table></div>
+        <tbody>${psTestQueueAll.slice(0,6).map(({s,tid})=>`<tr><td class="fw7">${fullName(s)}</td><td style="font-size:11px;color:var(--txt3)">${getFac(s.fid)?.name||'--'}</td><td style="font-size:11px">${PS_TRACKS[tid].name}</td><td><button class="btn btn-ok btn-xs" onclick="completePSTrack('${s.id}','${tid}')">Award Star</button></td></tr>`).join('')}</tbody></table></div>
       </div>`:''}
     </div>`:''}
 
