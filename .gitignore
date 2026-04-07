@@ -15,3 +15,14 @@ package-lock.json
 *.log
 public/
 .vercel/
+Anti Gravity MCP:Skills/
+Frameworks/
+WHEALTHY/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.zip
+*.tar.gz
+*.csv
+!sample_staff_upload.csv
