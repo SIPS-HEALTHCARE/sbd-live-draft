@@ -3828,7 +3828,7 @@ function renderSDashboard(){
   const win=getWindowStatus(s);
   const proj=generateProjection(s);
   const nb=nextBelt(s.belt);
-  const nxtSt=nb?{p:[s.nxt.c,s.nxt.s,s.nxt.o].filter(x=>x==='pass').length}:null;
+  const nxtSt=nb?{p:[(s.nxt||{}).c,(s.nxt||{}).s,(s.nxt||{}).o].filter(x=>x==='pass').length}:null;
   const rank=getRankInSystem(s);
   document.getElementById('s-topbar-pts').textContent=pts+' pts';
   // Prompt for PS eligibility
@@ -3898,7 +3898,7 @@ function renderSDashboard(){
     </div>` : '';
   const psCalloutHtml = psCallout;
   // Study callout  --  show when assessment window is open or next gates not all passed
-  const gatesLeft = nb ? [s.nxt.c,s.nxt.s,s.nxt.o].filter(x=>x!=='pass').length : 0;
+  const gatesLeft = nb ? [(s.nxt||{}).c,(s.nxt||{}).s,(s.nxt||{}).o].filter(x=>x!=='pass').length : 0;
   const studyCallout = (gatesLeft > 0 || win.status==='open') ? `
     <div style="background:rgba(96,165,250,.05);border:1px solid rgba(96,165,250,.2);border-radius:var(--r);padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px;cursor:pointer" onclick="sNav(document.querySelector('#s-portal .nav-item[data-view=s-study]'),'s-study','Study &amp; Practice')">
       <div style="width:34px;height:34px;background:rgba(96,165,250,.12);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px">📋</div>
@@ -5230,7 +5230,7 @@ function _practiceGateBtns(s, targetBelt) {
   var btns = types.map(function(t) {
     var pnd = DB.queue.find(function(q){return q.sid===s.id&&q.targetBelt===targetBelt&&q.type===t&&q.status==='pending';});
     var apv = DB.queue.find(function(q){return q.sid===s.id&&q.targetBelt===targetBelt&&q.type===t&&q.status==='approved';});
-    var psd = s.nxt&&((t==='Competency'&&s.nxt.c==='pass')||(t==='Simulation'&&s.nxt.s==='pass')||(t==='Observation'&&s.nxt.o==='pass'));
+    var psd = s.nxt&&((t==='Competency'&&(s.nxt||{}).c==='pass')||(t==='Simulation'&&(s.nxt||{}).s==='pass')||(t==='Observation'&&(s.nxt||{}).o==='pass'));
     if(psd) return '<span class="pill p-ok">'+t+' Passed ✓</span>';
     if(apv) return '<span class="pill p-ok">'+t+' Approved</span>';
     if(pnd) return '<span class="pill p-warn">'+t+' Pending</span>';
@@ -5270,7 +5270,7 @@ function _studyGateBtns(s, targetBelt, kScore, sScore) {
   var btns = types.map(function(t) {
     var pnd = DB.queue.find(function(q){return q.sid===s.id&&q.targetBelt===targetBelt&&q.type===t&&q.status==='pending';});
     var apv = DB.queue.find(function(q){return q.sid===s.id&&q.targetBelt===targetBelt&&q.type===t&&q.status==='approved';});
-    var psd = s.nxt&&((t==='Competency'&&s.nxt.c==='pass')||(t==='Simulation'&&s.nxt.s==='pass')||(t==='Observation'&&s.nxt.o==='pass'));
+    var psd = s.nxt&&((t==='Competency'&&(s.nxt||{}).c==='pass')||(t==='Simulation'&&(s.nxt||{}).s==='pass')||(t==='Observation'&&(s.nxt||{}).o==='pass'));
     if(psd) return '<span class="pill p-ok">'+t+' Passed ✓</span>';
     if(apv) return '<span class="pill p-ok">'+t+' Approved</span>';
     if(pnd) return '<span class="pill p-warn">'+t+' Pending</span>';
@@ -5690,8 +5690,8 @@ function renderXFacilityDetail(fid){
     const nb=nextBelt(s.belt);
     if(!nb||win.status!=='open') return false;
     // All current gates passed (eligible) but no next-belt gates started
-    const allCurPassed=s.cur.c==='pass'&&s.cur.s==='pass'&&s.cur.o==='pass';
-    const nxtStarted=s.nxt.c||s.nxt.s||s.nxt.o;
+    const allCurPassed=(s.cur||{}).c==='pass'&&(s.cur||{}).s==='pass'&&(s.cur||{}).o==='pass';
+    const nxtStarted=(s.nxt||{}).c||(s.nxt||{}).s||(s.nxt||{}).o;
     return allCurPassed&&!nxtStarted;
   });
   if(windowOpenNoApply.length)
@@ -5699,7 +5699,7 @@ function renderXFacilityDetail(fid){
       detail:`${windowOpenNoApply.length} staff member${windowOpenNoApply.length>1?'s':''} (${windowOpenNoApply.map(s=>s.first).join(', ')}) ${windowOpenNoApply.length>1?'have':'has'} an open assessment window and all current-belt gates passed, but no next-belt assessments have been scheduled. Contact SIPS to request assessment dates before the window closes.`});
 
   // 2. Failed gates: need coaching
-  const failedGates=st.filter(s=>s.nxt.c==='fail'||s.nxt.s==='fail'||s.nxt.o==='fail');
+  const failedGates=st.filter(s=>(s.nxt||{}).c==='fail'||(s.nxt||{}).s==='fail'||(s.nxt||{}).o==='fail');
   if(failedGates.length)
     focuses.push({priority:'high',icon:'⚠️',label:'Re-Assessment Coaching Needed',
       detail:`${failedGates.length} staff member${failedGates.length>1?'s':''} (${failedGates.map(s=>s.first).join(', ')}) ${failedGates.length>1?'have':'has'} a failed gate for the next belt. Schedule dedicated coaching sessions before their next attempt. Review the specific gate type that failed for each individual.`});
@@ -5724,7 +5724,7 @@ function renderXFacilityDetail(fid){
 
   // 6. Low avg belt: push mid-tier
   if(stats.avgBelt<2.5){
-    const midTier=st.filter(s=>s.belt==='Yellow'&&s.cur.c==='pass'&&s.cur.s==='pass'&&s.cur.o==='pass');
+    const midTier=st.filter(s=>s.belt==='Yellow'&&(s.cur||{}).c==='pass'&&(s.cur||{}).s==='pass'&&(s.cur||{}).o==='pass');
     if(midTier.length)
       focuses.push({priority:'medium',icon:'📈',label:'Yellow Belt → Green Transition Opportunity',
         detail:`${midTier.length} Yellow Belt staff member${midTier.length>1?'s':''} have all current-belt gates cleared and may be ready for Green Belt advancement. Green Belt is the compliance threshold. Prioritizing this group will move the department\'s overall health grade. Reach out to SIPS to schedule their assessment windows.`});
@@ -6232,10 +6232,10 @@ function renderHProfile(sid,context){
     </div>
     <div class="g2 mb16">
       <div class="card"><div class="card-hd"><div class="card-ttl">Current Belt Assessments</div><span style="font-size:11.5px;color:${curSt.p===3?'var(--ok)':'var(--warn)'}">${curSt.p}/3 passed</span></div>
-        <div class="card-body"><div class="gates">${gateCard('Competency','c',s.cur.c)}${gateCard('Simulation','s',s.cur.s)}${gateCard('Observation','o',s.cur.o)}</div><div style="font-size:11.5px;color:var(--txt3);line-height:1.5">All three assessments required to certify current belt. Marked by SBD-certified assessors only.</div></div>
+        <div class="card-body"><div class="gates">${gateCard('Competency','c',(s.cur||{}).c)}${gateCard('Simulation','s',(s.cur||{}).s)}${gateCard('Observation','o',(s.cur||{}).o)}</div><div style="font-size:11.5px;color:var(--txt3);line-height:1.5">All three assessments required to certify current belt. Marked by SBD-certified assessors only.</div></div>
       </div>
       <div class="card"><div class="card-hd"><div class="card-ttl">Advancing to ${nb||'(Max Belt)'}</div>${nb?`<span style="font-size:11.5px;color:${nxtSt.p===3?'var(--ok)':'var(--txt3)'}">${nxtSt.p}/3 gates</span>`:''}</div>
-        <div class="card-body">${nb?`<div class="gates">${gateCard('Competency','c',s.nxt.c)}${gateCard('Simulation','s',s.nxt.s)}${gateCard('Observation','o',s.nxt.o)}</div><div class="prog mt8 mb8" style="height:8px"><div class="prog-fill" style="width:${pctNxt}%;background:var(--gold)"></div></div><div style="font-size:11.5px;color:${nxtSt.rem===0?'var(--ok)':nxtSt.rem===1?'var(--warn)':'var(--txt3)'}"><strong>${nxtSt.p} of 3</strong> advancement gates cleared &bull; ${nxtSt.rem} remaining${nxtSt.rem===0?': Ready for belt review':''}</div>`:'<div class="tc-muted" style="font-size:12px;padding:20px 0;text-align:center">Black Belt is the highest level.</div>'}</div>
+        <div class="card-body">${nb?`<div class="gates">${gateCard('Competency','c',(s.nxt||{}).c)}${gateCard('Simulation','s',(s.nxt||{}).s)}${gateCard('Observation','o',(s.nxt||{}).o)}</div><div class="prog mt8 mb8" style="height:8px"><div class="prog-fill" style="width:${pctNxt}%;background:var(--gold)"></div></div><div style="font-size:11.5px;color:${nxtSt.rem===0?'var(--ok)':nxtSt.rem===1?'var(--warn)':'var(--txt3)'}"><strong>${nxtSt.p} of 3</strong> advancement gates cleared &bull; ${nxtSt.rem} remaining${nxtSt.rem===0?': Ready for belt review':''}</div>`:'<div class="tc-muted" style="font-size:12px;padding:20px 0;text-align:center">Black Belt is the highest level.</div>'}</div>
       </div>
     </div>
     <div class="g2 mb16">
@@ -7979,7 +7979,7 @@ function renderHAssessments(){
   const st  = staffOf(fid);
 
   // Build assessment status overview for this facility
-  const pending   = st.filter(s=>s.cur.c===null||s.cur.s===null||s.cur.o===null);
+  const pending   = st.filter(s=>(s.cur||{}).c===null||(s.cur||{}).s===null||(s.cur||{}).o===null);
   const promoReady= st.filter(s=>s.promo);
   const psQueue   = [];
   st.forEach(s=>{[...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].forEach(tid=>{if(getTrackStatus(s,tid)==='testing')psQueue.push({s,tid});});});
@@ -8111,7 +8111,7 @@ function renderHProgression(){
     const wb=win.status==='open'?`<span class="pill p-ok" style="font-size:9px">Open</span>`:`<span class="pill p-muted" style="font-size:9px">${win.status==='max'?'Max':'Closed'}</span>`;
     const proj=generateProjection(s);
     const pt=proj&&proj.nextBeltDate?`<span style="font-size:11px;color:var(--txt3)">${proj.nextBeltDate}</span>`:`<span style="color:var(--txt3);font-size:11px">--</span>`;
-    return `<tr onclick="openHStaffProfile('${s.id}')" style="cursor:pointer"><td><span style="font-weight:600">${fullName(s)}</span></td><td>${beltBadge(s.belt)}</td><td>${gc(s.cur.c,s.cur.s,s.cur.o)}</td><td>${gc(s.nxt.c,s.nxt.s,s.nxt.o)}</td><td>${wb}</td><td>${pt}</td><td>${s.promo?'<span class="pill p-gold" style="font-size:9px">Promo</span>':''}</td></tr>`;
+    return `<tr onclick="openHStaffProfile('${s.id}')" style="cursor:pointer"><td><span style="font-weight:600">${fullName(s)}</span></td><td>${beltBadge(s.belt)}</td><td>${gc((s.cur||{}).c,(s.cur||{}).s,(s.cur||{}).o)}</td><td>${gc((s.nxt||{}).c,(s.nxt||{}).s,(s.nxt||{}).o)}</td><td>${wb}</td><td>${pt}</td><td>${s.promo?'<span class="pill p-gold" style="font-size:9px">Promo</span>':''}</td></tr>`;
   }).join('');
   el.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><div style="font-size:17px;font-weight:800">${fac?fac.name:''} &bull; Staff Progression</div><div style="font-size:12px;color:var(--txt3);margin-top:2px">${staff.length} staff members &bull; C=Competency S=Simulation O=Observation</div></div><button class="btn btn-gold btn-sm" onclick="openAddStaffModal('${fid}')">${ICO.plus} Add Staff</button></div><div class="card"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Name</th><th>Belt</th><th>Current Gates</th><th>Next Belt</th><th>Window</th><th>Proj.</th><th>Flags</th></tr></thead><tbody>${rows||'<tr><td colspan="7" style="text-align:center;color:var(--txt3);padding:24px">No staff.</td></tr>'}</tbody></table></div></div>`;
   labelMobileTables(el);
@@ -8887,9 +8887,9 @@ function renderFacIntel(el){
 
   // Leadership focus
   const focuses=[];
-  const windowOpenNoApply=st.filter(s=>{const win=getWindowStatus(s);const nb=nextBelt(s.belt);if(!nb||win.status!=='open')return false;const allCurPassed=s.cur.c==='pass'&&s.cur.s==='pass'&&s.cur.o==='pass';return allCurPassed&&!s.nxt.c&&!s.nxt.s&&!s.nxt.o;});
+  const windowOpenNoApply=st.filter(s=>{const win=getWindowStatus(s);const nb=nextBelt(s.belt);if(!nb||win.status!=='open')return false;const allCurPassed=(s.cur||{}).c==='pass'&&(s.cur||{}).s==='pass'&&(s.cur||{}).o==='pass';return allCurPassed&&!(s.nxt||{}).c&&!(s.nxt||{}).s&&!(s.nxt||{}).o;});
   if(windowOpenNoApply.length) focuses.push({priority:'urgent',icon:'🔔',label:'Assessment Window Open: Action Required',detail:`${windowOpenNoApply.length} staff member${windowOpenNoApply.length>1?'s':''} (${windowOpenNoApply.map(s=>s.first).join(', ')}) ${windowOpenNoApply.length>1?'have':'has'} an open window and all current-belt gates passed but no next-belt assessments scheduled. Contact SIPS before the window closes.`});
-  const failedGates=st.filter(s=>s.nxt.c==='fail'||s.nxt.s==='fail'||s.nxt.o==='fail');
+  const failedGates=st.filter(s=>(s.nxt||{}).c==='fail'||(s.nxt||{}).s==='fail'||(s.nxt||{}).o==='fail');
   if(failedGates.length) focuses.push({priority:'high',icon:'⚠️',label:'Re-Assessment Coaching Needed',detail:`${failedGates.length} staff member${failedGates.length>1?'s':''} (${failedGates.map(s=>s.first).join(', ')}) ${failedGates.length>1?'have':'has'} a failed next-belt gate. Schedule coaching before their next attempt.`});
   const needsPS=st.filter(s=>beltIdx(s.belt)>=2&&getEligibleTracks(s).length>0&&calcTotalPSStars(s)===0);
   if(needsPS.length) focuses.push({priority:'high',icon:'📚',label:'Position School Enrollment Gap',detail:`${needsPS.length} Green Belt+ staff not yet enrolled: ${needsPS.map(s=>s.first+' – '+s.belt).join(', ')}. Required for promotion eligibility.`});
@@ -10221,7 +10221,7 @@ function openRecordModal(sid){
     `<div class="form-group"><label class="form-label">Staff Member *</label><select class="form-select" id="ra-staff">${staffOf(activeFid).map(s=>`<option value="${s.id}">${fullName(s)} -- ${s.belt} Belt</option>`).join('')}</select></div>`;
   const nb=curS?nextBelt(curS.belt):null;
   const gateInfo=curS&&nb?`<div style="padding:10px 12px;background:var(--s2);border-radius:var(--rs);border:1px solid var(--bdr);margin-bottom:14px;font-size:12px;color:var(--txt2);line-height:1.6">
-    Advancing to <strong>${nb} Belt</strong>: ${ICO.check}<span style="color:${curS.nxt.c==='pass'?'var(--ok)':'var(--txt3)'}"> Competency</span> &bull; <span style="color:${curS.nxt.s==='pass'?'var(--ok)':'var(--txt3)'}"> Simulation</span> &bull; <span style="color:${curS.nxt.o==='pass'?'var(--ok)':'var(--txt3)'}"> Observation</span>
+    Advancing to <strong>${nb} Belt</strong>: ${ICO.check}<span style="color:${(curS.nxt||{}).c==='pass'?'var(--ok)':'var(--txt3)'}"> Competency</span> &bull; <span style="color:${(curS.nxt||{}).s==='pass'?'var(--ok)':'var(--txt3)'}"> Simulation</span> &bull; <span style="color:${(curS.nxt||{}).o==='pass'?'var(--ok)':'var(--txt3)'}"> Observation</span>
   </div>`:'';
   openModal('Record Assessment',`
     <div class="modal-body">
@@ -10334,7 +10334,7 @@ function downloadFacilityReport(fid){
       <td>${s.role}</td>
       <td style="font-weight:700">${s.belt}</td>
       <td>${daysAt(s.since)}d</td>
-      <td style="text-align:center">${[s.nxt.c,s.nxt.s,s.nxt.o].filter(x=>x==='pass').length}/3</td>
+      <td style="text-align:center">${[(s.nxt||{}).c,(s.nxt||{}).s,(s.nxt||{}).o].filter(x=>x==='pass').length}/3</td>
       <td style="font-weight:700">${pts.toLocaleString()}</td>
       <td style="color:${win.status==='open'?'#16a34a':'#dc2626'};font-weight:700">${win.status==='open'?'Open':'Closed'}</td>
       <td>${proj.projectedWeeks>0?'~'+proj.projectedWeeks+'w to '+proj.nextBelt:'Max belt'}</td>
@@ -10495,9 +10495,13 @@ async function approveReg(rid){
   const approvedFac={id:fid,name:facilityName,loc:location,dept:department,contact:contactName,email:r.email,since:new Date().toLocaleDateString('en-US',{month:'short',year:'numeric'}),active:true};
   
   try {
+    let emailErr = null;
     if(IS_LIVE) {
       // The Edge Function automatically creates the user auth identity and user_profiles row
-      await SB.approveRegistration(rid, mapFacilityToBackend(approvedFac));
+      const beRes = await SB.approveRegistration(rid, mapFacilityToBackend(approvedFac));
+      if (beRes && beRes.email_error) {
+        emailErr = beRes.email_error;
+      }
     }
     
     // UI state updates below
@@ -10514,8 +10518,12 @@ async function approveReg(rid){
     const pendingCnt=DB.pendingRegs.filter(x=>x.status==='pending').length;
     if(nb){nb.textContent=pendingCnt;nb.style.display=pendingCnt>0?'inline-block':'none';}
     
-    toast(`${facilityName} approved.\nPortal account activated for ${contactName}. Refreshing view...`,'ok');
-    if(IS_LIVE) setTimeout(()=>initAppData(), 1500); // Trigger clean backend re-hydrate
+    if (emailErr) {
+      toast(`${facilityName} approved.\nHowever, the welcome email FAILED: ${emailErr}`, 'error');
+    } else {
+      toast(`${facilityName} approved.\nPortal account activated for ${contactName}. Refreshing view...`,'ok');
+    }
+    if(IS_LIVE) setTimeout(()=>initAppData(), emailErr ? 4000 : 1500); // Trigger clean backend re-hydrate
     renderARegistrations();
   } catch(e) {
     toast('Registration Approval Failed: '+e.message, 'err');

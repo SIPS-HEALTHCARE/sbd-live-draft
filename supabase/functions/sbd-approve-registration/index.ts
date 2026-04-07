@@ -159,6 +159,8 @@ serve(async (req) => {
             reviewed_by: adminId
         }).eq('id', registration_id);
 
+        let emailError = null;
+
         // 4. Send Custom Welcome Email via Resend
         try {
             const resendApiKey = Deno.env.get('RESEND_API_KEY');
@@ -207,14 +209,17 @@ serve(async (req) => {
                 if (!resendRes.ok) {
                     const errText = await resendRes.text();
                     console.error("Resend API failed:", errText);
+                    emailError = errText;
                 } else {
                     console.log("Approval email sent successfully to", regData.email);
                 }
             } else {
                 console.warn("RESEND_API_KEY is not set. Approval email skipped.");
+                emailError = "RESEND_API_KEY is not set.";
             }
         } catch (e: any) {
             console.error("Failed to send welcome email:", e.message);
+            emailError = e.message;
         }
 
 
@@ -223,7 +228,8 @@ serve(async (req) => {
             message: 'Registration approved',
             user_id: newUserId,
             facility_id: facilityId,
-            auth_created: authCreated 
+            auth_created: authCreated,
+            email_error: emailError
         }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
