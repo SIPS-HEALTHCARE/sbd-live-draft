@@ -13,3 +13,5 @@ simulate_*.js
 package-lock.json
 .DS_Store
 *.log
+public/
+.vercel/
