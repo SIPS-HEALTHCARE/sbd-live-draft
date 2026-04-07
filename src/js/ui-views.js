@@ -12384,7 +12384,7 @@ function renderASystems() {
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
               </button>
               <button class="btn btn-ghost btn-sm" style="padding:4px;color:var(--warn);opacity:0.6 hover:opacity:1" 
-                onclick="confirmDeleteSystem('${sys.id}', '${sys.name.replace(/'/g, "\\'")}')" title="Remove System">
+                onclick="promptDeleteHospitalSystem('${sys.id}')" title="Remove System">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6L19 21A2 2 0 0 1 17 23L7 23A2 2 0 0 1 5 21L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
               </button>
             </div>
@@ -12403,7 +12403,7 @@ function renderASystems() {
                     <div style="font-size:13px;font-weight:600;color:#e2e8f0">${f.name}</div>
                     <div style="font-size:11px;color:#64748b">${f.dept || 'General'}</div>
                   </div>
-                  <div style="font-size:14px;cursor:pointer;opacity:0.6;padding:4px" onclick="confirmUnlinkFacility('${f.id}', '${f.name.replace(/'/g, "\\'")}', '${sys.id}')" title="Unlink Facility">✕</div>
+                  <div style="font-size:14px;cursor:pointer;opacity:0.6;padding:4px" onclick="promptUnlinkFacility('${f.id}', '${f.name.replace(/'/g, "\\'")}', '${sys.id}')" title="Unlink Facility">✕</div>
                 </div>
               `).join('') : `
                 <div style="font-size:12px;color:#475569;font-style:italic;text-align:center;padding:12px">No facilities linked to this system.</div>
@@ -12536,13 +12536,47 @@ async function linkFacilityToSystem(fid, systemId) {
 }
 
 /**
- * Confirms unlinking a facility from a system.
+ * Prompts user to unlink a facility using a styled modal.
+ */
+function promptUnlinkFacility(fid, facName, systemId) {
+  if (window.SBD_INITIALIZING) return; 
+  if (!ST.user) return;
+
+  const fac = DB.facilities.find(f => f.id === fid);
+  const staffCount = DB.staff.filter(s => s.fid === fid).length;
+  const sys = DB.hospitalSystems.find(s => s.id === systemId);
+
+  openModal('Unlink Facility', `
+    <div style="padding:20px;text-align:center">
+      <div style="width:60px;height:60px;background:var(--warn-bg);color:var(--warn);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:24px">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+      </div>
+      <h3 style="margin-bottom:12px;color:var(--txt)">Unlink Facility?</h3>
+      <p style="color:var(--txt2);font-size:14px;line-height:1.6;margin-bottom:24px">
+        Are you sure you want to remove <strong>${facName}</strong> from the <strong>${sys ? sys.name : 'System'}</strong> network?<br><br>
+        This location has <strong>${staffCount}</strong> staff members enrolled. They will remain in the facility but will no longer roll up to system-level analytics.
+      </p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" style="background:var(--warn);border-color:var(--warn)" onclick="executeUnlinkFacility('${fid}')">Yes, Unlink Facility</button>
+      </div>
+    </div>
+  `, 'modal-sm');
+}
+
+/**
+ * Executes the unlinking after modal confirmation.
+ */
+function executeUnlinkFacility(fid) {
+  closeModal();
+  unlinkFacilityFromSystem(fid);
+}
+
+/**
+ * Confirms unlinking a facility from a system (Legacy wrapper).
  */
 function confirmUnlinkFacility(fid, facName, systemId) {
-  if (!ST.user) return; // Safeguard against early triggers during session restoration
-  if (confirm('Are you sure you want to unlink "' + facName + '" from this system?')) {
-    unlinkFacilityFromSystem(fid);
-  }
+  promptUnlinkFacility(fid, facName, systemId);
 }
 
 /**
@@ -12584,7 +12618,6 @@ async function unlinkFacilityFromSystem(fid) {
     
     // Context-aware refresh
     if (ST.portal === 'system_admin') {
-      // If we're in the drill-down, go back to the list since it's no longer in this system
       renderXView('x-facilities');
     } else if (ST.aView === 'a-systems-dashboard') {
       renderASystemsDashboard(systemId);
@@ -12735,7 +12768,7 @@ function renderASystemsDashboard(systemId) {
                   <td style="text-align:right;white-space:nowrap">
                     <button class="btn btn-ghost btn-xs" onclick="goFacility('${f.id}')" style="margin-right:4px">${ICO.view} Details</button>
                     <button class="btn btn-ghost btn-xs" style="color:var(--warn)" 
-                      onclick="confirmUnlinkFacility('${f.id}', '${f.name.replace(/'/g, "\\'")}', '${sid}')" title="Unlink Facility">
+                      onclick="promptUnlinkFacility('${f.id}', '${f.name.replace(/'/g, "\\'")}', '${sid}')" title="Unlink Facility">
                       ✕ Unlink
                     </button>
                   </td>

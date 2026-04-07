@@ -1982,6 +1982,7 @@ window.onload = function(){
 };
 
 async function initAppData(){
+  window.SBD_INITIALIZING = true;
   console.log('SBD Platform: Multi-table data hydration started...');
   try {
     const [facs, staff, systems, users, reviews, queue, registrations, freeAgents, promotions] = await Promise.race([
@@ -2085,7 +2086,9 @@ async function initAppData(){
     if(typeof window.renderAOverview === 'function' && ST.portal === 'admin') window.renderAOverview();
     if(typeof window.renderXDashboard === 'function' && ST.portal === 'system_admin') window.renderXDashboard();
     
+    window.SBD_INITIALIZING = false;
   } catch(e) {
+    window.SBD_INITIALIZING = false;
     console.error('SBD Platform: Data hydration failed:', e.message);
     if(typeof showToast === 'function') showToast('Failed to load application data. Please refresh.', 'err');
   }
