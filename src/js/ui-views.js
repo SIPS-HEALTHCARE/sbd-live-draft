@@ -10413,12 +10413,12 @@ function renderARegistrations(){
         <thead><tr><th>Facility</th><th class="hide-sm">Location</th><th class="hide-sm">Dept</th><th>Contact</th><th class="hide-sm">Email</th><th class="hide-sm">Requested</th><th>Action</th></tr></thead>
         <tbody>${pending.map(r=>`
           <tr>
-            <td class="fw7">${r.facilityName}</td>
-            <td class="tc-dim" style="font-size:11.5px">${r.loc}</td>
-            <td style="font-size:11.5px;color:var(--txt3)">${r.dept}</td>
-            <td style="font-size:12px">${r.contact}</td>
+            <td class="fw7">${r.facility || 'Unknown'}</td>
+            <td class="tc-dim" style="font-size:11.5px">${r.location || 'N/A'}</td>
+            <td style="font-size:11.5px;color:var(--txt3)">${r.department || 'General'}</td>
+            <td style="font-size:12px">${r.name || 'Anonymous'}</td>
             <td style="font-size:11.5px;color:var(--txt3)">${r.email}</td>
-            <td style="font-size:11.5px;color:var(--txt3)">${r.requestedAt}</td>
+            <td style="font-size:11.5px;color:var(--txt3)">${(r.requested_at || r.requestedAt || '').split('T')[0]}</td>
             <td><div style="display:flex;gap:6px">
               <button class="btn btn-ok btn-xs" onclick="approveReg('${r.id}')">${ICO.check} Approve</button>
               <button class="btn btn-err btn-xs" onclick="denyReg('${r.id}')">${ICO.x} Deny</button>
@@ -10434,10 +10434,10 @@ function renderARegistrations(){
         <thead><tr><th>Facility Name</th><th>Contact</th><th>Email</th><th>Requested</th><th>Status</th></tr></thead>
         <tbody>${reviewed.map(r=>`
           <tr>
-            <td class="fw7">${r.facilityName}</td>
-            <td style="font-size:12px">${r.contact}</td>
+            <td class="fw7">${r.facility || 'Unknown'}</td>
+            <td style="font-size:12px">${r.name || 'Anonymous'}</td>
             <td style="font-size:11.5px;color:var(--txt3)">${r.email}</td>
-            <td style="font-size:11.5px;color:var(--txt3)">${r.requestedAt}</td>
+            <td style="font-size:11.5px;color:var(--txt3)">${(r.requested_at || r.requestedAt || '').split('T')[0]}</td>
             <td><span class="pill ${r.status==='approved'?'p-ok':'p-err'}">${r.status==='approved'?'Approved':'Denied'}</span></td>
           </tr>`).join('')}
         </tbody>
