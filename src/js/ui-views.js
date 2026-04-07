@@ -10448,12 +10448,17 @@ function renderARegistrations(){
 async function approveReg(rid){
   const r=DB.pendingRegs.find(x=>x.id===rid);
   if(!r)return;
-  if(!confirm(`Approve registration for ${r.facilityName}?\n\nThis will create an active facility and portal account for ${r.contact} (${r.email}). They will be able to log in immediately.`))return;
+  const facilityName = r.facility || r.facilityName || 'Unknown Facility';
+  const location = r.location || r.loc || '';
+  const department = r.department || r.dept || '';
+  const contactName = r.name || r.contact || 'Unknown Person';
+
+  if(!confirm(`Approve registration for ${facilityName}?\n\nThis will create an active facility and portal account for ${contactName} (${r.email}). They will be able to log in immediately.`))return;
 
   toast('Approving registration... please wait.', 'info');
   // Create facility placeholder for UI state
   const fid='fac-'+Date.now();
-  const approvedFac={id:fid,name:r.facilityName,loc:r.loc,dept:r.dept,contact:r.contact,email:r.email,since:new Date().toLocaleDateString('en-US',{month:'short',year:'numeric'}),active:true};
+  const approvedFac={id:fid,name:facilityName,loc:location,dept:department,contact:contactName,email:r.email,since:new Date().toLocaleDateString('en-US',{month:'short',year:'numeric'}),active:true};
   
   try {
     if(IS_LIVE) {
@@ -10463,8 +10468,8 @@ async function approveReg(rid){
     
     // UI state updates below
     DB.facilities.push(approvedFac);
-    const initials=r.contact.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
-    const regUser={id:'u'+Date.now(),email:r.email,password:r.password,role:'hospital',name:r.contact,title:'Dept. Manager',initials,fid};
+    const initials=contactName.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
+    const regUser={id:'u'+Date.now(),email:r.email,password:r.password,role:'hospital',name:contactName,title:'Dept. Manager',initials,fid};
     DB.users.push(regUser);
     
     // Remove pending local status
@@ -10475,7 +10480,7 @@ async function approveReg(rid){
     const pendingCnt=DB.pendingRegs.filter(x=>x.status==='pending').length;
     if(nb){nb.textContent=pendingCnt;nb.style.display=pendingCnt>0?'inline-block':'none';}
     
-    toast(`${r.facilityName} approved.\nPortal account activated for ${r.contact}. Refreshing view...`,'ok');
+    toast(`${facilityName} approved.\nPortal account activated for ${contactName}. Refreshing view...`,'ok');
     if(IS_LIVE) setTimeout(()=>initAppData(), 1500); // Trigger clean backend re-hydrate
     renderARegistrations();
   } catch(e) {
@@ -10486,13 +10491,14 @@ async function approveReg(rid){
 function denyReg(rid){
   const r=DB.pendingRegs.find(x=>x.id===rid);
   if(!r)return;
-  if(!confirm(`Deny registration request from ${r.facilityName}?`))return;
+  const facilityName = r.facility || r.facilityName || 'Unknown Facility';
+  if(!confirm(`Deny registration request from ${facilityName}?`))return;
   r.status='denied';
   if(IS_LIVE){ SB.denyRegistration(rid).catch(e=>toast('Deny sync: '+e.message,'warn')); }
   const nb=document.getElementById('reg-nb');
   const pendingCnt=DB.pendingRegs.filter(x=>x.status==='pending').length;
   if(nb){nb.textContent=pendingCnt;nb.style.display=pendingCnt>0?'inline-block':'none';}
-  toast(`Registration from ${r.facilityName} denied.`,'err');
+  toast(`Registration from ${facilityName} denied.`,'err');
   renderARegistrations();
 }
 
