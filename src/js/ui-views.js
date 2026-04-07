@@ -108,7 +108,19 @@ function doRegister(){
   if(!pass||pass.length<6){errEl.textContent='Password must be at least 6 characters.';errEl.style.display='block';return;}
   if(pass!==pass2){errEl.textContent='Passwords do not match.';errEl.style.display='block';return;}
   if(DB.users.find(u=>u.email.toLowerCase()===email.toLowerCase())||DB.pendingRegs.find(r=>r.email.toLowerCase()===email.toLowerCase())){errEl.textContent='An account with this email already exists or is pending review.';errEl.style.display='block';return;}
-  const reg={id:'pr'+Date.now(),facilityName:fname,loc,dept,contact,email,password:pass,requestedAt:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),status:'pending'};
+  
+  // Map fields to match registrations table: name, email, facility, requested_at, location, department, password
+  const reg={
+    name: contact, 
+    email: email, 
+    facility: fname, 
+    location: loc,
+    department: dept,
+    requested_at: new Date().toISOString(),
+    status:'pending',
+    password: pass // Included for the Edge Function to create the auth user
+  };
+
   SB.submitRegistration(reg).then(()=>{
     document.getElementById('login').classList.add('hidden');
     document.getElementById('pending-screen').classList.remove('hidden');
@@ -199,6 +211,12 @@ function logout(){
   if(ST.charts) Object.values(ST.charts).forEach(c=>c.destroy());
   ST.charts={};
   ST.user=null;
+
+  // CLEANUP UI MODALS/OVERLAYS
+  if(typeof closeModal === 'function') closeModal();
+  document.getElementById('welcome-overlay')?.classList.remove('open');
+  document.getElementById('tour-overlay')?.classList.remove('open');
+  document.getElementById('skip-reminder')?.classList.remove('show');
 }
 
 function enterPortal(type){
@@ -12323,9 +12341,9 @@ function processBulkUpload(){
  */
 function renderASystems() {
   const currentDB = window.DB || (typeof DB !== 'undefined' ? DB : null);
-  const systems = (currentDB?.hospitalSystems) || [];
-  const facilities = (currentDB?.facilities) || [];
-  console.log('renderASystems: Current window.DB systems count:', systems.length);
+  const systems = (currentDB?.hospitalSystems || []).filter(sys => sys.active !== false);
+  const facilities = (currentDB?.facilities || [])
+  console.log('renderASystems: Active window.DB systems count:', systems.length);
   const container = document.getElementById('a-systems');
   if (!container) return;
 
@@ -12384,8 +12402,8 @@ function renderASystems() {
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
               </button>
               <button class="btn btn-ghost btn-sm" style="padding:4px;color:var(--warn);opacity:0.6 hover:opacity:1" 
-                onclick="promptDeleteHospitalSystem('${sys.id}')" title="Remove System">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6L19 21A2 2 0 0 1 17 23L7 23A2 2 0 0 1 5 21L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                onclick="promptArchiveHospitalSystem('${sys.id}')" title="Archive System">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>
               </button>
             </div>
           </div>
@@ -13154,88 +13172,82 @@ function renderSystemComparison() {
 }
 
 /**
- * Confirms deletion of a hospital system.
+ * Prompts user to archive a hospital system using a styled modal.
  */
-function confirmDeleteSystem(sid, name) {
-  const sysFacs = (window.DB?.facilities || []).filter(f => f.systemId === sid);
-  const warning = sysFacs.length > 0 
-    ? `<div style="margin-top:12px;background:rgba(255,243,191,0.1);padding:12px;border-radius:8px;border:1px solid rgba(255,243,191,0.2);color:#ffcc33;font-size:12px">
-         <b>Warning:</b> This system has ${sysFacs.length} linked facilities. They will be unlinked but not deleted.
-       </div>`
-    : '';
+function promptArchiveHospitalSystem(sid) {
+  if (window.SBD_INITIALIZING) return;
+  if (!ST.user) return;
 
-  const content = `
-    <div style="padding:24px">
-      <div style="font-size:18px;font-weight:800;color:#f1f5f9;margin-bottom:6px">Remove Hospital System?</div>
-      <div style="font-size:13px;color:#94a3b8;margin-bottom:12px">Are you sure you want to remove <b>${name}</b>? This action cannot be undone.</div>
-      ${warning}
-      <div style="display:flex;justify-content:flex-end;gap:12px;margin-top:32px">
+  const sys = DB.hospitalSystems.find(s => s.id === sid);
+  if (!sys) return;
+  
+  const facilities = DB.facilities.filter(f => f.systemId === sid);
+  const staffCount = DB.staff.filter(s => facilities.some(f => f.id === s.fid)).length;
+
+  openModal('Archive Hospital System', `
+    <div style="padding:20px;text-align:center">
+      <div style="width:60px;height:60px;background:rgba(255,243,191,0.1);color:var(--gold);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:24px">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>
+      </div>
+      <h3 style="margin-bottom:12px;color:var(--txt)">Archive System?</h3>
+      <p style="color:var(--txt2);font-size:14px;line-height:1.6;margin-bottom:24px">
+        Are you sure you want to archive <strong>${sys.name || 'this system'}</strong>?<br><br>
+        This will remove the system from your active dashboard but <strong>preserve all historical data</strong>. All linked facilities will remain associated with this system for historical reporting.
+      </p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-        <button class="btn btn-primary" onclick="deleteHospitalSystem('${sid}')" style="background:var(--warn);color:#fff;border-color:var(--warn)">Delete System</button>
+        <button class="btn btn-primary" style="background:var(--gold);border-color:var(--gold);color:#000" onclick="executeArchiveHospitalSystem('${sid}')">Yes, Archive System</button>
       </div>
     </div>
-  `;
-  openModal('Remove Hospital System?', content);
+  `, 'modal-sm');
 }
 
 /**
- * Executes system deletion and updates state.
+ * Executes the system archiving after modal confirmation.
  */
-async function deleteHospitalSystem(sid) {
-  toast('Removing system and unlinking facilities...', 'info');
+async function executeArchiveHospitalSystem(sid) {
+  closeModal();
+  await archiveHospitalSystem(sid);
+}
+
+/**
+ * Handles the soft-archiving of a hospital system.
+ */
+async function archiveHospitalSystem(sid) {
+  if (window.SBD_INITIALIZING) return;
+  toast('Archiving system...', 'info');
+  
   try {
-    console.log('SBD Platform: Commencing system removal for:', sid);
+    console.log('SBD Platform: Commencing system archival for:', sid);
     
-    // 1. Identify and Unlink Facilities in Backend
-    const sysFacs = (window.DB?.facilities || []).filter(f => f.systemId === sid);
-    if (IS_LIVE && (window.SB || SB).updateFacility) {
-      for (const f of sysFacs) {
-        if (String(f.id).startsWith('fac-')) {
-          console.log('deleteHospitalSystem: Optimistic Facility ID detected, skipping backend unlink.');
-        } else {
-          await (window.SB || SB).updateFacility(f.id, { system_id: null });
-          console.log('Backend Unlink Success:', f.name);
-        }
-      }
-    }
-
-    // 2. Delete System in Backend
-    if (IS_LIVE && (window.SB || SB).deleteHospitalSystem) {
+    // Soft-Archive in Backend
+    if (IS_LIVE && (window.SB || SB).updateHospitalSystem) {
       if (String(sid).startsWith('sys-')) {
-        console.log('deleteHospitalSystem: Optimistic ID detected, skipping backend call.');
+        console.log('archiveHospitalSystem: Optimistic ID detected, skipping backend call.');
       } else {
-        await (window.SB || SB).deleteHospitalSystem(sid);
-        console.log('API System Deletion Success');
+        await (window.SB || SB).updateHospitalSystem(sid, { active: false });
+        console.log('API System Archival Success');
       }
     }
 
-    // 3. Update Local State (Atomic)
+    // Update Local State (Atomic)
     if (window.DB && window.DB.hospitalSystems) {
-      window.DB.hospitalSystems = (window.DB.hospitalSystems || []).filter(s => s.id !== sid);
-      (window.DB.facilities || []).forEach(f => {
-        if (f.systemId === sid) {
-          f.systemId = null;
-        }
-      });
+      const sys = window.DB.hospitalSystems.find(s => s.id === sid);
+      if (sys) sys.active = false;
+      
       // Legacy sync
       window.DB.systems = window.DB.hospitalSystems;
-      
-      // Cleanup localStorage for deleted system (by ID if UUID or Name if Optimistic)
-      const optimistic = JSON.parse(localStorage.getItem('sbd_optimistic_systems') || '[]');
-      const filtered = optimistic.filter(s => s.id !== sid);
-      localStorage.setItem('sbd_optimistic_systems', JSON.stringify(filtered));
     }
 
-    toast('System removed and facilities unlinked successfully', 'ok');
-    closeModal();
+    toast('System archived successfully', 'ok');
     renderASystems();
     
     // Background refresh
     if(typeof initAppData === 'function') initAppData(); 
     
   } catch (err) {
-    console.error('Delete System Error:', err);
-    toast('Error removing system: ' + (err.message || 'Unknown error'), 'err');
+    console.error('Archive System Error:', err);
+    toast('Error archiving system: ' + (err.message || 'Unknown error'), 'err');
   }
 }
 

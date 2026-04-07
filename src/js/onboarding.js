@@ -94,7 +94,21 @@ function getTourRole(){
 // ── Onboarding Data Helpers ──
 function getOnboardingState(userId){
   if(!userId) return null;
-  return DB.onboarding.find(o=>o.userId===userId) || null;
+  // 1. Check in-memory DB
+  let state = DB.onboarding.find(o=>o.userId===userId);
+  if(state) return state;
+
+  // 2. Fallback to LocalStorage
+  const local = localStorage.getItem('sbd_onboarding_' + userId);
+  if(local) {
+    try {
+      const parsed = JSON.parse(local);
+      // Hydrate DB so it's available for next call
+      DB.onboarding.push(parsed);
+      return parsed;
+    } catch(e) { console.warn('Onboarding local load failed', e); }
+  }
+  return null;
 }
 
 function setOnboardingState(userId, updates){
@@ -105,8 +119,16 @@ function setOnboardingState(userId, updates){
     DB.onboarding.push(ob);
   }
   Object.assign(ob, updates, { updatedAt:new Date().toISOString() });
-  /* saveDemoData() removed */
-  if(IS_LIVE){ SB.upsertUserOnboarding(mapOnboardingToBackend(ob)).catch(e=>console.warn('Onboarding sync:',e.message)); }
+  
+  // 1. SAVE TO LOCALSTORAGE (Immediate Fallback)
+  localStorage.setItem('sbd_onboarding_' + userId, JSON.stringify(ob));
+
+  // 2. SYNC TO BACKEND (Background, ignore 403)
+  if(IS_LIVE){ 
+    SB.upsertUserOnboarding(mapOnboardingToBackend(ob)).catch(e=>{
+      if(!e.message.includes('403')) console.warn('Onboarding sync:',e.message); 
+    }); 
+  }
 }
 
 function isFirstLogin(userId){
@@ -120,6 +142,10 @@ SB.upsertUserOnboarding = function(data){ return sbFetch('/rest/v1/user_onboardi
 
 // ── Onboarding Mappers ──
 function mapOnboardingFromBackend(row){
+  if(!row) return null;
+  // Handle single object or array return
+  if(Array.isArray(row)) row = row[0];
+  if(!row) return null;
   return {
     userId: row.user_id,
     tourCompleted: row.tour_completed,

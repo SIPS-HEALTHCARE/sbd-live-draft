@@ -510,6 +510,14 @@ function l3BuildMarkBtn(type, id, idx){
 function showWelcomeOverlay(){
   const u = ST.user;
   if(!u) return;
+
+  // DEFENSIVE: If onboarding says we are done or skipped, do not show
+  const ob = getOnboardingState(u.id);
+  if(ob && (ob.tourCompleted || ob.tourSkipped)) {
+    console.log('showWelcomeOverlay: Skipping redundant popup (already completed/skipped)');
+    return;
+  }
+
   // IMMEDIATELY mark as skipped so it never pops up again
   setOnboardingState(u.id, { tourSkipped: true, tourSkippedAt: new Date().toISOString() });
 
@@ -1985,7 +1993,7 @@ async function initAppData(){
   window.SBD_INITIALIZING = true;
   console.log('SBD Platform: Multi-table data hydration started...');
   try {
-    const [facs, staff, systems, users, reviews, queue, registrations, freeAgents, promotions] = await Promise.race([
+    const [facs, staff, systems, users, reviews, queue, registrations, freeAgents, promotions, onboarding] = await Promise.race([
       Promise.all([
         SB.getFacilities().catch(e=>{ console.error('facs load err', e); return []; }),
         SB.getAllStaff().catch(e=>{ console.error('staff load err', e); return []; }),
@@ -1995,7 +2003,8 @@ async function initAppData(){
         SB.getPendingAssessments().catch(e=>{ console.error('queue load err', e); return []; }),
         SB.getPendingRegistrations().catch(e=>{ console.error('regs load err', e); return []; }),
         SB.getFreeAgents().catch(e=>{ console.error('fa load err', e); return []; }),
-        SB.getPromotionApprovals().catch(e=>{ console.error('promos load err', e); return []; })
+        SB.getPromotionApprovals().catch(e=>{ console.error('promos load err', e); return []; }),
+        (ST.user ? SB.getUserOnboarding(ST.user.id) : Promise.resolve([])).catch(e=>{ console.error('onboarding load err', e); return []; })
       ]),
       new Promise((_,rej)=>setTimeout(()=>rej(new Error('Initial data load timeout')), 20000))
     ]);
@@ -2074,6 +2083,7 @@ async function initAppData(){
     window.DB.pendingRegs = registrations||[];
     if(typeof mapFreeAgentFromBackend === 'function') window.DB.freeAgents = (freeAgents||[]).map(mapFreeAgentFromBackend); else window.DB.freeAgents = freeAgents||[];
     if(typeof mapPromotionApprovalFromBackend === 'function') window.DB.promotionApprovals = (promotions||[]).map(mapPromotionApprovalFromBackend); else window.DB.promotionApprovals = promotions||[];
+    if(typeof mapOnboardingFromBackend === 'function') window.DB.onboarding = (onboarding||[]).map(mapOnboardingFromBackend); else window.DB.onboarding = onboarding||[];
 
     console.log(`SBD Platform: Hydrated ${window.DB.facilities.length} facs, ${window.DB.staff.length} staff, ${window.DB.hospitalSystems.length} systems, ${window.DB.users.length} users.`);
     

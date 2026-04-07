@@ -12,6 +12,12 @@ serve(async (req) => {
     }
     
     try {
+        const supabaseAdmin = createClient(
+            Deno.env.get('SUPABASE_URL') ?? '',
+            Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+            { auth: { autoRefreshToken: false, persistSession: false } }
+        );
+
         const supabase = createClient(
             Deno.env.get('SUPABASE_URL') ?? '',
             Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
@@ -32,15 +38,17 @@ serve(async (req) => {
         const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
         if (authError || !user) throw new Error('Unauthorized');
 
-        const { data: profile } = await supabase.from('sbd_portal_users').select('role').eq('id', user.id).single();
-        if (!profile || (profile.role !== 'admin' && profile.role !== 'master')) {
-            throw new Error('Only admins can approve registrations');
+        // Verify Caller Identity (Allow master_admin, staff_admin, system_admin)
+        const { data: profile, error: profileErr } = await supabaseAdmin.from('sbd_portal_users').select('role').eq('auth_uid', user.id).single();
+        const allowedRoles = ['master_admin', 'staff_admin', 'system_admin', 'admin', 'master'];
+        if (profileErr || !profile || !allowedRoles.includes(profile.role)) {
+            throw new Error(`Unauthorized role (${profile?.role || 'none'}). Only admins can approve registrations.`);
         }
 
         const adminId = user.id;
 
         // Fetch registration details
-        const { data: regData, error: regError } = await supabase
+        const { data: regData, error: regError } = await supabaseAdmin
             .from('registrations')
             .select('*')
             .eq('id', registration_id)
@@ -54,29 +62,23 @@ serve(async (req) => {
             throw new Error(`Registration is already ${regData.status}`);
         }
 
-        // Initialize Supabase Admin Client to bypass RLS and create auth users
-        const supabaseAdmin = createClient(
-            Deno.env.get('SUPABASE_URL') ?? '',
-            Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-            { auth: { autoRefreshToken: false, persistSession: false } }
-        );
-
         // CREATE OR FIND USER
         let newUserId = null;
         let authCreated = false;
 
-        // Check if user already exists in portal_users (by email if possible)
-        const { data: existingUser } = await supabaseAdmin.from('sbd_portal_users').select('id').eq('email', regData.email).maybeSingle();
+        // Check if user already exists in auth.users by email
+        const { data: { users: existingAuthUsers } } = await supabaseAdmin.auth.admin.listUsers();
+        const existingAuthUser = existingAuthUsers.find(u => u.email === regData.email);
         
-        if (existingUser) {
-            newUserId = existingUser.id;
+        if (existingAuthUser) {
+            newUserId = existingAuthUser.id;
         } else {
-            // Generate a secure temp password
-            const tempPassword = 'Sbd_' + Math.random().toString(36).slice(-8) + '!2024';
+            // Use chosen password if provided, else generate one
+            const passwordToUse = regData.password || ('Sbd_' + Math.random().toString(36).slice(-8) + '!2025');
             
             const { data: authData, error: authCreateError } = await supabaseAdmin.auth.admin.createUser({
                 email: regData.email,
-                password: tempPassword,
+                password: passwordToUse,
                 email_confirm: true,
                 user_metadata: { name: regData.name, role: 'staff_member' }
             });
@@ -88,13 +90,24 @@ serve(async (req) => {
 
             newUserId = authData.user.id;
             authCreated = true;
-
-            // Wait briefly to allow async trigger to create the portal_user if they have one.
-            await new Promise(r => setTimeout(r, 1000));
         }
 
-        // Assign Staff record
-        const { error: staffError } = await supabaseAdmin.from('staff').insert({
+        // 1. Ensure Portal User Profile Exists (CRITICAL for login)
+        const { error: profileUpsertError } = await supabaseAdmin.from('sbd_portal_users').upsert({
+            auth_uid: newUserId,
+            email: regData.email,
+            name: regData.name,
+            role: 'staff_member',
+            facility_id: facility || regData.facility || 'unassigned',
+            system_id: regData.system_id || null
+        }, { onConflict: 'auth_uid' });
+
+        if (profileUpsertError) {
+            console.error("Profile Upsert Error:", profileUpsertError);
+        }
+
+        // 2. Assign Staff record (for legacy compatibility and staff views)
+        const { error: staffError } = await supabaseAdmin.from('staff').upsert({
             id: newUserId,
             name: regData.name,
             email: regData.email,
@@ -102,14 +115,13 @@ serve(async (req) => {
             facility_id: facility || regData.facility || 'unassigned',
             belt_level: 'White',
             joined_at: new Date().toISOString()
-        });
+        }, { onConflict: 'id' });
 
         if (staffError) {
             console.error("Staff Insert Error:", staffError);
-            // It might already exist if we retry
         }
 
-        // Update registration status
+        // 3. Update registration status
         await supabaseAdmin.from('registrations').update({
             status: 'approved',
             reviewed_at: new Date().toISOString(),
