@@ -10425,8 +10425,8 @@ function renderARegistrations(){
             <td style="font-size:11.5px;color:var(--txt3)">${r.email}</td>
             <td style="font-size:11.5px;color:var(--txt3)">${(r.requested_at || r.requestedAt || '').split('T')[0]}</td>
             <td><div style="display:flex;gap:6px">
-              <button class="btn btn-ok btn-xs" onclick="approveReg('${r.id}')">${ICO.check} Approve</button>
-              <button class="btn btn-err btn-xs" onclick="denyReg('${r.id}')">${ICO.x} Deny</button>
+              <button class="btn btn-ok btn-xs" onclick="openApproveRegModal('${r.id}')">${ICO.check} Approve</button>
+              <button class="btn btn-err btn-xs" onclick="openDenyRegModal('${r.id}')">${ICO.x} Deny</button>
             </div></td>
           </tr>`).join('')}
         </tbody>
@@ -10450,15 +10450,44 @@ function renderARegistrations(){
     </div>`:''}`;
 }
 
+async function openApproveRegModal(rid){
+  const r=DB.pendingRegs.find(x=>x.id===rid);
+  if(!r)return;
+  const facilityName = r.facility || r.facilityName || 'Unknown Facility';
+  const location = r.location || r.loc || '';
+  const contactName = r.name || r.contact || 'Unknown Person';
+
+  const html = `
+    <div style="text-align:center;padding:10px 0">
+      <div style="display:inline-flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:50%;background:rgba(34,197,94,0.1);color:#22c55e;margin-bottom:16px;">
+        ${ICO.check || '✓'}
+      </div>
+      <div style="font-size:16px;font-weight:600;color:var(--txt1);margin-bottom:8px;">
+        Approve Registration
+      </div>
+      <div style="font-size:14px;color:var(--txt3);margin-bottom:20px;line-height:1.5;">
+        You are about to approve the registration for <strong style="color:var(--txt1)">${facilityName}</strong>. 
+        This will create an active facility and a live portal account for <strong style="color:var(--txt1)">${contactName}</strong> 
+        (<span style="color:var(--gold)">${r.email}</span>). They will be able to log in immediately.
+      </div>
+    </div>
+    
+    <div style="display:flex;gap:12px;justify-content:center;">
+      <button class="btn btn-ghost" onclick="closeModal()" style="flex:1">Cancel</button>
+      <button class="btn btn-ok" onclick="approveReg('${rid}')" style="flex:1">Approve & Activate</button>
+    </div>
+  `;
+  openModal('Approve Facility', html, 'modal-md');
+}
+
 async function approveReg(rid){
+  closeModal();
   const r=DB.pendingRegs.find(x=>x.id===rid);
   if(!r)return;
   const facilityName = r.facility || r.facilityName || 'Unknown Facility';
   const location = r.location || r.loc || '';
   const department = r.department || r.dept || '';
   const contactName = r.name || r.contact || 'Unknown Person';
-
-  if(!confirm(`Approve registration for ${facilityName}?\n\nThis will create an active facility and portal account for ${contactName} (${r.email}). They will be able to log in immediately.`))return;
 
   toast('Approving registration... please wait.', 'info');
   // Create facility placeholder for UI state
@@ -10493,11 +10522,38 @@ async function approveReg(rid){
   }
 }
 
-function denyReg(rid){
+function openDenyRegModal(rid){
   const r=DB.pendingRegs.find(x=>x.id===rid);
   if(!r)return;
   const facilityName = r.facility || r.facilityName || 'Unknown Facility';
-  if(!confirm(`Deny registration request from ${facilityName}?`))return;
+
+  const html = `
+    <div style="text-align:center;padding:10px 0">
+      <div style="display:inline-flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:50%;background:rgba(239,68,68,0.1);color:#ef4444;margin-bottom:16px;">
+        ${ICO.x || 'X'}
+      </div>
+      <div style="font-size:16px;font-weight:600;color:var(--txt1);margin-bottom:8px;">
+        Deny Registration
+      </div>
+      <div style="font-size:14px;color:var(--txt3);margin-bottom:20px;line-height:1.5;">
+        Are you sure you want to deny the registration request from <strong style="color:var(--txt1)">${facilityName}</strong>?
+        This action will reject their application.
+      </div>
+    </div>
+    
+    <div style="display:flex;gap:12px;justify-content:center;">
+      <button class="btn btn-ghost" onclick="closeModal()" style="flex:1">Cancel</button>
+      <button class="btn btn-err" onclick="denyReg('${rid}')" style="flex:1">Confirm Denial</button>
+    </div>
+  `;
+  openModal('Deny Registration', html, 'modal-md');
+}
+
+async function denyReg(rid){
+  closeModal();
+  const r=DB.pendingRegs.find(x=>x.id===rid);
+  if(!r)return;
+  const facilityName = r.facility || r.facilityName || 'Unknown Facility';
   r.status='denied';
   if(IS_LIVE){ SB.denyRegistration(rid).catch(e=>toast('Deny sync: '+e.message,'warn')); }
   const nb=document.getElementById('reg-nb');
