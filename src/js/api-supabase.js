@@ -470,7 +470,7 @@ function mapUserFromBackend(row){
     initials:     row.initials,
     fid:          row.facility_id,
     systemId:     row.system_id,
-    sid:          row.staff_id,
+    sid:          row.staff_id || row.auth_uid,
     assignedFids: row.assigned_facility_ids || [],
     active:       row.active,
     protected:    row.protected

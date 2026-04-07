@@ -122,7 +122,7 @@ serve(async (req) => {
             auth_uid: newUserId,
             email: regData.email,
             name: regData.name,
-            role: 'staff_member',
+            role: 'staff_member', // reverted back to staff_member per user request
             facility_id: facilityId,
             system_id: regData.system_id || null
         }, { onConflict: 'auth_uid' });
