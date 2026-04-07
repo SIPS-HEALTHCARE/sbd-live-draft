@@ -132,14 +132,18 @@ serve(async (req) => {
         }
 
         // 2. Assign Staff record (for legacy compatibility and staff views)
+        const nameParts = (regData.name || '').trim().split(' ');
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
+        
         const { error: staffError } = await supabaseAdmin.from('staff').upsert({
             id: newUserId,
-            name: regData.name,
-            email: regData.email,
+            first: firstName,
+            last: lastName,
             fid: facilityId,
-            facility_id: facilityId,
-            belt_level: 'White',
-            joined_at: new Date().toISOString()
+            role: 'manager', // department manager role
+            belt: 'White',
+            since: new Date().toISOString().split('T')[0]
         }, { onConflict: 'id' });
 
         if (staffError) {
