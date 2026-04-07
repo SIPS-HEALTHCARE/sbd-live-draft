@@ -1736,7 +1736,12 @@ function submitOIP(staffId, answers){
     if(plNav) plNav.style.display='';
     updatePlacementBadge();
   }
-  if(ST.portal==='staff_member'||ST.sView) setTimeout(renderSDashboard, 100);
+  if(ST.portal==='staff_member'||ST.sView) {
+    setTimeout(() => {
+      if (ST.sView) renderSView(ST.sView);
+      else renderSDashboard();
+    }, 100);
+  }
   if(ST.aView==='a-facility') setTimeout(renderFacTab, 100);
   if(ST.hView==='h-staff'||ST.hView==='h-profile') setTimeout(()=>renderHView(ST.hView), 100);
 }
