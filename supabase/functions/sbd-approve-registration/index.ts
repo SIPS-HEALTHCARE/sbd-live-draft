@@ -62,6 +62,31 @@ serve(async (req) => {
             throw new Error(`Registration is already ${regData.status}`);
         }
 
+        // --- FACILITY HANDLING ---
+        let facilityId = facility;
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        const isValidUuid = (id: string) => id && uuidRegex.test(id);
+
+        if (!isValidUuid(facilityId)) {
+            console.log("No valid facility UUID provided. Creating a new facility...");
+            // Create a new facility based on registration data
+            const { data: newFac, error: facCreateError } = await supabaseAdmin.from('facilities').insert({
+                name: regData.facility,
+                loc: regData.location || 'Unknown',
+                dept: regData.department || 'General',
+                contact: regData.name,
+                email: regData.email,
+                system_id: regData.system_id || null,
+                active: true
+            }).select().single();
+
+            if (facCreateError) {
+                console.error("Facility Creation Error:", facCreateError);
+                throw new Error('Failed to create facility: ' + facCreateError.message);
+            }
+            facilityId = newFac.id;
+        }
+
         // CREATE OR FIND USER
         let newUserId = null;
         let authCreated = false;
@@ -98,7 +123,7 @@ serve(async (req) => {
             email: regData.email,
             name: regData.name,
             role: 'staff_member',
-            facility_id: facility || regData.facility || 'unassigned',
+            facility_id: facilityId,
             system_id: regData.system_id || null
         }, { onConflict: 'auth_uid' });
 
@@ -111,8 +136,8 @@ serve(async (req) => {
             id: newUserId,
             name: regData.name,
             email: regData.email,
-            fid: facility || regData.facility || 'unassigned',
-            facility_id: facility || regData.facility || 'unassigned',
+            fid: facilityId,
+            facility_id: facilityId,
             belt_level: 'White',
             joined_at: new Date().toISOString()
         }, { onConflict: 'id' });
@@ -133,6 +158,7 @@ serve(async (req) => {
             success: true, 
             message: 'Registration approved',
             user_id: newUserId,
+            facility_id: facilityId,
             auth_created: authCreated 
         }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
