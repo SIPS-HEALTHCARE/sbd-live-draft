@@ -31,7 +31,9 @@ async function sbFetch(path, opts={}){
       const err = await res.json().catch(()=>({message:res.statusText}));
       throw new Error(err.message || err.error || 'HTTP '+res.status);
     }
-    return res.status === 204 ? null : res.json();
+    if (res.status === 204) return null;
+    const text = await res.text();
+    return text ? JSON.parse(text) : null;
   } catch(e) {
     if(path.includes('report_audit_log')) return null;
     console.warn('sbFetch:', path, e.message);
