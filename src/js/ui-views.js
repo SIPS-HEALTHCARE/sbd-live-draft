@@ -2278,7 +2278,7 @@ function _renderOIPOverlay(){
   backBtn.style.display   = oipCurrentQ > 0 ? 'inline-flex' : 'none';
   submitBtn.style.display = allDone ? 'inline-flex' : 'none';
 
-  if(!allDone && oipCurrentQ < 29){
+  if(!allDone){
     nextBtn.style.display    = 'inline-flex';
     nextBtn.disabled         = answered === null;
     nextBtn.style.opacity    = answered === null ? '0.4' : '1';
@@ -2287,7 +2287,7 @@ function _renderOIPOverlay(){
     nextBtn.style.display = 'none';
   }
 
-  remaining.textContent = allDone ? '' : (60 - progress) + ' remaining';
+  remaining.textContent = allDone ? '' : (30 - progress) + ' remaining';
 }
 
 function oipSelectOverlay(idx){
@@ -2297,19 +2297,25 @@ function oipSelectOverlay(idx){
   setTimeout(()=>{
     if(oipCurrentQ < 29){
       oipCurrentQ++;
-      _renderOIPOverlay();
-      // Scroll question back to top
-      const body = document.getElementById('oip-quiz-body');
-      if(body) body.scrollTop = 0;
     } else {
-      _renderOIPOverlay(); // show Submit button
+      const firstMissing = oipAnswers.findIndex(a => a === null);
+      if(firstMissing !== -1) oipCurrentQ = firstMissing;
     }
+    _renderOIPOverlay();
+    // Scroll question back to top
+    const body = document.getElementById('oip-quiz-body');
+    if(body) body.scrollTop = 0;
   }, 280);
 }
 
 function oipNavNext(){
-  if(oipCurrentQ < 29 && oipAnswers[oipCurrentQ] !== null){
-    oipCurrentQ++;
+  if(oipAnswers[oipCurrentQ] !== null){
+    if(oipCurrentQ < 29){
+      oipCurrentQ++;
+    } else {
+      const firstMissing = oipAnswers.findIndex(a => a === null);
+      if(firstMissing !== -1) oipCurrentQ = firstMissing;
+    }
     _renderOIPOverlay();
     const body = document.getElementById('oip-quiz-body');
     if(body) body.scrollTop = 0;
@@ -2317,7 +2323,7 @@ function oipNavNext(){
 }
 
 function oipNav(dir){
-  oipCurrentQ = Math.max(0, Math.min(59, oipCurrentQ + dir));
+  oipCurrentQ = Math.max(0, Math.min(29, oipCurrentQ + dir));
   _renderOIPOverlay();
   const body = document.getElementById('oip-quiz-body');
   if(body) body.scrollTop = 0;
