@@ -126,14 +126,18 @@ serve(async (req) => {
             const first = nameParts[0] || 'Unknown';
             const last = nameParts.slice(1).join(' ') || '-';
             
-            const { error: staffUpsertErr } = await supabaseAdmin.from('staff').upsert({
+            const { data: existingStaff } = await supabaseAdmin.from('staff').select('id').eq('id', finalUserId).maybeSingle();
+            
+            const staffPayload: any = {
                 id: finalUserId,
                 first: first,
                 last: last,
                 fid: fid || null,
-                role: title || 'Staff Member',
-                belt: 'White'
-            }, { onConflict: 'id' });
+                role: title || 'Staff Member'
+            };
+            if (!existingStaff) staffPayload.belt = 'White';
+
+            const { error: staffUpsertErr } = await supabaseAdmin.from('staff').upsert(staffPayload, { onConflict: 'id' });
             
             if (staffUpsertErr) {
                 console.error("staff upsert error:", staffUpsertErr);

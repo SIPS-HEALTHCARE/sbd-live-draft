@@ -12007,7 +12007,7 @@ function openEditUserModal(uid){
             ${DB.facilities.map(f=>`<label style="display:flex;align-items:center;gap:6px;padding:7px 10px;background:var(--s2);border-radius:var(--rs);cursor:pointer;font-size:11.5px;border:1px solid var(--bdr2)"><input type="checkbox" id="eu-fac-${f.id}" ${(u.assignedFids||[]).includes(f.id)?'checked':''} style="accent-color:var(--gold)"> ${f.name}</label>`).join('')}
           </div>
         </div>` : ''}
-      ${(u.role==='facility_admin'||u.role==='hospital')? `
+      ${(u.role==='facility_admin'||u.role==='hospital'||u.role==='staff_member')? `
         <div class="form-group"><label class="form-label">Facility</label>
           <select class="form-select" id="eu-fid">
             ${DB.facilities.map(f=>`<option value="${f.id}" ${u.fid===f.id?'selected':''}>${f.name} \u2014 ${f.loc}</option>`).join('')}
@@ -12043,7 +12043,7 @@ async function saveEditUser(uid){
     let newFid = u.fid || null;
     let newSystemId = u.systemId || null;
     if(u.role==='staff_admin') newFids=DB.facilities.filter(f=>document.getElementById('eu-fac-'+f.id)?.checked).map(f=>f.id);
-    if(u.role==='facility_admin'||u.role==='hospital'){newFid=document.getElementById('eu-fid')?.value||null;const fac=getFac(newFid);newSystemId=fac?.systemId||null;}
+    if(u.role==='facility_admin'||u.role==='hospital'||u.role==='staff_member'){newFid=document.getElementById('eu-fid')?.value||null;const fac=getFac(newFid);newSystemId=fac?.systemId||null;}
     if(u.role==='system_admin'){newSystemId=document.getElementById('eu-sysid')?.value||null;}
 
     if(IS_LIVE){
