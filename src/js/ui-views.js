@@ -2858,7 +2858,7 @@ async function renderSReport(){
      el.innerHTML = '<div class="tc p20"><div class="spinner mb10"></div><div class="f-txt2" style="font-size:13px">Loading your report data...</div></div>';
      try {
        const today = todayStr();
-       const startDt = add30Days(today, -30)[0];
+       const startDt = today; // Optimized: staff view does not need past schedule
        const endDt = add30Days(today, 30)[30];
        const [sch, att] = await Promise.all([
           SB.getSchedule(s.fid, startDt, endDt).catch(()=>[]),
@@ -7358,7 +7358,7 @@ async function renderSSchedule(){
   if (!DB.schedule || DB.schedule.length === 0 || !DB.attendance || DB.attendance.length === 0) {
      el.innerHTML = '<div class="tc p20"><div class="spinner mb10"></div><div class="f-txt2" style="font-size:13px">Loading schedule and attendance...</div></div>';
      try {
-       const startDt = add30Days(today, -30)[0];
+       const startDt = today; // Optimized: staff view only displays upcoming shifts
        const endDt = dates[dates.length-1];
        const [sch, att] = await Promise.all([
           SB.getSchedule(s.fid, startDt, endDt).catch(()=>[]),
