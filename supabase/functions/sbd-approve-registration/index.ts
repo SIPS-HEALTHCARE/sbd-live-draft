@@ -122,6 +122,7 @@ serve(async (req) => {
         // 1. Ensure Portal User Profile Exists (CRITICAL for login)
         const { error: profileUpsertError } = await supabaseAdmin.from('sbd_portal_users').upsert({
             auth_uid: newUserId,
+            staff_id: newUserId, // Maps staff ID properly to auth_uid
             email: regData.email,
             name: regData.name,
             role: 'staff_member', // reverted back to staff_member per user request

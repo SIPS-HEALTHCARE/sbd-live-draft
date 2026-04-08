@@ -470,7 +470,7 @@ function mapUserFromBackend(row){
     initials:     row.initials,
     fid:          row.facility_id,
     systemId:     row.system_id,
-    sid:          row.staff_id || row.auth_uid,
+    sid:          row.staff_id || row.auth_uid || row.id || null,
     assignedFids: row.assigned_facility_ids || [],
     active:       row.active,
     protected:    row.protected
@@ -492,5 +492,59 @@ function mapUserToBackend(u){
     assigned_facility_ids: u.assignedFids || [],
     active:                u.active,
     protected:             u.protected
+  };
+}
+
+function mapScheduleFromBackend(row){
+  return {
+    id: row.id,
+    fid: row.facility_id,
+    date: row.date,
+    shift: row.shift,
+    assignedStaff: row.assigned_staff_ids || [],
+    zoneAssignments: row.zone_assignments || {}
+  };
+}
+
+function mapScheduleToBackend(sch){
+  return {
+    id: sch.id,
+    facility_id: sch.fid,
+    date: sch.date,
+    shift: sch.shift,
+    assigned_staff_ids: sch.assignedStaff || [],
+    zone_assignments: sch.zoneAssignments || {}
+  };
+}
+
+function mapAttendanceFromBackend(row){
+  return {
+    id: row.id,
+    fid: row.facility_id,
+    date: row.date,
+    shift: row.shift,
+    staffId: row.staff_id,
+    status: row.status,
+    arrivedAt: row.arrived_at,
+    leftAt: row.left_at,
+    coverageFor: row.coverage_for,
+    note: row.note,
+    markedBy: row.marked_by
+  };
+}
+
+function mapAttendanceToBackend(att){
+  return {
+    id: att.id,
+    facility_id: att.fid,
+    date: att.date,
+    shift: att.shift,
+    staff_id: att.staffId,
+    status: att.status,
+    arrived_at: att.arrivedAt,
+    left_at: att.leftAt,
+    coverage_for: att.coverageFor,
+    note: att.note,
+    marked_by: att.markedBy
   };
 }

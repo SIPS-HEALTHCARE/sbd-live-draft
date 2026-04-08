@@ -2046,7 +2046,7 @@ function openPromoteModal(staffId, context){
   openModal(`Promote Staff: ${fullName(s)}`,`
     <div class="modal-body">
       <div style="background:var(--s2);border:1px solid var(--bdr);border-radius:var(--rs);padding:12px 14px;margin-bottom:14px;display:flex;gap:12px;align-items:center">
-        <div style="width:40px;height:40px;border-radius:10px;background:${BELT_CLR[s.belt]||'#888'}22;border:2px solid ${BELT_CLR[s.belt]||'#888'};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:${BELT_CLR[s.belt]||'#888'};flex-shrink:0">${s.first[0]}${s.last[0]}</div>
+        <div style="width:40px;height:40px;border-radius:10px;background:${BELT_CLR[s.belt]||'#888'}22;border:2px solid ${BELT_CLR[s.belt]||'#888'};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:${BELT_CLR[s.belt]||'#888'};flex-shrink:0">${userInitials(s)}</div>
         <div>
           <div style="font-size:13.5px;font-weight:700">${fullName(s)}</div>
           <div style="font-size:11.5px;color:var(--txt2)">${s.role} &bull; ${s.belt} Belt</div>
@@ -2841,10 +2841,30 @@ function downloadNetworkReport(){
 }
 
 // ============================================================ REPORT LEVEL 1  --  INDIVIDUAL STAFF
-function renderSReport(){
+async function renderSReport(){
   const s = getStaff(ST.staffId);
   const el = document.getElementById('s-report');
   if(!s){el.innerHTML='<div class="empty-state"><div class="empty-ttl">Profile not found</div></div>';return;}
+
+  if (!DB.schedule || DB.schedule.length === 0 || !DB.attendance || DB.attendance.length === 0) {
+     el.innerHTML = '<div class="tc p20"><div class="spinner mb10"></div><div class="f-txt2" style="font-size:13px">Loading your report data...</div></div>';
+     try {
+       const today = todayStr();
+       const startDt = add30Days(today, -30)[0];
+       const endDt = add30Days(today, 30)[30];
+       const [sch, att] = await Promise.all([
+          SB.getSchedule(s.fid, startDt, endDt).catch(()=>[]),
+          SB.getStaffAttendance(s.id).catch(()=>[])
+       ]);
+       if (!DB.schedule) DB.schedule = [];
+       if (!DB.attendance) DB.attendance = [];
+       DB.schedule.push(...sch.map(mapScheduleFromBackend));
+       DB.attendance.push(...att.map(mapAttendanceFromBackend));
+     } catch(e) {
+       console.error("Hydration fallback failed", e);
+     }
+  }
+
   const pts = calcPoints(s);
   const rank = getRankInSystem(s);
   const win = getWindowStatus(s);
@@ -2876,7 +2896,7 @@ function renderSReport(){
     </div>
     <div style="background:var(--s1);border:1px solid var(--bdr);border-radius:var(--r);padding:18px;margin-bottom:16px">
       <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">
-        <div style="width:52px;height:52px;border-radius:12px;background:${BELT_CLR[s.belt]}22;border:2px solid ${BELT_CLR[s.belt]};display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:${BELT_CLR[s.belt]};flex-shrink:0">${s.first[0]}${s.last[0]}</div>
+        <div style="width:52px;height:52px;border-radius:12px;background:${BELT_CLR[s.belt]}22;border:2px solid ${BELT_CLR[s.belt]};display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:${BELT_CLR[s.belt]};flex-shrink:0">${userInitials(s)}</div>
         <div style="flex:1;min-width:180px">
           <div style="font-size:18px;font-weight:800;margin-bottom:2px">${fullName(s)}</div>
           <div style="font-size:12px;color:var(--txt2)">${s.role}</div>
@@ -3936,7 +3956,7 @@ function renderSDashboard(){
         <div class="card-hd"><div class="card-ttl">My Belt Profile</div>${beltBadge(s.belt)}</div>
         <div class="card-body">
           <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">
-            <div style="width:56px;height:56px;border-radius:12px;background:var(--s3);border:2px solid ${BELT_CLR[s.belt]};display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:${BELT_CLR[s.belt]};flex-shrink:0">${s.first[0]}${s.last[0]}</div>
+            <div style="width:56px;height:56px;border-radius:12px;background:var(--s3);border:2px solid ${BELT_CLR[s.belt]};display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:${BELT_CLR[s.belt]};flex-shrink:0">${userInitials(s)}</div>
             <div><div style="font-size:17px;font-weight:800">${fullName(s)}</div><div style="font-size:12px;color:var(--txt2)">${s.role}</div><div style="font-size:11px;color:var(--txt3);margin-top:2px">${BELT_CERT[s.belt]}</div></div>
           </div>
           <div class="irow"><div class="ilbl">Current Belt Gates</div><div class="ival">${gateDots(s.cur)}</div></div>
@@ -6216,7 +6236,7 @@ function renderHProfile(sid,context){
     `<button class="btn btn-ghost btn-sm mb16" onclick="hNav(document.querySelector('[data-view=h-staff]'),'h-staff','Staff Directory')"><svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M9 3L5 7l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg> Back to Staff</button>`;
   const html=`${backBtn}
     <div class="prof-banner">
-      <div class="prof-av">${s.first[0]}${s.last[0]}</div>
+      <div class="prof-av">${userInitials(s)}</div>
       <div style="flex:1">
         <div class="prof-name">${fullName(s)}</div>
         <div class="prof-role">${s.role} &bull; Sterile Processing Department</div>
@@ -6903,7 +6923,7 @@ function buildAttendanceTab(fid, shifts){
     return `<tr>
       <td>
         <div style="display:flex;align-items:center;gap:8px">
-          <div style="width:30px;height:30px;border-radius:8px;background:${BELT_CLR[s.belt]||'#888'}22;border:1.5px solid ${BELT_CLR[s.belt]||'#888'};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:${BELT_CLR[s.belt]||'#888'};flex-shrink:0">${s.first[0]}${s.last[0]}</div>
+          <div style="width:30px;height:30px;border-radius:8px;background:${BELT_CLR[s.belt]||'#888'}22;border:1.5px solid ${BELT_CLR[s.belt]||'#888'};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:${BELT_CLR[s.belt]||'#888'};flex-shrink:0">${userInitials(s)}</div>
           <div><div style="font-size:12.5px;font-weight:600">${fullName(s)}</div><div style="font-size:10.5px;color:var(--txt3)">${s.role}</div></div>
         </div>
       </td>
@@ -7319,13 +7339,32 @@ function assignCoverage(fid, date, shift, absentId){
 
 
 // ============================================================ S SCHEDULE (Staff self-view)
-function renderSSchedule(){
+async function renderSSchedule(){
   const s = getStaff(ST.staffId);
   const el = document.getElementById('s-schedule');
   if(!s){el.innerHTML='<div class="empty-state"><div class="empty-ttl">Profile not found</div></div>';return;}
 
   const today = todayStr();
   const dates = add30Days(today, 30);
+  
+  if (!DB.schedule || DB.schedule.length === 0 || !DB.attendance || DB.attendance.length === 0) {
+     el.innerHTML = '<div class="tc p20"><div class="spinner mb10"></div><div class="f-txt2" style="font-size:13px">Loading schedule and attendance...</div></div>';
+     try {
+       const startDt = add30Days(today, -30)[0];
+       const endDt = dates[dates.length-1];
+       const [sch, att] = await Promise.all([
+          SB.getSchedule(s.fid, startDt, endDt).catch(()=>[]),
+          SB.getStaffAttendance(s.id).catch(()=>[])
+       ]);
+       if (!DB.schedule) DB.schedule = [];
+       if (!DB.attendance) DB.attendance = [];
+       DB.schedule.push(...sch.map(mapScheduleFromBackend));
+       DB.attendance.push(...att.map(mapAttendanceFromBackend));
+     } catch(e) {
+       console.error("Hydration fallback failed", e);
+     }
+  }
+
   const myShifts = getStaffSchedule(s.id, today, dates[dates.length-1]);
 
   // Attendance history
@@ -10616,7 +10655,7 @@ function renderAPromoQueue(){
     const fac=getFac(a.fid);
     return `<tr>
       <td><div style="display:flex;align-items:center;gap:8px">
-        ${s?`<div style="width:28px;height:28px;border-radius:50%;background:${BELT_CLR[s.belt]||'#888'}22;border:1.5px solid ${BELT_CLR[s.belt]||'#888'};display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:${BELT_CLR[s.belt]||'#dde3f0'}">${s.first[0]}${s.last[0]}</div>`:''}
+        ${s?`<div style="width:28px;height:28px;border-radius:50%;background:${BELT_CLR[s.belt]||'#888'}22;border:1.5px solid ${BELT_CLR[s.belt]||'#888'};display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:${BELT_CLR[s.belt]||'#dde3f0'}">${userInitials(s)}</div>`:''}
         <div><div class="fw7">${s?fullName(s):'Unknown'}</div><div style="font-size:10.5px;color:#64748b">${s?s.role:''}</div></div>
       </div></td>
       <td style="font-size:12px;color:#94a3b8">${fac?fac.name:'--'}</td>
@@ -10744,7 +10783,7 @@ function openFreeAgentFullReport(faId) {
 
     <!-- Profile Header -->
     <div style="display:flex;align-items:flex-start;gap:16px;margin-bottom:18px;flex-wrap:wrap">
-      <div style="width:60px;height:60px;border-radius:14px;background:${bColor}22;border:2px solid ${bColor};display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:${bColor};flex-shrink:0">${fa.first[0]}${fa.last[0]}</div>
+      <div style="width:60px;height:60px;border-radius:14px;background:${bColor}22;border:2px solid ${bColor};display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:${bColor};flex-shrink:0">${userInitials(fa)}</div>
       <div style="flex:1">
         <div style="font-size:20px;font-weight:800;margin-bottom:2px">${fullName(fa)}</div>
         <div style="font-size:12.5px;color:var(--txt3);margin-bottom:8px">${fa.role}</div>
@@ -11174,7 +11213,7 @@ function renderAFreeAgents(){
         return`<div style="padding:16px;border-bottom:1px solid rgba(255,255,255,.06)${idx===fas.length-1?';border-bottom:none':''}">
           <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">
             <div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex-shrink:0">
-              <div style="width:44px;height:44px;border-radius:50%;background:${BELT_CLR[fa.belt]||'#888'}22;border:2px solid ${BELT_CLR[fa.belt]||'#888'};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:${BELT_CLR[fa.belt]||'#dde3f0'}">${fa.first[0]}${fa.last[0]}</div>
+              <div style="width:44px;height:44px;border-radius:50%;background:${BELT_CLR[fa.belt]||'#888'}22;border:2px solid ${BELT_CLR[fa.belt]||'#888'};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:${BELT_CLR[fa.belt]||'#dde3f0'}">${userInitials(fa)}</div>
               ${beltBadge(fa.belt)}
             </div>
             <div style="flex:1;min-width:200px">
@@ -11293,7 +11332,7 @@ function openFreeAgentProfile(faId){
         ${ICO.check} This is a SIPS-verified record. All belt certifications and history are authenticated by SIPS Healthcare Solutions.
       </div>
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-        <div style="width:52px;height:52px;border-radius:12px;background:${BELT_CLR[fa.belt]||'#888'}22;border:2px solid ${BELT_CLR[fa.belt]||'#888'};display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:${BELT_CLR[fa.belt]||'#dde3f0'};flex-shrink:0">${fa.first[0]}${fa.last[0]}</div>
+        <div style="width:52px;height:52px;border-radius:12px;background:${BELT_CLR[fa.belt]||'#888'}22;border:2px solid ${BELT_CLR[fa.belt]||'#888'};display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:${BELT_CLR[fa.belt]||'#dde3f0'};flex-shrink:0">${userInitials(fa)}</div>
         <div><div style="font-size:18px;font-weight:800">${fullName(fa)}</div>
           <div style="font-size:12px;color:#94a3b8;margin-bottom:4px">${fa.role}</div>
           ${beltBadge(fa.belt)} <span style="font-size:12px;color:#64748b;margin-left:6px">${BELT_CERT[fa.belt]}</span>
@@ -11439,7 +11478,7 @@ function releaseToFreeAgent(staffId){
         <strong style="color:#ef4444">This removes the staff member from ${fac?.name||'the facility'}.</strong> Their complete belt record is preserved in the Free Agent Registry. They can be assigned to a new facility at any time.
       </div>
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;padding:12px;background:#131829;border-radius:var(--rs)">
-        <div style="width:40px;height:40px;border-radius:10px;background:${BELT_CLR[s.belt]||'#888'}22;border:2px solid ${BELT_CLR[s.belt]||'#888'};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:${BELT_CLR[s.belt]||'#dde3f0'};flex-shrink:0">${s.first[0]}${s.last[0]}</div>
+        <div style="width:40px;height:40px;border-radius:10px;background:${BELT_CLR[s.belt]||'#888'}22;border:2px solid ${BELT_CLR[s.belt]||'#888'};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:${BELT_CLR[s.belt]||'#dde3f0'};flex-shrink:0">${userInitials(s)}</div>
         <div><div style="font-size:13.5px;font-weight:700">${fullName(s)}</div>
         <div style="font-size:11.5px;color:#94a3b8">${s.role} &bull; ${s.belt} Belt &bull; ${fac?.name||'--'}</div></div>
       </div>
