@@ -717,6 +717,21 @@ body{background:var(--bg);color:var(--txt);-webkit-text-size-adjust:100%}
 #sbd-root .cs-script-header { color:#dde3f0 !important; background:#1a2442 !important; }
 
 /* ── PS Curriculum Visual Design ── */
+#sbd-root .cs-body .cs-course-header { background: rgba(30,42,70,0.5); padding: 20px; border-radius: 8px; border-bottom: 2px solid #c49a20; margin-bottom: 24px; }
+#sbd-root .cs-body .cs-belt-title { font-size: 20px !important; font-weight: 800 !important; color: #fff; margin: 0 0 10px 0; letter-spacing: 0.05em; display: flex; align-items: center; gap: 12px; }
+#sbd-root .cs-body .cs-belt-title.cs-yellow { border-bottom-color: #facc15; }
+#sbd-root .cs-body .cs-belt-title.cs-green { border-bottom-color: #4ade80; }
+#sbd-root .cs-body .cs-belt-subtitle { font-size: 14px; font-weight: 500; color: #94a3b8; }
+#sbd-root .cs-body .cs-belt-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+#sbd-root .cs-body .cs-tag { font-size: 11px; padding: 4px 10px; background: rgba(196,154,32,0.15); color: #c49a20; border-radius: 12px; font-weight: 600; letter-spacing: 0.05em; }
+#sbd-root .cs-body .cs-belt-author { font-size: 11px; color: #64748b; margin: 0; font-style: italic; }
+#sbd-root .cs-body .cs-strong-gold { color: #fcd34d !important; font-weight: 700 !important; font-size: 14px !important; display: inline-block; margin-top: 12px; margin-bottom: 4px; }
+#sbd-root .cs-body .cs-alert-box { background: rgba(196,154,32,0.1); border-left: 4px solid #c49a20; padding: 16px; margin: 20px 0; border-radius: 0 8px 8px 0; }
+#sbd-root .cs-body .cs-alert-danger { background: rgba(239,68,68,0.1); border-left-color: #ef4444; }
+#sbd-root .cs-body .cs-alert-title { display: block; font-size: 13px !important; font-weight: 800 !important; color: #facc15 !important; margin-bottom: 8px; letter-spacing: 0.05em; }
+#sbd-root .cs-body .cs-alert-danger .cs-alert-title { color: #ef4444 !important; }
+#sbd-root .cs-body .cs-alert-text { font-size: 12.5px !important; line-height: 1.6 !important; color: #dde3f0 !important; margin: 0 !important; }
+
 #sbd-root .cs-body .cs-para { font-size:13px !important; line-height:1.8 !important; color:#dde3f0 !important; margin:0 0 12px !important; }
 #sbd-root .cs-body .cs-subhead { font-size:10.5px !important; font-weight:800 !important; letter-spacing:.09em !important; color:#c49a20 !important; margin:20px 0 8px !important; text-transform:uppercase !important; padding-bottom:5px !important; border-bottom:1px solid rgba(196,154,32,.2) !important; }
 #sbd-root .cs-body .cs-table { width:100% !important; border-collapse:collapse !important; margin:14px 0 18px !important; font-size:12.5px !important; }
