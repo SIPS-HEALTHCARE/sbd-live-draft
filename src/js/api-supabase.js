@@ -179,6 +179,7 @@ const SB = {
   assignFreeAgentRemote(data){ return sbFetch('/functions/v1/sbd-assign-free-agent', { method:'POST', body:data }); },
   // ── Schedule ──
   getSchedule(fid, startDate, endDate){ return sbFetch(`/rest/v1/sbd_schedule?facility_id=eq.${encodeURIComponent(fid)}&date=gte.${startDate}&date=lte.${endDate}&select=*&order=date.asc`); },
+  getStaffScheduleRange(staffId, startDate, endDate){ return sbFetch(`/rest/v1/sbd_schedule?staff_id=eq.${encodeURIComponent(staffId)}&date=gte.${startDate}&date=lte.${endDate}&select=*&order=date.asc`); },
   createSchedule(data){ return sbFetch('/rest/v1/sbd_schedule', { method:'POST', body:data }); },
   updateSchedule(id, data){ return sbFetch(`/rest/v1/sbd_schedule?id=eq.${id}`, { method:'PATCH', body:data }); },
   deleteSchedule(id){ return sbFetch(`/rest/v1/sbd_schedule?id=eq.${id}`, { method:'DELETE' }); },
