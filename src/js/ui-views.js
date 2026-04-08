@@ -382,9 +382,11 @@ function xNav(el,view,title){
 }
 
 function renderSView(view){
-  if(!ST.user || ST.user.role !== 'staff_member') {
+  if(!ST.user) return logout();
+  const allowed = ['staff_member','master_admin','staff_admin','hospital','facility_admin','system_admin'];
+  if(!allowed.includes(ST.user.role) && !allowed.includes(ST.portal)) {
     toast('RBAC Guard: Unauthorized access to Staff Portal', 'err');
-    return logout();
+    return;
   }
   ['s-dashboard','s-belt','s-window','s-scoreboard','s-posschool','s-report','s-oip','s-schedule','s-history','s-study','s-guide','s-settings'].forEach(v=>{
     const el=document.getElementById(v);
@@ -411,9 +413,11 @@ function renderSView(view){
 }
 
 function renderXView(view){
-  if(!ST.user || ST.user.role !== 'system_admin') {
+  if(!ST.user) return logout();
+  const allowed = ['system_admin','master_admin'];
+  if(!allowed.includes(ST.user.role) && !allowed.includes(ST.portal)) {
     toast('RBAC Guard: Unauthorized access to System Portal', 'err');
-    return logout();
+    return;
   }
   ['x-dashboard','x-facilities','x-facility','x-staff','x-schedule','x-reports','x-guide','x-settings'].forEach(v=>{
     const el=document.getElementById(v);
@@ -454,9 +458,11 @@ function goXFacility(fid){
 }
 
 function renderHView(view){
-  if(!ST.user || (ST.user.role !== 'hospital' && ST.user.role !== 'facility_admin')) {
+  if(!ST.user) return logout();
+  const allowed = ['hospital','facility_admin','master_admin','staff_admin','system_admin'];
+  if(!allowed.includes(ST.user.role) && !allowed.includes(ST.portal)) {
     toast('RBAC Guard: Unauthorized access to Facility Portal', 'err');
-    return logout();
+    return;
   }
   ['h-dashboard','h-staff','h-profile','h-milestones','h-posschool','h-scoreboard','h-schedule','h-attendance','h-reports','h-assessments','h-progression','h-guide','h-settings'].forEach(v=>{
     const el=document.getElementById(v);
@@ -489,9 +495,11 @@ function renderHView(view){
 }
 
 function renderAView(view){
-  if(!ST.user || (ST.user.role !== 'master_admin' && ST.user.role !== 'staff_admin')) {
+  if(!ST.user) return logout();
+  const allowed = ['master_admin','staff_admin','system_admin'];
+  if(!allowed.includes(ST.user.role) && !allowed.includes(ST.portal)) {
     toast('RBAC Guard: Unauthorized access to Network Portal', 'err');
-    return logout();
+    return;
   }
   ['a-overview','a-leaderboard','a-allstaff','a-scoreboard','a-facilities','a-facility','a-registrations','a-assessments','a-progression','a-upload','a-reports','a-adminusers','a-promoqueue','a-freeagents','a-placementreviews','a-guide','a-settings','a-systems','a-systems-dashboard'].forEach(v=>{
     const el=document.getElementById(v);
