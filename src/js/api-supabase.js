@@ -143,7 +143,7 @@ const SB = {
   // ── Registrations ──
   getPendingRegistrations(){ return sbFetch('/rest/v1/registrations?status=eq.pending&select=*&order=requested_at.desc'); },
   submitRegistration(data){ return sbFetch('/rest/v1/registrations', { method:'POST', prefer:'return=minimal', body:data }); },
-  approveRegistration(id, facility){ return sbFetch('/functions/v1/sbd-approve-registration', { method:'POST', body:{registration_id:id, facility} }); },
+  approveRegistration(id, facilityName, systemId, assignRole){ return sbFetch('/functions/v1/sbd-approve-registration', { method:'POST', body:{registration_id:id, facility_name:facilityName, assign_system_id:systemId, assign_role:assignRole} }); },
   denyRegistration(id, reviewedBy){ return sbFetch(`/rest/v1/registrations?id=eq.${id}`, { method:'PATCH', body:{status:'denied', reviewed_at:new Date().toISOString(), reviewed_by:reviewedBy} }); },
   // ── Analytics ──
   getFacilityTrends(fid){ return sbFetch(`/rest/v1/sbd_facility_trends?facility_id=eq.${encodeURIComponent(fid)}&select=*&order=year.asc,month_index.asc`); },

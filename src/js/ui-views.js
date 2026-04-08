@@ -99,6 +99,7 @@ function doRegister(){
   const fname=(document.getElementById('reg-fname').value||'').trim();
   const loc=(document.getElementById('reg-loc').value||'').trim();
   const dept=(document.getElementById('reg-dept').value||'').trim();
+  const reqRole=(document.getElementById('reg-requested-role').value||'staff_member');
   const contact=(document.getElementById('reg-contact').value||'').trim();
   const email=(document.getElementById('reg-email').value||'').trim();
   const pass=(document.getElementById('reg-pass').value||'').trim();
@@ -109,13 +110,14 @@ function doRegister(){
   if(pass!==pass2){errEl.textContent='Passwords do not match.';errEl.style.display='block';return;}
   if(DB.users.find(u=>u.email.toLowerCase()===email.toLowerCase())||DB.pendingRegs.find(r=>r.email.toLowerCase()===email.toLowerCase())){errEl.textContent='An account with this email already exists or is pending review.';errEl.style.display='block';return;}
   
-  // Map fields to match registrations table: name, email, facility, requested_at, location, department, password
+  // Map fields to match registrations table: name, email, facility, requested_at, location, department, password, requested_role
   const reg={
     name: contact, 
     email: email, 
     facility: fname, 
     location: loc,
     department: dept,
+    requested_role: reqRole,
     requested_at: new Date().toISOString(),
     status:'pending',
     password: pass // Included for the Edge Function to create the auth user
@@ -10501,6 +10503,18 @@ async function openApproveRegModal(rid){
   const facilityName = r.facility || r.facilityName || 'Unknown Facility';
   const location = r.location || r.loc || '';
   const contactName = r.name || r.contact || 'Unknown Person';
+  
+  let roleLabel = 'Unknown';
+  if(r.requested_role === 'staff_member') roleLabel = 'Individual Staff / Technician';
+  else if(r.requested_role === 'hospital') roleLabel = 'Facility Manager / Department Leader';
+  else if(r.requested_role === 'system_admin') roleLabel = 'Hospital System Executive';
+  else if(r.requested_role) roleLabel = r.requested_role;
+
+  const sortedFacilities = [...DB.facilities].sort((a,b) => a.name.localeCompare(b.name));
+  const facOptions = sortedFacilities.map(f => `<option value="${f.id}">${f.name} (${f.loc || 'Unknown'})</option>`).join('');
+  
+  const sortedSystems = [...(DB.hospitalSystems||[])].sort((a,b) => a.name.localeCompare(b.name));
+  const sysOptions = sortedSystems.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
 
   const html = `
     <div style="text-align:center;padding:10px 0">
@@ -10510,10 +10524,46 @@ async function openApproveRegModal(rid){
       <div style="font-size:16px;font-weight:600;color:var(--txt1);margin-bottom:8px;">
         Approve Registration
       </div>
-      <div style="font-size:14px;color:var(--txt3);margin-bottom:20px;line-height:1.5;">
-        You are about to approve the registration for <strong style="color:var(--txt1)">${facilityName}</strong>. 
-        This will create an active facility and a live portal account for <strong style="color:var(--txt1)">${contactName}</strong> 
-        (<span style="color:var(--gold)">${r.email}</span>). They will be able to log in immediately.
+      <div style="margin-bottom:20px;text-align:left;background:var(--s2);border:1px solid var(--bdr);padding:14px;border-radius:var(--rs);">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.04em;color:var(--txt3);margin-bottom:3px">Requester Name</div>
+        <div style="font-size:15px;font-weight:600;color:var(--txt1);margin-bottom:10px">${contactName}</div>
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.04em;color:var(--txt3);margin-bottom:3px">Email Address</div>
+        <div style="font-size:14px;font-weight:500;color:var(--gold);margin-bottom:12px">${r.email}</div>
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.04em;color:var(--txt3);margin-bottom:3px">Requested Profile</div>
+        <div style="font-size:13px;font-weight:600;color:var(--txt1);">${roleLabel}</div>
+      </div>
+    </div>
+
+    <div style="text-align:left;margin-bottom:20px;">
+      <label class="form-label">Assign Account Role</label>
+      <select id="approve-role-select" class="form-input" style="width:100%;margin-bottom:16px;">
+        <option value="staff_member" ${r.requested_role==='staff_member'?'selected':''}>Staff Member (Tech/Free Agent)</option>
+        <option value="hospital" ${(r.requested_role==='hospital' || !r.requested_role)?'selected':''}>Facility Admin (Manager/Leader)</option>
+        <option value="system_admin" ${r.requested_role==='system_admin'?'selected':''}>System Admin (Executive)</option>
+        <option value="staff_admin">Staff Admin (SIPS Internal)</option>
+        <option value="master_admin">Master Admin (SIPS Leader)</option>
+      </select>
+
+      <label class="form-label">Assign to Facility</label>
+      <select id="approve-facility-select" class="form-input" style="width:100%;margin-bottom:10px;" onchange="document.getElementById('new-facility-name-group').style.display = this.value === 'NEW' ? 'block' : 'none'">
+          <option value="NEW">✨ Create New Facility</option>
+          <optgroup label="Existing Facilities">
+            ${facOptions}
+          </optgroup>
+      </select>
+      
+      <div id="new-facility-name-group" style="display:block;">
+         <label class="form-label" style="display:flex;justify-content:space-between;">
+            <span>New Facility Name</span>
+            <span style="font-size:11px;color:var(--gold);">*Will create a new facility*</span>
+         </label>
+         <input type="text" id="new-facility-name" class="form-input" value="${facilityName}" style="margin-bottom:10px;">
+         
+         <label class="form-label">Assign to Hospital System</label>
+         <select id="approve-sys-select" class="form-input" style="width:100%;">
+             <option value="">-- No System (Independent) --</option>
+             ${sysOptions}
+         </select>
       </div>
     </div>
     
@@ -10526,47 +10576,61 @@ async function openApproveRegModal(rid){
 }
 
 async function approveReg(rid){
+  const sel = document.getElementById('approve-facility-select');
+  const roleSel = document.getElementById('approve-role-select');
+  const isNew = sel.value === 'NEW';
+  const chosenFacilityId = sel.value;
+  const newFacilityName = isNew ? document.getElementById('new-facility-name').value.trim() : sel.options[sel.selectedIndex].text.split(' (')[0];
+  const assignSystemId = isNew ? document.getElementById('approve-sys-select').value : null;
+  const assignRole = roleSel ? roleSel.value : 'hospital';
   closeModal();
+  
   const r=DB.pendingRegs.find(x=>x.id===rid);
   if(!r)return;
-  const facilityName = r.facility || r.facilityName || 'Unknown Facility';
   const location = r.location || r.loc || '';
   const department = r.department || r.dept || '';
   const contactName = r.name || r.contact || 'Unknown Person';
 
   toast('Approving registration... please wait.', 'info');
-  // Create facility placeholder for UI state
-  const fid='fac-'+Date.now();
-  const approvedFac={id:fid,name:facilityName,loc:location,dept:department,contact:contactName,email:r.email,since:new Date().toLocaleDateString('en-US',{month:'short',year:'numeric'}),active:true};
+  // Pass either the explicit UUID (for existing) OR the custom name (for NEW)
+  const payloadFacility = isNew ? newFacilityName : chosenFacilityId;
+  let finalFacilityId = isNew ? ('fac-'+Date.now()) : chosenFacilityId;
   
   try {
     let emailErr = null;
     if(IS_LIVE) {
       // The Edge Function automatically creates the user auth identity and user_profiles row
-      const beRes = await SB.approveRegistration(rid, mapFacilityToBackend(approvedFac));
+      const beRes = await SB.approveRegistration(rid, payloadFacility, assignSystemId || null, assignRole);
       if (beRes && beRes.email_error) {
         emailErr = beRes.email_error;
+      }
+      if (beRes && beRes.facility_id) {
+        finalFacilityId = beRes.facility_id;
       }
     }
     
     // UI state updates below
-    DB.facilities.push(approvedFac);
+    if (isNew) {
+      const approvedFac={id:finalFacilityId,name:newFacilityName,loc:location,dept:department,contact:contactName,email:r.email,since:new Date().toLocaleDateString('en-US',{month:'short',year:'numeric'}),active:true, systemId: assignSystemId || null};
+      DB.facilities.push(approvedFac);
+    }
+    
     const initials=contactName.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
-    const regUser={id:'u'+Date.now(),email:r.email,password:r.password,role:'hospital',name:contactName,title:'Dept. Manager',initials,fid};
+    const regUser={id:'u'+Date.now(),email:r.email,password:r.password,role:'hospital',name:contactName,title:'Dept. Manager',initials,fid:finalFacilityId};
     DB.users.push(regUser);
     
     // Remove pending local status
     r.status='approved';
-    const sel=document.getElementById('fac-switcher-sel');
-    if(sel) sel.innerHTML=DB.facilities.map(f=>`<option value="${f.id}">${f.name}</option>`).join('');
+    const facSel=document.getElementById('fac-switcher-sel');
+    if(facSel) facSel.innerHTML=DB.facilities.map(f=>`<option value="${f.id}">${f.name}</option>`).join('');
     const nb=document.getElementById('reg-nb');
     const pendingCnt=DB.pendingRegs.filter(x=>x.status==='pending').length;
     if(nb){nb.textContent=pendingCnt;nb.style.display=pendingCnt>0?'inline-block':'none';}
     
     if (emailErr) {
-      toast(`${facilityName} approved.\nHowever, the welcome email FAILED: ${emailErr}`, 'error');
+      toast(`${newFacilityName} approved.\nHowever, the welcome email FAILED: ${emailErr}`, 'error');
     } else {
-      toast(`${facilityName} approved.\nPortal account activated for ${contactName}. Refreshing view...`,'ok');
+      toast(`${newFacilityName} approved.\nPortal account activated for ${contactName}. Refreshing view...`,'ok');
     }
     if(IS_LIVE) setTimeout(()=>initAppData(), emailErr ? 4000 : 1500); // Trigger clean backend re-hydrate
     renderARegistrations();
@@ -10579,6 +10643,7 @@ function openDenyRegModal(rid){
   const r=DB.pendingRegs.find(x=>x.id===rid);
   if(!r)return;
   const facilityName = r.facility || r.facilityName || 'Unknown Facility';
+  const contactName = r.name || r.contact || 'Unknown Person';
 
   const html = `
     <div style="text-align:center;padding:10px 0">
@@ -10588,9 +10653,17 @@ function openDenyRegModal(rid){
       <div style="font-size:16px;font-weight:600;color:var(--txt1);margin-bottom:8px;">
         Deny Registration
       </div>
-      <div style="font-size:14px;color:var(--txt3);margin-bottom:20px;line-height:1.5;">
+      <div style="font-size:14px;color:var(--txt3);margin-bottom:16px;line-height:1.5;">
         Are you sure you want to deny the registration request from <strong style="color:var(--txt1)">${facilityName}</strong>?
         This action will reject their application.
+      </div>
+      <div style="margin-bottom:20px;text-align:left;background:var(--s2);border:1px solid var(--bdr);padding:14px;border-radius:var(--rs);">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.04em;color:var(--txt3);margin-bottom:3px">Requester Name</div>
+        <div style="font-size:15px;font-weight:600;color:var(--txt1);margin-bottom:10px">${contactName}</div>
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.04em;color:var(--txt3);margin-bottom:3px">Email Address</div>
+        <div style="font-size:14px;font-weight:500;color:var(--gold);margin-bottom:12px">${r.email}</div>
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.04em;color:var(--txt3);margin-bottom:3px">Requested Facility</div>
+        <div style="font-size:14px;font-weight:600;color:var(--txt1);">${facilityName}</div>
       </div>
     </div>
     
