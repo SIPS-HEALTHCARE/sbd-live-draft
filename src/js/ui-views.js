@@ -251,6 +251,8 @@ function enterPortal(type){
     return;
   }
 
+  try{const v=JSON.parse(sessionStorage.getItem('sbd_demo_view')||'{}');if(v.staffId) ST.staffId=v.staffId;}catch(e){}
+
   if(type==='system_admin'){
     const sys=getSystem(u.systemId);
     ST.curSystemId=u.systemId;
@@ -348,7 +350,7 @@ function hNav(el,view,title){
   el.classList.add('active');
   document.getElementById('h-topbar-title').textContent=title;
   closeSidebar('h');
-  try{sessionStorage.setItem('sbd_demo_view',JSON.stringify({view,title}));}catch(e){}
+  try{sessionStorage.setItem('sbd_demo_view',JSON.stringify({view,title,staffId:ST.staffId}));}catch(e){}
   renderHView(view);
 }
 
@@ -359,7 +361,7 @@ function aNav(el,view,title){
   document.getElementById('fac-switcher').classList.add('hidden');
   document.getElementById('download-btn').style.display='none';
   closeSidebar('a');
-  try{sessionStorage.setItem('sbd_demo_view',JSON.stringify({view,title}));}catch(e){}
+  try{sessionStorage.setItem('sbd_demo_view',JSON.stringify({view,title,staffId:ST.staffId}));}catch(e){}
   renderAView(view);
 }
 
@@ -368,7 +370,7 @@ function sNav(el,view,title){
   el.classList.add('active');
   document.getElementById('s-topbar-title').textContent=title;
   closeSidebar('s');
-  try{sessionStorage.setItem('sbd_demo_view',JSON.stringify({view,title}));}catch(e){}
+  try{sessionStorage.setItem('sbd_demo_view',JSON.stringify({view,title,staffId:ST.staffId}));}catch(e){}
   renderSView(view);
 }
 
@@ -377,7 +379,7 @@ function xNav(el,view,title){
   el.classList.add('active');
   document.getElementById('x-topbar-title').textContent=title;
   closeSidebar('x');
-  try{sessionStorage.setItem('sbd_demo_view',JSON.stringify({view,title}));}catch(e){}
+  try{sessionStorage.setItem('sbd_demo_view',JSON.stringify({view,title,staffId:ST.staffId}));}catch(e){}
   renderXView(view);
 }
 
@@ -1076,7 +1078,7 @@ const PLACEMENT_QUESTIONS = [
    keywords:['hold','do not release','verify','supervisor','OR','count sheet','discrepancy','confirm','document','check','preference card','do not guess']},
 ];
 
-let PA = {
+let PA = JSON.parse(localStorage.getItem('sbd_pa_state')||'null') || {
   active: false,
   staffId: null,
   answers: {},
@@ -1085,12 +1087,19 @@ let PA = {
   submitted: false
 };
 
+function savePAState(){ try{localStorage.setItem('sbd_pa_state',JSON.stringify(PA));}catch(e){} }
+
 function showPlacementAssessment(s){
-  PA.active = true;
-  PA.staffId = s.id;
-  PA.answers = {};
-  PA.currentQ = 0;
-  PA.submitted = false;
+  if (PA.staffId !== s.id || PA.submitted) {
+    PA.active = true;
+    PA.staffId = s.id;
+    PA.answers = {};
+    PA.currentQ = 0;
+    PA.submitted = false;
+  } else {
+    PA.active = true; // resume
+  }
+  savePAState();
   const overlay = document.getElementById('placement-overlay');
   overlay.classList.remove('hidden');
   overlay.style.display = 'flex';
@@ -1102,6 +1111,7 @@ function hidePlacementOverlay(){
   overlay.classList.add('hidden');
   overlay.style.display = '';
   PA.active = false;
+  savePAState();
 }
 
 function renderPAScreen(){
@@ -1220,11 +1230,13 @@ function paStartQuestions(){
 
 function paSelectKnowledge(qId, idx){
   PA.answers[qId] = idx;
+  savePAState();
   renderPAScreen();
 }
 
 function paSimInput(qId, val){
   PA.answers[qId] = val;
+  savePAState();
   const minChars = 80;
   const hint = document.getElementById('pa-sim-hint');
   const btn = document.getElementById('pa-next-btn');
@@ -1248,13 +1260,15 @@ function paNext(){
     submitPlacementAssessment();
   } else {
     PA.currentQ++;
+    savePAState();
     renderPAScreen();
   }
 }
 
 function paPrev(){
-  if(PA.currentQ <= 1){ PA.currentQ = 0; renderPAIntro(); return; }
+  if(PA.currentQ <= 1){ PA.currentQ = 0; savePAState(); renderPAIntro(); return; }
   PA.currentQ--;
+  savePAState();
   renderPAScreen();
 }
 
@@ -1353,6 +1367,7 @@ async function submitPlacementAssessment(){
 
   PA.submitting = false;
   PA.submitted = true;
+  savePAState();
   renderPAComplete();
 }
 
@@ -3408,11 +3423,13 @@ simulation: [
 // ============================================================
 // PS PRACTICE STATE (session-level)
 // ============================================================
-let PS_PRACTICE_STATE = {
+let PS_PRACTICE_STATE = JSON.parse(localStorage.getItem('sbd_psprac_state')||'null') || {
   active: false, trackId: null, mode: null,
   questions: [], current: 0, answers: [], score: 0,
   startTime: null, complete: false
 };
+
+function savePSState(){ try{localStorage.setItem('sbd_psprac_state',JSON.stringify(PS_PRACTICE_STATE));}catch(e){} }
 
 function startPSPracticeTest(trackId, mode) {
   const bank = PS_QUESTION_BANKS[trackId];
@@ -3425,6 +3442,7 @@ function startPSPracticeTest(trackId, mode) {
     questions: shuffled, current: 0, answers: [], score: 0,
     startTime: Date.now(), complete: false
   };
+  savePSState();
   // Navigate to PS study view
   window._psPracticeOpen = true;
   const navEl = document.querySelector('#s-portal .nav-item[data-view=s-posschool]');
@@ -3444,11 +3462,13 @@ function submitPSAnswer(correct) {
     ps.active = false;
     savePSPracticeScore(ps.trackId, ps.mode, ps.score, ps.questions.length);
   }
+  savePSState();
   renderSPosSchool();
 }
 
 function resetPSPractice() {
   PS_PRACTICE_STATE = { active: false, trackId: null, mode: null, questions: [], current: 0, answers: [], score: 0, startTime: null, complete: false };
+  savePSState();
   window._psPracticeOpen = false;
   renderSPosSchool();
 }
@@ -5133,7 +5153,7 @@ simulation: [
 // ============================================================
 // PRACTICE TEST STATE (session-level, non-persistent)
 // ============================================================
-let PRACTICE_STATE = {
+let PRACTICE_STATE = JSON.parse(localStorage.getItem('sbd_prac_state')||'null') || {
   active: false,
   belt: null,
   mode: null, // 'knowledge' | 'simulation'
@@ -5144,6 +5164,8 @@ let PRACTICE_STATE = {
   startTime: null,
   complete: false
 };
+
+function savePracState(){ try{localStorage.setItem('sbd_prac_state',JSON.stringify(PRACTICE_STATE));}catch(e){} }
 
 function startPracticeTest(belt, mode) {
   const bank = FULL_QUESTION_BANKS[belt];
@@ -5158,6 +5180,7 @@ function startPracticeTest(belt, mode) {
     current: 0, answers: [], score: 0,
     startTime: Date.now(), complete: false
   };
+  savePracState();
   renderSStudy();
 }
 
@@ -5175,6 +5198,7 @@ function submitPracticeAnswer(userAnswer) {
     // Save best practice score to staff record
     savePracticeScore(ps.belt, ps.mode, ps.score, ps.questions.length);
   }
+  savePracState();
   renderSStudy();
 }
 
