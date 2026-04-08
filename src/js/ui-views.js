@@ -7398,7 +7398,7 @@ async function renderSSchedule(){
 
   // Next shift
   const nextShift = myShifts.sort((a,b)=>a.date.localeCompare(b.date))[0];
-  const nextDef = nextShift ? SHIFT_DEF[nextShift.shift] : null;
+  const nextDef = nextShift ? (getFacilityShifts(nextShift.fid)[nextShift.shift] || {label:nextShift.shift, name:nextShift.shift, start:'', end:'', icon:'⏱', color:'var(--txt)', bg:'var(--s2)', bd:'var(--bdr)'}) : null;
 
   el.innerHTML=`
     <!-- Attendance points summary -->
@@ -7430,7 +7430,7 @@ async function renderSSchedule(){
       <div style="flex:1">
         <div style="font-size:11px;font-weight:700;color:${nextDef.color};letter-spacing:.07em">NEXT SHIFT</div>
         <div style="font-size:16px;font-weight:800">${dateLabel(nextShift.date)}</div>
-        <div style="font-size:13px;color:var(--txt2)">${nextDef.label} &bull; ${fmtTime(nextDef.start)}–${fmtTime(nextDef.end)}</div>
+        <div style="font-size:13px;color:var(--txt2)">${nextDef.label} ${nextDef.start&&nextDef.end?`&bull; ${fmtTime(nextDef.start)}–${fmtTime(nextDef.end)}`:''}</div>
         ${(()=>{const zid=getStaffZone(nextShift,s.id);const z=zid?getZone(zid):null;return z?`<div style="margin-top:6px;display:inline-flex;align-items:center;gap:5px;background:${z.bg};color:${z.color};border:1px solid ${z.bd};border-radius:20px;padding:3px 10px;font-size:11.5px;font-weight:700">${z.icon} Zone: ${z.label}</div>`:'<div style="font-size:11px;color:var(--txt3);margin-top:4px">Zone not yet assigned</div>';})()}
       </div>
       <div style="margin-left:auto;text-align:center;padding:8px 14px;background:var(--s2);border-radius:var(--rs)">
@@ -7462,14 +7462,14 @@ async function renderSSchedule(){
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             ${scheds.map(sch=>{
-              const def=SHIFT_DEF[sch.shift];
+              const def=getFacilityShifts(sch.fid)[sch.shift] || {label:sch.shift, icon:'⏱', color:'var(--txt)', bg:'var(--s2)', bd:'var(--bdr)', start:'', end:''};
               const att=getAttendance(sch.fid,date,sch.shift,s.id);
               const statusColor=att?ATTEND_COLORS[att.status]:'var(--txt3)';
               return `<div style="background:${def.bg};border:1px solid ${def.bd};border-radius:var(--rs);padding:8px 12px;display:flex;align-items:center;gap:8px">
                 <span style="font-size:18px">${def.icon}</span>
                 <div>
                   <div style="font-size:12px;font-weight:700;color:${def.color}">${def.label}</div>
-                  <div style="font-size:10.5px;color:var(--txt3)">${def.time}</div>
+                  <div style="font-size:10.5px;color:var(--txt3)">${def.start&&def.end?`${fmtTime(def.start)}–${fmtTime(def.end)}`:'—'}</div>
                 </div>
                 ${att?`<span class="pill" style="background:${statusColor}22;color:${statusColor};border:1px solid ${statusColor}44;font-size:9.5px;font-weight:700;margin-left:6px">${ATTEND_LABELS[att.status]}</span>`:''}
               </div>`;
@@ -7485,7 +7485,7 @@ async function renderSSchedule(){
       <div style="overflow-x:auto"><table class="tbl" style="min-width:380px">
         <thead><tr><th>Date</th><th>Shift</th><th>Status</th><th>Points</th></tr></thead>
         <tbody>${[...myAttendance].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,30).map(a=>{
-          const def=SHIFT_DEF[a.shift]||{icon:'',label:a.shift};
+          const def=getFacilityShifts(a.fid)[a.shift]||{icon:'',label:a.shift};
           const pts=a.status==='present'?ATTEND_POINTS.present:a.status==='late'?ATTEND_POINTS.late:a.status==='coverage'?ATTEND_POINTS.present+ATTEND_POINTS.coverage:ATTEND_POINTS.absent;
           return`<tr>
             <td style="color:var(--txt3);font-size:11.5px">${dateLabel(a.date)}</td>
