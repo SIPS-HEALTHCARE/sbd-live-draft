@@ -308,7 +308,8 @@ function mapStaffFromBackend(row){
     oip: row.oip || null,
     history: row.history || [],
     created_at: row.created_at,
-    updated_at: row.updated_at
+    updated_at: row.updated_at,
+    placementNeeded: row.placement_needed,
   };
 }
 
