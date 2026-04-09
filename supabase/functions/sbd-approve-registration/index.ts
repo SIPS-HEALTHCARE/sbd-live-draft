@@ -18,12 +18,8 @@ serve(async (req) => {
             { auth: { autoRefreshToken: false, persistSession: false } }
         );
 
-        const supabase = createClient(
-            Deno.env.get('SUPABASE_URL') ?? '',
-            Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-            { global: { headers: { Authorization: req.headers.get('Authorization')! } },
-              auth: { autoRefreshToken: false, persistSession: false } }
-        );
+        // Auth verification uses the admin client with getUser() to validate the JWT
+        // (removed anon-key client — supabaseAdmin handles everything)
 
         const { registration_id, facility_name, assign_system_id, assign_role } = await req.json();
 
@@ -36,8 +32,8 @@ serve(async (req) => {
         if (!authHeader) throw new Error('Missing Authorization header');
         const jwt = authHeader.replace(/^Bearer\s+/i, '');
         
-        const { data: { user }, error: authError } = await supabase.auth.getUser(jwt);
-        if (authError || !user) throw new Error('Unauthorized');
+        const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(jwt);
+        if (authError || !user) throw new Error('Unauthorized: Invalid or expired session');
 
         // Verify Caller Identity (Allow master_admin, staff_admin, system_admin)
         const { data: profile, error: profileErr } = await supabaseAdmin.from('sbd_portal_users').select('role').eq('auth_uid', user.id).single();
