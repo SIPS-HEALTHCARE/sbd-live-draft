@@ -12,20 +12,23 @@ serve(async (req) => {
     }
     
     try {
-        const supabase = createClient(
+        // Initialize Supabase Admin Client (service role - full access)
+        const supabaseAdmin = createClient(
             Deno.env.get('SUPABASE_URL') ?? '',
             Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-            { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
+            { auth: { autoRefreshToken: false, persistSession: false } }
         );
 
         const data = await req.json();
         
-        // Verify Caller Identity
+        // Verify Caller Identity via the Authorization header
         const authHeader = req.headers.get('Authorization');
         if (!authHeader) throw new Error('Missing Authorization header');
-        
-        const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
-        if (authError || !currentUser) throw new Error('Unauthorized');
+        const jwt = authHeader.replace(/^Bearer\s+/i, '');
+
+        // Use admin client to verify the JWT and get the caller's identity
+        const { data: { user: currentUser }, error: authError } = await supabaseAdmin.auth.getUser(jwt);
+        if (authError || !currentUser) throw new Error('Unauthorized: Invalid or expired session');
 
         const isHardcodedAdmin = [
             'jjacobs@sipsconsults.com',
@@ -39,46 +42,90 @@ serve(async (req) => {
         if (isHardcodedAdmin) {
             callerRole = 'master_admin';
         } else {
-            const { data: profile } = await supabase.from('sbd_portal_users').select('role, system_id').eq('id', currentUser.id).single();
-            if (!profile || !['admin', 'master', 'master_admin', 'system_admin', 'facility_manager'].includes(profile.role)) {
+            const { data: profile } = await supabaseAdmin.from('sbd_portal_users').select('role, system_id').eq('auth_uid', currentUser.id).single();
+            if (!profile || !['admin', 'master', 'master_admin', 'staff_admin', 'system_admin', 'facility_manager', 'facility_admin'].includes(profile.role)) {
                 throw new Error('Unauthorized role for syncing users: ' + (profile ? profile.role : 'none'));
             }
             callerRole = profile.role;
             callerSystemId = profile.system_id;
         }
 
-        // Initialize Supabase Admin Client
-        const supabaseAdmin = createClient(
-            Deno.env.get('SUPABASE_URL') ?? '',
-            Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-            { auth: { autoRefreshToken: false, persistSession: false } }
-        );
-
+        // ── DELETE USER ACTION ──
         if (data.action === 'delete' && data.userId) {
-            // Check if deleting themselves (not allowed)
-            if (data.userId === currentUser.id) {
+            // data.userId = sbd_portal_users.id (the PK)
+            
+            // Look up the full profile to get the auth_uid
+            const { data: targetProfile, error: profileErr } = await supabaseAdmin
+                .from('sbd_portal_users')
+                .select('id, auth_uid, name, email, role, protected')
+                .eq('id', data.userId)
+                .single();
+
+            if (profileErr || !targetProfile) {
+                // Also try by auth_uid in case the client sent that
+                const { data: altProfile, error: altErr } = await supabaseAdmin
+                    .from('sbd_portal_users')
+                    .select('id, auth_uid, name, email, role, protected')
+                    .eq('auth_uid', data.userId)
+                    .single();
+                
+                if (altErr || !altProfile) {
+                    throw new Error('User profile not found for deletion');
+                }
+                // Use the alt profile
+                Object.assign(targetProfile || {}, altProfile);
+            }
+
+            const profile = targetProfile!;
+
+            // Protected accounts cannot be removed
+            if (profile.protected) {
+                throw new Error(`${profile.name} is a protected account and cannot be removed`);
+            }
+
+            // Cannot delete yourself
+            if (profile.auth_uid === currentUser.id) {
                 throw new Error('Cannot delete your own account');
             }
 
-            // Must be admin/master to delete ANY, or system_admin if they match system
-            // In a real app we check hierarchies.
-            // 1. Delete from sbd_portal_users (sometimes cascading handles auth, but we should delete auth first)
-            await supabaseAdmin.from('sbd_portal_users').delete().eq('id', data.userId);
-            
-            // 2. Delete Auth User
-            const { error: delError } = await supabaseAdmin.auth.admin.deleteUser(data.userId);
-            if (delError) console.error("Could not delete from auth:", delError);
+            const authUidToDelete = profile.auth_uid;
+            const portalIdToDelete = profile.id;
 
-            return new Response(JSON.stringify({ success: true }), {
+            console.log(`Deleting user: ${profile.name} (portal_id=${portalIdToDelete}, auth_uid=${authUidToDelete})`);
+
+            // 1. Delete from staff table (cleanup linked staff record)
+            const { error: staffDelErr } = await supabaseAdmin.from('staff').delete().eq('id', authUidToDelete);
+            if (staffDelErr) console.error("Staff cleanup error:", staffDelErr);
+            else console.log("Staff record deleted for:", authUidToDelete);
+
+            // 2. Delete from sbd_portal_users
+            const { error: portalDelErr } = await supabaseAdmin.from('sbd_portal_users').delete().eq('id', portalIdToDelete);
+            if (portalDelErr) console.error("Portal profile delete error:", portalDelErr);
+            else console.log("Portal profile deleted:", portalIdToDelete);
+            
+            // 3. Delete from Supabase Auth (using the correct auth_uid)
+            const { error: authDelErr } = await supabaseAdmin.auth.admin.deleteUser(authUidToDelete);
+            if (authDelErr) console.error("Auth user delete error:", authDelErr);
+            else console.log("Auth user deleted:", authUidToDelete);
+
+            return new Response(JSON.stringify({ 
+                success: true,
+                deleted: {
+                    portal_id: portalIdToDelete,
+                    auth_uid: authUidToDelete,
+                    name: profile.name,
+                    email: profile.email
+                }
+            }), {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' }
             });
         }
 
+        // ── CREATE / UPDATE USER ACTION ──
         const { id, name, email, role, title, initials, assignedFids, fid, sid, systemId, password } = data;
         let finalUserId = id;
 
         // If ID starts with 'u' it implies it's a locally generated fake-ID from UI creation.
-        // E.g., 'u17...' from Date.now()
         if (!finalUserId || finalUserId.startsWith('u')) {
             // It's a new user! Create in Auth.
             const tempPassword = password || ('Sbd_' + Math.random().toString(36).slice(-8) + '!2024');
@@ -105,7 +152,7 @@ serve(async (req) => {
             title: title || '',
             initials: initials || (name ? name.substring(0, 2).toUpperCase() : ''),
             facility_id: fid || null,
-            system_id: systemId || callerSystemId || null, // ensure system alignment
+            system_id: systemId || callerSystemId || null,
             staff_id: sid || null,
             assigned_facility_ids: Array.isArray(assignedFids) ? assignedFids : (assignedFids ? [assignedFids] : []),
             active: true

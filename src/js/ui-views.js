@@ -11987,11 +11987,17 @@ async function executeRemoveUser(uid){
     if(IS_LIVE){
       toast(`Removing ${u.name}...`, 'info');
       const res = await SB.syncUserClaims({action:'delete', userId:uid});
-      if(res && res.error) throw new Error(res.error.message || res.detail || 'Failed API Call');
+      // Edge function returns { error: '...' } on failure, { success: true, deleted: {...} } on success
+      if(res && res.error) throw new Error(res.error);
+      if(res && !res.success) throw new Error('Remove failed — unexpected response');
     }
+    // Clean up local state: remove from users array
     DB.users=DB.users.filter(x=>x.id!==uid);
+    // Also remove from staff array if linked (by auth_uid)
+    if(u.authUid) DB.staff=DB.staff.filter(x=>x.id!==u.authUid);
+    
     closeModal();
-    toast(`${u.name}'s account has been removed.`,'err');
+    toast(`${u.name}'s account has been removed.`,'ok');
     
     if(IS_LIVE) setTimeout(()=>initAppData(), 1500);
     renderAAdminUsers();
