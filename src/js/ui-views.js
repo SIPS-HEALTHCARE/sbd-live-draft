@@ -54,6 +54,7 @@ async function doLogin(preAuthSession=null){
   const orgBtnHTML = btn ? btn.innerHTML : '';
   if(btn){ btn.disabled = true; btn.innerHTML = '<span class="spinner" style="border-width:2px;width:14px;height:14px;margin-right:6px;display:inline-block"></span> Authenticating...'; }
 
+  window.SBD_LOGIN_IN_PROGRESS = true;
   try {
     const sessionRes = preAuthSession || await SB_AUTH.signIn(email, pass);
     if (!sessionRes || !sessionRes.user) throw new Error("Invalid credentials");
@@ -67,9 +68,9 @@ async function doLogin(preAuthSession=null){
 
     if(btn){ btn.innerHTML = '<span class="spinner" style="border-width:2px;width:14px;height:14px;margin-right:6px;display:inline-block"></span> Signing in...'; }
     
-    // -- HYDRATE MEMORY CACHE WITH LIVE DATA --
-    await initAppData();
-
+    // Map user profile BEFORE hydration so ST.user is set when initAppData's
+    // refreshDashboard fires — preventing the `if(!ST.user) return logout()` guard
+    // from nuking state mid-login.
     if(typeof mapUserFromBackend === 'function') {
       userProfile = mapUserFromBackend(userProfile);
     } else {
@@ -77,8 +78,11 @@ async function doLogin(preAuthSession=null){
       userProfile.systemId = userProfile.system_id;
       userProfile.assignedFids = userProfile.assigned_fids;
     }
-
     ST.user = userProfile;
+
+    // -- HYDRATE MEMORY CACHE WITH LIVE DATA --
+    await initAppData();
+
     errEl.style.display='none';
     
     const roleMap={
@@ -91,6 +95,7 @@ async function doLogin(preAuthSession=null){
     errEl.textContent = e.message || 'Invalid email or password. Please try again.';
     errEl.style.display='block';
   } finally {
+    window.SBD_LOGIN_IN_PROGRESS = false;
     if(btn){ btn.disabled = false; btn.innerHTML = orgBtnHTML; }
   }
 }
@@ -192,6 +197,11 @@ function initSwipeClose(portal){
 
 // ============================================================ NAVIGATION
 function logout(){
+  // Guard: don't allow logout to fire during login/hydration
+  if(window.SBD_INITIALIZING || window.SBD_LOGIN_IN_PROGRESS) {
+    console.warn('SBD: Blocked logout during active login/initialization');
+    return;
+  }
   if(IS_LIVE){
     try { fetch(`${SB_API_URL}/auth/v1/logout`,{method:'POST',headers:{'apikey':SB_ANON_KEY,'Authorization':'Bearer '+(ST.session?.access_token||'')}}).catch(()=>{}); } catch(e){}
   }

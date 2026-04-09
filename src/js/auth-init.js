@@ -2079,10 +2079,15 @@ async function initAppData(){
     const sel = document.getElementById('fac-switcher-sel');
     if(sel) sel.innerHTML = DB.facilities.map(f=>`<option value="${f.id}">${f.name}</option>`).join('');
     
-    // Trigger view refreshes if active
-    if(typeof window.refreshDashboard === 'function') window.refreshDashboard();
-    if(typeof window.renderAOverview === 'function' && ST.portal === 'admin') window.renderAOverview();
-    if(typeof window.renderXDashboard === 'function' && ST.portal === 'system_admin') window.renderXDashboard();
+    // Trigger view refreshes ONLY if user is already authenticated.
+    // During initial doLogin(), ST.user isn't set until AFTER initAppData() returns,
+    // so calling refreshDashboard here would trigger renderSView's
+    // `if(!ST.user) return logout()` guard — nuking DB state mid-login.
+    if(ST.user) {
+      if(typeof window.refreshDashboard === 'function') window.refreshDashboard();
+      if(typeof window.renderAOverview === 'function' && ST.portal === 'admin') window.renderAOverview();
+      if(typeof window.renderXDashboard === 'function' && ST.portal === 'system_admin') window.renderXDashboard();
+    }
     
     window.SBD_INITIALIZING = false;
   } catch(e) {
