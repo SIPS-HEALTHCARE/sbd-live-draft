@@ -7380,6 +7380,7 @@ function assignCoverage(fid, date, shift, absentId){
 
 // ============================================================ S SCHEDULE (Staff self-view)
 async function renderSSchedule(){
+  try {
   const s = getStaff(ST.staffId);
   const el = document.getElementById('s-schedule');
   if(!s){el.innerHTML='<div class="empty-state"><div class="empty-ttl">Profile not found</div></div>';return;}
@@ -7393,7 +7394,7 @@ async function renderSSchedule(){
        const startDt = today; // Optimized: staff view only displays upcoming shifts
        const endDt = dates[dates.length-1];
        const [sch, att] = await Promise.all([
-          SB.getStaffScheduleRange(s.id, startDt, endDt).catch(()=>[]),
+          SB.getStaffScheduleRange(s.fid, startDt, endDt).catch(()=>[]),
           SB.getStaffAttendance(s.id).catch(()=>[])
        ]);
        if (!DB.schedule) DB.schedule = [];
@@ -7520,6 +7521,13 @@ async function renderSSchedule(){
         }).join('')}</tbody>
       </table></div>
     </div>`:''}`;
+  } catch (err) {
+    console.error(err);
+    const el = document.getElementById('s-schedule');
+    if(el) {
+      el.innerHTML = '<div style="color:red;padding:20px;text-align:center">Error rendering schedule: ' + err.message + '<br/><pre style="text-align:left;font-size:10px;margin-top:10px;overflow:auto">' + err.stack + '</pre></div>';
+    }
+  }
 }
 
 

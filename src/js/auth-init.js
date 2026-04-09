@@ -1951,21 +1951,7 @@ window.onload = function(){
   const overlay = document.getElementById('modal-overlay');
   if(overlay) overlay.addEventListener('touchmove', e => e.preventDefault(), {passive:false});
 
-  // ── Live Supabase Auto-restore session on refresh ──
-  const session = SB_AUTH.restoreSession();
-  if(session){
-    console.log('SBD Platform: Restored session for', session.user.email);
-    // Trigger login flow to properly hydrate data and mount portal
-    if (typeof doLogin === 'function') {
-      doLogin(session);
-    } else {
-      initAppData();
-    }
-  } else {
-    console.log('SBD Platform: No active session. Redirecting to login.');
-    // If not on login page, show login modal
-    if(typeof showLoginModal === 'function') showLoginModal();
-  }
+  // Note: Session restoration is handled exclusively by restoreSessionOnLoad on DOMContentLoaded to avoid duplicate race conditions.
 
   // Set up inactivity auto-logout (2 minutes)
   let inactivityTimer;
