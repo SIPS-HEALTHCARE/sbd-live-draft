@@ -2881,10 +2881,11 @@ async function renderSReport(){
      el.innerHTML = '<div class="tc p20"><div class="spinner mb10"></div><div class="f-txt2" style="font-size:13px">Loading your report data...</div></div>';
      try {
        const today = todayStr();
+       const dates = add30Days(today, 30);
        const startDt = today; // Optimized: staff view does not need past schedule
-       const endDt = add30Days(today, 30)[30];
+       const endDt = dates[dates.length-1];
        const [sch, att] = await Promise.all([
-          SB.getStaffScheduleRange(s.id, startDt, endDt).catch(()=>[]),
+          SB.getStaffScheduleRange(s.fid, startDt, endDt).catch(()=>[]),
           SB.getStaffAttendance(s.id).catch(()=>[])
        ]);
        if (!DB.schedule) DB.schedule = [];
