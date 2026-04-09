@@ -229,7 +229,9 @@ function enterPortal(type){
   if(type==='staff_member'){
     // Individual staff login
     const sid=u.sid;
+    console.log('[enterPortal] staff_member sid=', sid, 'DB.staff.length=', DB.staff.length, 'DB.staff IDs=', DB.staff.map(x=>x.id));
     const s=getStaff(sid);
+    console.log('[enterPortal] getStaff result=', s);
     ST.staffId=sid;
     ST.hFid=u.fid;
     const fac=getFac(u.fid)||{};
@@ -3877,8 +3879,9 @@ function renderSOIP(){
 
 // ============================================================ S DASHBOARD (Staff Member)
 function renderSDashboard(){
+  console.log('[renderSDashboard] ST.staffId=', ST.staffId, 'DB.staff.length=', DB.staff.length);
   const s=getStaff(ST.staffId);
-  if(!s){document.getElementById('s-dashboard').innerHTML='<div class="empty-state"><div class="empty-ttl">Profile not found</div></div>';return;}
+  if(!s){document.getElementById('s-dashboard').innerHTML='<div class="empty-state"><div class="empty-ttl">Profile not found</div><div style="font-size:11px;color:#94a3b8;margin-top:8px">staffId='+ST.staffId+' | DB.staff.length='+DB.staff.length+'</div></div>';return;}
   const existingPR = (DB.placementReviews||[]).find(r=>r.staffId===s.id);
   const isNewHire = s.placementNeeded || (existingPR && existingPR.status==='pending');
   const pts=calcPoints(s);
