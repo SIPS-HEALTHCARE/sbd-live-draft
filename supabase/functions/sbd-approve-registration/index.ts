@@ -121,18 +121,25 @@ serve(async (req) => {
         }
 
         console.log("Upserting portal user profile for:", newUserId);
+        const nameParts0 = (regData.name || '').trim().split(' ');
+        const initials = nameParts0.length > 1
+            ? (nameParts0[0][0] + nameParts0[nameParts0.length - 1][0]).toUpperCase()
+            : (nameParts0[0] || 'XX').substring(0, 2).toUpperCase();
+
         const { error: profileUpsertError } = await supabaseAdmin.from('sbd_portal_users').upsert({
             auth_uid: newUserId,
-            staff_id: newUserId, // Maps staff ID properly to auth_uid
             email: regData.email,
             name: regData.name,
-            role: accountRole, // Granular role enforcement
+            role: accountRole,
+            initials: initials,
             facility_id: facilityId,
-            system_id: assign_system_id || regData.system_id || null
+            system_id: assign_system_id || regData.system_id || null,
+            active: true
         }, { onConflict: 'auth_uid' });
 
         if (profileUpsertError) {
             console.error("Profile Upsert Error:", profileUpsertError);
+            throw new Error('Failed to create user profile: ' + profileUpsertError.message);
         }
 
         // 2. Assign Staff record (for legacy compatibility and staff views)

@@ -6293,7 +6293,16 @@ function renderHProfile(sid,context){
       <div class="prof-av">${userInitials(s)}</div>
       <div style="flex:1">
         <div class="prof-name">${fullName(s)}</div>
-        <div class="prof-role">${s.role} &bull; Sterile Processing Department</div>
+        <div class="prof-role">
+          ${s.role} &bull; 
+          ${(()=>{
+            const fac = getFac(s.fid);
+            if (!fac) return 'Sterile Processing Department';
+            const sys = (window.DB?.hospitalSystems || []).find(sys => sys.id === fac.systemId);
+            if (sys) return `${sys.name} &bull; ${fac.name}`;
+            return fac.name;
+          })()}
+        </div>
         <div style="margin-bottom:8px">${beltBadge(s.belt)} <span style="font-size:12px;color:var(--txt3);margin-left:6px">${BELT_CERT[s.belt]}</span></div>
         <div class="prof-meta"><span class="pmeta"><svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="2" y="3" width="10" height="10" rx="1" stroke="currentColor" stroke-width="1.3"/><path d="M5 1v3M9 1v3M2 7h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>Since ${s.since}</span><span class="pmeta">${daysAt(s.since)} days at current belt</span>${s.stars>0?`<span class="pmeta tc-gold">${'* '.repeat(s.stars).trim()}</span>`:''}</div>
       </div>

@@ -122,11 +122,13 @@ serve(async (req) => {
         }
 
         // ── CREATE / UPDATE USER ACTION ──
-        const { id, name, email, role, title, initials, assignedFids, fid, sid, systemId, password } = data;
-        let finalUserId = id;
+        const { id, userId, name, email, role, title, initials, assignedFids, fid, facilityId, sid, systemId, password, action } = data;
+        let finalUserId = id || userId;
+        let authUid = finalUserId;
+        let isUpdate = action === 'update';
 
         // If ID starts with 'u' it implies it's a locally generated fake-ID from UI creation.
-        if (!finalUserId || finalUserId.startsWith('u')) {
+        if (!isUpdate && (!finalUserId || finalUserId.startsWith('u'))) {
             // It's a new user! Create in Auth.
             const tempPassword = password || ('Sbd_' + Math.random().toString(36).slice(-8) + '!2024');
             const { data: authData, error: authCreateError } = await supabaseAdmin.auth.admin.createUser({
@@ -140,18 +142,33 @@ serve(async (req) => {
                 throw new Error('Failed to create backend identity: ' + authCreateError.message);
             }
             finalUserId = authData.user.id;
+            authUid = authData.user.id;
+        } else if (isUpdate) {
+            // For updates, the finalUserId passed from the frontend is usually the sbd_portal_users.id.
+            // We need to fetch the existing user's auth_uid to avoid foreign key violations.
+            const { data: existingProfile } = await supabaseAdmin.from('sbd_portal_users').select('id, auth_uid').eq('id', finalUserId).single();
+            if (existingProfile) {
+                authUid = existingProfile.auth_uid;
+            } else {
+                // Try to find by auth_uid just in case
+                const { data: existingAlt } = await supabaseAdmin.from('sbd_portal_users').select('id, auth_uid').eq('auth_uid', finalUserId).single();
+                if (existingAlt) {
+                    finalUserId = existingAlt.id;
+                    authUid = existingAlt.auth_uid;
+                }
+            }
         }
 
         // Sync to sbd_portal_users
         const portalPayload = {
             id: finalUserId,
-            auth_uid: finalUserId,
+            auth_uid: authUid,
             name: name,
             email: email,
             role: role,
             title: title || '',
             initials: initials || (name ? name.substring(0, 2).toUpperCase() : ''),
-            facility_id: fid || null,
+            facility_id: fid || facilityId || null,
             system_id: systemId || callerSystemId || null,
             staff_id: sid || null,
             assigned_facility_ids: Array.isArray(assignedFids) ? assignedFids : (assignedFids ? [assignedFids] : []),
