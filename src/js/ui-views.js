@@ -332,6 +332,10 @@ function enterPortal(type){
   document.getElementById('nav-adminusers').style.display=isMaster?'flex':'none';
   document.getElementById('nav-freeagents').style.display=isMaster?'flex':'none';
   document.getElementById('nav-systems').style.display=isMaster?'flex':'none';
+  // Placement reviews visible to all SIPS admins (master + staff_admin)
+  const _navPlacement=document.getElementById('nav-placementreviews');
+  if(_navPlacement) _navPlacement.style.display='flex';
+  if(typeof updatePlacementBadge === 'function') updatePlacementBadge();
   // Promo queue visible to all SIPS admins (master + assessors)
   const _navPromo=document.getElementById('nav-promoqueue');
   if(_navPromo) _navPromo.style.display='flex';
