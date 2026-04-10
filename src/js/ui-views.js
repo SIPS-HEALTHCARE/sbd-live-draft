@@ -1339,17 +1339,27 @@ async function submitPlacementAssessment(){
 
   // Create placement review record
   const s = getStaff(PA.staffId);
+  // Compute final level score percentages for storage
+  const levelScorePcts = {};
+  for(let lvl=1; lvl<=5; lvl++){
+    const items = levelScores[lvl];
+    if(!items.length) continue;
+    const total = items.reduce((acc,x)=>acc+(x.weight*x.score),0);
+    const maxTotal = items.reduce((acc,x)=>acc+x.weight*100,0);
+    levelScorePcts[lvl] = maxTotal > 0 ? Math.round((total/maxTotal)*100) : 0;
+  }
   const pr = {
     id: 'pr-' + Date.now(),
     staffId: PA.staffId,
     fid: s ? s.fid : 'test-a',
     staffName: s ? (s.first+' '+s.last) : 'Unknown',
     staffTitle: s ? (s.role||s.title||'') : '',
-    submittedAt: new Date().toISOString().split('T')[0],
+    submittedAt: new Date().toISOString(),
     tentativeBelt: suggestedBelt,
     confirmedBelt: null,
     status: 'pending',
     assessorNote: '',
+    levelScores: levelScorePcts,
     responses
   };
 
@@ -1361,19 +1371,21 @@ async function submitPlacementAssessment(){
     try {
       await sbFetch('/rest/v1/placement_reviews', {
         method:'POST',
-        body: JSON.stringify({
+        body: {
           staff_id: pr.staffId,
           fid: pr.fid,
           status: pr.status,
           tentative_belt: pr.tentativeBelt,
           responses: pr.responses,
           level_scores: pr.levelScores,
-          submitted_at: pr.submittedAt
-        })
+          submitted_at: pr.submittedAt,
+          staff_name: pr.staffName,
+          staff_title: pr.staffTitle
+        }
       });
       await sbFetch(`/rest/v1/staff?id=eq.${pr.staffId}`, {
         method:'PATCH',
-        body: JSON.stringify({placement_needed: false})
+        body: {placement_needed: false}
       });
     } catch(e){ toast('Placement sync: '+e.message,'warn'); }
   } else {
@@ -1482,16 +1494,21 @@ function renderAPlacementReviews(){
     const statusClr = pr.status==='pending' ? '#a78bfa' : '#22c55e';
     const statusLabel = pr.status==='pending' ? 'Pending Review' : pr.status==='adjusted' ? 'Adjusted' : 'Confirmed';
     const fac = getFac(pr.fid);
+    // Resolve staff name: prefer stored name, fallback to DB.staff lookup
+    const staffRec = getStaff(pr.staffId);
+    const displayName = pr.staffName || (staffRec ? (staffRec.first+' '+staffRec.last) : pr.staffId || 'Unknown');
+    const displayTitle = pr.staffTitle || (staffRec ? (staffRec.role||'') : '');
+    const displayDate = pr.submittedAt ? (pr.submittedAt.length > 10 ? new Date(pr.submittedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : pr.submittedAt) : '';
     return `
       <div class="card" style="margin-bottom:16px" id="pr-card-${pr.id}">
         <div class="card-hd" style="cursor:pointer" onclick="togglePRCard('${pr.id}')">
           <div style="flex:1">
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-              <div style="font-size:15px;font-weight:700;color:#f1f5f9">${pr.staffName}</div>
+              <div style="font-size:15px;font-weight:700;color:#f1f5f9">${displayName}</div>
               <div style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:12px;background:rgba(139,92,246,.15);color:${statusClr}">${statusLabel.toUpperCase()}</div>
               ${pr.tentativeBelt ? `<div style="font-size:10px;color:#64748b">System suggestion: <span style="color:${pr.confirmedBelt?'#22c55e':'#f59e0b'}">${pr.confirmedBelt||pr.tentativeBelt} Belt</span></div>` : ''}
             </div>
-            <div style="font-size:11.5px;color:#64748b;margin-top:4px">${pr.staffTitle||''} &middot; ${fac?fac.name:pr.fid} &middot; Submitted ${pr.submittedAt}</div>
+            <div style="font-size:11.5px;color:#64748b;margin-top:4px">${displayTitle||''} &middot; ${fac?fac.name:pr.fid} &middot; Submitted ${displayDate}</div>
           </div>
           <svg viewBox="0 0 18 18" fill="none" width="16" height="16" id="pr-chev-${pr.id}" style="transition:.2s;flex-shrink:0"><path d="M6 3l6 6-6 6" stroke="#64748b" stroke-width="1.5" stroke-linecap="round"/></svg>
         </div>
@@ -1591,18 +1608,18 @@ function confirmPlacement(prId){
   if(IS_LIVE){
     sbFetch(`/rest/v1/placement_reviews?id=eq.${pr.id}`, {
       method:'PATCH',
-      body: JSON.stringify({
+      body: {
         status: pr.status,
         confirmed_belt: chosenBelt,
         assessor_note: note,
         confirmed_at: pr.confirmedAt,
         confirmed_by: pr.confirmedBy
-      })
+      }
     }).catch(e=>toast('Placement confirm sync: '+e.message,'warn'));
     if(s){
       sbFetch(`/rest/v1/staff?id=eq.${s.id}`, {
         method:'PATCH',
-        body: JSON.stringify({belt: chosenBelt, since: s.since, placement_needed: false, history: s.history})
+        body: {belt: chosenBelt, since: s.since, placement_needed: false, history: s.history}
       }).catch(e=>toast('Staff update sync: '+e.message,'warn'));
     }
   } else {
@@ -1766,7 +1783,7 @@ function submitOIP(staffId, answers){
   if(IS_LIVE){
     sbFetch(`/rest/v1/staff?id=eq.${s.id}`, {
       method:'PATCH',
-      body: JSON.stringify({oip: s.oip})
+      body: {oip: s.oip}
     }).catch(e=>toast('OIP sync: '+e.message,'warn'));
   } else {
     /* saveDemoData() removed */
