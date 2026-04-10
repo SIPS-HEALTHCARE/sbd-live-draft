@@ -3131,7 +3131,7 @@ function _psCurrNav(tid, idx) {
 function _buildPSSectionHTML(sec, tid, idx) {
   if (!sec) return '';
   var markBtn = (typeof tid !== 'undefined' && typeof idx !== 'undefined') ? l3BuildMarkBtn('ps', tid, idx) : '';
-  return '<div style="font-size:11px;font-weight:700;color:var(--blue);letter-spacing:.07em;margin-bottom:12px;text-transform:uppercase;padding-bottom:8px;border-bottom:1px solid var(--bdr)">' + sec.title + '</div><div class="cs-body">' + sec.html + '</div>' + markBtn;
+  return '<div style="font-size:11px;font-weight:700;color:var(--blue);letter-spacing:.07em;margin-bottom:12px;text-transform:uppercase;padding-bottom:8px;border-bottom:1px solid var(--bdr)">' + sec.title + '</div><div class="cs-body">' + (sec.html||'').replace(/<br\s*\/?>/gi,'') + '</div>' + markBtn;
 }
 
 
@@ -5517,7 +5517,7 @@ function renderSStudy() {
         <!-- Section content -->
         <div style="flex:1;min-width:0;overflow-y:auto;max-height:70vh;padding:20px 22px">
           <div style="font-size:11px;font-weight:700;color:var(--gold);letter-spacing:.07em;margin-bottom:8px;text-transform:uppercase">${curSection.title}</div>
-          <div class="cs-body">${curSection.html}</div>
+          <div class="cs-body">${(curSection.html||'').replace(/<br\s*\/?>/gi,'')}</div>
           ${l3BuildMarkBtn('belt', beltKey, secIdx)}
           <!-- Prev/Next nav -->
           <div style="display:flex;justify-content:space-between;margin-top:20px;padding-top:14px;border-top:1px solid var(--bdr)">
@@ -5539,10 +5539,10 @@ function renderSStudy() {
       ? scriptSections.map(sec => `
           <div style="margin-bottom:20px">
             <div style="font-size:11px;font-weight:700;color:${bColor};letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px">${sec.title}</div>
-            <div class="cs-body">${sec.html}</div>
+            <div class="cs-body">${(sec.html||'').replace(/<br\s*\/?>/gi,'')}</div>
           </div>`).join('')
       : beltData.filter(sec => sec.title.match(/section [45]/i) || /two.*script|script.*belt/i.test(sec.title))
-          .map(sec => `<div style="margin-bottom:20px"><div style="font-size:11px;font-weight:700;color:${bColor};letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px">${sec.title}</div><div class="cs-body">${sec.html}</div></div>`).join('');
+          .map(sec => `<div style="margin-bottom:20px"><div style="font-size:11px;font-weight:700;color:${bColor};letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px">${sec.title}</div><div class="cs-body">${(sec.html||'').replace(/<br\s*\/?>/gi,'')}</div></div>`).join('');
     
     tabContent = `
       <div style="background:${bColor}08;border:1px solid ${bColor}20;border-radius:var(--rs);padding:12px 16px;margin-bottom:14px">
