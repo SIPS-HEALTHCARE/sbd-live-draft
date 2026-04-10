@@ -3131,7 +3131,7 @@ function _psCurrNav(tid, idx) {
 function _buildPSSectionHTML(sec, tid, idx) {
   if (!sec) return '';
   var markBtn = (typeof tid !== 'undefined' && typeof idx !== 'undefined') ? l3BuildMarkBtn('ps', tid, idx) : '';
-  return '<div style="font-size:11px;font-weight:700;color:var(--blue);letter-spacing:.07em;margin-bottom:12px;text-transform:uppercase;padding-bottom:8px;border-bottom:1px solid var(--bdr)">' + sec.title + '</div><div class="cs-body">' + (sec.html||'').replace(/<br\s*\/?>/gi,'') + '</div>' + markBtn;
+  return '<div style="font-size:11px;font-weight:700;color:var(--blue);letter-spacing:.07em;margin-bottom:12px;text-transform:uppercase;padding-bottom:8px;border-bottom:1px solid var(--bdr)">' + sec.title + '</div><div class="cs-body">' + _styleCurriculumHTML(sec.html) + '</div>' + markBtn;
 }
 
 
@@ -5374,6 +5374,44 @@ function _studyGateBtns(s, targetBelt, kScore, sScore) {
   return '<div style="background:rgba(34,197,94,.06);border:1.5px solid rgba(34,197,94,.3);border-radius:var(--r);padding:12px 16px;margin-bottom:14px"><div style="font-size:12.5px;font-weight:700;color:var(--ok);margin-bottom:5px">Assessment Request Unlocked ✓</div><div style="font-size:12px;color:var(--txt2);margin-bottom:10px">Both practice tests at 80%+. Request your '+targetBelt+' Belt gate assessments below.</div><div style="display:flex;flex-wrap:wrap;gap:8px">'+btns+'</div></div>';
 }
 
+/** Strip <br/> between block elements AND inject inline styles for curriculum content.
+ *  The CSS selectors (#sbd-root .cs-body .cs-*) fail on some embed/deploy contexts,
+ *  so we shift to inline styling for guaranteed rendering of color blocks. */
+function _styleCurriculumHTML(raw) {
+  if (!raw) return '';
+  var h = raw.replace(/<br\s*\/?>/gi, '');
+  // ── Paragraphs ──
+  h = h.replace(/<p class="cs-para">/g,'<p style="font-size:13px;line-height:1.8;color:#dde3f0;margin:0 0 12px;font-family:Poppins,sans-serif">');
+  h = h.replace(/<p class="cs-para cs-script-desc">/g,'<p style="font-size:12.5px;color:#94a3b8;font-style:italic;line-height:1.65;margin:0 0 10px;font-family:Poppins,sans-serif">');
+  // ── Script Headers ──
+  h = h.replace(/<div class="cs-script-header">/g,'<div style="font-size:12px;font-weight:700;color:#dde3f0;background:#1a2442;border-left:3px solid #c49a20;padding:8px 12px;margin:18px 0 0 0;border-radius:4px 4px 0 0;letter-spacing:.03em;font-family:Poppins,sans-serif">');
+  h = h.replace(/<div class="cs-script-spacer">/g,'<div style="height:16px;display:block">');
+  // ── Approved Language ──
+  h = h.replace(/<div class="cs-mode-label cs-approved-label">/g,'<div style="font-size:10px;font-weight:700;letter-spacing:.07em;padding:5px 12px;display:block;background:#052e16;color:#22c55e;border-left:3px solid #22c55e;margin:0;font-family:Poppins,sans-serif">');
+  h = h.replace(/<div class="cs-approved-item">/g,'<div style="display:flex;align-items:flex-start;gap:8px;padding:8px 12px;background:rgba(5,46,22,0.4);border-left:3px solid #22c55e;margin:1px 0;font-family:Poppins,sans-serif">');
+  h = h.replace(/<span class="cs-approved-tag">/g,'<span style="font-size:14px;color:#22c55e;flex-shrink:0;margin-top:1px">');
+  h = h.replace(/<span class="cs-approved-text">/g,'<span style="font-size:13px;color:#86efac;line-height:1.6;font-weight:500">');
+  // ── Forbidden Language ──
+  h = h.replace(/<div class="cs-mode-label cs-forbidden-label">/g,'<div style="font-size:10px;font-weight:700;letter-spacing:.07em;padding:5px 12px;display:block;background:#2d0a0a;color:#ef4444;border-left:3px solid #ef4444;margin:0;font-family:Poppins,sans-serif">');
+  h = h.replace(/<div class="cs-forbidden-item">/g,'<div style="display:flex;align-items:flex-start;gap:8px;padding:8px 12px;background:rgba(45,10,10,0.4);border-left:3px solid #ef4444;margin:1px 0;font-family:Poppins,sans-serif">');
+  h = h.replace(/<span class="cs-forbidden-tag">/g,'<span style="font-size:14px;color:#ef4444;flex-shrink:0;margin-top:1px">');
+  h = h.replace(/<span class="cs-forbidden-text">/g,'<span style="font-size:13px;color:#fca5a5;line-height:1.6">');
+  // ── Subheads ──
+  h = h.replace(/<div class="cs-subhead">/g,'<div style="font-size:10.5px;font-weight:800;letter-spacing:.09em;color:#c49a20;margin:20px 0 8px;text-transform:uppercase;padding-bottom:5px;border-bottom:1px solid rgba(196,154,32,.2);font-family:Poppins,sans-serif">');
+  // ── Tables ──
+  h = h.replace(/<table class="cs-table">/g,'<table style="width:100%;border-collapse:collapse;margin:14px 0 18px;font-size:12.5px;font-family:Poppins,sans-serif">');
+  h = h.replace(/<th>/g,'<th style="background:#1a2442;color:#dde3f0;font-weight:700;padding:9px 12px;text-align:left;border:1px solid #2a3a5c;font-size:11.5px;letter-spacing:.04em">');
+  h = h.replace(/<td>/g,'<td style="padding:9px 12px;border:1px solid #2a3a5c;color:#94a3b8;vertical-align:top;line-height:1.6">');
+  // ── Gold strong ──
+  h = h.replace(/<strong class="cs-strong-gold">/g,'<strong style="color:#fcd34d;font-weight:700;font-size:14px;display:inline-block;margin-top:12px;margin-bottom:4px">');
+  // ── Alert boxes ──
+  h = h.replace(/<div class="cs-alert-box">/g,'<div style="background:rgba(196,154,32,0.1);border-left:4px solid #c49a20;padding:16px;margin:20px 0;border-radius:0 8px 8px 0;font-family:Poppins,sans-serif">');
+  h = h.replace(/<div class="cs-alert-box cs-alert-danger">/g,'<div style="background:rgba(239,68,68,0.1);border-left:4px solid #ef4444;padding:16px;margin:20px 0;border-radius:0 8px 8px 0;font-family:Poppins,sans-serif">');
+  h = h.replace(/<span class="cs-alert-title">/g,'<span style="display:block;font-size:13px;font-weight:800;color:#facc15;margin-bottom:8px;letter-spacing:.05em">');
+  h = h.replace(/<span class="cs-alert-text">/g,'<span style="font-size:12.5px;line-height:1.6;color:#dde3f0;margin:0">');
+  return h;
+}
+
 function renderSStudy() {
   const s = getStaff(ST.staffId);
   const el = document.getElementById('s-study');
@@ -5517,7 +5555,7 @@ function renderSStudy() {
         <!-- Section content -->
         <div style="flex:1;min-width:0;overflow-y:auto;max-height:70vh;padding:20px 22px">
           <div style="font-size:11px;font-weight:700;color:var(--gold);letter-spacing:.07em;margin-bottom:8px;text-transform:uppercase">${curSection.title}</div>
-          <div class="cs-body">${(curSection.html||'').replace(/<br\s*\/?>/gi,'')}</div>
+          <div class="cs-body">${_styleCurriculumHTML(curSection.html)}</div>
           ${l3BuildMarkBtn('belt', beltKey, secIdx)}
           <!-- Prev/Next nav -->
           <div style="display:flex;justify-content:space-between;margin-top:20px;padding-top:14px;border-top:1px solid var(--bdr)">
@@ -5539,10 +5577,10 @@ function renderSStudy() {
       ? scriptSections.map(sec => `
           <div style="margin-bottom:20px">
             <div style="font-size:11px;font-weight:700;color:${bColor};letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px">${sec.title}</div>
-            <div class="cs-body">${(sec.html||'').replace(/<br\s*\/?>/gi,'')}</div>
+            <div class="cs-body">${_styleCurriculumHTML(sec.html)}</div>
           </div>`).join('')
       : beltData.filter(sec => sec.title.match(/section [45]/i) || /two.*script|script.*belt/i.test(sec.title))
-          .map(sec => `<div style="margin-bottom:20px"><div style="font-size:11px;font-weight:700;color:${bColor};letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px">${sec.title}</div><div class="cs-body">${(sec.html||'').replace(/<br\s*\/?>/gi,'')}</div></div>`).join('');
+          .map(sec => `<div style="margin-bottom:20px"><div style="font-size:11px;font-weight:700;color:${bColor};letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px">${sec.title}</div><div class="cs-body">${_styleCurriculumHTML(sec.html)}</div></div>`).join('');
     
     tabContent = `
       <div style="background:${bColor}08;border:1px solid ${bColor}20;border-radius:var(--rs);padding:12px 16px;margin-bottom:14px">
