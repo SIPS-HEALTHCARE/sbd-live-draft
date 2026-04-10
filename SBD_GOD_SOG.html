@@ -1666,10 +1666,12 @@ const Security = {
 // ── Supabase Backend Config ──
 const SB_API_URL = 'https://mhijaqahbceuahfzezbh.supabase.co';
 const SB_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1oaWphcWFoYmNldWFoZnplemJoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4MDkwNzksImV4cCI6MjA4OTM4NTA3OX0.GZcvOFxm4uNdTFPnq-rfwHaMVhWbIJWY7QMYToPa7mQ';
-let SB_SESSION = null;
+window.SB_SESSION = null;
+const getSession = () => window.SB_SESSION;
 
 async function sbFetch(path, opts={}){
-  const token = SB_SESSION && SB_SESSION.access_token;
+  const session = getSession();
+  const token = session && session.access_token;
   const headers = {
     'apikey': SB_ANON_KEY,
     'Authorization': `Bearer ${token || SB_ANON_KEY}`,
@@ -1707,7 +1709,7 @@ const SB_AUTH = {
       body: JSON.stringify({ email, password })
     }).then(r => r.json());
     if(data.error) throw new Error(data.error_description || data.error);
-    SB_SESSION = data;
+    window.SB_SESSION = data;
     sessionStorage.setItem('sbd_session', JSON.stringify({
       access_token: data.access_token,
       expires_at: data.expires_at,
@@ -1719,10 +1721,10 @@ const SB_AUTH = {
     try {
       await fetch(`${SB_API_URL}/auth/v1/logout`, {
         method: 'POST',
-        headers: { 'apikey': SB_ANON_KEY, 'Authorization': `Bearer ${SB_SESSION && SB_SESSION.access_token}` }
+        headers: { 'apikey': SB_ANON_KEY, 'Authorization': `Bearer ${getSession()?.access_token}` }
       });
     } catch(_){}
-    SB_SESSION = null;
+    window.SB_SESSION = null;
     sessionStorage.removeItem('sbd_session');
   },
   restoreSession(){
@@ -1734,7 +1736,7 @@ const SB_AUTH = {
         sessionStorage.removeItem('sbd_session');
         return null;
       }
-      SB_SESSION = session;
+      window.SB_SESSION = session;
       return session;
     } catch{ return null; }
   }
@@ -18175,6 +18177,9 @@ window.onload = function(){
     const rr=document.getElementById('demo-reset-row');
     if(rr) rr.style.display='block';
   }
+
+  // ── Restore real Supabase session if available ──
+  SB_AUTH.restoreSession();
 
   // ── Auto-restore demo session on refresh ──
   try {

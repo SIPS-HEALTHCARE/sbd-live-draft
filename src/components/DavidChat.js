@@ -302,18 +302,50 @@ class DavidChat {
         this.msgArea.scrollTop = this.msgArea.scrollHeight;
 
         try {
-            const token = window.SB_SESSION ? window.SB_SESSION.access_token : '';
+            let token = window.SB_SESSION ? window.SB_SESSION.access_token : '';
+            console.log('[DAVID] window.SB_SESSION check:', window.SB_SESSION ? 'Found' : 'Missing');
+            
+            if (!token) {
+                console.log('[DAVID] Token missing from window, checking localStorage...');
+                try {
+                    const raw = localStorage.getItem('sbd_session');
+                    if (raw) {
+                        const sess = JSON.parse(raw);
+                        token = sess.access_token;
+                        console.log('[DAVID] Token recovered from localStorage:', token ? 'Success' : 'Empty');
+                    } else {
+                        console.log('[DAVID] No sbd_session found in localStorage');
+                    }
+                } catch(e) {
+                    console.error('[DAVID] Session parsing error:', e);
+                }
+            } else {
+                console.log('[DAVID] Token found in window.SB_SESSION');
+            }
+
+            if (!token) {
+                console.error('[DAVID] CRITICAL: No authentication token available. Request will fail with 401.');
+            }
+
             const snapshot = this.getPlatformSnapshot();
             
             const res = await fetch(this.apiUrl, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                headers: { 
+                    'Content-Type': 'application/json', 
+                    'Authorization': token ? `Bearer ${token}` : '' 
+                },
                 body: JSON.stringify({ 
                     message: text, 
                     history: this.history,
                     context: snapshot
                 })
             });
+
+            if (res.status === 401) {
+                throw new Error('Unauthorized Access. Please re-login to the portal.');
+            }
+
             const data = await res.json();
             
             typingIndicator.remove();
@@ -333,7 +365,8 @@ class DavidChat {
             }
         } catch (e) {
             typingIndicator.remove();
-            this.addMessage('Network Error: DAVID terminal connection disrupted.', 'ai');
+            this.addMessage('Connection Failure: ' + e.message, 'ai');
+            console.error('[DAVID] Error:', e);
         } finally {
             this.isThinking = false;
             this.btn.disabled = false;
