@@ -3944,11 +3944,17 @@ function acknowledgePlacement(staffId){
     acked[staffId] = true;
     localStorage.setItem('sbd_placement_ack', JSON.stringify(acked));
   } catch(e){}
-  // Also persist to Supabase if column exists
-  if(IS_LIVE){
-    sbFetch(`/rest/v1/staff?id=eq.${s.id}`, {
+  // Also persist to Supabase silently (no console warnings if column doesn't exist yet)
+  if(IS_LIVE && SB_SESSION){
+    fetch(`${SB_API_URL}/rest/v1/staff?id=eq.${s.id}`, {
       method:'PATCH',
-      body: { placement_acknowledged: true }
+      headers: {
+        'apikey': SB_ANON_KEY,
+        'Authorization': `Bearer ${SB_SESSION.access_token}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify({ placement_acknowledged: true })
     }).catch(()=>{});
   }
   toast('Placement acknowledged. Welcome to the team!','ok');
