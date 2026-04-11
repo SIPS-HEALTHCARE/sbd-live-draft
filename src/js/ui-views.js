@@ -3908,6 +3908,21 @@ function renderSOIP(){
     </div>`;
 }
 
+// ============================================================ PLACEMENT ACKNOWLEDGMENT
+function acknowledgePlacement(staffId){
+  const s = getStaff(staffId);
+  if(!s) return;
+  s.placementAcknowledged = true;
+  if(IS_LIVE){
+    sbFetch(`/rest/v1/staff?id=eq.${s.id}`, {
+      method:'PATCH',
+      body: { placement_acknowledged: true }
+    }).catch(e=>toast('Acknowledge sync: '+e.message,'warn'));
+  }
+  toast('Placement acknowledged. Welcome to the team!','ok');
+  renderSDashboard();
+}
+
 // ============================================================ S DASHBOARD (Staff Member)
 function renderSDashboard(){
   console.log('[renderSDashboard] ST.staffId=', ST.staffId, 'DB.staff.length=', DB.staff.length);
@@ -3926,13 +3941,15 @@ function renderSDashboard(){
   const eligTracks = getEligibleTracks(s);
   // Placement / new hire banners and callouts
   const placementBanner = existingPR ? (existingPR.status==='confirmed'||existingPR.status==='adjusted' ?
+    (s.placementAcknowledged ? '' :
     `<div style="background:#052e16;border:1px solid #16a34a;border-radius:var(--r);padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
       <div style="width:36px;height:36px;background:#166534;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px">&#10003;</div>
-      <div>
-        <div style="font-size:13px;font-weight:700;color:#22c55e">Starting Point Confirmed</div>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:700;color:#22c55e">Starting Point Confirmed: ${existingPR.confirmedBelt||s.belt} Belt</div>
         <div style="font-size:11.5px;color:#86efac;margin-top:2px">Your assessor has reviewed your responses and confirmed your placement. Welcome to the SIPS Belt Intelligence Program.</div>
       </div>
-    </div>` :
+      <button onclick="acknowledgePlacement('${s.id}')" style="background:#166534;border:1px solid #22c55e;border-radius:6px;padding:6px 14px;font-size:11.5px;font-weight:700;color:#22c55e;cursor:pointer;white-space:nowrap;font-family:'Poppins',sans-serif;flex-shrink:0">Acknowledge</button>
+    </div>`) :
     `<div style="background:#2e1065;border:1px dashed #8b5cf6;border-radius:var(--r);padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
       <div style="width:36px;height:36px;background:#4c1d95;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px">&#9203;</div>
       <div>
