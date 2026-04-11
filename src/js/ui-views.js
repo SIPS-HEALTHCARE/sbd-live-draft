@@ -6330,6 +6330,148 @@ function openHProfile(sid){
   renderHView('h-profile');
 }
 
+// ============================================================
+// MASTER ADMIN BELT OVERRIDE
+// ============================================================
+function openBeltOverrideModal(staffId, context){
+  const s = getStaff(staffId); if(!s) return;
+  const overrideReasons = [
+    'Assessor Error Correction',
+    'Administrative Override',
+    'Performance-Based Promotion',
+    'Performance-Based Demotion',
+    'Training Reset',
+    'Special Circumstance'
+  ];
+  openModal(`Override Belt: ${fullName(s)}`,`
+    <div class="modal-body">
+      <div style="background:var(--s2);border:1px solid var(--bdr);border-radius:var(--rs);padding:12px 14px;margin-bottom:14px;display:flex;gap:12px;align-items:center">
+        <div style="width:40px;height:40px;border-radius:10px;background:${BELT_CLR[s.belt]||'#888'}22;border:2px solid ${BELT_CLR[s.belt]||'#888'};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:${BELT_CLR[s.belt]||'#888'};flex-shrink:0">${userInitials(s)}</div>
+        <div>
+          <div style="font-size:13.5px;font-weight:700">${fullName(s)}</div>
+          <div style="font-size:11.5px;color:var(--txt2)">${s.role} &bull; ${s.belt} Belt</div>
+          <div style="margin-top:4px">${beltBadge(s.belt,s)}</div>
+        </div>
+      </div>
+
+      <div style="background:rgba(196,154,32,.07);border:1px solid var(--gold-bd);border-radius:var(--rs);padding:10px 14px;margin-bottom:14px;font-size:11.5px;color:var(--txt2);line-height:1.5">
+        <strong style="color:var(--gold)">&#x1F6E1; Master Admin Override</strong><br>
+        This action bypasses the normal assessment/gate system. The belt change takes effect immediately and is logged in the staff member's permanent audit trail.
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">New Belt Level *</label>
+        <select class="form-select" id="bo-belt" onchange="(function(){
+          var sel=document.getElementById('bo-belt');
+          var dir=document.getElementById('bo-direction');
+          var warn=document.getElementById('bo-demote-warn');
+          if(!sel||!dir) return;
+          var cur=${beltIdx(s.belt)};
+          var nw=parseInt(sel.value);
+          if(nw>cur){dir.innerHTML='<span style=\"color:var(--ok);font-weight:700\">&#x2B06; PROMOTION</span>';warn.style.display='none';}
+          else if(nw<cur){dir.innerHTML='<span style=\"color:var(--err);font-weight:700\">&#x2B07; DEMOTION</span>';warn.style.display='block';}
+          else{dir.innerHTML='<span style=\"color:var(--txt3)\">No change</span>';warn.style.display='none';}
+        })()">
+          ${BELT_ORDER.map((b,i)=>`<option value="${i}" ${b===s.belt?'selected':''}>${b} Belt — ${BELT_CERT[b]}</option>`).join('')}
+        </select>
+        <div id="bo-direction" style="margin-top:6px;font-size:12px"><span style="color:var(--txt3)">Select a different belt</span></div>
+      </div>
+
+      <div id="bo-demote-warn" style="display:none;background:rgba(239,68,68,.07);border:1px solid var(--err-bd);border-radius:var(--rs);padding:10px 14px;margin-bottom:14px;font-size:11.5px;color:var(--err);line-height:1.5">
+        &#x26A0; <strong>Demotion Warning:</strong> This will reset the staff member's current and advancement assessment gates. Position School progress will be preserved but may become hidden if demoted below Green Belt.
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Reason *</label>
+        <select class="form-select" id="bo-reason">
+          <option value="">Select reason for override</option>
+          ${overrideReasons.map(r=>`<option value="${r}">${r}</option>`).join('')}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Notes * <span style="color:var(--txt3);font-weight:400">(min 10 characters)</span></label>
+        <textarea class="form-input" id="bo-notes" rows="3" placeholder="Explain the reason for this belt override. This is permanently recorded in the audit trail." style="resize:none"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Effective Date</label>
+        <input type="date" class="form-input" id="bo-date" value="${new Date().toISOString().slice(0,10)}">
+      </div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-gold" onclick="submitBeltOverride('${s.id}','${context}')">Confirm Override</button>
+    </div>`,'modal-md');
+}
+
+function submitBeltOverride(staffId, context){
+  const s = getStaff(staffId);
+  if(!s){ toast('Staff record not found.','err'); return; }
+  const beltEl = document.getElementById('bo-belt');
+  const reasonEl = document.getElementById('bo-reason');
+  const notesEl = document.getElementById('bo-notes');
+  const dateEl = document.getElementById('bo-date');
+  if(!beltEl||!reasonEl) return;
+
+  const newBeltIdx = parseInt(beltEl.value);
+  const newBelt = BELT_ORDER[newBeltIdx];
+  const reason = reasonEl.value;
+  const notes = (notesEl?.value||'').trim();
+  const effectDate = dateEl?.value || new Date().toISOString().slice(0,10);
+  const oldBelt = s.belt;
+  const adminName = ST.user?.name || ST.name || 'Master Admin';
+
+  // Validation
+  if(newBelt === oldBelt){ toast('Belt is unchanged. Select a different belt level.','err'); return; }
+  if(!reason){ toast('Please select a reason for the override.','err'); return; }
+  if(notes.length < 10){ toast('Notes must be at least 10 characters for the audit trail.','err'); return; }
+
+  const isPromotion = newBeltIdx > beltIdx(oldBelt);
+  const dirLabel = isPromotion ? 'promoted' : 'demoted';
+
+  if(!confirm(`${isPromotion?'PROMOTE':'DEMOTE'} ${fullName(s)} from ${oldBelt} Belt to ${newBelt} Belt?\n\nReason: ${reason}\nThis action is logged permanently.`)) return;
+
+  // ── Update staff record ──
+  s.belt = newBelt;
+  s.since = effectDate;
+
+  if(isPromotion){
+    // Promotion: clear advancement gates (they'll advance from new belt now)
+    s.nxt = {c:null,s:null,o:null};
+  } else {
+    // Demotion: reset both current and advancement gates
+    s.cur = {c:null,s:null,o:null};
+    s.nxt = {c:null,s:null,o:null};
+  }
+
+  // ── Audit trail ──
+  if(!s.history) s.history = [];
+  s.history.unshift({
+    dt: effectDate,
+    type: 'Belt Override',
+    belt: newBelt,
+    res: isPromotion ? 'pass' : 'fail',
+    note: `${reason}: ${notes} (Override by ${adminName}, ${oldBelt} → ${newBelt})`
+  });
+
+  // ── Persist to Supabase ──
+  if(IS_LIVE){
+    sbFetch(`/rest/v1/staff?id=eq.${s.id}`, {
+      method:'PATCH',
+      body: { belt: newBelt, since: s.since, cur: s.cur, nxt: s.nxt, history: s.history }
+    }).catch(e=>toast('Belt override sync: '+e.message,'warn'));
+  }
+
+  closeModal();
+  toast(`${fullName(s)} ${dirLabel} from ${oldBelt} to ${newBelt} Belt.`, isPromotion?'ok':'err');
+
+  // ── Re-render ──
+  if(context==='admin'){ renderHProfile(staffId,'admin'); }
+  else if(context==='h'){ renderHProfile(staffId,'h'); }
+  else { renderHProfile(staffId, context); }
+}
+
 function renderHProfile(sid,context){
   const s=getStaff(sid);if(!s)return;
   const nb=nextBelt(s.belt);
@@ -6369,6 +6511,7 @@ function renderHProfile(sid,context){
         ${context==='admin'?`<button class="btn btn-gold btn-sm" onclick="openRecordModal('${s.id}')">${ICO.record} Record Assessment</button>`:''}
         ${context==='admin'||context==='h'?`<button class="btn btn-blue btn-sm" onclick="openPromoteModal('${s.id}','${context}')">&#x2B06; Promote</button>`:''}
         <button class="btn btn-ghost btn-sm" onclick="downloadStaffReport('${s.id}')">${ICO.dl} Report</button>
+        ${(ST.user&&ST.user.role==='master_admin')?`<button class="btn btn-ghost btn-sm" onclick="openBeltOverrideModal('${s.id}','${context}')" style="border-color:var(--gold-bd);color:var(--gold)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Override Belt</button>`:''}
         ${context==='admin'&&(ST.user&&ST.user.role==='master_admin')?`<button class="btn btn-err btn-sm" onclick="releaseToFreeAgent('${s.id}')" title="Release staff member to Free Agent Registry" style="margin-left:auto"><svg width="13" height="13" viewBox="0 0 18 18" fill="none"><path d="M12 14H15a1 1 0 001-1V5a1 1 0 00-1-1H12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M9 12l3-3-3-3M12 9H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Release</button>`:''}
       </div>
     </div>
