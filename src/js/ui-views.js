@@ -1416,14 +1416,107 @@ async function submitPlacementAssessment(){
 }
 
 function scoreByKeywords(answer, keywords){
-  if(!answer || !keywords || !keywords.length) return 40;
+  if(!answer || !keywords || !keywords.length) return 0;
+  // ── Gibberish / gaming detection ──
+  const qualityScore = assessResponseQuality(answer);
+  if(qualityScore === 0) return 0; // Pure gibberish = 0 points
+  
   const lc = answer.toLowerCase();
   const matched = keywords.filter(k => lc.includes(k.toLowerCase())).length;
   const ratio = matched / keywords.length;
-  return Math.round(40 + ratio * 60);
+  // Base: 0-100 from keyword matches, multiplied by quality factor
+  const rawScore = Math.round(ratio * 100);
+  return Math.round(rawScore * qualityScore);
+}
+
+// Returns 0-1 quality multiplier. 0 = gibberish, 1 = well-formed response
+function assessResponseQuality(answer){
+  if(!answer || answer.trim().length < 10) return 0;
+  const text = answer.trim();
+  
+  // Split into words (alphabetic sequences 2+ chars)
+  const words = text.match(/[a-zA-Z]{2,}/g) || [];
+  if(words.length < 5) return 0; // Need at least 5 real words
+  
+  // Check: what % of words are recognizable English?
+  // Common SPD/medical + general English words (top frequency)
+  const COMMON = new Set([
+    // General English
+    'the','and','for','are','but','not','you','all','can','had','her','was','one','our','out',
+    'has','his','how','its','may','new','now','old','see','way','who','did','get','let','say',
+    'she','too','use','with','this','that','have','from','they','been','call','come','each',
+    'make','like','long','look','many','over','such','take','than','them','then','what','when',
+    'will','more','some','time','very','your','just','know','also','back','been','work','first',
+    'even','give','most','find','here','thing','after','year','about','would','there','their',
+    'which','could','other','into','than','only','come','made','before','should','through',
+    'where','much','must','need','does','right','still','because','every','between','never',
+    // SPD / Medical domain
+    'sterile','instrument','patient','safety','clean','decontamination','assembly','sterilization',
+    'procedure','protocol','process','tray','wrap','load','cycle','indicator','biological',
+    'chemical','mechanical','monitor','rinse','wash','dry','inspect','verify','document',
+    'supervisor','notify','report','escalate','stop','hold','release','contamination','exposure',
+    'breach','failure','recall','count','sheet','case','cart','scope','flexible','rigid',
+    'manual','automated','ultrasonic','washer','autoclave','steam','pressure','temperature',
+    'prevac','gravity','immediate','recall','event','related','packaging','storage','handling',
+    'transport','distribution','staff','technician','department','hospital','surgical','operating',
+    'room','area','zone','station','sink','table','counter','shelf','certification','training',
+    'competency','assessment','evaluation','standard','compliance','regulation','policy',
+    'documentation','log','record','tracking','quality','control','assurance','improvement',
+    'corrective','action','root','cause','analysis','risk','hazard','personal','protective',
+    'equipment','gloves','gown','mask','shield','eye','face','hand','hygiene','disinfection',
+    'antiseptic','detergent','enzymatic','neutral','water','solution','concentration','dilution',
+    'contact','time','soak','flush','purge','filter','biofilm','residual','organic','inorganic',
+    'check','ensure','confirm','follow','perform','complete','maintain','prepare','apply',
+    'remove','replace','repair','return','send','place','open','close','lock','seal',
+    'label','tag','mark','identify','sort','separate','prioritize','organize','schedule',
+    'coordinate','communicate','inform','alert','warn','caution','danger','emergency',
+    'critical','urgent','priority','immediate','delayed','routine','special','custom',
+    'preference','card','physician','surgeon','nurse','team','lead','tech','manager',
+    'would','should','could','must','need','will','shall','might','before','after',
+    'during','while','until','because','since','therefore','however','also','then',
+    'first','second','next','finally','always','never','immediately','properly','correctly',
+    'carefully','thoroughly','completely','appropriate','required','necessary','important',
+    'essential','specific','correct','proper','safe','unsafe','acceptable','unacceptable',
+    'double','signature','verification','visual','physical','functional','packaging',
+    'integrity','compromise','damage','defect','corrosion','stain','pit','crack','chip',
+    'bend','misalign','loose','tight','sharp','dull','missing','broken','worn','expired'
+  ]);
+  
+  const realWords = words.filter(w => {
+    const wl = w.toLowerCase();
+    if(wl.length <= 2) return true; // short words pass
+    if(COMMON.has(wl)) return true;
+    // Heuristic: word has reasonable vowel-consonant ratio
+    const vowels = (wl.match(/[aeiou]/g)||[]).length;
+    const ratio = vowels / wl.length;
+    return ratio >= 0.15 && ratio <= 0.8 && wl.length <= 20;
+  });
+  
+  const realWordRatio = realWords.length / words.length;
+  
+  // Check for repeated character patterns (keyboard mashing)
+  const deduped = text.replace(/(.)\1{2,}/g, '$1'); // collapse repeats
+  if(deduped.length < text.length * 0.5) return 0; // >50% was repeated chars
+  
+  // Check for excessive non-alpha characters
+  const alphaChars = (text.match(/[a-zA-Z]/g)||[]).length;
+  if(alphaChars / text.length < 0.6) return 0; // Less than 60% letters
+  
+  // Check for sentence-like structure (has at least one period, comma, or connecting word)
+  const hasStructure = /[.!?,;:]/.test(text) || /\b(and|but|or|because|then|when|if|should|would|must|need|after|before)\b/i.test(text);
+  
+  // Quality tiers
+  if(realWordRatio < 0.3) return 0;      // Mostly gibberish
+  if(realWordRatio < 0.5) return 0.15;    // Very poor quality
+  if(realWordRatio < 0.7) return 0.4;     // Below average
+  if(!hasStructure) return 0.5;           // Real words but no coherence
+  if(words.length < 10) return 0.6;       // Too brief
+  return Math.min(1, 0.7 + realWordRatio * 0.3); // Good quality
 }
 
 function generateFallbackFeedback(answer, keywords, score){
+  if(score === 0) return 'Response does not contain a meaningful answer. Please provide a genuine response using complete sentences.';
+  if(score < 20) return 'Response lacks relevant content. Address the specific situation described in the question.';
   if(score >= 80) return 'Response demonstrates solid understanding of core procedures and safety protocols.';
   if(score >= 60) return 'Response covers key concepts but could expand on safety documentation and escalation steps.';
   return 'Response would benefit from more specific detail about safety protocols, documentation, and escalation procedures.';
