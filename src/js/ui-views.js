@@ -1094,14 +1094,27 @@ const PLACEMENT_QUESTIONS = [
    keywords:['hold','do not release','verify','supervisor','OR','count sheet','discrepancy','confirm','document','check','preference card','do not guess']},
 ];
 
+function shuffleArray(arr){
+  const a = arr.slice();
+  for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]; }
+  return a;
+}
+
 let PA = JSON.parse(localStorage.getItem('sbd_pa_state')||'null') || {
   active: false,
   staffId: null,
   answers: {},
   currentQ: 0,
   submitting: false,
-  submitted: false
+  submitted: false,
+  shuffledQuestions: null
 };
+
+function getPAQuestions(){
+  if(PA.shuffledQuestions && PA.shuffledQuestions.length) return PA.shuffledQuestions;
+  PA.shuffledQuestions = shuffleArray(PLACEMENT_QUESTIONS);
+  return PA.shuffledQuestions;
+}
 
 function savePAState(){ try{localStorage.setItem('sbd_pa_state',JSON.stringify(PA));}catch(e){} }
 
@@ -1112,6 +1125,7 @@ function showPlacementAssessment(s){
     PA.answers = {};
     PA.currentQ = 0;
     PA.submitted = false;
+    PA.shuffledQuestions = shuffleArray(PLACEMENT_QUESTIONS);
   } else {
     PA.active = true; // resume
   }
@@ -1139,10 +1153,11 @@ function renderPAScreen(){
     renderPAIntro();
     return;
   }
-  const totalQ = PLACEMENT_QUESTIONS.length;
+  const questions = getPAQuestions();
+  const totalQ = questions.length;
   // PA.currentQ is 1-based (1 = first question, totalQ = last question)
   // Array index = PA.currentQ - 1
-  const q = PLACEMENT_QUESTIONS[PA.currentQ - 1];
+  const q = questions[PA.currentQ - 1];
   const pct = Math.round((PA.currentQ / totalQ) * 100);
   const isLast = PA.currentQ === totalQ;
   const savedAns = PA.answers[q.id];
@@ -1266,8 +1281,9 @@ function paSimInput(qId, val){
 }
 
 function paNext(){
-  const totalQ = PLACEMENT_QUESTIONS.length;
-  const q = PLACEMENT_QUESTIONS[PA.currentQ - 1]; // current displayed question
+  const questions = getPAQuestions();
+  const totalQ = questions.length;
+  const q = questions[PA.currentQ - 1]; // current displayed question
   const ans = PA.answers[q.id];
   if(q.type==='knowledge' && ans===undefined) return;
   if(q.type==='simulation' && (!ans || ans.length < 80)) return;
@@ -3909,15 +3925,31 @@ function renderSOIP(){
 }
 
 // ============================================================ PLACEMENT ACKNOWLEDGMENT
+function isPlacementAcknowledged(staffId){
+  try {
+    const acked = JSON.parse(localStorage.getItem('sbd_placement_ack')||'{}');
+    if(acked[staffId]) return true;
+  } catch(e){}
+  const s = getStaff(staffId);
+  return s && s.placementAcknowledged;
+}
+
 function acknowledgePlacement(staffId){
   const s = getStaff(staffId);
   if(!s) return;
   s.placementAcknowledged = true;
+  // Persist to localStorage immediately (always reliable)
+  try {
+    const acked = JSON.parse(localStorage.getItem('sbd_placement_ack')||'{}');
+    acked[staffId] = true;
+    localStorage.setItem('sbd_placement_ack', JSON.stringify(acked));
+  } catch(e){}
+  // Also persist to Supabase if column exists
   if(IS_LIVE){
     sbFetch(`/rest/v1/staff?id=eq.${s.id}`, {
       method:'PATCH',
       body: { placement_acknowledged: true }
-    }).catch(e=>toast('Acknowledge sync: '+e.message,'warn'));
+    }).catch(()=>{});
   }
   toast('Placement acknowledged. Welcome to the team!','ok');
   renderSDashboard();
@@ -3941,7 +3973,7 @@ function renderSDashboard(){
   const eligTracks = getEligibleTracks(s);
   // Placement / new hire banners and callouts
   const placementBanner = existingPR ? (existingPR.status==='confirmed'||existingPR.status==='adjusted' ?
-    (s.placementAcknowledged ? '' :
+    (isPlacementAcknowledged(s.id) ? '' :
     `<div style="background:#052e16;border:1px solid #16a34a;border-radius:var(--r);padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
       <div style="width:36px;height:36px;background:#166534;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px">&#10003;</div>
       <div style="flex:1">
