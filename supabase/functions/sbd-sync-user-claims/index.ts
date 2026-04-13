@@ -127,10 +127,12 @@ serve(async (req) => {
         let authUid = finalUserId;
         let isUpdate = action === 'update';
 
+        let tempPassword: string | null = null;
+
         // If ID starts with 'u' it implies it's a locally generated fake-ID from UI creation.
         if (!isUpdate && (!finalUserId || finalUserId.startsWith('u'))) {
             // It's a new user! Create in Auth.
-            const tempPassword = password || ('Sbd_' + Math.random().toString(36).slice(-8) + '!2024');
+            tempPassword = password || ('Sbd_' + Math.random().toString(36).slice(-8) + '!2024');
             const { data: authData, error: authCreateError } = await supabaseAdmin.auth.admin.createUser({
                 email: email,
                 password: tempPassword,
@@ -167,7 +169,7 @@ serve(async (req) => {
             email: email,
             role: role,
             title: title || '',
-            initials: initials || (name ? name.substring(0, 2).toUpperCase() : ''),
+            initials: initials || (name ? (name.trim().split(/\s+/).length > 1 ? (name.trim().split(/\s+/)[0][0] + name.trim().split(/\s+/).slice(-1)[0][0]).toUpperCase() : name.trim().substring(0, 2).toUpperCase()) : 'XX'),
             facility_id: fid || facilityId || null,
             system_id: systemId || callerSystemId || null,
             staff_id: sid || null,
@@ -206,6 +208,31 @@ serve(async (req) => {
             if (staffUpsertErr) {
                 console.error("staff upsert error:", staffUpsertErr);
                 throw new Error('Failed to sync staff record: ' + staffUpsertErr.message);
+            }
+        }
+
+        // If this was a NEW user creation (not an update), enqueue a welcome email
+        if (!isUpdate && email && tempPassword) {
+            try {
+                const firstName = (name || '').split(' ')[0] || 'Team Member';
+                await supabaseAdmin.from('sbd_email_queue').insert({
+                    recipient_email: email,
+                    template: 'registration_approved',
+                    subject: 'Welcome to the SIPS Belt Intelligence Portal',
+                    body_data: {
+                        name: firstName,
+                        contact_name: name,
+                        facility_name: '',
+                        temp_password: tempPassword
+                    },
+                    status: 'pending',
+                    attempts: 0,
+                    created_at: new Date().toISOString()
+                });
+                console.log('Welcome email enqueued for:', email);
+            } catch (emailErr) {
+                // Non-blocking — user creation succeeded even if email queue fails
+                console.warn('Failed to enqueue welcome email:', emailErr);
             }
         }
 

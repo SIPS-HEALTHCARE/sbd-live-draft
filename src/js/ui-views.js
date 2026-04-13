@@ -115,6 +115,11 @@ function doRegister(){
   if(pass!==pass2){errEl.textContent='Passwords do not match.';errEl.style.display='block';return;}
   if(DB.users.find(u=>u.email.toLowerCase()===email.toLowerCase())||DB.pendingRegs.find(r=>r.email.toLowerCase()===email.toLowerCase())){errEl.textContent='An account with this email already exists or is pending review.';errEl.style.display='block';return;}
   
+  // Disable submit button to prevent double-submissions
+  const btn=document.querySelector('#auth-register .btn-gold');
+  const orgBtnHTML=btn?btn.innerHTML:'';
+  if(btn){btn.disabled=true;btn.innerHTML='<span class="spinner" style="border-width:2px;width:14px;height:14px;margin-right:6px;display:inline-block"></span> Submitting...';}
+
   // Map fields to match registrations table: name, email, facility, requested_at, location, department, password, requested_role
   const reg={
     name: contact, 
@@ -129,9 +134,21 @@ function doRegister(){
   };
 
   SB.submitRegistration(reg).then(()=>{
+    if(btn){btn.disabled=false;btn.innerHTML=orgBtnHTML;}
     document.getElementById('login').classList.add('hidden');
     document.getElementById('pending-screen').classList.remove('hidden');
-  }).catch(e=>{ document.getElementById('reg-error').textContent='Submission failed: '+e.message; document.getElementById('reg-error').style.display='block'; });
+  }).catch(e=>{
+    if(btn){btn.disabled=false;btn.innerHTML=orgBtnHTML;}
+    let userMsg='Submission failed: '+e.message;
+    // Translate known backend errors into user-friendly messages
+    if(e.message&&e.message.includes('registrations_email_key')){
+      userMsg='This email address has already been used in a previous registration. If your prior request was denied, please contact SIPS Healthcare at support@sipsconsults.com or use a different email address.';
+    } else if(e.message&&(e.message.includes('Load failed')||e.message.includes('timed out')||e.message.includes('Failed to fetch')||e.message.includes('NetworkError'))){
+      userMsg='Network error — please check your internet connection and try again.';
+    }
+    errEl.textContent=userMsg;
+    errEl.style.display='block';
+  });
 }
 
 // ============================================================ TOAST
@@ -246,9 +263,9 @@ function enterPortal(type){
     ST.hFid=u.fid;
     const fac=getFac(u.fid)||{};
     document.getElementById('s-sb-orgname').textContent=fac.name||'--';
-    document.getElementById('s-uav-name').textContent=s?fullName(s):u.name;
-    document.getElementById('s-uav-role').textContent=s?s.role:u.title;
-    document.getElementById('s-uav-initials').textContent=u.initials||'--';
+    document.getElementById('s-uav-name').textContent=s?fullName(s):(u.name||u.email||'--');
+    document.getElementById('s-uav-role').textContent=s?s.role:(u.title||u.role||'Staff');
+    document.getElementById('s-uav-initials').textContent=u.initials||(u.name?u.name.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase():'--');
     if(s) document.getElementById('s-topbar-pts').textContent=calcPoints(s)+' pts';
     initSwipeClose('s');
     document.querySelectorAll('#s-portal .nav-item').forEach(n=>n.classList.remove('active'));
@@ -269,9 +286,9 @@ function enterPortal(type){
     const sys=getSystem(u.systemId);
     ST.curSystemId=u.systemId;
     document.getElementById('x-sb-sysname').textContent=sys?sys.name:'My System';
-    document.getElementById('x-uav-name').textContent=u.name;
-    document.getElementById('x-uav-role').textContent=u.title||'System Admin';
-    document.getElementById('x-uav-initials').textContent=u.initials||'--';
+    document.getElementById('x-uav-name').textContent=u.name||u.email||'System Admin';
+    document.getElementById('x-uav-role').textContent=u.title||u.role||'System Admin';
+    document.getElementById('x-uav-initials').textContent=u.initials||(u.name?u.name.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase():'--');
     initSwipeClose('x');
     document.querySelectorAll('#x-portal .nav-item').forEach(n=>n.classList.remove('active'));
     let _xv='x-dashboard',_xt='System Overview';
@@ -291,11 +308,11 @@ function enterPortal(type){
     const fac=getFac(fid);
     document.getElementById('h-sb-orgname').textContent=fac?fac.name:'--';
     document.getElementById('h-topbar-sub').textContent=fac?(fac.name+' \u2022 '+fac.dept):'--';
-    document.getElementById('h-uav-name').textContent=u?u.name:'--';
+    document.getElementById('h-uav-name').textContent=u?(u.name||u.email||'--'):'--';
     const _isFacAdmin = u&&u.role==='facility_admin';
-    const _hroleDisplay=_isFacAdmin?'Facility Admin':(u?u.title:'Dept. Manager');
+    const _hroleDisplay=_isFacAdmin?'Facility Admin':(u?(u.title||u.role||'Dept. Manager'):'Dept. Manager');
     document.getElementById('h-uav-role').textContent=_hroleDisplay;
-    const initials=u?u.initials:(u&&u.name?u.name.split(' ').map(n=>n[0]).join('').slice(0,2):'--');
+    const initials=u?(u.initials||(u.name?u.name.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase():'--')):'--';
     document.getElementById('h-uav-initials').textContent=initials;
     // Update topbar role pill
     const _hPill=document.getElementById('h-topbar-role-pill');
@@ -324,9 +341,9 @@ function enterPortal(type){
   // admin / staff_admin / master_admin
   const isMaster=u&&u.role==='master_admin';
   document.getElementById('a-sb-role-label').textContent=isMaster?'Master Admin':'Staff Admin';
-  document.getElementById('a-uav-name').textContent=u?u.name:'Admin';
-  document.getElementById('a-uav-role').textContent=u?u.title:'SIPS Admin';
-  document.getElementById('a-uav-initials').textContent=u?u.initials:'AD';
+  document.getElementById('a-uav-name').textContent=u?(u.name||u.email||'Admin'):'Admin';
+  document.getElementById('a-uav-role').textContent=u?(u.title||u.role||'SIPS Admin'):'SIPS Admin';
+  document.getElementById('a-uav-initials').textContent=u?(u.initials||(u.name?u.name.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase():'AD')):'AD';
   document.getElementById('a-topbar-pill').textContent=isMaster?'Master Admin':'Staff Admin';
   document.getElementById('admin-mgmt-lbl').style.display=isMaster?'block':'none';
   document.getElementById('nav-adminusers').style.display=isMaster?'flex':'none';
@@ -11094,7 +11111,20 @@ async function denyReg(rid){
   if(!r)return;
   const facilityName = r.facility || r.facilityName || 'Unknown Facility';
   r.status='denied';
-  if(IS_LIVE){ SB.denyRegistration(rid).catch(e=>toast('Deny sync: '+e.message,'warn')); }
+  if(IS_LIVE){ 
+    SB.denyRegistration(rid).catch(e=>toast('Deny sync: '+e.message,'warn'));
+    // Queue denial notification email
+    if(r.email){
+      sbFetch('/rest/v1/sbd_email_queue', { method:'POST', prefer:'return=minimal', body:{
+        recipient_email: r.email,
+        template: 'registration_denied',
+        body_data: { contact_name: r.name||r.contact||'Applicant', facility_name: facilityName },
+        status: 'pending',
+        attempts: 0,
+        created_at: new Date().toISOString()
+      }}).catch(e=>console.warn('Denial email queue failed:', e));
+    }
+  }
   const nb=document.getElementById('reg-nb');
   const pendingCnt=DB.pendingRegs.filter(x=>x.status==='pending').length;
   if(nb){nb.textContent=pendingCnt;nb.style.display=pendingCnt>0?'inline-block':'none';}

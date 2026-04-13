@@ -170,72 +170,36 @@ serve(async (req) => {
 
         let emailError = null;
 
-        // 4. Send Custom Welcome Email via Resend
+        // 4. Queue Welcome Email via sbd_email_queue (processed by sbd-send-emails with retry logic)
         try {
-            const resendApiKey = Deno.env.get('RESEND_API_KEY');
-            if (resendApiKey) {
-                // Adjust text based on role assigned
-                const instructions = (accountRole === 'hospital' || accountRole === 'facility_admin')
-                    ? 'Please log in to access your Facility Administrative Dashboard.'
-                    : (accountRole === 'system_admin')
-                        ? 'Please log in to access your Hospital System Executive Dashboard.'
-                        : 'Please log in to your dashboard to complete your Operator Intelligence Profile (OIP).';
-                
-                const emailHtml = authCreated 
-                    ? `
-                        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #edf2f7; background-color: #0d1117; padding: 30px; border-radius: 8px;">
-                            <h2 style="color: #a78bfa;">Welcome to Sterile by Design!</h2>
-                            <p>Hi ${firstName},</p>
-                            <p>Your registration has been approved. You can now access your Operations Portal.</p>
-                            <div style="background-color: rgba(167, 139, 250, 0.1); border: 1px solid rgba(167, 139, 250, 0.3); padding: 15px; border-radius: 8px; margin: 20px 0;">
-                                <p style="margin: 0; color: #a8b2d1;"><strong>Login Email:</strong> ${regData.email}</p>
-                                <p style="margin: 10px 0 0 0; color: #a8b2d1;"><strong>Temporary Password:</strong> ${authPassword}</p>
-                            </div>
-                            <p>${instructions}</p>
-                            <p style="margin-top: 30px;">
-                                <a href="https://belt.sterilebydesign.ai" style="background-color: #c49a20; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold; display: inline-block;">Log in to SBD Portal</a>
-                            </p>
-                        </div>
-                    `
-                    : `
-                        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #edf2f7; background-color: #0d1117; padding: 30px; border-radius: 8px;">
-                            <h2 style="color: #a78bfa;">SBD Registration Approved</h2>
-                            <p>Hi ${firstName},</p>
-                            <p>Your portal registration has been approved! You can now log into the portal using your existing credentials.</p>
-                            <p>${instructions}</p>
-                            <p style="margin-top: 30px;">
-                                <a href="https://belt.sterilebydesign.ai" style="background-color: #c49a20; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold; display: inline-block;">Access Dashboard</a>
-                            </p>
-                        </div>
-                    `;
+            const { error: queueError } = await supabaseAdmin.from('sbd_email_queue').insert({
+                recipient_email: regData.email,
+                template: 'registration_approved',
+                subject: authCreated
+                    ? 'Welcome to Sterile by Design - Account Approved'
+                    : 'SBD Registration Approved',
+                body_data: {
+                    contact_name: regData.name,
+                    name: firstName,
+                    facility_name: regData.facility || '',
+                    temp_password: authCreated ? authPassword : null,
+                    auth_created: authCreated,
+                    role: accountRole,
+                    login_email: regData.email
+                },
+                status: 'pending',
+                attempts: 0,
+                created_at: new Date().toISOString()
+            });
 
-                const resendRes = await fetch('https://api.resend.com/emails', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${resendApiKey}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        from: 'SBD Team <noreply@sterilebydesign.ai>',
-                        to: regData.email,
-                        subject: authCreated ? 'Welcome to Sterile by Design - Account Approved' : 'SBD Registration Approved',
-                        html: emailHtml
-                    })
-                });
-
-                if (!resendRes.ok) {
-                    const errText = await resendRes.text();
-                    console.error("Resend API failed:", errText);
-                    emailError = errText;
-                } else {
-                    console.log("Approval email sent successfully to", regData.email);
-                }
+            if (queueError) {
+                console.error("Email queue insert failed:", queueError);
+                emailError = queueError.message;
             } else {
-                console.warn("RESEND_API_KEY is not set. Approval email skipped.");
-                emailError = "RESEND_API_KEY is not set.";
+                console.log("Approval email queued for:", regData.email);
             }
         } catch (e: any) {
-            console.error("Failed to send welcome email:", e.message);
+            console.error("Failed to queue welcome email:", e.message);
             emailError = e.message;
         }
 

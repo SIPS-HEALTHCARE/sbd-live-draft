@@ -1,16 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.6";
 
+const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
 serve(async (req) => {
     // Handle CORS preflight requests
     if (req.method === 'OPTIONS') {
-        return new Response('ok', {
-            headers: {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'POST',
-                'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-            }
-        });
+        return new Response('ok', { headers: corsHeaders });
     }
 
     try {
@@ -19,7 +19,7 @@ serve(async (req) => {
         // Ensure this is an UPDATE event for a placement review transitioning to 'approved'
         if (payload.type !== 'UPDATE' && payload.type !== 'INSERT') {
             return new Response(JSON.stringify({ message: "Ignored event type." }), { 
-                headers: { 'Content-Type': 'application/json' }, 
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
                 status: 200 
             });
         }
@@ -31,7 +31,7 @@ serve(async (req) => {
         // or if it was inserted as 'approved' (rare but possible)
         if (record.status !== 'approved' || oldRecord.status === 'approved') {
             return new Response(JSON.stringify({ message: "Status is not 'approved' or already was approved." }), { 
-                headers: { 'Content-Type': 'application/json' }, 
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
                 status: 200 
             });
         }
@@ -50,13 +50,19 @@ serve(async (req) => {
 
         if (userError || !userData) {
             console.error("Could not find user profile for staff_id:", record.staff_id, userError);
-            return new Response(JSON.stringify({ error: "User profile not found." }), { status: 404 });
+            return new Response(JSON.stringify({ error: "User profile not found." }), { 
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
+                status: 404 
+            });
         }
 
         const resendApiKey = Deno.env.get('RESEND_API_KEY');
         if (!resendApiKey) {
             console.error("RESEND_API_KEY missing");
-            return new Response(JSON.stringify({ error: "Missing email API key." }), { status: 500 });
+            return new Response(JSON.stringify({ error: "Missing email API key." }), { 
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
+                status: 500 
+            });
         }
 
         const assessmentType = record.type ? record.type : 'Placement';
@@ -94,18 +100,21 @@ serve(async (req) => {
         if (!res.ok) {
             const errBody = await res.text();
             console.error("Resend API Error:", errBody);
-            return new Response(JSON.stringify({ error: "Failed to send email." }), { status: 500 });
+            return new Response(JSON.stringify({ error: "Failed to send email." }), { 
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
+                status: 500 
+            });
         }
 
         return new Response(JSON.stringify({ message: "Assessment approval email sent successfully." }), {
-            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             status: 200
         });
 
     } catch (err: any) {
         console.error("Edge function error:", err);
         return new Response(JSON.stringify({ error: err.message || "Internal server error" }), { 
-            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
             status: 500 
         });
     }

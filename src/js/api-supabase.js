@@ -86,7 +86,7 @@ const SB_AUTH = {
     const res = await fetch(`${SB_API_URL}/auth/v1/recover`, {
       method: 'POST',
       headers: { 'apikey': SB_ANON_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email })
+      body: JSON.stringify({ email, redirectTo: window.location.origin || 'https://belt.sterilebydesign.ai' })
     });
     return res.ok;
   },
