@@ -56,57 +56,34 @@ serve(async (req) => {
             });
         }
 
-        const resendApiKey = Deno.env.get('RESEND_API_KEY');
-        if (!resendApiKey) {
-            console.error("RESEND_API_KEY missing");
-            return new Response(JSON.stringify({ error: "Missing email API key." }), { 
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
-                status: 500 
-            });
-        }
-
+        // Queue assessment approval notification via sbd_email_queue
+        // (processed by sbd-send-emails with 3x retry logic)
         const assessmentType = record.type ? record.type : 'Placement';
         const firstName = userData.name ? userData.name.split(' ')[0] : 'Staff Member';
 
-        const emailHtml = `
-            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #edf2f7; background-color: #0d1117; padding: 30px; border-radius: 8px;">
-                <h2 style="color: #a78bfa;">Great News!</h2>
-                <p>Hi ${firstName},</p>
-                <p>Your <strong>${assessmentType} Assessment</strong> has been reviewed and <strong>Approved</strong> by your leadership team.</p>
-                <p>Your new status and progress are now reflected on your portal dashboard. Keep up the excellent work!</p>
-                <p style="margin-top: 30px;">
-                    <a href="https://belt.sterilebydesign.ai" style="background-color: #c49a20; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold; display: inline-block;">Log in to SBD Portal</a>
-                </p>
-                <p style="margin-top: 30px; font-size: 12px; color: #64748b;">
-                    Sterile by Design &bull; SIPS Healthcare Solutions
-                </p>
-            </div>
-        `;
-
-        const res = await fetch('https://api.resend.com/emails', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${resendApiKey}`,
-                'Content-Type': 'application/json'
+        const { error: queueError } = await supabaseAdmin.from('sbd_email_queue').insert({
+            recipient_email: userData.email,
+            template: 'assessment_approved',
+            subject: `Your ${assessmentType} Assessment has been Approved!`,
+            body_data: {
+                name: firstName,
+                assessment_type: assessmentType,
+                staff_id: record.staff_id
             },
-            body: JSON.stringify({
-                from: 'Sterile by Design <noreply@belt.sterilebydesign.ai>',
-                to: userData.email,
-                subject: `Your ${assessmentType} Assessment has been Approved!`,
-                html: emailHtml
-            })
+            status: 'pending',
+            attempts: 0,
+            created_at: new Date().toISOString()
         });
 
-        if (!res.ok) {
-            const errBody = await res.text();
-            console.error("Resend API Error:", errBody);
-            return new Response(JSON.stringify({ error: "Failed to send email." }), { 
+        if (queueError) {
+            console.error("Email queue insert failed:", queueError);
+            return new Response(JSON.stringify({ error: "Failed to queue email." }), { 
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
                 status: 500 
             });
         }
 
-        return new Response(JSON.stringify({ message: "Assessment approval email sent successfully." }), {
+        return new Response(JSON.stringify({ message: "Assessment approval email queued successfully." }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             status: 200
         });

@@ -11,12 +11,17 @@ const corsHeaders = {
   'Content-Type': 'application/json',
 };
 
+function esc(s: string): string {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 function renderTemplate(template: string, data: Record<string, unknown>): { subject: string; html: string } {
-  const name = (data.contact_name || data.name || 'there') as string;
-  const facility = (data.facility_name || '') as string;
-  const loginEmail = (data.login_email || '') as string;
-  const tempPassword = (data.temp_password || '') as string;
+  const name = esc((data.contact_name || data.name || 'there') as string);
+  const facility = esc((data.facility_name || '') as string);
+  const loginEmail = esc((data.login_email || '') as string);
+  const tempPassword = esc((data.temp_password || '') as string);
   const authCreated = data.auth_created as boolean;
+  const assessmentType = esc((data.assessment_type || 'Placement') as string);
   const base = `<div style="font-family:'Helvetica Neue',Arial,sans-serif;max-width:600px;margin:0 auto;background:#0a0c1a;color:#dde3f0;padding:0;border-radius:12px;overflow:hidden"><div style="background:linear-gradient(135deg,#c49a20,#7a5c0d);padding:24px 32px;text-align:center"><div style="font-size:22px;font-weight:800;color:#000;letter-spacing:0.05em">SIPS</div><div style="font-size:10px;color:#000;letter-spacing:0.15em;text-transform:uppercase;margin-top:2px">Belt Intelligence Platform</div></div><div style="padding:32px">__BODY__</div><div style="padding:20px 32px;border-top:1px solid #1a1e30;text-align:center;font-size:11px;color:#64748b">SIPS Healthcare Solutions &bull; Sterile By Design<br>This is an automated message. Please do not reply directly.</div></div>`;
 
   const templates: Record<string, { subject: string; body: string }> = {
@@ -38,7 +43,11 @@ function renderTemplate(template: string, data: Record<string, unknown>): { subj
     },
     admin_new_registration: {
       subject: `New Facility Registration: ${facility}`,
-      body: `<div style="font-size:16px;font-weight:700;color:#c49a20;margin-bottom:16px">New Registration Pending Review</div><p style="color:#94a3b8;line-height:1.7;margin:0 0 16px">Hello ${(data.admin_name || 'Admin') as string},</p><p style="color:#94a3b8;line-height:1.7;margin:0 0 16px">A new facility registration request has been submitted:</p><div style="background:#131829;border:1px solid #1a1e30;border-radius:8px;padding:16px;margin:20px 0"><table style="width:100%;border-collapse:collapse"><tr><td style="padding:6px 0;color:#64748b;font-size:12px;width:100px">Facility</td><td style="padding:6px 0;color:#dde3f0;font-size:13px;font-weight:600">${facility}</td></tr><tr><td style="padding:6px 0;color:#64748b;font-size:12px">Contact</td><td style="padding:6px 0;color:#dde3f0;font-size:13px">${(data.contact_name || '') as string}</td></tr><tr><td style="padding:6px 0;color:#64748b;font-size:12px">Email</td><td style="padding:6px 0;color:#c49a20;font-size:13px">${(data.contact_email || '') as string}</td></tr><tr><td style="padding:6px 0;color:#64748b;font-size:12px">Location</td><td style="padding:6px 0;color:#dde3f0;font-size:13px">${(data.location || '') as string}</td></tr><tr><td style="padding:6px 0;color:#64748b;font-size:12px">Department</td><td style="padding:6px 0;color:#dde3f0;font-size:13px">${(data.department || '') as string}</td></tr></table></div><p style="color:#94a3b8;line-height:1.7;margin:0">Log in to the admin portal to review this request.</p>`,
+      body: `<div style="font-size:16px;font-weight:700;color:#c49a20;margin-bottom:16px">New Registration Pending Review</div><p style="color:#94a3b8;line-height:1.7;margin:0 0 16px">Hello ${esc((data.admin_name || 'Admin') as string)},</p><p style="color:#94a3b8;line-height:1.7;margin:0 0 16px">A new facility registration request has been submitted:</p><div style="background:#131829;border:1px solid #1a1e30;border-radius:8px;padding:16px;margin:20px 0"><table style="width:100%;border-collapse:collapse"><tr><td style="padding:6px 0;color:#64748b;font-size:12px;width:100px">Facility</td><td style="padding:6px 0;color:#dde3f0;font-size:13px;font-weight:600">${facility}</td></tr><tr><td style="padding:6px 0;color:#64748b;font-size:12px">Contact</td><td style="padding:6px 0;color:#dde3f0;font-size:13px">${esc((data.contact_name || '') as string)}</td></tr><tr><td style="padding:6px 0;color:#64748b;font-size:12px">Email</td><td style="padding:6px 0;color:#c49a20;font-size:13px">${esc((data.contact_email || '') as string)}</td></tr><tr><td style="padding:6px 0;color:#64748b;font-size:12px">Location</td><td style="padding:6px 0;color:#dde3f0;font-size:13px">${esc((data.location || '') as string)}</td></tr><tr><td style="padding:6px 0;color:#64748b;font-size:12px">Department</td><td style="padding:6px 0;color:#dde3f0;font-size:13px">${esc((data.department || '') as string)}</td></tr></table></div><p style="color:#94a3b8;line-height:1.7;margin:0">Log in to the admin portal to review this request.</p>`,
+    },
+    assessment_approved: {
+      subject: `Your ${assessmentType} Assessment has been Approved!`,
+      body: `<div style="font-size:16px;font-weight:700;color:#22c55e;margin-bottom:16px">Assessment Approved</div><p style="color:#94a3b8;line-height:1.7;margin:0 0 16px">Hi ${name},</p><p style="color:#94a3b8;line-height:1.7;margin:0 0 16px">Your <strong style="color:#dde3f0">${assessmentType} Assessment</strong> has been reviewed and <strong style="color:#22c55e">Approved</strong> by your leadership team.</p><div style="background:#0e382c;border:1px solid #166534;border-radius:8px;padding:16px;margin:20px 0;text-align:center"><div style="font-size:14px;font-weight:700;color:#22c55e;margin-bottom:8px">Status Updated</div><div style="font-size:13px;color:#94a3b8">Your new status and progress are now reflected on your portal dashboard.</div></div><a href="https://belt.sterilebydesign.ai" style="display:inline-block;background:linear-gradient(135deg,#c49a20,#7a5c0d);color:#000;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:0.05em;margin-top:8px">View Your Dashboard</a><p style="color:#94a3b8;line-height:1.7;margin:16px 0 0">Keep up the excellent work.</p>`,
     },
   };
 
