@@ -223,7 +223,10 @@ serve(async (req) => {
                         name: firstName,
                         contact_name: name,
                         facility_name: '',
-                        temp_password: tempPassword
+                        temp_password: tempPassword,
+                        login_email: email,
+                        auth_created: true,
+                        role: role || 'staff_member'
                     },
                     status: 'pending',
                     attempts: 0,
