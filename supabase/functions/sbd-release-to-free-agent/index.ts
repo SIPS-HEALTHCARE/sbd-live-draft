@@ -41,18 +41,19 @@ serve(async (req) => {
         const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
         if (authError || !user) throw new Error('Unauthorized');
 
-        const { data: profile } = await supabase.from('sbd_portal_users').select('role, fid').eq('id', user.id).single();
-        const allowedRoles = ['master_admin', 'staff_admin', 'admin', 'master'];
-        if (!profile || !allowedRoles.includes(profile.role)) {
-            throw new Error('Only admins can release staff to free agents');
-        }
-
-        // Initialize Supabase Admin Client
+        // Initialize Supabase Admin Client (bypasses RLS)
         const supabaseAdmin = createClient(
             Deno.env.get('SUPABASE_URL') ?? '',
             Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
             { auth: { autoRefreshToken: false, persistSession: false } }
         );
+
+        const { data: profile } = await supabaseAdmin.from('sbd_portal_users').select('role, fid').eq('id', user.id).single();
+        console.log('Release auth check — user:', user.id, 'profile:', JSON.stringify(profile));
+        const allowedRoles = ['master_admin', 'staff_admin', 'admin', 'master'];
+        if (!profile || !allowedRoles.includes(profile.role)) {
+            throw new Error(`Only admins can release staff to free agents (found role: ${profile?.role || 'no profile'})`);
+        }
 
         // Update staff record to unassigned
         const { error: staffError } = await supabaseAdmin
