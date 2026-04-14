@@ -11042,7 +11042,7 @@ function renderHScoreboard(){
 
 // ============================================================ A ALL STAFF (network-level filtered roster)
 function renderAAllStaff(){
-  adminStaffFilter.fid='all';
+  // Note: do NOT reset adminStaffFilter.fid here — it would undo the user's selection
   const isMaster=ST.user&&ST.user.role==='master_admin';
   const facList=(isMaster?DB.facilities:(ST.user&&ST.user.assignedFids?DB.facilities.filter(f=>(ST.user.assignedFids||[]).includes(f.id)):DB.facilities)).filter(f=>f.active!==false);
   const fullPool=DB.staff.filter(s=>facList.find(f=>f.id===s.fid));
