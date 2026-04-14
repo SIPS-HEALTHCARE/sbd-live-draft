@@ -13919,13 +13919,22 @@ function releaseToFreeAgent(staffId){
 function executeReleaseToFA(staffId){
   const s=getStaff(staffId);
   if(!s){toast('Staff record not found.','err');return;}
+
+  if(!DB.pendingTransfers) DB.pendingTransfers=[];
+
+  // Block duplicate release requests
+  const existingRelease = DB.pendingTransfers.find(t => t.staffId === staffId && t.type === 'release' && t.status === 'pending');
+  if(existingRelease){
+    toast(`A release request for <strong>${fullName(s)}</strong> is already pending. Awaiting second-admin verification.`,'warn');
+    closeModal();
+    return;
+  }
+
   const fac=getFac(s.fid);
   const date=document.getElementById('fa-rel-date')?.value||new Date().toISOString().slice(0,10);
   const reason=document.getElementById('fa-rel-reason')?.value||'Other';
   const notes=document.getElementById('fa-rel-notes')?.value||'';
   const adminName=(ST.user&&(ST.user.name||ST.user.email))||'Admin';
-
-  if(!DB.pendingTransfers) DB.pendingTransfers=[];
 
   const transfer={
     id:'tr-'+Date.now(),
