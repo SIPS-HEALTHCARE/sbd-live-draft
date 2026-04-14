@@ -91,13 +91,16 @@ serve(async (req) => {
             throw new Error('Only admins can release staff to free agents');
         }
 
-        // Update staff record to unassigned
+        // Update staff record — set fid to null (column is uuid FK, can't use string 'unassigned')
         const { error: staffError } = await supabaseAdmin
             .from('staff')
-            .update({ fid: 'unassigned', facility_id: 'unassigned', is_free_agent: true })
+            .update({ fid: null })
             .eq('id', staffId);
 
-        if (staffError) throw new Error('Failed to update staff record to free agent');
+        if (staffError) {
+            console.error('Staff update error:', JSON.stringify(staffError));
+            throw new Error('Failed to update staff record to free agent: ' + staffError.message);
+        }
 
         // Add to free_agents table
         const { error: faError } = await supabaseAdmin.from('free_agents').insert({
