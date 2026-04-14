@@ -3141,6 +3141,10 @@ function adminFilterBar(showFacility, facList, onChangeFn){
 
 // Filter a staff array by the current adminStaffFilter
 function applyAdminFilter(staffArr){
+  console.log('[Filter] fid:', adminStaffFilter.fid, 'belt:', adminStaffFilter.belt, 'q:', adminStaffFilter.q, 'pool:', staffArr.length);
+  if(adminStaffFilter.fid!=='all' && staffArr.length) {
+    console.log('[Filter] sample fid:', staffArr[0].fid, 'type:', typeof staffArr[0].fid, ' | filter fid:', adminStaffFilter.fid, 'type:', typeof adminStaffFilter.fid);
+  }
   return staffArr.filter(s=>{
     const matchBelt = adminStaffFilter.belt==='All' || s.belt===adminStaffFilter.belt;
     const matchFid  = adminStaffFilter.fid==='all' || s.fid===adminStaffFilter.fid;
