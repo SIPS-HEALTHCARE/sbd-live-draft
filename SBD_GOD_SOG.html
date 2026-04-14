@@ -1776,8 +1776,8 @@ const SB = {
   submitPromotionApproval(data){ return sbFetch('/rest/v1/promotion_approvals', { method:'POST', body:data }); },
   updatePromotionApproval(id, data){ return sbFetch(`/rest/v1/promotion_approvals?id=eq.${id}`, { method:'PATCH', body:data }); },
   getFreeAgents(){ return sbFetch('/rest/v1/free_agents?select=*&order=released_at.desc'); },
-  releaseToFreeAgent(data){ return sbFetch('/functions/v1/release-to-free-agent', { method:'POST', body:data }); },
-  assignFreeAgent(data){ return sbFetch('/functions/v1/assign-free-agent', { method:'POST', body:data }); },
+  releaseToFreeAgent(data){ return sbFetch('/functions/v1/sbd-release-to-free-agent', { method:'POST', body:data }); },
+  assignFreeAgent(data){ return sbFetch('/functions/v1/sbd-assign-free-agent', { method:'POST', body:data }); },
   purgeFreeAgent(id){ return sbFetch(`/rest/v1/free_agents?id=eq.${id}`, { method:'DELETE' }); },
   getUserProfile(userId){ return sbFetch(`/rest/v1/user_profiles?id=eq.${userId}&select=*`); },
   getAllAdminProfiles(){ return sbFetch('/rest/v1/user_profiles?select=*&order=name.asc'); },
@@ -1800,8 +1800,8 @@ const SB = {
   getFacilityShifts(fid){ return sbFetch(`/rest/v1/facility_shifts?fid=eq.${encodeURIComponent(fid)}&select=*`); },
   upsertFacilityShift(data){ return sbFetch('/rest/v1/facility_shifts', { method:'POST', prefer:'resolution=merge-duplicates', body:data }); },
   deleteFacilityShift(id){ return sbFetch(`/rest/v1/facility_shifts?id=eq.${id}`, { method:'DELETE' }); },
-  releaseToFreeAgentRemote(data){ return sbFetch('/functions/v1/release-to-free-agent', { method:'POST', body:data }); },
-  assignFreeAgentRemote(data){ return sbFetch('/functions/v1/assign-free-agent', { method:'POST', body:data }); }
+  releaseToFreeAgentRemote(data){ return sbFetch('/functions/v1/sbd-release-to-free-agent', { method:'POST', body:data }); },
+  assignFreeAgentRemote(data){ return sbFetch('/functions/v1/sbd-assign-free-agent', { method:'POST', body:data }); }
 };
 
 
