@@ -48,19 +48,47 @@ serve(async (req) => {
             { auth: { autoRefreshToken: false, persistSession: false } }
         );
 
-        // Try lookup by auth UID first, then fall back to email (master admins use custom IDs like 'sips-ma-2')
-        let profile = null;
-        const { data: profileById } = await supabaseAdmin.from('sbd_portal_users').select('role, fid').eq('id', user.id).single();
-        if (profileById) {
-            profile = profileById;
-        } else if (user.email) {
-            const { data: profileByEmail } = await supabaseAdmin.from('sbd_portal_users').select('role, fid').eq('email', user.email).single();
-            profile = profileByEmail;
-        }
-        console.log('Release auth check — user:', user.id, 'email:', user.email, 'profile:', JSON.stringify(profile));
+        // Resolve caller role — multiple fallback strategies because master admins
+        // are hardcoded in the frontend and may not exist in sbd_portal_users
         const allowedRoles = ['master_admin', 'staff_admin', 'admin', 'master'];
-        if (!profile || !allowedRoles.includes(profile.role)) {
-            throw new Error(`Only admins can release staff to free agents (found role: ${profile?.role || 'no profile'})`);
+        let callerRole: string | null = null;
+        let callerFid: string | null = null;
+
+        // 1) Try sbd_portal_users by auth UID
+        const { data: profileById } = await supabaseAdmin.from('sbd_portal_users').select('role, fid').eq('id', user.id).single();
+        if (profileById && allowedRoles.includes(profileById.role)) {
+            callerRole = profileById.role;
+            callerFid = profileById.fid;
+        }
+
+        // 2) Try sbd_portal_users by email
+        if (!callerRole && user.email) {
+            const { data: profileByEmail } = await supabaseAdmin.from('sbd_portal_users').select('role, fid').eq('email', user.email).single();
+            if (profileByEmail && allowedRoles.includes(profileByEmail.role)) {
+                callerRole = profileByEmail.role;
+                callerFid = profileByEmail.fid;
+            }
+        }
+
+        // 3) Check Supabase auth user metadata (set by sbd-sync-user-claims)
+        if (!callerRole) {
+            const metaRole = user.app_metadata?.role || user.user_metadata?.role;
+            if (metaRole && allowedRoles.includes(metaRole)) {
+                callerRole = metaRole;
+            }
+        }
+
+        // 4) Known SIPS master admin emails (hardcoded fallback)
+        if (!callerRole && user.email) {
+            const sipsAdminEmails = ['jjacobs@sipsconsults.com', 'izambrano@sipsconsults.com', 'dpayne@sipsconsults.com'];
+            if (sipsAdminEmails.includes(user.email.toLowerCase())) {
+                callerRole = 'master_admin';
+            }
+        }
+
+        console.log('Release auth — user:', user.id, 'email:', user.email, 'resolvedRole:', callerRole);
+        if (!callerRole) {
+            throw new Error('Only admins can release staff to free agents');
         }
 
         // Update staff record to unassigned
@@ -74,7 +102,7 @@ serve(async (req) => {
         // Add to free_agents table
         const { error: faError } = await supabaseAdmin.from('free_agents').insert({
             staff_id: staffId,
-            origin_facility_id: currentFacilityId || profile.fid || 'unknown',
+            origin_facility_id: currentFacilityId || callerFid || 'unknown',
             reason: reason || 'Released by Admin',
             notes: notes || '',
             released_by: user.id
