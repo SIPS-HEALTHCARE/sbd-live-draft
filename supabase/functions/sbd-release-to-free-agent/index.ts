@@ -42,7 +42,8 @@ serve(async (req) => {
         if (authError || !user) throw new Error('Unauthorized');
 
         const { data: profile } = await supabase.from('sbd_portal_users').select('role, fid').eq('id', user.id).single();
-        if (!profile || (profile.role !== 'admin' && profile.role !== 'master')) {
+        const allowedRoles = ['master_admin', 'staff_admin', 'admin', 'master'];
+        if (!profile || !allowedRoles.includes(profile.role)) {
             throw new Error('Only admins can release staff to free agents');
         }
 
