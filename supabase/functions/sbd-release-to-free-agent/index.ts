@@ -48,8 +48,16 @@ serve(async (req) => {
             { auth: { autoRefreshToken: false, persistSession: false } }
         );
 
-        const { data: profile } = await supabaseAdmin.from('sbd_portal_users').select('role, fid').eq('id', user.id).single();
-        console.log('Release auth check — user:', user.id, 'profile:', JSON.stringify(profile));
+        // Try lookup by auth UID first, then fall back to email (master admins use custom IDs like 'sips-ma-2')
+        let profile = null;
+        const { data: profileById } = await supabaseAdmin.from('sbd_portal_users').select('role, fid').eq('id', user.id).single();
+        if (profileById) {
+            profile = profileById;
+        } else if (user.email) {
+            const { data: profileByEmail } = await supabaseAdmin.from('sbd_portal_users').select('role, fid').eq('email', user.email).single();
+            profile = profileByEmail;
+        }
+        console.log('Release auth check — user:', user.id, 'email:', user.email, 'profile:', JSON.stringify(profile));
         const allowedRoles = ['master_admin', 'staff_admin', 'admin', 'master'];
         if (!profile || !allowedRoles.includes(profile.role)) {
             throw new Error(`Only admins can release staff to free agents (found role: ${profile?.role || 'no profile'})`);
