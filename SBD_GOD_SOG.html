@@ -12985,16 +12985,56 @@ function renderARegistrations(){
 function approveReg(rid){
   const r=DB.pendingRegs.find(x=>x.id===rid);
   if(!r)return;
-  if(!confirm(`Approve registration for ${r.facilityName}?\n\nThis will create an active facility and portal account for ${r.contact} (${r.email}). They will be able to log in immediately.`))return;
+  // Show role selection modal before approving
+  openModal('Approve Registration',`
+    <div class="modal-body">
+      <div style="padding:12px;background:var(--s2);border:1px solid var(--bdr);border-radius:var(--rs);margin-bottom:16px;font-size:12.5px;line-height:1.7">
+        <strong>${r.facilityName}</strong><br>
+        <span style="color:var(--txt3)">${r.contact} &bull; ${r.email}</span><br>
+        <span style="color:var(--txt3)">${r.loc} &bull; ${r.dept}</span>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Portal Role *</label>
+        <select class="form-select" id="approve-role" onchange="updateApproveTitle()">
+          <option value="hospital">Hospital Manager (read-only facility view)</option>
+          <option value="facility_admin">Facility Admin (full facility management)</option>
+          <option value="system_admin">System Admin (hospital system level)</option>
+          <option value="staff_member">Staff Member (individual belt portal)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Title</label>
+        <input class="form-input" id="approve-title" value="Dept. Manager" placeholder="e.g. SPD Manager, Technician, Director">
+      </div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-ok" onclick="confirmApproveReg('${r.id}')">Approve & Activate</button>
+    </div>`,'modal-md');
+}
+
+function updateApproveTitle(){
+  const role=document.getElementById('approve-role')?.value;
+  const titleEl=document.getElementById('approve-title');
+  if(!titleEl)return;
+  const defaults={hospital:'Dept. Manager',facility_admin:'Facility Admin',system_admin:'System Admin',staff_member:'SPD Technician'};
+  titleEl.value=defaults[role]||'';
+}
+
+function confirmApproveReg(rid){
+  const r=DB.pendingRegs.find(x=>x.id===rid);
+  if(!r)return;
+  const role=document.getElementById('approve-role')?.value||'hospital';
+  const title=document.getElementById('approve-title')?.value||'Dept. Manager';
   r.status='approved';
   // Create facility
   const fid='fac-'+Date.now();
   const approvedFac={id:fid,name:r.facilityName,loc:r.loc,dept:r.dept,contact:r.contact,email:r.email,since:new Date().toLocaleDateString('en-US',{month:'short',year:'numeric'}),active:true};
   if(IS_LIVE){ SB.approveRegistration(rid,mapFacilityToBackend(approvedFac)).catch(e=>toast('Approval sync: '+e.message,'warn')); }
   DB.facilities.push(approvedFac);
-  // Create user account
+  // Create user account with selected role
   const initials=r.contact.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
-  const regUser={id:'u'+Date.now(),email:r.email,password:r.password,role:'hospital',name:r.contact,title:'Dept. Manager',initials,fid};
+  const regUser={id:'u'+Date.now(),email:r.email,password:r.password,role,name:r.contact,title,initials,fid};
   if(IS_LIVE){ SB.syncUserClaims(regUser).catch(()=>{}); }
   DB.users.push(regUser);
   // Update facility switcher
@@ -13004,7 +13044,9 @@ function approveReg(rid){
   const nb=document.getElementById('reg-nb');
   const pendingCnt=DB.pendingRegs.filter(x=>x.status==='pending').length;
   if(nb){nb.textContent=pendingCnt;nb.style.display=pendingCnt>0?'inline-block':'none';}
-  toast(`${r.facilityName} approved. Portal account activated for ${r.contact}.`,'ok');
+  closeModal();
+  const roleLabel={hospital:'Hospital Manager',facility_admin:'Facility Admin',system_admin:'System Admin',staff_member:'Staff Member'}[role]||role;
+  toast(`${r.facilityName} approved as <strong>${roleLabel}</strong>. Portal account activated for ${r.contact}.`,'ok');
   renderARegistrations();
 }
 
