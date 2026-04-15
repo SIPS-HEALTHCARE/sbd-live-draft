@@ -3107,6 +3107,12 @@ const adminStaffFilter = {
 };
 
 // Build filter bar HTML for admin staff views
+window.setAdminFacFilter = function(sel, fnStr) {
+  adminStaffFilter.fid = sel.value || sel.options[sel.selectedIndex].value;
+  if (typeof window[fnStr] === 'function') window[fnStr]();
+  else eval(fnStr + '()');
+};
+
 // showFacility = true for multi-facility views (network / system-level)
 function adminFilterBar(showFacility, facList, onChangeFn){
   const beltChips=['All',...BELT_ORDER].map(b=>`
@@ -3118,9 +3124,9 @@ function adminFilterBar(showFacility, facList, onChangeFn){
 
   const facSelect = showFacility && facList&&facList.length?`
     <select class="form-select" style="width:auto;max-width:200px;padding:5px 11px;font-size:12px;height:32px"
-      onchange="adminStaffFilter.fid=this.value;${onChangeFn}()">
+      onchange="setAdminFacFilter(this, '${onChangeFn}')">
       <option value="all" ${adminStaffFilter.fid==='all'?'selected':''}>All Facilities</option>
-      ${facList.map(f=>`<option value="${f.id}" ${adminStaffFilter.fid==f.id?'selected':''}>${f.name}</option>`).join('')}
+      ${facList.map(f=>`<option value="${f.id}" ${String(adminStaffFilter.fid)===String(f.id)?'selected':''}>${f.name}</option>`).join('')}
     </select>`:'';
 
   return`
@@ -3143,7 +3149,7 @@ function adminFilterBar(showFacility, facList, onChangeFn){
 function applyAdminFilter(staffArr){
   return staffArr.filter(s=>{
     const matchBelt = adminStaffFilter.belt==='All' || s.belt==adminStaffFilter.belt;
-    const matchFid  = adminStaffFilter.fid==='all' || s.fid==adminStaffFilter.fid;
+    const matchFid  = adminStaffFilter.fid==='all' || String(s.fid)===String(adminStaffFilter.fid);
     const term      = adminStaffFilter.q.toLowerCase();
     const matchQ    = !term || fullName(s).toLowerCase().includes(term) || (s.role||'').toLowerCase().includes(term);
     return matchBelt && matchFid && matchQ;
