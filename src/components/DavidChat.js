@@ -27,10 +27,12 @@ class DavidChat {
                 display: flex;
                 flex-direction: column;
                 height: 100%;
+                min-height: 0;
                 width: 100%;
                 color: var(--txt);
                 font-family: var(--font);
                 background: var(--bg);
+                position: relative;
             }
             .david-chat-header {
                 padding: 24px 30px;
@@ -183,6 +185,25 @@ class DavidChat {
                 transform: translateY(-1px);
             }
 
+            /* --- Streaming Styles --- */
+            .david-cursor {
+                display: inline-block;
+                width: 2px;
+                height: 15px;
+                background: var(--gold);
+                margin-left: 4px;
+                animation: david-blink 0.8s infinite;
+                vertical-align: middle;
+            }
+            @keyframes david-blink {
+                0%, 100% { opacity: 0; }
+                50% { opacity: 1; }
+            }
+            .david-streaming-content {
+                display: inline;
+                white-space: pre-wrap;
+            }
+
             .david-action-card {
                 background: var(--s1);
                 border: 1px solid var(--bdr);
@@ -215,20 +236,24 @@ class DavidChat {
         const container = document.getElementById(containerId);
         if (!container) return;
 
+        const _st = (typeof ST !== 'undefined') ? ST : {};
+        const user = _st.user || { role: 'admin', name: 'Admin' };
+        const roleLabel = (user.role || 'admin').replace('_', ' ').toUpperCase();
+        
         container.innerHTML = `
             <div class="david-container">
                 <div class="david-chat-header">
                     <h2><span style="font-size:24px">🧠</span> DAVID Intelligence Hub</h2>
-                    <p>Dynamic AI Visual Intelligence Dashboard &bull; Access Level: SIPS Master Admin</p>
+                    <p>Strategic Intelligence Dashboard &bull; Access Level: ${roleLabel}</p>
                 </div>
                 <div class="david-quick-actions" id="david-qa">
-                    <button class="david-qa-btn" onclick="DAVID.handleQA('Compare all facility registration volumes')">📊 Compare Facilities</button>
-                    <button class="david-qa-btn" onclick="DAVID.handleQA('Summarize training audit for current staff')">🎓 Training Audit</button>
-                    <button class="david-qa-btn" onclick="DAVID.handleQA('Show recent registration trends')">📈 Trend Analysis</button>
+                    <button class="david-qa-btn" onclick="DAVID.handleQA('Summarize authorized facility activity')">📊 Scope Audit</button>
+                    <button class="david-qa-btn" onclick="DAVID.handleQA('Analyze competency distribution in my scope')">🎓 Competency Distribution</button>
+                    <button class="david-qa-btn" onclick="DAVID.handleQA('What are the most urgent tasks for me?')">📈 Priority Analysis</button>
                 </div>
                 <div class="david-messages-area" id="david-msgs">
                     <div class="david-msg david-msg-ai fade-in">
-                        Greetings, Master Admin. I am DAVID, your Strategic Intelligence Assistant. I have indexed the latest SIPS platform data. How can I assist with reports or comparisons today?
+                        Greetings, ${user.name || 'Admin'}. I am DAVID, your Intelligence Assistant. I have indexed the SIPS platform data within your authorized scope. How can I assist you today?
                     </div>
                 </div>
                 <div class="david-footer">
@@ -254,7 +279,6 @@ class DavidChat {
             }
         };
         
-        
         // Auto-resize textarea
         this.input.addEventListener('input', () => {
             this.input.style.height = 'auto';
@@ -268,19 +292,106 @@ class DavidChat {
     }
 
     getPlatformSnapshot() {
-        // Generate a concise snapshot of the platform data for AI context
-        if(!window.DB) return "No data available.";
+        const _db = (typeof DB !== 'undefined') ? DB : null;
+        const _st = (typeof ST !== 'undefined') ? ST : null;
+        if (!_db || !_st || !_st.user) return "No data available or profile not loaded.";
         
-        const staffCount = DB.users ? DB.users.filter(u => u.role === 'staff_member').length : 0;
-        const facilityCount = DB.facilities ? DB.facilities.length : 0;
-        const regCount = DB.registrations ? DB.registrations.length : 0;
+        const user = _st.user;
+        const role = user.role || 'staff_member';
+        const assignedFids = user.assignedFids || [];
+        const isMaster = role === 'master_admin';
         
+        // 1. Filter Facilities
+        const authorizedFacilities = _db.facilities.filter(f => 
+            isMaster || assignedFids.includes(f.id) || (role === 'facility_admin' && f.id === user.facility_id)
+        );
+        const authFidList = authorizedFacilities.map(f => f.id);
+
+        // 2. Filter Staff (from DB.staff - actual hospital techs)
+        // Note: DB.users are auth accounts, DB.staff are the practitioners
+        const authorizedStaff = (_db.staff || []).filter(s => 
+            isMaster || authFidList.includes(s.fid)
+        );
+
+        // 3. Filter Registrations & Systems
+        const authorizedRegs = (_db.pendingRegs || []).filter(r => 
+            isMaster || authFidList.includes(r.facility_id)
+        );
+        const authorizedSystems = (_db.systems || []).filter(sys => 
+            isMaster || (sys.facilityIds && sys.facilityIds.some(fid => authFidList.includes(fid)))
+        );
+
+        // 4. Filter Assessment Queue
+        const authorizedQueue = (_db.queue || []).filter(q => 
+            isMaster || authFidList.includes(q.fid)
+        );
+
+        // 5. Talent Pipeline Deep-Dive
+        const talentPipeline = {
+            readyForPromotion: authorizedStaff.filter(s => s.promo).length,
+            elitePractitioners: authorizedStaff.filter(s => ['Black', 'Brown'].includes(s.belt)).length,
+            newHires: authorizedStaff.filter(s => s.belt === 'White' || !s.belt).length,
+            averageStars: (authorizedStaff.reduce((acc, s) => acc + (s.stars || 0), 0) / (authorizedStaff.length || 1)).toFixed(1)
+        };
+
+        // 6. Filter & Summarize Facility Trends
+        const authorizedTrends = {};
+        let trendSummary = "No trend data available for current scope.";
+        if (_db.trends) {
+            let totalGrowth = 0;
+            let count = 0;
+            authFidList.forEach(fid => {
+                if (_db.trends[fid]) {
+                    authorizedTrends[fid] = _db.trends[fid];
+                    const years = Object.keys(_db.trends[fid]).sort().reverse();
+                    if (years.length > 0) {
+                        const latestYear = _db.trends[fid][years[0]];
+                        if (latestYear.g && latestYear.g.length > 0) {
+                            totalGrowth += latestYear.g[latestYear.g.length - 1];
+                            count++;
+                        }
+                    }
+                }
+            });
+            if (count > 0) {
+                trendSummary = `Average current competency (Green+) across scope: ${(totalGrowth / count).toFixed(1)}%`;
+            }
+        }
+        
+        // Detailed summary of belt distribution
+        const beltCounts = authorizedStaff.reduce((acc, s) => {
+            const b = s.belt || 'None';
+            acc[b] = (acc[b] || 0) + 1;
+            return acc;
+        }, {});
+
+        // 7. Regional Awareness (Geography)
+        const regions = [...new Set(authorizedFacilities.map(f => f.loc?.split(',')[1]?.trim()))].filter(Boolean);
+
+        const scopeLabel = isMaster ? "Full SIPS Network" : 
+                          (authFidList.length === 1 ? `Facility: ${authorizedFacilities[0]?.name || 'Authorized scope'}` : 
+                          `${authFidList.length} Assigned Facilities`);
+
         return `
-            PLATFORM SNAPSHOT:
-            - Total Staff: ${staffCount}
-            - Total Facilities: ${facilityCount}
-            - Total Pending Registrations: ${regCount}
-            - Active Master Admins: ${DB.users ? DB.users.filter(u => u.role === 'master_admin').length : 0}
+            DAVID SECURE INTELLIGENCE SNAPSHOT:
+            - Access Level: ${role.toUpperCase()}
+            - Authorized Scope: ${scopeLabel}
+            - Geography: ${regions.length} Regions covered (${regions.join(', ')})
+            - Institutional Assets:
+                * Hospital Systems: ${authorizedSystems.length} (${authorizedSystems.map(s => s.name).join(', ')})
+                * Authorized Facilities: ${authorizedFacilities.length}
+                * Staff Members: ${authorizedStaff.length}
+            - Talent Pipeline:
+                * Ready for Promotion: ${talentPipeline.readyForPromotion}
+                * Elite (Black/Brown Belts): ${talentPipeline.elitePractitioners}
+                * Average Star Rating: ${talentPipeline.averageStars}
+            - Operational Backlog:
+                * Pending Registrations: ${authorizedRegs.length}
+                * Active Assessments in Queue: ${authorizedQueue.length}
+                * Free Agents (Unassigned): ${isMaster ? (_db.freeAgents?.length || 0) : 'N/A'}
+            - Strategic Trends: ${trendSummary}
+            - Competency Distribution: ${Object.entries(beltCounts).map(([b, n]) => `${n} ${b}`).join(', ')}.
+            - Environment: ${isMaster ? 'Global Strategy Hub' : 'Scoped Operations Dashboard'}.
         `.trim();
     }
 
@@ -295,39 +406,33 @@ class DavidChat {
         this.isThinking = true;
         this.btn.disabled = true;
         
-        const typingIndicator = document.createElement('div');
-        typingIndicator.className = 'david-typing fade-in';
-        typingIndicator.innerText = 'DAVID is thinking...';
-        this.msgArea.appendChild(typingIndicator);
+        // Initialize streaming message element
+        const msgDiv = document.createElement('div');
+        msgDiv.className = 'david-msg david-msg-ai fade-in';
+        msgDiv.innerHTML = '<div class="david-streaming-content"></div><span class="david-cursor"></span>';
+        this.msgArea.appendChild(msgDiv);
+        const contentTarget = msgDiv.querySelector('.david-streaming-content');
         this.msgArea.scrollTop = this.msgArea.scrollHeight;
 
         try {
-            let token = window.SB_SESSION ? window.SB_SESSION.access_token : '';
-            console.log('[DAVID] window.SB_SESSION check:', window.SB_SESSION ? 'Found' : 'Missing');
-            
+            const _session = (typeof SB_SESSION !== 'undefined') ? SB_SESSION : (window.SB_SESSION || null);
+            let token = _session ? _session.access_token : '';
             if (!token) {
-                console.log('[DAVID] Token missing from window, checking localStorage...');
-                try {
-                    const raw = localStorage.getItem('sbd_session');
-                    if (raw) {
-                        const sess = JSON.parse(raw);
-                        token = sess.access_token;
-                        console.log('[DAVID] Token recovered from localStorage:', token ? 'Success' : 'Empty');
-                    } else {
-                        console.log('[DAVID] No sbd_session found in localStorage');
-                    }
-                } catch(e) {
-                    console.error('[DAVID] Session parsing error:', e);
-                }
-            } else {
-                console.log('[DAVID] Token found in window.SB_SESSION');
-            }
-
-            if (!token) {
-                console.error('[DAVID] CRITICAL: No authentication token available. Request will fail with 401.');
+                const raw = sessionStorage.getItem('sbd_session');
+                if (raw) { try { token = JSON.parse(raw).access_token; } catch(e){} }
             }
 
             const snapshot = this.getPlatformSnapshot();
+            const personality = `
+                PERSONALITY & VOICE:
+                You are David, a warm, sharp, and genuinely invested intelligence partner. You speak like a trusted colleague who knows the data cold but also cares about the people behind it. You are conversational, direct, and confident.
+                
+                TONE RULES:
+                - Talk like a real person. Use "you", "your", "we", "let's".
+                - Lead with insight, skip the preamble.
+                - Be specific. Use numbers and names from the context.
+                - Never say "As an AI". You are David.
+            `;
             
             const res = await fetch(this.apiUrl, {
                 method: 'POST',
@@ -338,34 +443,53 @@ class DavidChat {
                 body: JSON.stringify({ 
                     message: text, 
                     history: this.history,
-                    context: snapshot
+                    systemPrompt: personality + "\n\nCONTEXT:\n" + snapshot
                 })
             });
 
-            if (res.status === 401) {
-                throw new Error('Unauthorized Access. Please re-login to the portal.');
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({ error: 'Connection failed' }));
+                throw new Error(err.error || `Request failed (${res.status})`);
             }
 
-            const data = await res.json();
-            
-            typingIndicator.remove();
-            
-            if (data.success) {
-                this.addMessage(data.response, 'ai');
-                
-                // If the response contains report triggers, render action buttons
-                if (data.action === 'trigger_report') {
-                   this.renderActionCard(data.action_payload);
+            // SSE Streaming Logic
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let fullContent = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value);
+                const lines = chunk.split('\n');
+
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const data = line.slice(6).trim();
+                        if (data === '[DONE]') break;
+                        try {
+                            const json = JSON.parse(data);
+                            if (json.text) {
+                                fullContent += json.text;
+                                // Simple formatting: preserve line breaks
+                                contentTarget.innerHTML = fullContent.replace(/\n/g, '<br>');
+                                this.msgArea.scrollTop = this.msgArea.scrollHeight;
+                            }
+                        } catch (e) {}
+                    }
                 }
-
-                this.history.push({ role: 'user', content: text }, { role: 'assistant', content: data.response });
-                if (this.history.length > 20) this.history = this.history.slice(-20);
-            } else {
-                this.addMessage('System Exception: ' + (data.error || 'Request failure encountered.'), 'ai');
             }
+
+            this.history.push({ role: 'user', content: text }, { role: 'assistant', content: fullContent });
+            if (this.history.length > 20) this.history = this.history.slice(-20);
+            
+            // Remove cursor after completion
+            const cursor = msgDiv.querySelector('.david-cursor');
+            if (cursor) cursor.remove();
+
         } catch (e) {
-            typingIndicator.remove();
-            this.addMessage('Connection Failure: ' + e.message, 'ai');
+            contentTarget.innerHTML = `<span style="color:var(--err)">Error: ${e.message}</span>`;
             console.error('[DAVID] Error:', e);
         } finally {
             this.isThinking = false;

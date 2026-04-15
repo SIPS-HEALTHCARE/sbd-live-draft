@@ -71,7 +71,7 @@ serve(async (req) => {
         // Add current user message
         messages.push({ role: 'user', content: message });
 
-        // 3. Call OpenRouter (Claude Sonnet)
+        // 3. Call OpenRouter with streaming enabled
         const orRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
             headers: {
@@ -85,6 +85,7 @@ serve(async (req) => {
                 messages,
                 max_tokens: 4096,
                 temperature: 0.7,
+                stream: true, // Enable streaming
             }),
         });
 
@@ -94,27 +95,77 @@ serve(async (req) => {
             throw new Error(`AI service error (${orRes.status})`);
         }
 
-        const orData = await orRes.json();
-        const responseText = orData?.choices?.[0]?.message?.content || '';
+        // 4. Stream chunks as SSE
+        const { readable, writable } = new TransformStream();
+        const writer = writable.getWriter();
+        const encoder = new TextEncoder();
+        const reader = orRes.body?.getReader();
 
-        console.log(`[DAVID] Response: ${responseText.length} chars, model: ${orData?.model || 'unknown'}`);
+        let fullContent = '';
 
-        // 4. Store interaction in memory (non-blocking)
-        supabase.from('assistant_memory').insert({
-            user_id: user.id,
-            interaction_type: 'chat',
-            context_summary: `Facility: ${profile.facility_id || 'Global'}`,
-            raw_interaction: { query: message, response: responseText }
-        }).then(({ error }: { error: any }) => {
-            if (error) console.warn('[DAVID] Memory store skipped:', error.message);
-        });
+        // Process stream in background
+        (async () => {
+            try {
+                if (!reader) {
+                    await writer.write(encoder.encode('data: {"error": "Failed to initialize reader"}\n\n'));
+                    await writer.close();
+                    return;
+                }
 
-        return new Response(JSON.stringify({ 
-            success: true, 
-            response: responseText,
-            model: orData?.model || 'claude-sonnet'
-        }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = new TextDecoder().decode(value);
+                    const lines = chunk.split('\n');
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = line.slice(6).trim();
+                            if (data === '[DONE]') continue;
+                            
+                            try {
+                                const json = JSON.parse(data);
+                                const content = json.choices?.[0]?.delta?.content || '';
+                                if (content) {
+                                    fullContent += content;
+                                    await writer.write(encoder.encode(`data: ${JSON.stringify({ text: content })}\n\n`));
+                                }
+                            } catch (e) {
+                                // Silent skip for partial JSON
+                            }
+                        }
+                    }
+                }
+
+                // Append [DONE] signal
+                await writer.write(encoder.encode('data: [DONE]\n\n'));
+
+                // Perform memory logging after stream is done
+                supabase.from('assistant_memory').insert({
+                    user_id: user.id,
+                    interaction_type: 'chat',
+                    context_summary: `Facility: ${profile.facility_id || 'Global'}`,
+                    raw_interaction: { query: message, response: fullContent }
+                }).then(({ error }: { error: any }) => {
+                    if (error) console.warn('[DAVID] Memory store skipped:', error.message);
+                });
+
+            } catch (err: any) {
+                console.error('[DAVID] Stream processing error:', err);
+                await writer.write(encoder.encode(`data: ${JSON.stringify({ error: err.message })}\n\n`));
+            } finally {
+                await writer.close();
+            }
+        })();
+
+        return new Response(readable, {
+            headers: { 
+                ...corsHeaders, 
+                'Content-Type': 'text/event-stream',
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+            }
         });
 
     } catch (err: any) {
