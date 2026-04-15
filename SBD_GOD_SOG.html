@@ -4600,6 +4600,50 @@ function promoteStaffPosition(staffId, newPositionLabel, promotedBy){
   return true;
 }
 
+// Inline role change from the All Staff table dropdown
+function changeStaffRoleInline(staffId, newRole){
+  const s = getStaff(staffId);
+  if(!s) return;
+  if(s.role === newRole) return; // no change
+  const oldRole = s.role;
+  promoteStaffPosition(staffId, newRole, ST.user?.name||'Admin');
+
+  // ── Sync linked user account level ──
+  // Map position titles to portal access roles
+  const positionToAccess = {
+    'SPD Technician I':'staff_member',  'SPD Technician II':'staff_member',
+    'SPD Technician III':'staff_member',
+    'Lead Technician':'hospital',       'Shift Supervisor':'hospital',
+    'Department Supervisor':'facility_admin',
+    'SPD Manager':'facility_admin',
+    'Director of Sterile Processing':'facility_admin'
+  };
+  const newAccess = positionToAccess[newRole];
+  if(newAccess){
+    // Find linked user account(s) for this staff member
+    const linkedUsers = DB.users.filter(u => u.sid === staffId);
+    linkedUsers.forEach(u => {
+      // Only upgrade/adjust accounts at staff_member or hospital level
+      // Never downgrade system_admin, staff_admin, or master_admin
+      const protectedRoles = ['master_admin','staff_admin','system_admin'];
+      if(!protectedRoles.includes(u.role) && u.role !== newAccess){
+        const oldAccess = u.role;
+        u.role = newAccess;
+        console.log(`[Role] Account ${u.email}: portal access ${oldAccess} → ${newAccess}`);
+      }
+    });
+  }
+
+  saveDemoData();
+  // Sync to backend if live
+  if(IS_LIVE && SB && SB.updateStaffRole){
+    SB.updateStaffRole(staffId, newRole).catch(e=>console.warn('[Role] Sync failed:', e.message));
+  }
+  toast(`${fullName(s)}: role updated <strong>${oldRole}</strong> → <strong>${newRole}</strong>`,'ok');
+  // Re-render (don't lose scroll position)
+  renderAAllStaff();
+}
+
 // Open the promotion modal  --  works from any admin portal
 function openPromoteModal(staffId, context){
   const s = getStaff(staffId); if(!s) return;
@@ -11123,7 +11167,12 @@ function renderAAllStaff(){
           return`<tr onclick="openAdminProfile(${s.id})" style="cursor:pointer">
             <td class="fw7" style="white-space:nowrap">${fullName(s)}</td>
             <td class="hide-sm tc-dim" style="font-size:11.5px;white-space:nowrap">${fac?fac.name:'--'}</td>
-            <td class="hide-sm tc-dim" style="font-size:11.5px">${s.role}</td>
+            <td class="hide-sm" onclick="event.stopPropagation()" style="padding:0 4px">
+              <select class="form-select" style="font-size:11px;padding:3px 6px;height:26px;min-width:110px;background:var(--s2);border:1px solid var(--bdr);color:var(--txt1);border-radius:4px;cursor:pointer" onchange="changeStaffRoleInline(${s.id},this.value)" title="Change role">
+                ${POSITION_LEVELS.map(p=>'<option value="'+p.label+'"'+(s.role===p.label?' selected':'')+'>'+p.label+'</option>').join('')}
+                ${!POSITION_LEVELS.find(p=>p.label===s.role)?'<option value="'+s.role+'" selected>'+s.role+'</option>':''}
+              </select>
+            </td>
             <td style="white-space:nowrap">${beltBadge(s.belt)}</td>
             <td class="hide-sm" style="font-size:12px;color:var(--txt3)">${daysAt(s.since)}d</td>
             <td>${gateDots(s.cur)}</td>
