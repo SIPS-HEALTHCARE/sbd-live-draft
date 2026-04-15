@@ -4697,10 +4697,18 @@ function applyBeltOverride(staffId){
 
   saveDemoData();
 
-  // Sync to backend
+  // Sync to backend (staff table uses flattened gate columns)
   if(IS_LIVE && SB && SB.updateStaff){
-    SB.updateStaff(staffId, { belt: newBelt, since: today })
-      .catch(e => toast('Belt override sync: ' + e.message, 'warn'));
+    SB.updateStaff(staffId, {
+      belt: newBelt,
+      since: today,
+      cur_comp: null,
+      cur_sim: null,
+      cur_obs: null,
+      nxt_comp: null,
+      nxt_sim: null,
+      nxt_obs: null
+    }).catch(e => toast('Belt override sync: ' + e.message, 'warn'));
   }
 
   closeModal();
@@ -11231,11 +11239,11 @@ function renderAAllStaff(){
           const nb=nextBelt(s.belt);
           const pts=calcPoints(s);
           const fac=getFac(s.fid);
-          return`<tr onclick="openAdminProfile(${s.id})" style="cursor:pointer">
+          return`<tr onclick="openAdminProfile('${s.id}')" style="cursor:pointer">
             <td class="fw7" style="white-space:nowrap">${fullName(s)}</td>
             <td class="hide-sm tc-dim" style="font-size:11.5px;white-space:nowrap">${fac?fac.name:'--'}</td>
             <td class="hide-sm" onclick="event.stopPropagation()" style="padding:0 4px">
-              <select class="form-select" style="font-size:11px;padding:3px 6px;height:26px;min-width:110px;background:var(--s2);border:1px solid var(--bdr);color:var(--txt1);border-radius:4px;cursor:pointer" onchange="changeStaffRoleInline(${s.id},this.value)" title="Change role">
+              <select class="form-select" style="font-size:11px;padding:3px 6px;height:26px;min-width:110px;background:var(--s2);border:1px solid var(--bdr);color:var(--txt1);border-radius:4px;cursor:pointer" onchange="changeStaffRoleInline('${s.id}',this.value)" title="Change role">
                 ${POSITION_LEVELS.map(p=>'<option value="'+p.label+'"'+(s.role===p.label?' selected':'')+'>'+p.label+'</option>').join('')}
                 ${!POSITION_LEVELS.find(p=>p.label===s.role)?'<option value="'+s.role+'" selected>'+s.role+'</option>':''}
               </select>
@@ -11604,7 +11612,7 @@ function renderFacIntel(el){
       <div class="card-hd"><div class="card-ttl">Progression Velocity – Full Roster</div></div>
       <div style="overflow-x:auto"><table class="tbl" style="min-width:520px">
         <thead><tr><th>Name</th><th>Belt</th><th>Days</th><th>Gates/Mo</th><th>Window</th><th>ETA</th><th>Promo</th></tr></thead>
-        <tbody>${staffWithVelocity.map(({s,proj,win,velocity})=>{const wc=win.status==='open'?'var(--ok)':win.status==='closed'?'var(--err)':'var(--txt3)';const vc=velocity>=1.5?'var(--ok)':velocity>=0.5?'var(--txt2)':'var(--warn)';return`<tr onclick="openAdminProfile(${s.id})"><td class="fw7" style="white-space:nowrap">${fullName(s)}</td><td>${beltBadge(s.belt)}</td><td style="color:var(--txt3);font-size:12px">${daysAt(s.since)}d</td><td style="font-weight:700;color:${vc}">${velocity}</td><td style="color:${wc};font-size:11.5px;font-weight:600">${win.status==='open'?'Open':win.status==='closed'?'Closed':'Locked'}</td><td style="font-size:11.5px;color:var(--txt2)">${proj.nextBelt?'~'+proj.projectedWeeks+'w':'Max'}</td><td>${s.promo?'<span class="pill p-gold" style="font-size:9px">Yes</span>':'–'}</td></tr>`;}).join('')}
+        <tbody>${staffWithVelocity.map(({s,proj,win,velocity})=>{const wc=win.status==='open'?'var(--ok)':win.status==='closed'?'var(--err)':'var(--txt3)';const vc=velocity>=1.5?'var(--ok)':velocity>=0.5?'var(--txt2)':'var(--warn)';return`<tr onclick="openAdminProfile('${s.id}')"><td class="fw7" style="white-space:nowrap">${fullName(s)}</td><td>${beltBadge(s.belt)}</td><td style="color:var(--txt3);font-size:12px">${daysAt(s.since)}d</td><td style="font-weight:700;color:${vc}">${velocity}</td><td style="color:${wc};font-size:11.5px;font-weight:600">${win.status==='open'?'Open':win.status==='closed'?'Closed':'Locked'}</td><td style="font-size:11.5px;color:var(--txt2)">${proj.nextBelt?'~'+proj.projectedWeeks+'w':'Max'}</td><td>${s.promo?'<span class="pill p-gold" style="font-size:9px">Yes</span>':'–'}</td></tr>`;}).join('')}
         </tbody>
       </table></div>
     </div>`;
@@ -11836,7 +11844,7 @@ function renderFacStaff(el){
       ${st.length===0?`<div class="empty-state"><div class="empty-ttl">No staff match this filter</div><div class="empty-desc">Try adjusting the belt or search filter above.</div></div>`:`
       <div style="overflow-x:auto"><table class="tbl" style="min-width:520px">
         <thead><tr><th>Name</th><th class="hide-sm">Role</th><th>Belt</th><th class="hide-sm">Days</th><th>Cur Gates</th><th>Nxt Gates</th><th>Promo</th><th>Action</th></tr></thead>
-        <tbody>${st.map(s=>{const nb=nextBelt(s.belt);return`<tr onclick="openAdminProfile(${s.id})">
+        <tbody>${st.map(s=>{const nb=nextBelt(s.belt);return`<tr onclick="openAdminProfile('${s.id}')">
           <td class="fw7" style="white-space:nowrap">${fullName(s)}</td>
           <td class="tc-dim hide-sm" style="font-size:11.5px">${s.role}</td>
           <td style="white-space:nowrap">${beltBadge(s.belt)}</td>
@@ -11929,7 +11937,7 @@ function renderFacReports(el){
     </div>
     ${stagnation.length?`${rptSection('Stagnation Alerts',stagnation.length+' flagged')}
     <div class="card mb16"><div style="overflow-x:auto"><table class="tbl" style="min-width:360px"><thead><tr><th>Name</th><th>Belt</th><th>Days at Belt</th><th>Expected</th><th>Overage</th></tr></thead>
-    <tbody>${stagnation.slice(0,8).map(({s,actual,expected,over})=>`<tr onclick="openAdminProfile(${s.id})" style="cursor:pointer"><td class="fw7">${fullName(s)}</td><td>${beltBadge(s.belt)}</td><td style="color:var(--err);font-weight:600">${actual}d</td><td style="color:var(--txt3)">${expected}d</td><td><span class="pill p-err" style="font-size:9px">+${over}d</span></td></tr>`).join('')}</tbody></table></div></div>`:''}
+    <tbody>${stagnation.slice(0,8).map(({s,actual,expected,over})=>`<tr onclick="openAdminProfile('${s.id}')" style="cursor:pointer"><td class="fw7">${fullName(s)}</td><td>${beltBadge(s.belt)}</td><td style="color:var(--err);font-weight:600">${actual}d</td><td style="color:var(--txt3)">${expected}d</td><td><span class="pill p-err" style="font-size:9px">+${over}d</span></td></tr>`).join('')}</tbody></table></div></div>`:''}
     ${rptSection('Trend Charts')}
     <div class="g2 mb16">
       <div class="card"><div class="card-hd"><div class="card-ttl">Progressions</div></div><div class="card-body"><div class="chart-wrap" style="height:160px"><canvas id="fac-prog-c"></canvas></div></div></div>
@@ -11939,7 +11947,7 @@ function renderFacReports(el){
     <div class="card">
       <div style="overflow-x:auto"><table class="tbl" style="min-width:560px">
         <thead><tr><th>Name</th><th>Role</th><th>Belt</th><th>Days</th><th>Cur Gates</th><th>Points</th><th>PS Stars</th><th>OIP</th></tr></thead>
-        <tbody>${[...st].sort((a,b)=>beltIdx(b.belt)-beltIdx(a.belt)||calcPoints(b)-calcPoints(a)).map(s=>`<tr onclick="openAdminProfile(${s.id})" style="cursor:pointer">
+        <tbody>${[...st].sort((a,b)=>beltIdx(b.belt)-beltIdx(a.belt)||calcPoints(b)-calcPoints(a)).map(s=>`<tr onclick="openAdminProfile('${s.id}')" style="cursor:pointer">
           <td class="fw7">${fullName(s)}</td>
           <td style="font-size:11.5px;color:var(--txt2)">${s.role}</td>
           <td>${beltBadge(s.belt,s)}</td>
@@ -12590,7 +12598,7 @@ function renderAReports(){
       ${promoReady.length>0?`<div class="card" style="border-color:rgba(196,154,32,.4)">
         <div class="card-hd"><div class="card-ttl" style="color:var(--gold)">Promotion Reviews Pending</div><span class="pill p-gold">${promoReady.length}</span></div>
         <div style="overflow-x:auto"><table class="tbl" style="min-width:340px"><thead><tr><th>Name</th><th>Facility</th><th>Belt</th><th>Action</th></tr></thead>
-        <tbody>${promoReady.slice(0,6).map(s=>`<tr><td class="fw7">${fullName(s)}</td><td style="font-size:11px;color:var(--txt3)">${getFac(s.fid)?.name||'--'}</td><td>${beltBadge(s.belt,s)}</td><td><button class="btn btn-ghost btn-xs" onclick="openAdminProfile(${s.id})">View</button></td></tr>`).join('')}</tbody></table></div>
+        <tbody>${promoReady.slice(0,6).map(s=>`<tr><td class="fw7">${fullName(s)}</td><td style="font-size:11px;color:var(--txt3)">${getFac(s.fid)?.name||'--'}</td><td>${beltBadge(s.belt,s)}</td><td><button class="btn btn-ghost btn-xs" onclick="openAdminProfile('${s.id}')">View</button></td></tr>`).join('')}</tbody></table></div>
         ${promoReady.length>6?`<div style="font-size:11px;color:var(--txt3);text-align:center;padding:8px">+${promoReady.length-6} more in All Staff view</div>`:''}
       </div>`:''}
       ${psTestQueueAll.length>0?`<div class="card" style="border-color:rgba(59,130,246,.4)">
