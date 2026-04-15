@@ -12681,10 +12681,11 @@ function openEditUserModal(uid){
       <div class="form-group"><label class="form-label">Account Role</label>
         <select class="form-select" id="eu-role" onchange="const v=this.value; document.getElementById('eu-wrap-fac-assigned').style.display=(v==='staff_admin'?'block':'none'); document.getElementById('eu-wrap-fac').style.display=(['facility_admin','hospital','staff_member'].includes(v)?'block':'none'); document.getElementById('eu-wrap-sys').style.display=(v==='system_admin'?'block':'none');">
           <option value="staff_member" ${u.role==='staff_member'?'selected':''}>Staff Member (Tech)</option>
-          <option value="hospital" ${(u.role==='hospital'||u.role==='facility_admin')?'selected':''}>Facility Admin / Hospital Manager</option>
+          <option value="hospital" ${u.role==='hospital'?'selected':''}>Hospital Manager (Read Only)</option>
+          <option value="facility_admin" ${u.role==='facility_admin'?'selected':''}>Facility Admin (Full Facility Access)</option>
           <option value="system_admin" ${u.role==='system_admin'?'selected':''}>System Admin</option>
           <option value="staff_admin" ${u.role==='staff_admin'?'selected':''}>Assessor (SIPS Internal)</option>
-
+          <option value="master_admin" ${u.role==='master_admin'?'selected':''}>Master Admin (SIPS Level)</option>
         </select>
       </div>
 
