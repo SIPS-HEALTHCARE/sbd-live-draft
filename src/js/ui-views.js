@@ -14093,13 +14093,18 @@ function changeStaffRoleInline(staffId, newRole){
         const oldAccess = u.role;
         u.role = newAccess;
         console.log(`[Role] Account ${u.email}: portal access ${oldAccess} \u2192 ${newAccess}`);
+        if(IS_LIVE && typeof SB !== 'undefined' && SB.updateUserProfile) {
+          SB.updateUserProfile(u.authUid, { role: newAccess })
+            .then(() => { if(SB.syncUserClaims) SB.syncUserClaims({ userId: u.authUid, role: newAccess }); })
+            .catch(e => console.warn('[Role] User sync failed:', e.message));
+        }
       }
     });
   }
 
   // Sync to backend if live
-  if(IS_LIVE && typeof SB !== 'undefined' && SB.updateStaffRole){
-    SB.updateStaffRole(staffId, newRole).catch(e=>console.warn('[Role] Sync failed:', e.message));
+  if(IS_LIVE && typeof SB !== 'undefined' && SB.updateStaff){
+    SB.updateStaff(staffId, { role: newRole }).catch(e=>console.warn('[Role] Sync failed:', e.message));
   }
   toast(`${fullName(s)}: role updated <strong>${oldRole}</strong> \u2192 <strong>${newRole}</strong>`,'ok');
   // Re-render (don't lose scroll position)
