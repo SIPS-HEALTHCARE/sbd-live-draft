@@ -3122,11 +3122,12 @@ function adminFilterBar(showFacility, facList, onChangeFn){
       ${b==='All'?'All Belts':`<span style="width:8px;height:8px;border-radius:50%;background:${BELT_CLR[b]};display:inline-block;margin-right:4px"></span>${b}`}
     </div>`).join('');
 
-  const facSelect = showFacility && facList&&facList.length?`
+  const sortedFacs = facList ? [...facList].sort((a,b)=>(a.name||'').toLowerCase().localeCompare((b.name||'').toLowerCase())) : [];
+  const facSelect = showFacility && sortedFacs.length?`
     <select class="form-select" style="width:auto;max-width:200px;padding:5px 11px;font-size:12px;height:32px"
       onchange="setAdminFacFilter(this, '${onChangeFn}')">
       <option value="all" ${adminStaffFilter.fid==='all'?'selected':''}>All Facilities</option>
-      ${facList.map(f=>`<option value="${f.id}" ${String(adminStaffFilter.fid)===String(f.id)?'selected':''}>${f.name}</option>`).join('')}
+      ${sortedFacs.map(f=>`<option value="${f.id}" ${String(adminStaffFilter.fid)===String(f.id)?'selected':''}>${f.name}</option>`).join('')}
     </select>`:'';
 
   return`

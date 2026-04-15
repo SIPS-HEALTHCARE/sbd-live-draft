@@ -189,7 +189,11 @@ const SB = {
   recordAttendance(data){ return sbFetch('/rest/v1/sbd_attendance', { method:'POST', body:data }); },
   updateAttendance(id, data){ return sbFetch(`/rest/v1/sbd_attendance?id=eq.${id}`, { method:'PATCH', body:data }); }
 };
-if (typeof window !== 'undefined') window.SB = SB;
+if (typeof window !== 'undefined') {
+  window.SB = SB;
+  window.sbFetch = sbFetch;
+  window.SB_AUTH = SB_AUTH;
+}
 
 // ── Shared State Management ──
 function resetDB(){

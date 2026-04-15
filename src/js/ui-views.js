@@ -632,11 +632,12 @@ function adminFilterBar(showFacility, facList, onChangeFn){
       ${b==='All'?'All Belts':`<span style="width:8px;height:8px;border-radius:50%;background:${BELT_CLR[b]};display:inline-block;margin-right:4px"></span>${b}`}
     </div>`).join('');
 
-  const facSelect = showFacility && facList&&facList.length?`
+  const sortedFacs = facList ? [...facList].sort((a,b)=>(a.name||'').toLowerCase().localeCompare((b.name||'').toLowerCase())) : [];
+  const facSelect = showFacility && sortedFacs.length?`
     <select class="form-select" style="width:auto;max-width:200px;padding:5px 11px;font-size:12px;height:32px"
       onchange="adminStaffFilter.fid=this.value;${onChangeFn}()">
       <option value="all" ${adminStaffFilter.fid==='all'?'selected':''}>All Facilities</option>
-      ${facList.map(f=>`<option value="${f.id}" ${adminStaffFilter.fid===f.id?'selected':''}>${f.name}</option>`).join('')}
+      ${sortedFacs.map(f=>`<option value="${f.id}" ${adminStaffFilter.fid===f.id?'selected':''}>${f.name}</option>`).join('')}
     </select>`:'';
 
   return`
@@ -8985,7 +8986,7 @@ function renderHScoreboard(){
 
 // ============================================================ A ALL STAFF (network-level filtered roster)
 function renderAAllStaff(){
-  adminStaffFilter.fid='all';
+  // Note: do NOT reset adminStaffFilter.fid here — it would undo the user's selection
   const isMaster=ST.user&&ST.user.role==='master_admin';
   const assignedFids=ST.user?.assignedFids||[];
   const hasFilter=assignedFids.length>0;
@@ -11063,8 +11064,26 @@ async function approveReg(rid){
     }
     
     const initials=contactName.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
-    const regUser={id:'u'+Date.now(),email:r.email,password:r.password,role:'hospital',name:contactName,title:'Dept. Manager',initials,fid:finalFacilityId};
+    let assignTitle = 'Dept. Manager';
+    let staffRole = 'manager';
+    if(assignRole === 'staff_member') { assignTitle = 'Technician'; staffRole = 'technician'; }
+    else if(assignRole === 'system_admin') { assignTitle = 'System Executive'; staffRole = 'executive'; }
+    else if(assignRole === 'staff_admin') { assignTitle = 'SIPS Internal'; staffRole = 'admin'; }
+    else if(assignRole === 'master_admin') { assignTitle = 'SIPS Leader'; staffRole = 'admin'; }
+
+    const regUser={id:'u'+Date.now(),email:r.email,password:r.password,role:assignRole,name:contactName,title:assignTitle,initials,fid:finalFacilityId};
     DB.users.push(regUser);
+
+    const nameParts = contactName.split(' ');
+    DB.staff.push({
+      id: regUser.id,
+      first: nameParts[0] || '',
+      last: nameParts.slice(1).join(' '),
+      fid: finalFacilityId,
+      role: staffRole,
+      belt: 'White',
+      since: new Date().toISOString().split('T')[0]
+    });
     
     // Remove pending local status
     r.status='approved';
