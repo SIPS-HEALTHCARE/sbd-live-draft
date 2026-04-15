@@ -10769,6 +10769,7 @@ function yoyConfig(labels,d1,d2,y1,y2){
 function openAddFacilityModal(){
   openModal('Add New Facility',`
     <div class="modal-body">
+      <div id="fac-err-msg" style="display:none;color:#ef4444;background:rgba(239,68,68,0.1);padding:10px;border-radius:6px;font-size:13px;margin-bottom:15px;text-align:center;"></div>
       <div class="form-row"><div class="form-group"><label class="form-label">Facility Name *</label><input class="form-input" id="nf-name" placeholder="e.g. Mercy General Hospital"></div><div class="form-group"><label class="form-label">Location *</label><input class="form-input" id="nf-loc" placeholder="City, State"></div></div>
       <div class="form-row"><div class="form-group"><label class="form-label">Department Name *</label><input class="form-input" id="nf-dept" placeholder="e.g. Sterile Processing Department"></div><div class="form-group"><label class="form-label">Member Since</label><input class="form-input" id="nf-since" placeholder="e.g. Jan 2025"></div></div>
       <div class="form-row"><div class="form-group"><label class="form-label">Primary Contact Name *</label><input class="form-input" id="nf-contact" placeholder="Full name"></div><div class="form-group"><label class="form-label">Contact Email *</label><input class="form-input" id="nf-email" placeholder="email@hospital.org" type="email"></div></div>
@@ -10778,7 +10779,7 @@ function openAddFacilityModal(){
         <div style="font-size:11px;color:var(--txt3);margin-top:4px">If left blank, the facility can still register themselves through the login screen. Setting a password here activates their portal account immediately.</div>
       </div>
     </div>
-    <div class="modal-ft"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-gold" onclick="addFacility()">${ICO.plus} Add Facility</button></div>`,'modal-lg');
+    <div class="modal-ft"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button id="fac-create-btn" class="btn btn-gold" onclick="addFacility()">${ICO.plus} Add Facility</button></div>`,'modal-lg');
 }
 
 async function addFacility(){
@@ -10788,7 +10789,18 @@ async function addFacility(){
   const contact=document.getElementById('nf-contact').value.trim();
   const email=document.getElementById('nf-email').value.trim();
   const pass=document.getElementById('nf-pass')?.value.trim();
-  if(!name||!loc||!dept||!contact||!email){toast('Please fill in all required fields.','err');return;}
+  const errMsg=document.getElementById('fac-err-msg');
+  const btn=document.getElementById('fac-create-btn');
+  
+  if(errMsg) errMsg.style.display = 'none';
+  
+  if(!name||!loc||!dept||!contact||!email){
+    if(errMsg) { errMsg.innerText = 'Please fill in all required fields.'; errMsg.style.display = 'block'; }
+    toast('Please fill in all required fields.','err');
+    return;
+  }
+  
+  if(btn) { btn.disabled = true; btn.innerHTML = 'Creating...'; btn.style.opacity = '0.7'; }
   
   const id='fac-'+Date.now();
   const newFac={id,name,loc,dept,contact,email,since:document.getElementById('nf-since').value||new Date().toLocaleDateString('en-US',{month:'short',year:'numeric'}),active:true};
@@ -10821,7 +10833,13 @@ async function addFacility(){
     if(IS_LIVE) setTimeout(() => initAppData(), 1500);
     renderAFacilities();
   } catch(e) {
-    toast('Facility Creation Failed: '+e.message, 'err');
+    if(btn) { btn.disabled = false; btn.innerHTML = `${ICO.plus} Add Facility`; btn.style.opacity = '1'; }
+    let msg = e.message;
+    if(msg.toLowerCase().includes('duplicate') || msg.includes('23505')) {
+      msg = 'A facility with this exact configuration may already exist.';
+    }
+    if(errMsg) { errMsg.innerText = msg; errMsg.style.display = 'block'; }
+    toast('Facility Creation Failed: '+msg, 'err');
   }
 }
 
@@ -13764,6 +13782,8 @@ function openCreateSystemModal() {
       <div style="font-size:18px;font-weight:800;color:#f1f5f9;margin-bottom:6px">Create Hospital System</div>
       <div style="font-size:13px;color:#94a3b8;margin-bottom:24px">Define a new system grouping for network benchmarking.</div>
       
+      <div id="sys-err-msg" style="display:none;color:#ef4444;background:rgba(239,68,68,0.1);padding:10px;border-radius:6px;font-size:13px;margin-bottom:20px;text-align:center;"></div>
+
       <div style="margin-bottom:20px">
         <label style="display:block;font-size:11px;font-weight:700;color:#64748b;margin-bottom:8px;text-transform:uppercase">System Name</label>
         <input id="new-sys-name" type="text" placeholder="e.g. Ascension Health" 
@@ -13772,7 +13792,7 @@ function openCreateSystemModal() {
       
       <div style="display:flex;justify-content:flex-end;gap:12px;margin-top:32px">
         <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-        <button class="btn btn-primary" onclick="createHospitalSystem()" style="background:var(--gold);color:#000">Create System</button>
+        <button id="sys-create-btn" class="btn btn-primary" onclick="createHospitalSystem()" style="background:var(--gold);color:#000">Create System</button>
       </div>
     </div>
   `;
@@ -13783,9 +13803,18 @@ function openCreateSystemModal() {
  * Persists a new hospital system to the database.
  */
 async function createHospitalSystem() {
-  const name = document.getElementById('new-sys-name').value;
-  if (!name) return toast('Please enter a system name', 'warn');
+  const name = document.getElementById('new-sys-name').value.trim();
+  const errMsg = document.getElementById('sys-err-msg');
+  const btn = document.getElementById('sys-create-btn');
   
+  if (errMsg) errMsg.style.display = 'none';
+
+  if (!name) {
+    if (errMsg) { errMsg.innerText = 'Please enter a system name'; errMsg.style.display = 'block'; }
+    return toast('Please enter a system name', 'warn');
+  }
+  
+  if (btn) { btn.disabled = true; btn.innerText = 'Creating...'; btn.style.opacity = '0.7'; }
   toast('Creating system...', 'info');
   try {
     let newSys = null;
@@ -13860,8 +13889,14 @@ async function createHospitalSystem() {
     }
     
   } catch (err) {
+    if (btn) { btn.disabled = false; btn.innerText = 'Create System'; btn.style.opacity = '1'; }
     console.error('Create System Error:', err);
-    toast('Error creating system: ' + (err.message || 'Unknown error'), 'err');
+    let msg = err.message || 'Unknown error';
+    if(msg.toLowerCase().includes('duplicate') || msg.includes('23505')) {
+      msg = 'A system with this name already exists.';
+    }
+    if (errMsg) { errMsg.innerText = msg; errMsg.style.display = 'block'; }
+    toast('Error creating system: ' + msg, 'err');
   }
 }
 
