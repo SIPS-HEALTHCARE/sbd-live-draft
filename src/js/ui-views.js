@@ -12478,25 +12478,42 @@ function openEditUserModal(uid){
         <div class="form-group"><label class="form-label">Email Address *</label><input class="form-input" id="eu-email" type="email" value="${u.email}" autocomplete="off"></div>
         <div class="form-group"><label class="form-label">New Password <span style="color:#64748b;font-weight:400">(leave blank to keep)</span></label><input class="form-input" id="eu-pass" type="password" placeholder="New password" autocomplete="new-password"></div>
       </div>
-      ${(u.role==='staff_admin')? `
+
+      <div class="form-group"><label class="form-label">Account Role</label>
+        <select class="form-select" id="eu-role" onchange="const v=this.value; document.getElementById('eu-wrap-fac-assigned').style.display=(v==='staff_admin'?'block':'none'); document.getElementById('eu-wrap-fac').style.display=(['facility_admin','hospital','staff_member'].includes(v)?'block':'none'); document.getElementById('eu-wrap-sys').style.display=(v==='system_admin'?'block':'none');">
+          <option value="staff_member" ${u.role==='staff_member'?'selected':''}>Staff Member (Tech)</option>
+          <option value="hospital" ${(u.role==='hospital'||u.role==='facility_admin')?'selected':''}>Facility Admin / Hospital Manager</option>
+          <option value="system_admin" ${u.role==='system_admin'?'selected':''}>System Admin</option>
+          <option value="staff_admin" ${u.role==='staff_admin'?'selected':''}>Assessor (SIPS Internal)</option>
+          <option value="master_admin" ${u.role==='master_admin'?'selected':''}>Master Admin (SIPS Leader)</option>
+        </select>
+      </div>
+
+      <div id="eu-wrap-fac-assigned" style="display:${u.role==='staff_admin'?'block':'none'}; margin-top:8px;">
         <div class="form-group"><label class="form-label">Assigned Facilities</label>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px;max-height:150px;overflow-y:auto;">
             ${DB.facilities.map(f=>`<label style="display:flex;align-items:center;gap:6px;padding:7px 10px;background:var(--s2);border-radius:var(--rs);cursor:pointer;font-size:11.5px;border:1px solid var(--bdr2)"><input type="checkbox" id="eu-fac-${f.id}" ${(u.assignedFids||[]).includes(f.id)?'checked':''} style="accent-color:var(--gold)"> ${f.name}</label>`).join('')}
           </div>
-        </div>` : ''}
-      ${(u.role==='facility_admin'||u.role==='hospital'||u.role==='staff_member')? `
+        </div>
+      </div>
+
+      <div id="eu-wrap-fac" style="display:${(u.role==='facility_admin'||u.role==='hospital'||u.role==='staff_member')?'block':'none'}; margin-top:8px;">
         <div class="form-group"><label class="form-label">Facility</label>
           <select class="form-select" id="eu-fid">
             ${DB.facilities.map(f=>`<option value="${f.id}" ${u.fid===f.id?'selected':''}>${f.name} \u2014 ${f.loc}</option>`).join('')}
           </select>
-        </div>` : ''}
-      ${u.role==='system_admin'? `
+        </div>
+      </div>
+
+      <div id="eu-wrap-sys" style="display:${u.role==='system_admin'?'block':'none'}; margin-top:8px;">
         <div class="form-group"><label class="form-label">Hospital System</label>
           <select class="form-select" id="eu-sysid">
             ${(DB.hospitalSystems||[]).map(s=>`<option value="${s.id}" ${u.systemId===s.id?'selected':''}>${s.name}</option>`).join('')}
             <option value="">No system</option>
           </select>
-        </div>` : ''}
+        </div>
+      </div>
+
     </div>
     <div class="modal-ft">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
@@ -12511,6 +12528,8 @@ async function saveEditUser(uid){
   const title=(document.getElementById('eu-title')?.value||'').trim();
   const email=(document.getElementById('eu-email')?.value||'').trim().toLowerCase();
   const pass=(document.getElementById('eu-pass')?.value||'').trim();
+  const newRole=document.getElementById('eu-role')?.value||u.role;
+  
   if(!name||!email){toast('Name and email are required.','err');return;}
   if(!Security.isEmail(email)){toast('Please enter a valid email address.','err');return;}
   if(DB.users.find(x=>x.email.toLowerCase()===email&&x.id!==uid)){toast('Another account already uses this email.','err');return;}
@@ -12519,19 +12538,19 @@ async function saveEditUser(uid){
     let newFids = u.assignedFids || [];
     let newFid = u.fid || null;
     let newSystemId = u.systemId || null;
-    if(u.role==='staff_admin') newFids=DB.facilities.filter(f=>document.getElementById('eu-fac-'+f.id)?.checked).map(f=>f.id);
-    if(u.role==='facility_admin'||u.role==='hospital'||u.role==='staff_member'){newFid=document.getElementById('eu-fid')?.value||null;const fac=getFac(newFid);newSystemId=fac?.systemId||null;}
-    if(u.role==='system_admin'){newSystemId=document.getElementById('eu-sysid')?.value||null;}
+    if(newRole==='staff_admin') newFids=DB.facilities.filter(f=>document.getElementById('eu-fac-'+f.id)?.checked).map(f=>f.id);
+    if(newRole==='hospital'||newRole==='facility_admin'||newRole==='staff_member'){newFid=document.getElementById('eu-fid')?.value||null;const fac=getFac(newFid);newSystemId=fac?.systemId||null;}
+    if(newRole==='system_admin'){newSystemId=document.getElementById('eu-sysid')?.value||null;}
 
     if(IS_LIVE){
       toast('Updating user...', 'info');
-      const payload={action:'update',userId:uid,email,name,title,role:u.role,assignedFids:newFids,facilityId:newFid,systemId:newSystemId};
+      const payload={action:'update',userId:uid,email,name,title,role:newRole,assignedFids:newFids,facilityId:newFid,systemId:newSystemId};
       if(pass&&pass.length>=6) payload.newPassword=pass;
       const res = await SB.syncUserClaims(payload);
       if(res && res.error) throw new Error(res.error.message || res.detail || 'Update sync failed');
     }
     
-    u.name=name; u.title=title; u.email=email;
+    u.name=name; u.title=title; u.email=email; u.role=newRole;
     u.initials=name.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
     if(!IS_LIVE && pass&&pass.length>=6) u.password=pass;
     u.assignedFids = newFids;
