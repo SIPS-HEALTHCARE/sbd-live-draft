@@ -378,7 +378,15 @@ function enterPortal(type){
   ST.curFid=facList[0]?.id||'test-a';
   document.querySelectorAll('#a-portal .nav-item').forEach(n=>n.classList.remove('active'));
   let _av='a-overview',_at='Network Overview';
-  try{const v=JSON.parse(sessionStorage.getItem('sbd_demo_view')||'{}');if(v.view&&v.view.startsWith('a-')){_av=v.view;_at=v.title||_at;}}catch(e){}
+  try{
+    const pathRoute = window.location.pathname.substring(1);
+    const possibleView = pathRoute ? 'a-' + pathRoute : null;
+    const v=JSON.parse(sessionStorage.getItem('sbd_demo_view')||'{}');
+    if(possibleView && document.querySelector('#a-portal .nav-item[data-view="'+possibleView+'"]')) {
+      _av = possibleView;
+      _at = document.querySelector('#a-portal .nav-item[data-view="'+possibleView+'"]').textContent.trim() || _at;
+    } else if(v.view&&v.view.startsWith('a-')){_av=v.view;_at=v.title||_at;}
+  }catch(e){}
   const _aEl=document.querySelector('#a-portal .nav-item[data-view="'+_av+'"]');
   if(_aEl) _aEl.classList.add('active'); else document.querySelector('#a-portal .nav-item[data-view="a-overview"]').classList.add('active');
   document.getElementById('a-topbar-title').textContent=_at;
@@ -387,12 +395,35 @@ function enterPortal(type){
 }
 
 
+window.addEventListener('popstate', function(e) {
+  if (e.state && e.state.view) {
+    // Determine the portal type based on the view prefix
+    const v = e.state.view;
+    if (v.startsWith('h-') && ST.portal === 'hospital' || ST.portal === 'facility_admin') renderHView(v);
+    else if (v.startsWith('x-') && ST.portal === 'system_admin') renderXView(v);
+    else if (v.startsWith('a-') && (ST.portal === 'master_admin' || ST.portal === 'staff_admin')) renderAView(v);
+    else if (v.startsWith('s-') && ST.portal === 'staff_member') renderSView(v);
+  }
+});
+
+function _pushState(view, title) {
+  try {
+    const route = '/' + view.substring(2);
+    if (window.location.pathname !== route) {
+      window.history.pushState({ view: view, title: title }, title, route);
+    }
+  } catch (e) {
+    console.warn('History pushState failed:', e);
+  }
+}
+
 function hNav(el,view,title){
   document.querySelectorAll('#h-portal .nav-item').forEach(n=>n.classList.remove('active'));
   el.classList.add('active');
   document.getElementById('h-topbar-title').textContent=title;
   closeSidebar('h');
   try{sessionStorage.setItem('sbd_demo_view',JSON.stringify({view,title,staffId:ST.staffId}));}catch(e){}
+  _pushState(view, title);
   renderHView(view);
 }
 
@@ -404,6 +435,7 @@ function aNav(el,view,title){
   document.getElementById('download-btn').style.display='none';
   closeSidebar('a');
   try{sessionStorage.setItem('sbd_demo_view',JSON.stringify({view,title,staffId:ST.staffId}));}catch(e){}
+  _pushState(view, title);
   renderAView(view);
 }
 
@@ -413,6 +445,7 @@ function sNav(el,view,title){
   document.getElementById('s-topbar-title').textContent=title;
   closeSidebar('s');
   try{sessionStorage.setItem('sbd_demo_view',JSON.stringify({view,title,staffId:ST.staffId}));}catch(e){}
+  _pushState(view, title);
   renderSView(view);
 }
 
@@ -422,6 +455,7 @@ function xNav(el,view,title){
   document.getElementById('x-topbar-title').textContent=title;
   closeSidebar('x');
   try{sessionStorage.setItem('sbd_demo_view',JSON.stringify({view,title,staffId:ST.staffId}));}catch(e){}
+  _pushState(view, title);
   renderXView(view);
 }
 
@@ -8858,7 +8892,10 @@ function renderALeaderboard(){
       '<div style="display:flex;flex-wrap:wrap;gap:6px">'+typeChips+'</div>',
     '</div>',
     '<div class="card">',
-      '<div class="card-hd"><div class="card-ttl">'+titleLabel+'</div><span class="pill p-muted">'+sorted.length+' facilities</span></div>',
+      '<div class="card-hd" style="display:flex;justify-content:space-between;align-items:center;">',
+        '<div><div class="card-ttl">'+titleLabel+'</div><span class="pill p-muted">'+sorted.length+' facilities</span></div>',
+        '<button class="btn btn-ghost btn-sm" onclick="downloadLeaderboardCSV()">'+ICO.dl+' Export CSV</button>',
+      '</div>',
       '<div style="overflow-x:auto"><table class="tbl tbl-static" style="min-width:580px">',
         '<thead><tr><th style="width:48px">Rank</th><th>Facility</th><th>Type</th><th class="hide-sm">Location</th><th>Staff</th><th>Green Belt %</th><th>Avg Belt</th><th>Grade</th><th>Actions</th></tr></thead>',
         '<tbody>',
@@ -8884,6 +8921,39 @@ function renderALeaderboard(){
       '</table></div>',
     '</div>'
   ].join('');
+}
+
+function downloadLeaderboardCSV() {
+  const typeFilter = window._lbTypeFilter || 'all';
+  const facList = DB.facilities.filter(f=>f.active!==false);
+  const filtered = typeFilter==='all' ? facList : facList.filter(f=>(f.type||'community')===typeFilter);
+  const sorted = [...filtered].sort((a,b)=>facStats(b.id).greenPct-facStats(a.id).greenPct);
+
+  let csvContent = "data:text/csv;charset=utf-8,";
+  csvContent += "Rank,Facility Name,Type,Location,Staff Count,Green Belt %,Avg Belt Score\n";
+
+  sorted.forEach((f, i) => {
+    const fs = facStats(f.id);
+    const typeLabel = typeof FACILITY_TYPES !== 'undefined' ? (FACILITY_TYPES[f.type] || FACILITY_TYPES['community']).label : (f.type || 'Community');
+    const row = [
+      i + 1,
+      `"${f.name}"`,
+      `"${typeLabel}"`,
+      `"${f.loc}"`,
+      fs.n,
+      fs.greenPct,
+      fs.avgBelt
+    ].join(",");
+    csvContent += row + "\n";
+  });
+
+  const encodedUri = encodeURI(csvContent);
+  const a = document.createElement("a");
+  a.setAttribute("href", encodedUri);
+  a.setAttribute("download", `SBD_Leaderboard_${typeFilter}_${new Date().toISOString().split('T')[0]}.csv`);
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }
 
 // ============================================================ A SCOREBOARD (staff points)
