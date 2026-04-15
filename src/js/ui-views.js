@@ -6624,7 +6624,13 @@ function submitBeltOverride(staffId, context){
   if(IS_LIVE){
     sbFetch(`/rest/v1/staff?id=eq.${s.id}`, {
       method:'PATCH',
-      body: { belt: newBelt, since: s.since, cur: s.cur, nxt: s.nxt, history: s.history }
+      body: { 
+        belt: newBelt, 
+        since: s.since, 
+        history: s.history,
+        cur_comp: null, cur_sim: null, cur_obs: null,
+        nxt_comp: null, nxt_sim: null, nxt_obs: null
+      }
     }).catch(e=>toast('Belt override sync: '+e.message,'warn'));
   }
 
@@ -9046,7 +9052,13 @@ function renderAAllStaff(){
           return`<tr onclick="openAdminProfile('${s.id}')" style="cursor:pointer">
             <td class="fw7" style="white-space:nowrap">${fullName(s)}</td>
             <td class="hide-sm tc-dim" style="font-size:11.5px;white-space:nowrap">${fac?fac.name:'--'}</td>
-            <td class="hide-sm tc-dim" style="font-size:11.5px">${s.role}</td>
+            <td class="hide-sm tc-dim" style="font-size:11.5px">
+              <select class="form-select" style="font-size:11px;padding:3px 6px;height:26px;min-width:110px;background:var(--s2);border:1px solid var(--bdr);color:var(--txt1);border-radius:4px;cursor:pointer" onclick="event.stopPropagation()" onchange="changeStaffRoleInline('${s.id}',this.value)" title="Change role">
+                ${['SPD Technician I','SPD Technician II','SPD Technician III','Lead Technician','Shift Supervisor','Department Supervisor','SPD Manager','Director of Sterile Processing'].map(r => 
+                  `<option value="${r}"${s.role===r?' selected':''}>${r}</option>`
+                ).join('')}
+              </select>
+            </td>
             <td style="white-space:nowrap">${beltBadge(s.belt)}</td>
             <td class="hide-sm" style="font-size:12px;color:var(--txt3)">${daysAt(s.since)}d</td>
             <td>${gateDots(s.cur)}</td>
@@ -14044,4 +14056,48 @@ function cleanOptimisticCache() {
     renderASystems();
     toast('Optimistic cache cleared.', 'info');
   }
+}
+
+// Inline role change from the All Staff table dropdown
+function changeStaffRoleInline(staffId, newRole){
+  const s = getStaff(staffId);
+  if(!s) return;
+  if(s.role === newRole) return; // no change
+  const oldRole = s.role;
+  promoteStaffPosition(staffId, newRole, ST.user?.name||'Admin');
+
+  // \u2500\u2500 Sync linked user account level \u2500\u2500
+  // Map position titles to portal access roles
+  const positionToAccess = {
+    'SPD Technician I':'staff_member',  'SPD Technician II':'staff_member',
+    'SPD Technician III':'staff_member',
+    'Lead Technician':'hospital',       'Shift Supervisor':'hospital',
+    'Department Supervisor':'facility_admin',
+    'SPD Manager':'facility_admin',
+    'Director of Sterile Processing':'facility_admin'
+  };
+  const newAccess = positionToAccess[newRole];
+  if(newAccess){
+    // Find linked user account(s) for this staff member
+    const linkedUsers = DB.users.filter(u => u.sid === staffId);
+    linkedUsers.forEach(u => {
+      // Only upgrade/adjust accounts at staff_member or hospital level
+      // Never downgrade system_admin, staff_admin, or master_admin
+      const protectedRoles = ['master_admin','staff_admin','system_admin'];
+      if(!protectedRoles.includes(u.role) && u.role !== newAccess){
+        const oldAccess = u.role;
+        u.role = newAccess;
+        console.log(`[Role] Account ${u.email}: portal access ${oldAccess} \u2192 ${newAccess}`);
+      }
+    });
+  }
+
+  saveDemoData();
+  // Sync to backend if live
+  if(IS_LIVE && typeof SB !== 'undefined' && SB.updateStaffRole){
+    SB.updateStaffRole(staffId, newRole).catch(e=>console.warn('[Role] Sync failed:', e.message));
+  }
+  toast(`${fullName(s)}: role updated <strong>${oldRole}</strong> \u2192 <strong>${newRole}</strong>`,'ok');
+  // Re-render (don't lose scroll position)
+  renderAAllStaff();
 }

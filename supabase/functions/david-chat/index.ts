@@ -81,7 +81,7 @@ serve(async (req) => {
                 'X-Title': 'DAVID Intelligence - SBD Belt Platform',
             },
             body: JSON.stringify({
-                model: 'anthropic/claude-sonnet-4-20250514',
+                model: 'anthropic/claude-3.5-sonnet',
                 messages,
                 max_tokens: 4096,
                 temperature: 0.7,
@@ -92,7 +92,7 @@ serve(async (req) => {
         if (!orRes.ok) {
             const errBody = await orRes.text();
             console.error(`[DAVID] OpenRouter ${orRes.status}: ${errBody}`);
-            throw new Error(`AI service error (${orRes.status})`);
+            throw new Error(`AI service error (${orRes.status}): ${errBody}`);
         }
 
         // 4. Stream chunks as SSE
