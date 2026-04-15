@@ -2384,6 +2384,17 @@ function beltBadgeStaff(staff){
   return beltBadge(staff.belt, staff);
 }
 
+// Generate interactive role dropdown for admins, or text for staff
+function renderRoleDropdown(s) {
+  if (ST.user && ST.user.role !== 'staff_member') {
+    const roles = ['SPD Technician I','SPD Technician II','SPD Technician III','Lead Technician','Shift Supervisor','Department Supervisor','SPD Manager','Director of Sterile Processing'];
+    const opts = roles.includes(s.role) ? roles : [s.role, ...roles];
+    const optionsHtml = opts.map(r => `<option value="${r}"${s.role===r?' selected':''}>${r}</option>`).join('');
+    return `<select class="form-select" style="font-size:11.5px;padding:3px 6px;height:26px;min-width:110px;background:var(--s2);border:1px solid var(--bdr);color:var(--txt1);border-radius:4px;cursor:pointer" onclick="event.stopPropagation()" onchange="changeStaffRoleInline('${s.id}',this.value)" title="Change role">${optionsHtml}</select>`;
+  }
+  return s.role;
+}
+
 // ============================================================ GATE DOTS
 function gateDots(g){
   const dot=(v)=>{
@@ -2726,7 +2737,7 @@ function downloadFacilityReportV2(fid){
     <table class="no-break"><thead><tr><th>Name</th><th>Belt</th><th>Role</th><th>Points</th><th>PS Stars</th><th>OIP Type</th></tr></thead>
     <tbody>${promoReady.map(s=>`<tr>
       <td style="font-weight:700">${fullName(s)}</td><td>${pBelt(s.belt)}</td>
-      <td style="font-size:8pt;color:#475569">${s.role}</td>
+      <td style="font-size:8pt;color:#475569">${renderRoleDropdown(s)}</td>
       <td style="font-weight:700;color:#d97706">${calcPoints(s).toLocaleString()}</td>
       <td style="color:#d97706">${calcTotalPSStars(s)>0?Array(calcTotalPSStars(s)).fill('★').join(''):'–'}</td>
       <td>${pOIP(s)}</td>
@@ -2781,7 +2792,7 @@ function downloadFacilityReportV2(fid){
     <table><thead><tr><th>Name</th><th>Role</th><th>Belt</th><th>Days</th><th>Cur Gates</th><th>Points</th><th>PS ★</th><th>OIP</th></tr></thead>
     <tbody>${[...st].sort((a,b)=>beltIdx(b.belt)-beltIdx(a.belt)||calcPoints(b)-calcPoints(a)).map(s=>`<tr>
       <td style="font-weight:700">${fullName(s)}</td>
-      <td style="font-size:8pt;color:#475569">${s.role}</td>
+      <td style="font-size:8pt;color:#475569">${renderRoleDropdown(s)}</td>
       <td>${pBelt(s.belt)}</td>
       <td style="color:#64748b">${daysAt(s.since)}d</td>
       <td>${[s.cur?.c,s.cur?.s,s.cur?.o].filter(g=>g==='pass').length}/3</td>
@@ -2891,7 +2902,7 @@ function downloadSystemReportV2(){
       <td style="font-weight:700">${fullName(s)}</td>
       <td style="font-size:8pt;color:#475569">${getFac(s.fid)?.name||'–'}</td>
       <td>${pBelt(s.belt)}</td>
-      <td style="font-size:8pt">${s.role}</td>
+      <td style="font-size:8pt">${renderRoleDropdown(s)}</td>
       <td style="font-weight:700;color:#d97706">${calcPoints(s).toLocaleString()}</td>
       <td>${pOIP(s)}</td>
     </tr>`).join('')}</tbody></table>`:''}
@@ -6341,7 +6352,7 @@ function renderXReports(){
           <td class="fw7">${fullName(s)}</td>
           <td style="font-size:11.5px;color:var(--txt2)">${getFac(s.fid)?.name||'--'}</td>
           <td>${beltBadge(s.belt,s)}</td>
-          <td style="font-size:11.5px">${s.role}</td>
+          <td style="font-size:11.5px">${renderRoleDropdown(s)}</td>
           <td style="color:var(--gold);font-weight:700">${calcPoints(s).toLocaleString()}</td>
           <td>${(()=>{
             if(!s.oip || !s.oip.completed || !s.oip.primaryType || !OIP_TYPES[s.oip.primaryType]) return '<span style="font-size:10px;color:var(--txt3)">--</span>';
@@ -6445,7 +6456,7 @@ function renderHDashboard(){
     <div class="card">
       <div class="card-hd"><div class="card-ttl">Recent Staff Activity</div><button class="btn btn-ghost btn-sm" onclick="hNav(document.querySelector('[data-view=h-staff]'),'h-staff','Staff Directory')">View All</button></div>
       <div style="overflow-x:auto"><table class="tbl" style="min-width:380px"><thead><tr><th>Name</th><th class="hide-sm">Role</th><th>Belt</th><th class="hide-sm">Days</th><th>Adv. Gates</th><th class="hide-sm">Pos School</th></tr></thead>
-      <tbody>${st.slice(0,6).map(s=>`<tr onclick="openHProfile('${s.id}')"><td class="fw7" style="white-space:nowrap">${fullName(s)}</td><td class="tc-dim hide-sm">${s.role}</td><td style="white-space:nowrap">${beltBadge(s.belt)}</td><td class="hide-sm" style="font-size:12px;color:var(--txt3)">${daysAt(s.since)}d</td><td>${gateDots(s.nxt)}</td><td class="hide-sm">${(()=>{const st2=calcTotalPSStars(s);const et=getEligibleTracks(s);const at=[...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].filter(t=>['active','testing'].includes(getTrackStatus(s,t)));return at.length>0?'<span class="pill p-warn" style="font-size:9px">In Progress</span>':st2>0?'<span class="pill p-ok" style="font-size:9px">'+Array(st2).fill('★').join('')+'</span>':et.length>0?'<span class="pill p-gold" style="font-size:9px">Available</span>':'<span style="font-size:11px;color:var(--txt3)">--</span>';})()}</td></tr>`).join('')}</tbody>
+      <tbody>${st.slice(0,6).map(s=>`<tr onclick="openHProfile('${s.id}')"><td class="fw7" style="white-space:nowrap">${fullName(s)}</td><td class="tc-dim hide-sm">${renderRoleDropdown(s)}</td><td style="white-space:nowrap">${beltBadge(s.belt)}</td><td class="hide-sm" style="font-size:12px;color:var(--txt3)">${daysAt(s.since)}d</td><td>${gateDots(s.nxt)}</td><td class="hide-sm">${(()=>{const st2=calcTotalPSStars(s);const et=getEligibleTracks(s);const at=[...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].filter(t=>['active','testing'].includes(getTrackStatus(s,t)));return at.length>0?'<span class="pill p-warn" style="font-size:9px">In Progress</span>':st2>0?'<span class="pill p-ok" style="font-size:9px">'+Array(st2).fill('★').join('')+'</span>':et.length>0?'<span class="pill p-gold" style="font-size:9px">Available</span>':'<span style="font-size:11px;color:var(--txt3)">--</span>';})()}</td></tr>`).join('')}</tbody>
       </table></div>
     </div>`;
 }
@@ -6466,7 +6477,7 @@ function renderHStaff(){
       <table class="tbl"><thead><tr><th>Name</th><th>Role</th><th>Belt</th><th class="hide-sm">Days at Belt</th><th>Current Gates</th><th>Next Belt</th><th>Promo</th>${facAdmin?'<th>Actions</th>':''}</tr></thead>
       <tbody>${st.map(s=>{const nb=nextBelt(s.belt);return`<tr onclick="openHProfile('${s.id}')">
         <td class="fw7" style="white-space:nowrap">${fullName(s)}</td>
-        <td class="tc-dim" style="font-size:11.5px;white-space:nowrap">${s.role}</td>
+        <td class="tc-dim" style="font-size:11.5px;white-space:nowrap">${renderRoleDropdown(s)}</td>
         <td style="white-space:nowrap">${beltBadge(s.belt)}</td>
         <td class="hide-sm" style="font-size:12px;color:var(--txt3)">${daysAt(s.since)} days</td>
         <td>${gateDots(s.cur)}</td>
@@ -8113,7 +8124,7 @@ function renderHPosSchool(){
     return `<tr onclick="openHProfile('${s.id}')" style="cursor:pointer">
       <td class="fw7" style="white-space:nowrap">${fullName(s)}</td>
       <td>${beltBadge(s.belt,s)}</td>
-      <td style="font-size:11.5px;color:var(--txt2)">${s.role}</td>
+      <td style="font-size:11.5px;color:var(--txt2)">${renderRoleDropdown(s)}</td>
       <td>${psCell}</td>
       <td>${s.promo?'<span class="pill p-gold">Yes</span>':'<span style="font-size:10px;color:var(--txt3)">--</span>'}</td>
     </tr>`;
@@ -8334,7 +8345,7 @@ function renderHReports(){
         <thead><tr><th>Name</th><th>Current Belt</th><th>Role</th><th>Points</th><th>PS Stars</th></tr></thead>
         <tbody>${promoReady.map(s=>`<tr onclick="openHProfile('${s.id}')" style="cursor:pointer">
           <td class="fw7">${fullName(s)}</td><td>${beltBadge(s.belt,s)}</td>
-          <td style="font-size:12px;color:var(--txt2)">${s.role}</td>
+          <td style="font-size:12px;color:var(--txt2)">${renderRoleDropdown(s)}</td>
           <td style="color:var(--gold);font-weight:700">${calcPoints(s).toLocaleString()}</td>
           <td>${calcTotalPSStars(s)>0?'<span style="color:var(--gold)">'+Array(calcTotalPSStars(s)).fill('★').join(' ')+'</span>':'--'}</td>
         </tr>`).join('')}</tbody>
@@ -8419,7 +8430,7 @@ function renderHReports(){
         <thead><tr><th>Name</th><th>Role</th><th>Belt</th><th>Days</th><th>Gates</th><th>Points</th><th>PS Stars</th><th>OIP Type</th></tr></thead>
         <tbody>${[...st].sort((a,b)=>beltIdx(b.belt)-beltIdx(a.belt)||calcPoints(b)-calcPoints(a)).map(s=>`<tr onclick="openHProfile('${s.id}')" style="cursor:pointer">
           <td class="fw7" style="white-space:nowrap">${fullName(s)}</td>
-          <td style="font-size:11.5px;color:var(--txt2)">${s.role}</td>
+          <td style="font-size:11.5px;color:var(--txt2)">${renderRoleDropdown(s)}</td>
           <td style="white-space:nowrap">${beltBadge(s.belt,s)}</td>
           <td style="font-size:11.5px;color:var(--txt3)">${daysAt(s.since)}d</td>
           <td>${gateDots(s.cur)}</td>
@@ -9052,13 +9063,7 @@ function renderAAllStaff(){
           return`<tr onclick="openAdminProfile('${s.id}')" style="cursor:pointer">
             <td class="fw7" style="white-space:nowrap">${fullName(s)}</td>
             <td class="hide-sm tc-dim" style="font-size:11.5px;white-space:nowrap">${fac?fac.name:'--'}</td>
-            <td class="hide-sm tc-dim" style="font-size:11.5px">
-              <select class="form-select" style="font-size:11px;padding:3px 6px;height:26px;min-width:110px;background:var(--s2);border:1px solid var(--bdr);color:var(--txt1);border-radius:4px;cursor:pointer" onclick="event.stopPropagation()" onchange="changeStaffRoleInline('${s.id}',this.value)" title="Change role">
-                ${['SPD Technician I','SPD Technician II','SPD Technician III','Lead Technician','Shift Supervisor','Department Supervisor','SPD Manager','Director of Sterile Processing'].map(r => 
-                  `<option value="${r}"${s.role===r?' selected':''}>${r}</option>`
-                ).join('')}
-              </select>
-            </td>
+            <td class="hide-sm tc-dim" style="font-size:11.5px">${renderRoleDropdown(s)}</td>
             <td style="white-space:nowrap">${beltBadge(s.belt)}</td>
             <td class="hide-sm" style="font-size:12px;color:var(--txt3)">${daysAt(s.since)}d</td>
             <td>${gateDots(s.cur)}</td>
@@ -9661,7 +9666,7 @@ function renderFacStaff(el){
         <thead><tr><th>Name</th><th class="hide-sm">Role</th><th>Belt</th><th class="hide-sm">Days</th><th>Cur Gates</th><th>Nxt Gates</th><th>Promo</th><th>Action</th></tr></thead>
         <tbody>${st.map(s=>{const nb=nextBelt(s.belt);return`<tr onclick="openAdminProfile('${s.id}')">
           <td class="fw7" style="white-space:nowrap">${fullName(s)}</td>
-          <td class="tc-dim hide-sm" style="font-size:11.5px">${s.role}</td>
+          <td class="tc-dim hide-sm" style="font-size:11.5px">${renderRoleDropdown(s)}</td>
           <td style="white-space:nowrap">${beltBadge(s.belt)}</td>
           <td class="hide-sm" style="font-size:12px;color:var(--txt3)">${daysAt(s.since)}d</td>
           <td>${gateDots(s.cur)}</td>
@@ -9764,7 +9769,7 @@ function renderFacReports(el){
         <thead><tr><th>Name</th><th>Role</th><th>Belt</th><th>Days</th><th>Cur Gates</th><th>Points</th><th>PS Stars</th><th>OIP</th></tr></thead>
         <tbody>${[...st].sort((a,b)=>beltIdx(b.belt)-beltIdx(a.belt)||calcPoints(b)-calcPoints(a)).map(s=>`<tr onclick="openAdminProfile('${s.id}')" style="cursor:pointer">
           <td class="fw7">${fullName(s)}</td>
-          <td style="font-size:11.5px;color:var(--txt2)">${s.role}</td>
+          <td style="font-size:11.5px;color:var(--txt2)">${renderRoleDropdown(s)}</td>
           <td>${beltBadge(s.belt,s)}</td>
           <td style="font-size:11.5px;color:var(--txt3)">${daysAt(s.since)}d</td>
           <td>${gateDots(s.cur)}</td>
@@ -10820,7 +10825,7 @@ function downloadFacilityReport(fid){
     const pts=calcPoints(s);
     return`<tr>
       <td>${fullName(s)}</td>
-      <td>${s.role}</td>
+      <td>${renderRoleDropdown(s)}</td>
       <td style="font-weight:700">${s.belt}</td>
       <td>${daysAt(s.since)}d</td>
       <td style="text-align:center">${[(s.nxt||{}).c,(s.nxt||{}).s,(s.nxt||{}).o].filter(x=>x==='pass').length}/3</td>
