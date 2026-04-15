@@ -8912,7 +8912,7 @@ function renderScoreboardHTML(data, highlightStaffId, showFacility){
               const idx = window._sbSort&&window._sbSort.col!=='Rank'?i:s._rank;
               const wc=s.win.status==='open'?'var(--ok)':s.win.status==='closed'?'var(--err)':'var(--txt3)';
               const isMe=s.id===highlightStaffId;
-              return`<tr style="cursor:pointer;${isMe?'background:rgba(196,154,32,.06)':''}" onclick="if(ST.portal==='a') openAdminProfile('${s.id}'); else if(ST.portal==='h') openHProfile('${s.id}');">
+              return`<tr style="cursor:pointer;${isMe?'background:rgba(196,154,32,.06)':''}" onclick="if(['admin','master_admin','staff_admin'].includes(ST.portal)) { openAdminProfile('${s.id}'); } else if(['hospital','facility_admin'].includes(ST.portal)) { openHProfile('${s.id}'); } else { openUserDrawer('${s.id}'); }">
                 <td>${scoreboardRankBadge(idx)}</td>
                 <td class="fw7" style="white-space:nowrap;color:${isMe?'var(--gold)':''}">
                   ${fullName(s)}${isMe?' <span style="font-size:9px;color:var(--gold)">YOU</span>':''}
