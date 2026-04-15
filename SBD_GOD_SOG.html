@@ -3120,7 +3120,7 @@ function adminFilterBar(showFacility, facList, onChangeFn){
     <select class="form-select" style="width:auto;max-width:200px;padding:5px 11px;font-size:12px;height:32px"
       onchange="adminStaffFilter.fid=this.value;${onChangeFn}()">
       <option value="all" ${adminStaffFilter.fid==='all'?'selected':''}>All Facilities</option>
-      ${facList.map(f=>`<option value="${f.id}" ${adminStaffFilter.fid===f.id?'selected':''}>${f.name}</option>`).join('')}
+      ${facList.map(f=>`<option value="${f.id}" ${adminStaffFilter.fid==f.id?'selected':''}>${f.name}</option>`).join('')}
     </select>`:'';
 
   return`
@@ -3141,13 +3141,9 @@ function adminFilterBar(showFacility, facList, onChangeFn){
 
 // Filter a staff array by the current adminStaffFilter
 function applyAdminFilter(staffArr){
-  console.log('[Filter] fid:', adminStaffFilter.fid, 'belt:', adminStaffFilter.belt, 'q:', adminStaffFilter.q, 'pool:', staffArr.length);
-  if(adminStaffFilter.fid!=='all' && staffArr.length) {
-    console.log('[Filter] sample fid:', staffArr[0].fid, 'type:', typeof staffArr[0].fid, ' | filter fid:', adminStaffFilter.fid, 'type:', typeof adminStaffFilter.fid);
-  }
   return staffArr.filter(s=>{
-    const matchBelt = adminStaffFilter.belt==='All' || s.belt===adminStaffFilter.belt;
-    const matchFid  = adminStaffFilter.fid==='all' || s.fid===adminStaffFilter.fid;
+    const matchBelt = adminStaffFilter.belt==='All' || s.belt==adminStaffFilter.belt;
+    const matchFid  = adminStaffFilter.fid==='all' || s.fid==adminStaffFilter.fid;
     const term      = adminStaffFilter.q.toLowerCase();
     const matchQ    = !term || fullName(s).toLowerCase().includes(term) || (s.role||'').toLowerCase().includes(term);
     return matchBelt && matchFid && matchQ;
@@ -8445,7 +8441,6 @@ function renderXFacilityDetail(fid){
 
 
 function renderXStaff(){
-  adminStaffFilter.fid='all';
   const facs=systemFacs(ST.curSystemId).filter(f=>f.active!==false);
   const all=systemStaff(ST.curSystemId).map(s=>({...s,pts:calcPoints(s),proj:generateProjection(s),facName:getFac(s.fid)?.name||'--'})).sort((a,b)=>b.pts-a.pts);
   const st=applyAdminFilter(all);
