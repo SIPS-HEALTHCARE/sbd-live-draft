@@ -10998,7 +10998,7 @@ async function openApproveRegModal(rid){
         <option value="hospital" ${(r.requested_role==='hospital' || !r.requested_role)?'selected':''}>Facility Admin (Manager/Leader)</option>
         <option value="system_admin" ${r.requested_role==='system_admin'?'selected':''}>System Admin (Executive)</option>
         <option value="staff_admin">Staff Admin (SIPS Internal)</option>
-        <option value="master_admin">Master Admin (SIPS Leader)</option>
+
       </select>
 
       <label class="form-label">Assign to Facility</label>
@@ -12494,7 +12494,7 @@ function openEditUserModal(uid){
           <option value="hospital" ${(u.role==='hospital'||u.role==='facility_admin')?'selected':''}>Facility Admin / Hospital Manager</option>
           <option value="system_admin" ${u.role==='system_admin'?'selected':''}>System Admin</option>
           <option value="staff_admin" ${u.role==='staff_admin'?'selected':''}>Assessor (SIPS Internal)</option>
-          <option value="master_admin" ${u.role==='master_admin'?'selected':''}>Master Admin (SIPS Leader)</option>
+
         </select>
       </div>
 
