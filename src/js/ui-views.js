@@ -662,12 +662,31 @@ const adminStaffFilter = {
   belt: 'All',
   fid:  'all',
   q:    '',
-  reset(){ this.belt='All'; this.fid='all'; this.q=''; }
+  initFromUrl() {
+    try {
+      const p = new URLSearchParams(window.location.search);
+      if(p.has('f_belt')) this.belt = p.get('f_belt');
+      if(p.has('f_fid')) this.fid = p.get('f_fid');
+      if(p.has('f_q')) this.q = p.get('f_q');
+    } catch(e) {}
+  },
+  syncToUrl() {
+    try {
+      const url = new URL(window.location);
+      if(this.belt !== 'All') url.searchParams.set('f_belt', this.belt); else url.searchParams.delete('f_belt');
+      if(this.fid !== 'all') url.searchParams.set('f_fid', this.fid); else url.searchParams.delete('f_fid');
+      if(this.q !== '') url.searchParams.set('f_q', this.q); else url.searchParams.delete('f_q');
+      window.history.replaceState(window.history.state, '', url);
+    } catch(e) {}
+  },
+  reset(){ this.belt='All'; this.fid='all'; this.q=''; this.syncToUrl(); }
 };
+adminStaffFilter.initFromUrl();
 
 // Build filter bar HTML for admin staff views
 // showFacility = true for multi-facility views (network / system-level)
 function adminFilterBar(showFacility, facList, onChangeFn){
+  adminStaffFilter.syncToUrl();
   const beltChips=['All',...BELT_ORDER].map(b=>`
     <div class="fchip ${adminStaffFilter.belt===b?'on':''}"
       style="${adminStaffFilter.belt===b?'border-color:'+BELT_CLR[b]+'!important;':''}"
@@ -910,8 +929,12 @@ function beginPSTrack(staffId, tid){
   const status = getTrackStatus(s, tid);
   if(status !== 'eligible') return;
   s.ps.tracks[tid] = {status:'active', promptedAt: s.ps.tracks[tid]?.promptedAt||new Date().toISOString().slice(0,10), startedAt: new Date().toISOString().slice(0,10), completedAt: null};
+  s.ps.enrolled = true;
   toast('Position School track started. Complete all 5 criteria to earn your star.');
-  renderSPosSchool();
+  if (IS_LIVE && typeof SB !== 'undefined' && SB.updateStaff) {
+    SB.updateStaff(staffId, { ps: s.ps }).catch(e=>console.warn('Sync failed:', e));
+  }
+  if(typeof renderSPosSchool === 'function') renderSPosSchool();
 }
 
 // Staff action: signal ready to test
@@ -922,7 +945,10 @@ function readyToTestPS(staffId, tid){
   if(getTrackStatus(s, tid) !== 'active') return;
   s.ps.tracks[tid].status = 'testing';
   toast('Marked as ready to test. Your assessor has been notified.');
-  renderSPosSchool();
+  if (IS_LIVE && typeof SB !== 'undefined' && SB.updateStaff) {
+    SB.updateStaff(staffId, { ps: s.ps }).catch(e=>console.warn('Sync failed:', e));
+  }
+  if(typeof renderSPosSchool === 'function') renderSPosSchool();
 }
 
 // Admin/Assessor action: award star (complete a track)
@@ -943,7 +969,12 @@ function completePSTrack(staffId, tid){
   s.ps.done = [...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].some(t => getTrackStatus(s,t)==='complete');
   s.ps.enrolled = [...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].some(t => ['active','testing'].includes(getTrackStatus(s,t)));
   toast('Position School track complete! Star awarded.');
-  // Refresh whichever view is active
+  
+  if (IS_LIVE && typeof SB !== 'undefined' && SB.updateStaff) {
+    SB.updateStaff(staffId, { ps: s.ps, stars: s.stars }).catch(e=>console.warn('Sync failed:', e));
+  }
+
+  // Refresh whichever view is active (includes drawer redrawing or scoreboard re-rendering)
   if(ST.portal==='a') renderAView(ST.aView);
   if(ST.portal==='h') renderHView(ST.hView);
 }
@@ -6768,8 +6799,9 @@ function renderHProfile(sid,context){
   return allT.map(tid=>{
     const t=PS_TRACKS[tid]; const st2=getTrackStatus(s,tid); const td=s.ps&&s.ps.tracks?s.ps.tracks[tid]||{}:{};
     const statusBadge=st2==='complete'?'<span class="pill p-ok">Complete ★</span>':st2==='testing'?'<span class="pill p-blue">Ready to Test</span>':st2==='active'?'<span class="pill p-warn">In Progress</span>':st2==='eligible'?'<span class="pill p-gold">Available</span>':'<span class="pill p-muted">Locked</span>';
-    const action=st2==='testing'?`<button class="btn btn-ok btn-xs" style="margin-left:8px" onclick="completePSTrack('${s.id}','${tid}')">Award Star</button>`:st2==='active'?`<span style="font-size:10.5px;color:var(--txt3);margin-left:8px">Since ${td.startedAt||'--'}</span>`:'';
-    return `<div class="irow" style="${st2==='locked'?'opacity:.5':''}"><div class="ilbl" style="font-size:11.5px">${t.name}</div><div class="ival" style="display:flex;align-items:center;gap:6px">${statusBadge}${action}</div></div>`;
+    const action=st2==='testing'?`<button class="btn btn-ok btn-xs" style="margin-left:8px" onclick="completePSTrack('${s.id}','${tid}'); event.stopPropagation()">Award Star</button>`:st2==='active'?`<span style="font-size:10.5px;color:var(--txt3);margin-left:8px">Since ${td.startedAt||'--'}</span>`:'';
+    const canClick = st2 !== 'locked';
+    return `<div class="irow" style="${st2==='locked'?'opacity:.5':'cursor:pointer'}" ${canClick?`onclick="openPSTrackDetail('${tid}','${s.id}')"`:''}><div class="ilbl" style="font-size:11.5px;flex:1">${t.name}</div><div class="ival" style="display:flex;align-items:center;gap:6px">${statusBadge}${action}</div></div>`;
   }).join('')+'<div class="irow" style="border:none"><div class="ilbl">Promotion Eligible</div><div class="ival">'+( s.promo?'<span class="pill p-gold">Yes</span>':'<span style="color:var(--txt3);font-size:12px">Not yet</span>' )+'</div></div>';
 })()}</div></div>
         <div class="card"><div class="card-hd"><div class="card-ttl">Assessment History</div></div><div class="card-body"><div class="tl">${s.history.length?s.history.slice().reverse().map(h=>`<div class="tl-item"><div class="tl-dot" style="background:${h.res==='pass'?'rgba(34,197,94,.15)':'rgba(239,68,68,.15)'};color:${h.res==='pass'?'var(--ok)':'var(--err)'}">${h.res==='pass'?ICO.check:ICO.x}</div><div><div class="tl-date">${h.dt} &bull; ${beltBadge(h.belt)}</div><div class="tl-txt">${h.type}: <strong style="color:${h.res==='pass'?'var(--ok)':'var(--err)'}">${h.res.charAt(0).toUpperCase()+h.res.slice(1)}</strong></div></div></div>`).join(''):'<div style="font-size:12px;color:var(--txt3)">No assessment history recorded yet.</div>'}</div></div></div>
@@ -8771,6 +8803,26 @@ function scoreboardRankBadge(i){
   if(i===2) return `<div style="width:28px;height:28px;border-radius:50%;background:rgba(194,119,42,.15);border:2px solid #c2772a;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#c2772a">3</div>`;
   return `<div style="width:28px;height:28px;border-radius:50%;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--txt3)">${i+1}</div>`;
 }
+window._sbSort = { col: 'Rank', dir: 1 };
+function setScoreboardSort(c) {
+  if (window._sbSort.col === c) window._sbSort.dir *= -1;
+  else { window._sbSort.col = c; window._sbSort.dir = c==='Name'||c==='Facility'?1:-1; }
+  
+  if (typeof ST !== 'undefined') {
+    if (ST.portal === 'a' && ST.aView === 'a-scoreboard') {
+      if (typeof renderAView === 'function') renderAView('a-scoreboard');
+    } else if (ST.portal === 'h' && ST.hView === 'h-scoreboard') {
+      if (typeof renderHView === 'function') renderHView('h-scoreboard');
+    } else if (ST.portal === 's' && ST.sView === 's-scoreboard') {
+      if (typeof renderSView === 'function') renderSView('s-scoreboard');
+    } else {
+      if (typeof renderAScoreboard === 'function') renderAScoreboard();
+    }
+  } else {
+    // fallback
+    if (typeof renderAScoreboard === 'function') renderAScoreboard();
+  }
+}
 
 function renderScoreboardHTML(data, highlightStaffId, showFacility){
   const {all, topPerBelt} = data;
@@ -8833,14 +8885,35 @@ function renderScoreboardHTML(data, highlightStaffId, showFacility){
       <div class="card-hd"><div class="card-ttl">Overall Points Ranking – All Staff</div><span class="pill p-muted">${all.length} staff</span></div>
       <div style="overflow-x:auto">
         <table class="tbl tbl-static" style="min-width:${showFacility?480:380}px">
-          <thead><tr><th style="width:52px">Rank</th><th>Name</th>${showFacility?'<th class="hide-sm">Facility</th>':''}
-            <th>Belt</th><th>Points</th><th class="hide-sm">Window</th><th class="hide-sm">Next Belt ETA</th></tr></thead>
+          <thead><tr>
+            <th style="width:52px;cursor:pointer;user-select:none" onclick="setScoreboardSort('Rank')">Rank ${window._sbSort?.col==='Rank'?(window._sbSort.dir===1?'▲':'▼'):''}</th>
+            <th style="cursor:pointer;user-select:none" onclick="setScoreboardSort('Name')">Name ${window._sbSort?.col==='Name'?(window._sbSort.dir===1?'▲':'▼'):''}</th>
+            ${showFacility?`<th class="hide-sm" style="cursor:pointer;user-select:none" onclick="setScoreboardSort('Facility')">Facility ${window._sbSort?.col==='Facility'?(window._sbSort.dir===1?'▲':'▼'):''}</th>`:''}
+            <th style="cursor:pointer;user-select:none" onclick="setScoreboardSort('Belt')">Belt ${window._sbSort?.col==='Belt'?(window._sbSort.dir===1?'▲':'▼'):''}</th>
+            <th style="cursor:pointer;user-select:none" onclick="setScoreboardSort('Points')">Points ${window._sbSort?.col==='Points'?(window._sbSort.dir===1?'▲':'▼'):''}</th>
+            <th class="hide-sm" style="cursor:pointer;user-select:none" onclick="setScoreboardSort('Window')">Window ${window._sbSort?.col==='Window'?(window._sbSort.dir===1?'▲':'▼'):''}</th>
+            <th class="hide-sm" style="cursor:pointer;user-select:none" onclick="setScoreboardSort('Next Belt ETA')">Next Belt ETA ${window._sbSort?.col==='Next Belt ETA'?(window._sbSort.dir===1?'▲':'▼'):''}</th>
+          </tr></thead>
           <tbody>
-            ${all.slice(0,100).map((s,i)=>{
+            ${all.map((s,i)=>{ s._rank = i; return s; }).sort((a,b)=>{
+              if(!window._sbSort) return 0;
+              const dir = window._sbSort.dir;
+              switch(window._sbSort.col){
+                case 'Rank': return (a._rank - b._rank) * dir;
+                case 'Name': return fullName(a).localeCompare(fullName(b)) * dir;
+                case 'Facility': return (a.facName||'').localeCompare(b.facName||'') * dir;
+                case 'Belt': return (beltIdx(a.belt)-beltIdx(b.belt))*dir || (a.pts-b.pts)*dir;
+                case 'Points': return (a.pts - b.pts) * dir;
+                case 'Window': return (a.win.status||'').localeCompare(b.win.status||'') * dir;
+                case 'Next Belt ETA': return ((a.proj.projectedWeeks||999) - (b.proj.projectedWeeks||999)) * dir;
+                default: return 0;
+              }
+            }).slice(0,100).map((s,i)=>{
+              const idx = window._sbSort&&window._sbSort.col!=='Rank'?i:s._rank;
               const wc=s.win.status==='open'?'var(--ok)':s.win.status==='closed'?'var(--err)':'var(--txt3)';
               const isMe=s.id===highlightStaffId;
-              return`<tr style="${isMe?'background:rgba(196,154,32,.06)':''}">
-                <td>${scoreboardRankBadge(i)}</td>
+              return`<tr style="cursor:pointer;${isMe?'background:rgba(196,154,32,.06)':''}" onclick="if(ST.portal==='a') openAdminProfile('${s.id}'); else if(ST.portal==='h') openHProfile('${s.id}');">
+                <td>${scoreboardRankBadge(idx)}</td>
                 <td class="fw7" style="white-space:nowrap;color:${isMe?'var(--gold)':''}">
                   ${fullName(s)}${isMe?' <span style="font-size:9px;color:var(--gold)">YOU</span>':''}
                 </td>
@@ -9073,6 +9146,13 @@ function renderHScoreboard(){
 
 
 // ============================================================ A ALL STAFF (network-level filtered roster)
+const adminStaffSort = { col: 'Points', dir: -1 };
+function setAAllStaffSort(c) { 
+  if(adminStaffSort.col===c) adminStaffSort.dir *= -1;
+  else { adminStaffSort.col=c; adminStaffSort.dir=c==='Name'||c==='Facility'?1:-1; }
+  renderAAllStaff();
+}
+
 function renderAAllStaff(){
   // Note: do NOT reset adminStaffFilter.fid here — it would undo the user's selection
   const isMaster=ST.user&&ST.user.role==='master_admin';
@@ -9133,19 +9213,34 @@ function renderAAllStaff(){
       </div>
       <div style="overflow-x:auto"><table class="tbl" style="min-width:560px">
         <thead><tr>
-          <th>Name</th>
-          <th class="hide-sm">Facility</th>
-          <th class="hide-sm">Role</th>
-          <th>Belt</th>
-          <th class="hide-sm">Days</th>
-          <th>Cur Gates</th>
-          <th>Nxt Gates</th>
-          <th>Points</th>
-          <th>OIP Type</th>
-          <th>Promo</th>
+          <th style="cursor:pointer;user-select:none" onclick="setAAllStaffSort('Name')">Name ${adminStaffSort.col==='Name'?(adminStaffSort.dir===1?'▲':'▼'):''}</th>
+          <th style="cursor:pointer;user-select:none" class="hide-sm" onclick="setAAllStaffSort('Facility')">Facility ${adminStaffSort.col==='Facility'?(adminStaffSort.dir===1?'▲':'▼'):''}</th>
+          <th style="cursor:pointer;user-select:none" class="hide-sm" onclick="setAAllStaffSort('Role')">Role ${adminStaffSort.col==='Role'?(adminStaffSort.dir===1?'▲':'▼'):''}</th>
+          <th style="cursor:pointer;user-select:none" onclick="setAAllStaffSort('Belt')">Belt ${adminStaffSort.col==='Belt'?(adminStaffSort.dir===1?'▲':'▼'):''}</th>
+          <th style="cursor:pointer;user-select:none" class="hide-sm" onclick="setAAllStaffSort('Days')">Days ${adminStaffSort.col==='Days'?(adminStaffSort.dir===1?'▲':'▼'):''}</th>
+          <th style="cursor:pointer;user-select:none" onclick="setAAllStaffSort('Cur Gates')">Cur Gates ${adminStaffSort.col==='Cur Gates'?(adminStaffSort.dir===1?'▲':'▼'):''}</th>
+          <th style="cursor:pointer;user-select:none" onclick="setAAllStaffSort('Nxt Gates')">Nxt Gates ${adminStaffSort.col==='Nxt Gates'?(adminStaffSort.dir===1?'▲':'▼'):''}</th>
+          <th style="cursor:pointer;user-select:none" onclick="setAAllStaffSort('Points')">Points ${adminStaffSort.col==='Points'?(adminStaffSort.dir===1?'▲':'▼'):''}</th>
+          <th style="cursor:pointer;user-select:none" onclick="setAAllStaffSort('OIP Type')">OIP Type ${adminStaffSort.col==='OIP Type'?(adminStaffSort.dir===1?'▲':'▼'):''}</th>
+          <th style="cursor:pointer;user-select:none" onclick="setAAllStaffSort('Promo')">Promo ${adminStaffSort.col==='Promo'?(adminStaffSort.dir===1?'▲':'▼'):''}</th>
           <th>Action</th>
         </tr></thead>
-        <tbody>${[...st].sort((a,b)=>beltIdx(b.belt)-beltIdx(a.belt)||calcPoints(b)-calcPoints(a)).map(s=>{
+        <tbody>${[...st].sort((a,b)=>{
+          const dir = adminStaffSort.dir;
+          switch(adminStaffSort.col) {
+            case 'Name': return fullName(a).localeCompare(fullName(b))*dir;
+            case 'Facility': { const fa=getFac(a.fid), fb=getFac(b.fid); return ((fa?fa.name:'').localeCompare(fb?fb.name:''))*dir; }
+            case 'Role': return (a.role||'').localeCompare(b.role||'')*dir;
+            case 'Belt': return (beltIdx(a.belt)-beltIdx(b.belt))*dir || (calcPoints(a)-calcPoints(b))*dir;
+            case 'Days': return (daysAt(a.since)-daysAt(b.since))*dir;
+            case 'Cur Gates': return (a.cur-b.cur)*dir;
+            case 'Nxt Gates': return (a.nxt-b.nxt)*dir;
+            case 'Points': return (calcPoints(a)-calcPoints(b))*dir;
+            case 'OIP Type': return ((a.oip?.primaryType||'').localeCompare(b.oip?.primaryType||''))*dir;
+            case 'Promo': return ((a.promo?1:0)-(b.promo?1:0))*dir;
+            default: return (beltIdx(b.belt)-beltIdx(a.belt)) || (calcPoints(b)-calcPoints(a));
+          }
+        }).map(s=>{
           const nb=nextBelt(s.belt);
           const pts=calcPoints(s);
           const fac=getFac(s.fid);
@@ -14227,10 +14322,19 @@ function changeStaffRoleInline(staffId, newRole){
   }
 
   // Sync to backend if live
-  if(IS_LIVE && typeof SB !== 'undefined' && SB.updateStaff){
-    SB.updateStaff(staffId, { role: newRole }).catch(e=>console.warn('[Role] Sync failed:', e.message));
+  if(IS_LIVE && typeof SB !== 'undefined' && SB.updateStaff) {
+    SB.updateStaff(staffId, { role: newRole })
+      .then(() => SB.getAllStaff ? SB.getAllStaff() : null)
+      .then(staffData => {
+        if(staffData) {
+          DB.staff = typeof mapStaffFromBackend === 'function' ? staffData.map(mapStaffFromBackend) : staffData;
+          if(window._sv === 'a-allstaff') renderAAllStaff();
+        }
+      })
+      .catch(e => console.warn('[Role] Sync failed:', e.message));
   }
   toast(`${fullName(s)}: role updated <strong>${oldRole}</strong> \u2192 <strong>${newRole}</strong>`,'ok');
-  // Re-render (don't lose scroll position)
-  renderAAllStaff();
+  
+  // Re-render optimistically (don't lose scroll position)
+  if(window._sv === 'a-allstaff') renderAAllStaff();
 }
