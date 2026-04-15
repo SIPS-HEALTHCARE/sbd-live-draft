@@ -1323,6 +1323,12 @@ function paPrev(){
 }
 
 async function submitPlacementAssessment(){
+  // [CRITICAL GUARDRAIL - DO NOT REMOVE OR BREAK]
+  // This function relies on a globally defined `sbFetch` to persist data to Supabase.
+  // Before making any refactors to this method or `api-supabase.js`, 100% verity that 
+  // `sbFetch` is seamlessly connected to POST to `placement_reviews`.
+  // Do NOT change the payload object keys unless the backend schema explicitly changes.
+  
   if(PA.submitting) return;
   PA.submitting = true;
   document.getElementById('placement-content').innerHTML = `
@@ -1895,6 +1901,9 @@ function scoreOIP(answers){
 
 // Save completed OIP to staff record
 function submitOIP(staffId, answers){
+  // [CRITICAL GUARDRAIL - DO NOT REMOVE OR BREAK]
+  // Relies on globally defined `sbFetch` for syncing OIP blobs via PATCH.
+  // Never break this payload mapping or module linking.
   const s=getStaff(staffId);
   if(!s) return;
   ensureOIP(s);
