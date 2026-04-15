@@ -1,3 +1,12 @@
+// CRITICAL GUARDRAIL ERROR HANDLER
+window.handleSyncError = function(e, context) {
+  if (e instanceof ReferenceError || e instanceof TypeError || e instanceof SyntaxError) {
+    console.error('CRITICAL SYSTEM FAULT [' + context + ']:', e);
+    alert('CRITICAL SYSTEM ERROR in ' + context + ': ' + e.message + '\n\nPlease refresh the page.');
+    throw e;
+  }
+  if (typeof toast !== 'undefined') toast(context + ': ' + e.message, 'warn');
+};
 
 // ============================================================ STATE
 const ST={portal:null,hView:'h-dashboard',aView:'a-overview',sView:'s-dashboard',xView:'x-dashboard',curFid:'test-a',hFid:'test-a',curSystemId:null,aTab:'all',facTab:'staff',charts:{},user:null,staffId:null};
@@ -220,7 +229,7 @@ function logout(){
     return;
   }
   if(IS_LIVE){
-    try { fetch(`${SB_API_URL}/auth/v1/logout`,{method:'POST',headers:{'apikey':SB_ANON_KEY,'Authorization':'Bearer '+(ST.session?.access_token||'')}}).catch(()=>{}); } catch(e){}
+    try { fetch(`${SB_API_URL}/auth/v1/logout`,{method:'POST',headers:{'apikey':SB_ANON_KEY,'Authorization':'Bearer '+(ST.session?.access_token||'')}}).catch(e => { if (e instanceof ReferenceError || e instanceof TypeError || e instanceof SyntaxError) throw e; }); } catch(e){}
   }
   try { localStorage.removeItem('sbd_session'); localStorage.removeItem('sb-sbd-session'); sessionStorage.removeItem('sbd_demo_view'); } catch(e){}
   
@@ -1427,7 +1436,7 @@ async function submitPlacementAssessment(){
         method:'PATCH',
         body: {placement_needed: false}
       });
-    } catch(e){ toast('Placement sync: '+e.message,'warn'); }
+    } catch(e) { handleSyncError(e, 'Placement sync'); }
   } else {
     /* saveDemoData() removed */
   }
@@ -1748,12 +1757,12 @@ function confirmPlacement(prId){
         confirmed_at: pr.confirmedAt,
         confirmed_by: pr.confirmedBy
       }
-    }).catch(e=>toast('Placement confirm sync: '+e.message,'warn'));
+    }).catch(e => handleSyncError(e, 'Placement confirm sync'));
     if(s){
       sbFetch(`/rest/v1/staff?id=eq.${s.id}`, {
         method:'PATCH',
         body: {belt: chosenBelt, since: s.since, placement_needed: false, history: s.history}
-      }).catch(e=>toast('Staff update sync: '+e.message,'warn'));
+      }).catch(e => handleSyncError(e, 'Staff update sync'));
     }
   } else {
     /* saveDemoData() removed */
@@ -1920,7 +1929,7 @@ function submitOIP(staffId, answers){
     sbFetch(`/rest/v1/staff?id=eq.${s.id}`, {
       method:'PATCH',
       body: {oip: s.oip}
-    }).catch(e=>toast('OIP sync: '+e.message,'warn'));
+    }).catch(e => handleSyncError(e, 'OIP sync'));
   } else {
     /* saveDemoData() removed */
   }
@@ -2329,7 +2338,7 @@ function submitPromotion(staffId, context){
       requestedAt:  new Date().toISOString().slice(0,10),
       status:       'pending'
     };
-    if(IS_LIVE){ SB.submitPromotionApproval(mapPromotionApprovalToBackend(newPromo)).catch(e=>toast('Promo sync: '+e.message,'warn')); }
+    if(IS_LIVE){ SB.submitPromotionApproval(mapPromotionApprovalToBackend(newPromo)).catch(e => handleSyncError(e, 'Promo sync')); }
     DB.promotionApprovals.push(newPromo);
     closeModal();
     toast('Promotion request submitted for SIPS review.','info');
@@ -2557,7 +2566,7 @@ function oipSelect(idx){ oipSelectOverlay(idx); }
 function downloadStaffReport(staffId){
   const s = getStaff(staffId||ST.staffId);
   if(!s){ toast('Staff record not found.','err'); return; }
-  if(ST.user) SB.logReportDownload(s.fid, ST.user.id).catch(()=>{});
+  if(ST.user) SB.logReportDownload(s.fid, ST.user.id).catch(e => { if (e instanceof ReferenceError || e instanceof TypeError || e instanceof SyntaxError) throw e; });
 
   const pts = calcPoints(s);
   const rank = getRankInSystem(s);
@@ -2689,7 +2698,7 @@ function downloadFacilityReportV2(fid){
   const facRanked=[...activeFacs].sort((a,b)=>facStats(b.id).greenPct-facStats(a.id).greenPct);
   const networkRank=facRanked.findIndex(f=>f.id===facId)+1;
   const networkAvgPct=Math.round(activeFacs.reduce((s,f)=>s+facStats(f.id).greenPct,0)/Math.max(activeFacs.length,1));
-  if(ST.user) SB.logReportDownload(facId, ST.user.id).catch(()=>{});
+  if(ST.user) SB.logReportDownload(facId, ST.user.id).catch(e => { if (e instanceof ReferenceError || e instanceof TypeError || e instanceof SyntaxError) throw e; });
 
   const body = `
     <div class="rpt-header">
@@ -2827,7 +2836,7 @@ function downloadSystemReportV2(){
   const greenPlus = allSt.filter(s=>beltIdx(s.belt)>=2).length;
   const networkGreenPct = allSt.length?Math.round(greenPlus/allSt.length*100):0;
   const totalPS = allSt.reduce((a,s)=>a+calcTotalPSStars(s),0);
-  if(ST.user) SB.logReportDownload(facs[0]?.id||'', ST.user.id).catch(()=>{});
+  if(ST.user) SB.logReportDownload(facs[0]?.id||'', ST.user.id).catch(e => { if (e instanceof ReferenceError || e instanceof TypeError || e instanceof SyntaxError) throw e; });
 
   const facRows = facs.map(f=>{
     const st=staffOf(f.id);const hs=buildHealthScore(f.id);const fs=facStats(f.id);
@@ -2939,7 +2948,7 @@ function downloadNetworkReport(){
   const psTestQueueAll=[];
   allSt.forEach(s=>{[...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].forEach(tid=>{if(getTrackStatus(s,tid)==='testing')psTestQueueAll.push({s,tid});});});
   const oipPending=allSt.filter(s=>!s.oip||!s.oip.completed).length;
-  if(ST.user) SB.logReportDownload('network', ST.user.id).catch(()=>{});
+  if(ST.user) SB.logReportDownload('network', ST.user.id).catch(e => { if (e instanceof ReferenceError || e instanceof TypeError || e instanceof SyntaxError) throw e; });
 
   const facRows = facPool.map(f=>{
     const st=staffOf(f.id);const hs=buildHealthScore(f.id);const fs=facStats(f.id);
@@ -4086,7 +4095,7 @@ function acknowledgePlacement(staffId){
         'Prefer': 'return=minimal'
       },
       body: JSON.stringify({ placement_acknowledged: true })
-    }).catch(()=>{});
+    }).catch(e => { if (e instanceof ReferenceError || e instanceof TypeError || e instanceof SyntaxError) throw e; });
   }
   toast('Placement acknowledged. Welcome to the team!','ok');
   renderSDashboard();
@@ -4298,7 +4307,7 @@ function submitApply(sid,gate,targetBelt){
   const gateLabel={c:'Competency',s:'Simulation',o:'Observation'}[gate];
   const qid='q'+Date.now();
   const newQItem={id:qid,sid,fid:s.fid,type:gateLabel,targetBelt,date:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})};
-  if(IS_LIVE){ SB.submitAssessmentQueue(mapQueueToBackend(newQItem)).catch(e=>toast('Queue sync: '+e.message,'warn')); }
+  if(IS_LIVE){ SB.submitAssessmentQueue(mapQueueToBackend(newQItem)).catch(e => handleSyncError(e, 'Queue sync')); }
   DB.queue.push(newQItem);
   const nb=document.getElementById('assess-nb');
   if(nb) {
@@ -5489,7 +5498,7 @@ function requestGateAssessment(belt, type) {
     practiceSimulation: scores.simulation,
     requestedAt: new Date().toISOString()
   };
-  if(IS_LIVE){ SB.submitAssessmentQueue(mapQueueToBackend(newReq)).catch(e=>toast('Queue sync: '+e.message,'warn')); }
+  if(IS_LIVE){ SB.submitAssessmentQueue(mapQueueToBackend(newReq)).catch(e => handleSyncError(e, 'Queue sync')); }
   DB.queue.push(newReq);
   toast(type + ' assessment request submitted for ' + belt + ' Belt. Your Lead and admin have been notified.', 'ok');
   renderSStudy();
@@ -6652,7 +6661,7 @@ function submitBeltOverride(staffId, context){
         cur_comp: null, cur_sim: null, cur_obs: null,
         nxt_comp: null, nxt_sim: null, nxt_obs: null
       }
-    }).catch(e=>toast('Belt override sync: '+e.message,'warn'));
+    }).catch(e => handleSyncError(e, 'Belt override sync'));
   }
 
   closeModal();
@@ -7017,7 +7026,7 @@ function execBulkSchedule(fid){
       if(existing){ existing.assignedStaff=assigned; if(!existing.zoneAssignments) existing.zoneAssignments={}; }
       else {
         const autoSched={id:'sch-'+DB.schNextId++,fid,date,shift:sk,assignedStaff:assigned,publishedBy:ST.user?.id||'',notes:'',zoneAssignments:{}};
-        if(IS_LIVE){ SB.createSchedule(mapScheduleToBackend(autoSched)).catch(()=>{}); }
+        if(IS_LIVE){ SB.createSchedule(mapScheduleToBackend(autoSched)).catch(e => { if (e instanceof ReferenceError || e instanceof TypeError || e instanceof SyntaxError) throw e; }); }
         DB.schedule.push(autoSched);
       }
       filled++;
@@ -7298,12 +7307,12 @@ function saveShift(fid, date, shift){
     existing.notes=notes;
     existing.zoneAssignments=zoneAssignments;
     if(IS_LIVE){
-      SB.updateSchedule(existing.id, mapScheduleToBackend(existing)).catch(e=>toast('Schedule sync: '+e.message,'warn'));
+      SB.updateSchedule(existing.id, mapScheduleToBackend(existing)).catch(e => handleSyncError(e, 'Schedule sync'));
     }
   } else {
     const newSched={id:'sch-'+DB.schNextId++,fid,date,shift,assignedStaff:[..._seAssigned],publishedBy:ST.user?.id||'',notes,zoneAssignments};
     if(IS_LIVE){
-      SB.createSchedule(mapScheduleToBackend(newSched)).catch(e=>toast('Schedule sync: '+e.message,'warn'));
+      SB.createSchedule(mapScheduleToBackend(newSched)).catch(e => handleSyncError(e, 'Schedule sync'));
     }
     DB.schedule.push(newSched);
   }
@@ -7742,7 +7751,7 @@ function markAttend(fid, date, shift, staffId, status){
   if(existing){ existing.status=status; }
   else {
     const att1={id:'att-'+DB.attNextId++,fid,date,shift,staffId,status,coverageFor:null,markedBy:ST.user?.id||''};
-    if(IS_LIVE) SB.recordAttendance(mapAttendanceToBackend(att1)).catch(e=>toast('Attendance sync: '+e.message,'warn'));
+    if(IS_LIVE) SB.recordAttendance(mapAttendanceToBackend(att1)).catch(e => handleSyncError(e, 'Attendance sync'));
     DB.attendance.push(att1);
   }
   const s=getStaff(staffId);
@@ -7760,7 +7769,7 @@ function markAllAttend(fid, date, shift, status){
     if(existing){ existing.status=status; }
     else {
       const att2={id:'att-'+DB.attNextId++,fid,date,shift,staffId:sid,status,coverageFor:null,markedBy:ST.user?.id||''};
-      if(IS_LIVE) SB.recordAttendance(mapAttendanceToBackend(att2)).catch(()=>{});
+      if(IS_LIVE) SB.recordAttendance(mapAttendanceToBackend(att2)).catch(e => { if (e instanceof ReferenceError || e instanceof TypeError || e instanceof SyntaxError) throw e; });
       DB.attendance.push(att2);
     }
   });
@@ -7778,7 +7787,7 @@ function assignCoverage(fid, date, shift, absentId){
   if(existing){ existing.status='coverage'; existing.coverageFor=absentId; }
   else {
     const covAtt={id:'att-'+DB.attNextId++,fid,date,shift,staffId:covSid,status:'coverage',coverageFor:absentId,markedBy:ST.user?.id||''};
-    if(IS_LIVE) SB.recordAttendance(mapAttendanceToBackend(covAtt)).catch(()=>{});
+    if(IS_LIVE) SB.recordAttendance(mapAttendanceToBackend(covAtt)).catch(e => { if (e instanceof ReferenceError || e instanceof TypeError || e instanceof SyntaxError) throw e; });
     DB.attendance.push(covAtt);
   }
   // Inherit zone from the absent staff member for coverage worker
@@ -9268,7 +9277,7 @@ function executeDeactivate(fid){
   f.deactivatedAt=new Date().toISOString();
   f.deactivatedBy=ST.user?ST.user.name:'Master Admin';
   if(IS_LIVE){
-    SB.updateFacility(fid,{active:false,deactivated_at:f.deactivatedAt}).catch(e=>toast('Deactivate sync: '+e.message,'warn'));
+    SB.updateFacility(fid,{active:false,deactivated_at:f.deactivatedAt}).catch(e => handleSyncError(e, 'Deactivate sync'));
   } else {
     /* saveDemoData() removed */
   }
@@ -9310,7 +9319,7 @@ function executeReactivate(fid){
   delete f.deactivatedAt;
   delete f.deactivatedBy;
   if(IS_LIVE){
-    SB.updateFacility(fid,{active:true,deactivated_at:null}).catch(e=>toast('Reactivate sync: '+e.message,'warn'));
+    SB.updateFacility(fid,{active:true,deactivated_at:null}).catch(e => handleSyncError(e, 'Reactivate sync'));
   } else {
     /* saveDemoData() removed */
   }
@@ -10294,8 +10303,8 @@ function markQueue(qid,result){
   else if(targetBeltIdx===currentBeltIdx+1){ s.nxt[gateKey]=result; }
   s.history.push({dt:new Date().toISOString().slice(0,10),type:item.type,belt:item.targetBelt,res:result});
   if(IS_LIVE){
-    SB.recordAssessment(mapStaffToBackend(s),item.type,item.targetBelt,result,'',ST.user?.id,new Date().toISOString()).catch(e=>toast('Backend sync: '+e.message,'warn'));
-    SB.resolveAssessmentQueue(item.sid,item.type,item.targetBelt,result).catch(()=>{});
+    SB.recordAssessment(mapStaffToBackend(s),item.type,item.targetBelt,result,'',ST.user?.id,new Date().toISOString()).catch(e => handleSyncError(e, 'Backend sync'));
+    SB.resolveAssessmentQueue(item.sid,item.type,item.targetBelt,result).catch(e => { if (e instanceof ReferenceError || e instanceof TypeError || e instanceof SyntaxError) throw e; });
   }
   // Remove from queue
   DB.queue=DB.queue.filter(q=>q.id!==qid);
@@ -10698,9 +10707,7 @@ async function addStaff(lockedFid){
       const sRes = await SB.createStaff(mapStaffToBackend(newStaff));
       if (sRes && sRes[0] && sRes[0].id) newStaff.id = sRes[0].id;
     }
-  } catch(e) {
-    toast('Staff sync: '+e.message, 'warn');
-  }
+  } catch(e) { handleSyncError(e, 'Staff sync'); }
 
   DB.staff.push(newStaff);
   closeModal();
@@ -10765,8 +10772,8 @@ function submitAssessment(sid){
   else if(targetIdx===curIdx+1){ s.nxt[gateKey]=raResult; }
   s.history.push({dt:new Date().toISOString().slice(0,10),type,belt:targetBelt,res:raResult});
   if(IS_LIVE){
-    SB.recordAssessment(mapStaffToBackend(s),type,targetBelt,raResult,'',ST.user?.id,new Date().toISOString()).catch(e=>toast('Backend sync: '+e.message,'warn'));
-    SB.resolveAssessmentQueue(staffId,type,targetBelt,raResult).catch(()=>{});
+    SB.recordAssessment(mapStaffToBackend(s),type,targetBelt,raResult,'',ST.user?.id,new Date().toISOString()).catch(e => handleSyncError(e, 'Backend sync'));
+    SB.resolveAssessmentQueue(staffId,type,targetBelt,raResult).catch(e => { if (e instanceof ReferenceError || e instanceof TypeError || e instanceof SyntaxError) throw e; });
   }
   DB.queue=DB.queue.filter(q=>!(q.sid===staffId&&q.type===type&&q.targetBelt===targetBelt));
   const nb=document.getElementById('assess-nb');
@@ -10897,7 +10904,7 @@ function downloadFacilityReport(fid){
   const w=window.open('','_blank');
   if(w){w.document.write(html);w.document.close();}
   else toast('Please allow pop-ups to download reports.','err');
-  if(ST.user) SB.logReportDownload(fid, ST.user.id).catch(()=>{});
+  if(ST.user) SB.logReportDownload(fid, ST.user.id).catch(e => { if (e instanceof ReferenceError || e instanceof TypeError || e instanceof SyntaxError) throw e; });
 }
 
 // ============================================================ A REGISTRATIONS
@@ -11157,7 +11164,7 @@ async function denyReg(rid){
   const facilityName = r.facility || r.facilityName || 'Unknown Facility';
   r.status='denied';
   if(IS_LIVE){ 
-    SB.denyRegistration(rid).catch(e=>toast('Deny sync: '+e.message,'warn'));
+    SB.denyRegistration(rid).catch(e => handleSyncError(e, 'Deny sync'));
     // Queue denial notification email
     if(r.email){
       sbFetch('/rest/v1/sbd_email_queue', { method:'POST', prefer:'return=minimal', body:{
@@ -11279,10 +11286,10 @@ function approvePromotion(apId, approved){
   ap.decidedBy=ST.user?.name||'Admin';
   ap.decidedAt=new Date().toISOString().slice(0,10);
   if(IS_LIVE){
-    SB.updatePromotionApproval(ap.id,{status:ap.status,decided_by:ap.decidedBy,decided_at:ap.decidedAt}).catch(e=>toast('Promo approval sync: '+e.message,'warn'));
+    SB.updatePromotionApproval(ap.id,{status:ap.status,decided_by:ap.decidedBy,decided_at:ap.decidedAt}).catch(e => handleSyncError(e, 'Promo approval sync'));
     if(approved && ap.proposedBelt){
       // Invoke the promote_staff_position edge function in live mode
-      sbFetch('/functions/v1/record-assessment',{method:'POST',body:{action:'promote',staffId:ap.staffId,newRole:ap.proposedRole,newBelt:ap.proposedBelt,approvedBy:ST.user?.id,notes:ap.notes}}).catch(e=>toast('Promo staff sync: '+e.message,'warn'));
+      sbFetch('/functions/v1/record-assessment',{method:'POST',body:{action:'promote',staffId:ap.staffId,newRole:ap.proposedRole,newBelt:ap.proposedBelt,approvedBy:ST.user?.id,notes:ap.notes}}).catch(e => handleSyncError(e, 'Promo staff sync'));
     }
   } else {
     if(approved) promoteStaffPosition(ap.staffId, ap.proposedRole, ST.user?.name||'SIPS Admin');
@@ -11611,7 +11618,7 @@ function approveTransfer(trId) {
       ]
     };
     faRecord.history = [...(s.history||[]), {dt:date, type:'Release', belt:s.belt, res:'released', note:`Released from ${fac?.name||'--'}. Reason: ${tr.reason}${tr.notes?' \u2014 '+tr.notes:''}. Approved by ${adminName}.`}];
-    if(IS_LIVE){ SB.releaseToFreeAgent(mapFreeAgentToBackend(faRecord)).catch(e=>toast('Release sync: '+e.message,'warn')); }
+    if(IS_LIVE){ SB.releaseToFreeAgent(mapFreeAgentToBackend(faRecord)).catch(e => handleSyncError(e, 'Release sync')); }
   DB.freeAgents.push(faRecord);
     DB.staff = DB.staff.filter(x => x.id !== tr.staffId);
     DB.users = DB.users.filter(u => !(u.sid === tr.staffId && u.role === 'staff_member'));
@@ -11635,11 +11642,11 @@ function approveTransfer(trId) {
 
     const restoredStaff = {...fa, fid: tr.toFacId, id: fa.originalId||fa.id};
     if(!DB.staff.find(s => s.id === restoredStaff.id)) {
-      if(IS_LIVE){ SB.assignFreeAgent(tr.faId,tr.toFacId,mapStaffToBackend(restoredStaff)).catch(e=>toast('Assign sync: '+e.message,'warn')); }
+      if(IS_LIVE){ SB.assignFreeAgent(tr.faId,tr.toFacId,mapStaffToBackend(restoredStaff)).catch(e => handleSyncError(e, 'Assign sync')); }
       DB.staff.push(restoredStaff);
     } else {
       restoredStaff.id = ++DB.nextId;
-      if(IS_LIVE){ SB.createStaff(mapStaffToBackend(restoredStaff)).catch(e=>toast('Staff sync: '+e.message,'warn')); }
+      if(IS_LIVE){ SB.createStaff(mapStaffToBackend(restoredStaff)).catch(e => handleSyncError(e, 'Staff sync')); }
       DB.staff.push(restoredStaff);
     }
     if(!restoredStaff.facilityHistory) restoredStaff.facilityHistory = [];
@@ -11990,7 +11997,7 @@ function executeFreeAgentAssign(faId){
 
   DB.pendingTransfers.push(transfer);
   if(IS_LIVE){
-    SB.assignFreeAgentRemote(transfer).catch(e=>toast('Assign sync: '+e.message,'warn'));
+    SB.assignFreeAgentRemote(transfer).catch(e => handleSyncError(e, 'Assign sync'));
   } else {
     /* saveDemoData() removed */
   }
@@ -12024,7 +12031,7 @@ function executePurgeFreeAgent(faId){
   if(!fa)return;
   DB.freeAgents=DB.freeAgents.filter(f=>f.id!==faId);
   if(IS_LIVE){
-    sbFetch(`/rest/v1/free_agents?id=eq.${faId}`,{method:'DELETE'}).catch(e=>toast('Purge sync: '+e.message,'warn'));
+    sbFetch(`/rest/v1/free_agents?id=eq.${faId}`,{method:'DELETE'}).catch(e => handleSyncError(e, 'Purge sync'));
   } else {
     /* saveDemoData() removed */
   }
@@ -12104,7 +12111,7 @@ function executeReleaseToFA(staffId){
 
   DB.pendingTransfers.push(transfer);
   if(IS_LIVE){
-    SB.releaseToFreeAgentRemote(transfer).catch(e=>toast('Release sync: '+e.message,'warn'));
+    SB.releaseToFreeAgentRemote(transfer).catch(e => handleSyncError(e, 'Release sync'));
   } else {
     /* saveDemoData() removed */
   }
@@ -12957,7 +12964,7 @@ function importScheduleCSV(fid){
     if(existing){ existing.assignedStaff=g.staffIds; }
     else {
       const bulkSched={id:'sch-'+DB.schNextId++,fid,date:g.date,shift:g.shift,assignedStaff:g.staffIds,publishedBy:ST.user?.id||'',notes:'CSV import'};
-      if(IS_LIVE){ SB.createSchedule(mapScheduleToBackend(bulkSched)).catch(()=>{}); }
+      if(IS_LIVE){ SB.createSchedule(mapScheduleToBackend(bulkSched)).catch(e => { if (e instanceof ReferenceError || e instanceof TypeError || e instanceof SyntaxError) throw e; }); }
       DB.schedule.push(bulkSched);
     }
     imported++;
