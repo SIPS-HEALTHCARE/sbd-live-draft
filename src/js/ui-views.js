@@ -14092,7 +14092,6 @@ function changeStaffRoleInline(staffId, newRole){
     });
   }
 
-  saveDemoData();
   // Sync to backend if live
   if(IS_LIVE && typeof SB !== 'undefined' && SB.updateStaffRole){
     SB.updateStaffRole(staffId, newRole).catch(e=>console.warn('[Role] Sync failed:', e.message));
