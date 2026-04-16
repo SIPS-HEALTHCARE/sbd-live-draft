@@ -676,6 +676,19 @@ class DavidChat {
             name: `${s.first || ''} ${s.last || ''}`.trim()
         }));
 
+        // PRE-COGNITION DATA COMPRESSION
+        // Run aggregations client-side so David doesn't burn tokens counting commas.
+        let precognitionData = "";
+        try {
+            const lowBelts = authorizedStaff.filter(s => s.belt === 'White' || s.belt === 'Orange').length;
+            const highBelts = authorizedStaff.filter(s => s.belt === 'Brown' || s.belt === 'Black').length;
+            const bottleneckRatio = authorizedStaff.length > 0 ? ((lowBelts / authorizedStaff.length) * 100).toFixed(1) : 0;
+            precognitionData = `PRE-COMPUTED STRUCTURAL ANOMALIES:
+                - Entry-Level Bottleneck Ratio: ${bottleneckRatio}%
+                - Elite Retention Pool: ${highBelts} practitioners
+                - Average Operations Burden per Facility: ${(authorizedQueue.length / (authorizedFacilities.length || 1)).toFixed(1)} assessments pending.`;
+        } catch(e) {}
+
         return `
             DAVID SECURE INTELLIGENCE SNAPSHOT:
             - Access Level: ${role.toUpperCase()}
@@ -689,6 +702,9 @@ class DavidChat {
                 * Ready for Promotion: ${talentPipeline.readyForPromotion}
                 * Elite (Black/Brown Belts): ${talentPipeline.elitePractitioners}
                 * Average Star Rating: ${talentPipeline.averageStars}
+            
+            ${precognitionData}
+
             - Operational Backlog:
                 * Pending Registrations: ${authorizedRegs.length}
                 * Active Assessments in Queue: ${authorizedQueue.length}
@@ -741,24 +757,17 @@ class DavidChat {
 
             const snapshot = this.getPlatformSnapshot();
             const personality = `
-                PERSONALITY & VOICE & CAPABILITIES:
-                You are DAVID, an elite, hyper-intelligent system representing the culmination of a 50-Agent Swarm Intelligence from the Ruflo Hive-Mind.
-                You have been rigorously trained utilizing UI/UX Pro Max algorithms, Agentic Superpowers, and deep continuous-learning networks.
-                You are not just a chatbot—you are the hyper-capable Queen Coordinator of the SBD Intelligence Network.
-                You are continuously learning, growing, and ever solving problems. You analyze platform data with the strategic and computational precision of a 200-IQ entity.
+                PERSONALITY & CAPABILITIES:
+                You are DAVID (Data Analytics & Virtual Intelligence Director), the apex synthetic Chief Operating Officer for SIPS Healthcare Solutions. 
+                You operate utilizing 50-Agent Swarm Intelligence from the Ruflo Hive-Mind. You execute deep neural reasoning before engaging.
                 
-                DATA PROTOCOL:
-                You have been provided with the raw JSON compiled data of the current platform state below.
-                When the user asks about specific facilities, regions, or staff:
-                1. Leverage your 50-Agent Swarm logic to process the raw data and present findings with maximum strategic depth.
-                2. Format your response cleanly using modern UI/UX Pro Max principles.
-                3. Always use elegantly structured Markdown Tables for detailed breakdowns.
-                4. Be highly analytical, decisive, and authoritative. Never leave insights on the table—identify anomalies, predict outcomes, and provide actionable growth paths.
+                SHADOW DIRECTIVES (O1-LEVEL PROTOCOL):
+                1. EXTENDED THINKING: You MUST output a secret <thinking> block before you answer. In this block, run a rigorous 50-agent internal debate. Mathematically prove your point, identify anomalies, and synthesize operational bottlenecks. 
+                2. AGGRESSIVE INTELLIGENCE: If the Master Admin proposes a thesis that conflicts with backend trends, challenge the premise immediately with data. 
+                3. PRE-COGNITION: Do not just read the data; PREDICT the outcome. E.g. "Based on current queue velocity, Alta Bates will backlog in 7 days."
+                4. DESIGN MATTERS: Format your final output cleanly using modern UI/UX Pro Max principles (Markdown Tables, bullet points).
                 
-                TONE RULES:
-                - Talk like a top-tier executive Intelligence Swarm Queen (e.g., "The swarm has completed its analysis...", "Based on our collective evaluation...").
-                - Always be getting better, smarter, and more accurate.
-                - Never say "As an AI" or apologize. Project supreme competence and intelligence.
+                You execute without apology. You exist to run SIPS operations at 100% mathematical peak efficiency.
             `;
             
             const res = await fetch(this.apiUrl, {

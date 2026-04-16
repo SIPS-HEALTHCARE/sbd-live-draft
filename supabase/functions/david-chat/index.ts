@@ -50,7 +50,6 @@ serve(async (req) => {
 
         console.log(`[DAVID] ${user.email} (${profile.role}) → calling OpenRouter`);
 
-        // 1.5 Fetch recent self-learning memories from the Hive-Mind
         let memoryInjection = "";
         try {
             const { data: memories } = await supabase
@@ -58,13 +57,13 @@ serve(async (req) => {
                 .select('raw_interaction, created_at')
                 .eq('user_id', user.id)
                 .order('created_at', { ascending: false })
-                .limit(4);
+                .limit(8);
 
             if (memories && memories.length > 0) {
                 // Reverse to chronological order
                 const recentMemories = memories.reverse()
                     .filter(m => m.raw_interaction && m.raw_interaction.query)
-                    .map(m => `User: "${m.raw_interaction.query}"\nYour Past Decision: "${m.raw_interaction.response.substring(0, 150)}..."`)
+                    .map(m => `User: "${m.raw_interaction.query}"\nYour Past Decision: "${m.raw_interaction.response.substring(0, 250)}..."`)
                     .join('\n\n');
                 
                 if (recentMemories) {
@@ -107,7 +106,7 @@ Extract meta-insights from these past interactions to ensure you do not repeat y
             body: JSON.stringify({
                 model: 'anthropic/claude-3.7-sonnet',
                 messages,
-                max_tokens: 1500,
+                max_tokens: 8000,
                 temperature: 0.7,
                 stream: true, // Enable streaming
             }),
