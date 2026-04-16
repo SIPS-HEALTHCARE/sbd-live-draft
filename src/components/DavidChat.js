@@ -6,6 +6,8 @@ class DavidChat {
     constructor(options = {}) {
         this.containerId = options.containerId;
         this.history = [];
+        this.sessions = [];
+        this.currentSessionId = null;
         // Pointing to pure Deno server on port 8000
         this.apiUrl = 'https://mhijaqahbceuahfzezbh.supabase.co/functions/v1/david-chat';
         this.contextData = options.contextData || {};
@@ -28,7 +30,6 @@ class DavidChat {
 
             .david-container {
                 display: flex;
-                flex-direction: column;
                 height: 100%;
                 min-height: 0;
                 width: 100%;
@@ -37,10 +38,82 @@ class DavidChat {
                 background: var(--bg);
                 position: relative;
             }
+
+            .david-layout {
+                display: flex;
+                height: 100%;
+                width: 100%;
+            }
+
+            .david-sessions-sidebar {
+                width: 260px;
+                background: var(--s1);
+                border-right: 1px solid var(--bdr);
+                display: flex;
+                flex-direction: column;
+                flex-shrink: 0;
+            }
+
+            .david-new-chat-btn {
+                margin: 20px 16px;
+                padding: 12px;
+                background: var(--gold);
+                color: #000;
+                border: none;
+                border-radius: 8px;
+                font-weight: 600;
+                font-size: 14px;
+                cursor: pointer;
+                transition: transform 0.2s, background 0.2s;
+            }
+            .david-new-chat-btn:hover {
+                transform: scale(1.02);
+                background: #d4a72d;
+            }
+
+            .david-session-list {
+                flex: 1;
+                overflow-y: auto;
+                padding: 0 12px 20px 12px;
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+            }
+
+            .david-session-item {
+                padding: 12px 14px;
+                border-radius: 6px;
+                cursor: pointer;
+                font-size: 13px;
+                color: var(--txt);
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                background: transparent;
+                transition: background 0.2s, color 0.2s;
+                border: 1px solid transparent;
+            }
+            .david-session-item:hover {
+                background: rgba(255,255,255,0.03);
+            }
+            .david-session-item.active {
+                background: rgba(196,154,32,0.1);
+                color: var(--gold);
+                font-weight: 500;
+                border-color: rgba(196,154,32,0.3);
+            }
+
+            .david-main {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                min-width: 0;
+            }
+
             .david-chat-header {
                 padding: 24px 30px;
                 border-bottom: 1px solid var(--bdr);
-                background: var(--s1);
+                background: var(--bg);
                 flex-shrink: 0;
             }
             .david-chat-header h2 { 
@@ -297,27 +370,36 @@ class DavidChat {
         const roleLabel = (user.role || 'admin').replace('_', ' ').toUpperCase();
         
         container.innerHTML = `
+        container.innerHTML = `
             <div class="david-container">
-                <div class="david-chat-header">
-                    <h2><span style="font-size:24px">🧠</span> DAVID Intelligence Hub</h2>
-                    <p>Strategic Intelligence Dashboard &bull; Access Level: ${roleLabel}</p>
-                </div>
-                <div class="david-quick-actions" id="david-qa">
-                    <button class="david-qa-btn" onclick="DAVID.handleQA('Summarize authorized facility activity')">📊 Scope Audit</button>
-                    <button class="david-qa-btn" onclick="DAVID.handleQA('Analyze competency distribution in my scope')">🎓 Competency Distribution</button>
-                    <button class="david-qa-btn" onclick="DAVID.handleQA('What are the most urgent tasks for me?')">📈 Priority Analysis</button>
-                </div>
-                <div class="david-messages-area" id="david-msgs">
-                    <div class="david-msg david-msg-ai fade-in">
-                        Greetings, ${user.name || 'Admin'}. I am DAVID, your Intelligence Assistant. I have indexed the SIPS platform data within your authorized scope. How can I assist you today?
+                <div class="david-layout">
+                    <div class="david-sessions-sidebar">
+                        <button class="david-new-chat-btn" id="david-new-chat">➕ New Chat</button>
+                        <div class="david-session-list" id="david-session-list">
+                            <!-- Sessions injected here -->
+                        </div>
                     </div>
-                </div>
-                <div class="david-footer">
-                    <div class="david-input-wrapper">
-                        <textarea placeholder="Ask DAVID about staff, reports, or belt progression..." id="david-query"></textarea>
-                        <button class="david-send-btn" id="david-btn">
-                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
-                        </button>
+                    <div class="david-main">
+                        <div class="david-chat-header">
+                            <h2><span style="font-size:24px">🧠</span> DAVID Intelligence Hub</h2>
+                            <p>Strategic Intelligence Dashboard &bull; Access Level: ${roleLabel}</p>
+                        </div>
+                        <div class="david-quick-actions" id="david-qa">
+                            <button class="david-qa-btn" onclick="DAVID.handleQA('Summarize authorized facility activity')">📊 Scope Audit</button>
+                            <button class="david-qa-btn" onclick="DAVID.handleQA('Analyze competency distribution in my scope')">🎓 Competency Distribution</button>
+                            <button class="david-qa-btn" onclick="DAVID.handleQA('What are the most urgent tasks for me?')">📈 Priority Analysis</button>
+                        </div>
+                        <div class="david-messages-area" id="david-msgs">
+                            <!-- Chat messages injected here -->
+                        </div>
+                        <div class="david-footer">
+                            <div class="david-input-wrapper">
+                                <textarea placeholder="Ask DAVID about staff, reports, or belt progression..." id="david-query"></textarea>
+                                <button class="david-send-btn" id="david-btn">
+                                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -340,6 +422,161 @@ class DavidChat {
             this.input.style.height = 'auto';
             this.input.style.height = (this.input.scrollHeight) + 'px';
         });
+
+        // Setup session UI bindings
+        const newChatBtn = container.querySelector('#david-new-chat');
+        if (newChatBtn) {
+            newChatBtn.onclick = () => this.createNewSession();
+        }
+
+        // Initialize Chat History from DB
+        this.loadSessions();
+    }
+
+    // --- DB Session Management ---
+
+    async loadSessions() {
+        if (!window.sbFetch || !window.SB_SESSION?.user?.id) {
+            this.renderGreetingOnly();
+            return;
+        }
+
+        try {
+            const uid = window.SB_SESSION.user.id;
+            const res = await window.sbFetch(\`/rest/v1/david_chat_sessions?user_id=eq.\${uid}&select=*&order=updated_at.desc\`);
+            if (res && res.length > 0) {
+                this.sessions = res;
+                this.currentSessionId = this.sessions[0].id;
+                this.history = this.sessions[0].messages || [];
+                this.renderSessionSidebar();
+                this.renderCurrentSessionMessages();
+            } else {
+                await this.createNewSession();
+            }
+        } catch (e) {
+            console.warn('[DAVID] Failed to load sessions:', e);
+            this.renderGreetingOnly();
+        }
+    }
+
+    async createNewSession(title = 'New Chat') {
+        if (!window.sbFetch || !window.SB_SESSION?.user?.id) {
+            this.history = [];
+            this.renderGreetingOnly();
+            return;
+        }
+        try {
+            const uid = window.SB_SESSION.user.id;
+            const res = await window.sbFetch('/rest/v1/david_chat_sessions', {
+                method: 'POST',
+                headers: { 'Prefer': 'return=representation' },
+                body: { user_id: uid, title: title, messages: [] }
+            });
+            if (res && res.length > 0) {
+                this.sessions.unshift(res[0]);
+                this.currentSessionId = res[0].id;
+                this.history = [];
+                this.renderSessionSidebar();
+                this.renderCurrentSessionMessages();
+            }
+        } catch (e) {
+            console.warn('[DAVID] Failed to create session:', e);
+        }
+    }
+
+    async saveSessionMessages(newTitle = null) {
+        if (!this.currentSessionId || !window.sbFetch) return;
+        const payload = { 
+            messages: this.history, 
+            updated_at: new Date().toISOString() 
+        };
+        
+        if (newTitle) payload.title = newTitle;
+
+        try {
+            await window.sbFetch(\`/rest/v1/david_chat_sessions?id=eq.\${this.currentSessionId}\`, {
+                method: 'PATCH',
+                body: payload
+            });
+            // Update local state sync
+            const s = this.sessions.find(s => s.id === this.currentSessionId);
+            if (s) {
+                s.messages = this.history;
+                if (newTitle) s.title = newTitle;
+                this.renderSessionSidebar(); // Refresh title if it changed
+            }
+        } catch (e) {
+            console.warn('[DAVID] Failed to sync session to DB:', e);
+        }
+    }
+
+    loadSession(sessionId) {
+        if (this.currentSessionId === sessionId) return;
+        const s = this.sessions.find(s => s.id === sessionId);
+        if (s) {
+            this.currentSessionId = s.id;
+            this.history = s.messages || [];
+            this.renderSessionSidebar();
+            this.renderCurrentSessionMessages();
+        }
+    }
+
+    renderSessionSidebar() {
+        const list = document.getElementById('david-session-list');
+        if (!list) return;
+        
+        list.innerHTML = '';
+        this.sessions.forEach(s => {
+            const div = document.createElement('div');
+            div.className = 'david-session-item' + (s.id === this.currentSessionId ? ' active' : '');
+            
+            // Format time natively
+            const date = new Date(s.created_at);
+            const timeStr = isNaN(date) ? '' : date.toLocaleDateString();
+
+            div.innerHTML = \`<div>\${s.title}</div><div style="font-size:10px; opacity:0.6; margin-top:2px;">\${timeStr}</div>\`;
+            div.onclick = () => this.loadSession(s.id);
+            list.appendChild(div);
+        });
+    }
+
+    renderCurrentSessionMessages() {
+        if (!this.msgArea) return;
+        this.msgArea.innerHTML = '';
+        
+        if (this.history.length === 0) {
+            this.renderGreetingOnly();
+            return;
+        }
+
+        this.history.forEach(msg => {
+            this.addParsedMessage(msg.content, msg.role);
+        });
+        this.msgArea.scrollTop = this.msgArea.scrollHeight;
+    }
+
+    renderGreetingOnly() {
+        if (!this.msgArea) return;
+        const user = (typeof ST !== 'undefined' && ST.user) ? ST.user : { name: 'Admin' };
+        this.msgArea.innerHTML = \`
+            <div class="david-msg david-msg-ai fade-in">
+                Greetings, \${user.name || 'Admin'}. I am DAVID, your Intelligence Assistant. I have indexed the SIPS platform data within your authorized scope. How can I assist you today?
+            </div>
+        \`;
+    }
+
+    addParsedMessage(text, role) {
+        const div = document.createElement('div');
+        div.className = \`david-msg david-msg-\${role} fade-in\`;
+        if (role === 'ai' && window.marked) {
+            div.innerHTML = marked.parse(text);
+        } else if (role === 'ai') {
+            div.innerHTML = text.replace(/\\n/g, '<br>');
+        } else {
+            div.innerText = text;
+        }
+        this.msgArea.appendChild(div);
+        this.msgArea.scrollTop = this.msgArea.scrollHeight;
     }
 
     handleQA(text) {
@@ -587,11 +824,19 @@ class DavidChat {
             }
 
             this.history.push({ role: 'user', content: text }, { role: 'assistant', content: fullContent });
-            if (this.history.length > 20) this.history = this.history.slice(-20);
+            if (this.history.length > 50) this.history = this.history.slice(-50);
             
             // Remove cursor after completion
             const cursor = msgDiv.querySelector('.david-cursor');
             if (cursor) cursor.remove();
+
+            // Sync to Database
+            let newTitle = null;
+            if (this.history.length === 2 && this.currentSessionId) {
+                // Generate a brief auto-title from the first user message
+                newTitle = text.length > 30 ? text.substring(0, 30) + '...' : text;
+            }
+            await this.saveSessionMessages(newTitle);
 
         } catch (e) {
             contentTarget.innerHTML = `<span style="color:var(--err)">Error: ${e.message}</span>`;
@@ -603,11 +848,7 @@ class DavidChat {
     }
 
     addMessage(text, role) {
-        const div = document.createElement('div');
-        div.className = `david-msg david-msg-${role} fade-in`;
-        div.innerText = text;
-        this.msgArea.appendChild(div);
-        this.msgArea.scrollTop = this.msgArea.scrollHeight;
+        this.addParsedMessage(text, role);
     }
 
     renderActionCard(payload) {
