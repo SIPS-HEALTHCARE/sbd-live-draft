@@ -671,7 +671,7 @@ class DavidChat {
         }));
         
         const detailedStaff = authorizedStaff.map(s => ({
-            name: s.n, belt: s.belt, facility_id: s.fid, role: s.role, promoReady: !!s.promo
+            name: `${s.first || ''} ${s.last || ''}`.trim(), belt: s.belt, facility_id: s.fid, role: s.role, promoReady: !!s.promo
         }));
 
         return `

@@ -78,7 +78,7 @@ serve(async (req) => {
             body: JSON.stringify({
                 model: 'anthropic/claude-3.7-sonnet',
                 messages,
-                max_tokens: 800,
+                max_tokens: 1500,
                 temperature: 0.7,
                 stream: true, // Enable streaming
             }),
