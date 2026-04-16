@@ -440,15 +440,59 @@ class DavidChat {
 
     // --- DB Session Management ---
 
+    getAuthContext() {
+        let token = null;
+        let uid = null;
+        
+        const _session = (typeof SB_SESSION !== 'undefined') ? SB_SESSION : (window.SB_SESSION || null);
+        if (_session && _session.access_token) {
+            token = _session.access_token;
+            uid = _session.user?.id;
+        }
+
+        if (!token) {
+            const raw = localStorage.getItem('sb-mhijaqahbceuahfzezbh-auth-token') || sessionStorage.getItem('sbd_session') || localStorage.getItem('sbd_session');
+            if (raw) {
+                try {
+                    const parsed = JSON.parse(raw);
+                    token = parsed.access_token || (parsed.session && parsed.session.access_token) || parsed.token || null;
+                    uid = parsed.user?.id || (parsed.session && parsed.session.user && parsed.session.user.id) || null;
+                } catch (e) {
+                    token = raw;
+                }
+            }
+        }
+        
+        if (token && !uid) {
+             try {
+                 const base64Url = token.split('.')[1];
+                 const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+                 const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+                 uid = JSON.parse(jsonPayload).sub;
+             } catch(e) {}
+        }
+        
+        if (token && uid && typeof window !== 'undefined') {
+            if (!window.SB_SESSION) window.SB_SESSION = {};
+            window.SB_SESSION.access_token = token;
+            if (!window.SB_SESSION.user) window.SB_SESSION.user = {};
+            window.SB_SESSION.user.id = uid;
+        }
+
+        return { token, uid };
+    }
+
     async loadSessions() {
-        if (!window.sbFetch || !window.SB_SESSION?.user?.id) {
+        const { uid, token } = this.getAuthContext();
+        if (!window.sbFetch || !uid) {
             this.renderGreetingOnly();
             return;
         }
 
         try {
-            const uid = window.SB_SESSION.user.id;
-            const res = await window.sbFetch(`/rest/v1/david_chat_sessions?user_id=eq.${uid}&select=*&order=updated_at.desc`);
+            const res = await window.sbFetch(`/rest/v1/david_chat_sessions?user_id=eq.${uid}&select=*&order=updated_at.desc`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
             if (res && res.length > 0) {
                 this.sessions = res;
                 this.currentSessionId = this.sessions[0].id;
@@ -465,16 +509,20 @@ class DavidChat {
     }
 
     async createNewSession(title = 'New Chat') {
-        if (!window.sbFetch || !window.SB_SESSION?.user?.id) {
+        if (this.btn && this.btn.disabled) return; // Prevent overwriting while streaming
+        const { uid, token } = this.getAuthContext();
+        if (!window.sbFetch || !uid) {
             this.history = [];
             this.renderGreetingOnly();
             return;
         }
         try {
-            const uid = window.SB_SESSION.user.id;
             const res = await window.sbFetch('/rest/v1/david_chat_sessions', {
                 method: 'POST',
-                headers: { 'Prefer': 'return=representation' },
+                headers: { 
+                    'Prefer': 'return=representation',
+                    'Authorization': `Bearer ${token}`
+                },
                 body: { user_id: uid, title: title, messages: [] }
             });
             if (res && res.length > 0) {
@@ -489,8 +537,11 @@ class DavidChat {
         }
     }
 
-    async saveSessionMessages(newTitle = null) {
-        if (!this.currentSessionId || !window.sbFetch) return;
+    async saveSessionMessages(newTitle = null, targetSessionId = null) {
+        const sessionIdToSave = targetSessionId || this.currentSessionId;
+        const { token } = this.getAuthContext();
+        if (!sessionIdToSave || !window.sbFetch || !token) return;
+        
         const payload = { 
             messages: this.history, 
             updated_at: new Date().toISOString() 
@@ -499,14 +550,15 @@ class DavidChat {
         if (newTitle) payload.title = newTitle;
 
         try {
-            await window.sbFetch(`/rest/v1/david_chat_sessions?id=eq.${this.currentSessionId}`, {
+            await window.sbFetch(`/rest/v1/david_chat_sessions?id=eq.${sessionIdToSave}`, {
                 method: 'PATCH',
+                headers: { 'Authorization': `Bearer ${token}` },
                 body: payload
             });
             // Update local state sync
-            const s = this.sessions.find(s => s.id === this.currentSessionId);
+            const s = this.sessions.find(s => s.id === sessionIdToSave);
             if (s) {
-                s.messages = this.history;
+                s.messages = [...this.history]; // Deep copy for memory safety
                 if (newTitle) s.title = newTitle;
                 this.renderSessionSidebar(); // Refresh title if it changed
             }
@@ -516,6 +568,7 @@ class DavidChat {
     }
 
     loadSession(sessionId) {
+        if (this.btn && this.btn.disabled) return; // Prevent corrupting chat history scope during active streams
         if (this.currentSessionId === sessionId) return;
         const s = this.sessions.find(s => s.id === sessionId);
         if (s) {
@@ -755,20 +808,17 @@ class DavidChat {
         this.msgArea.scrollTop = this.msgArea.scrollHeight;
 
         try {
-            const _session = (typeof SB_SESSION !== 'undefined') ? SB_SESSION : (window.SB_SESSION || null);
-            let token = _session ? _session.access_token : '';
+            const { token, uid } = this.getAuthContext();
+
             if (!token) {
-                // Strictly prioritize the native Supabase auth token over legacy buffers
-                const raw = localStorage.getItem('sb-mhijaqahbceuahfzezbh-auth-token') || sessionStorage.getItem('sbd_session') || localStorage.getItem('sbd_session');
-                if (raw) { 
-                    try { 
-                        const parsed = JSON.parse(raw);
-                        token = parsed.access_token || (parsed.session && parsed.session.access_token) || parsed;
-                    } catch(e) {
-                        console.error('Failed to parse auth token:', e);
-                    }
-                }
+                this.addParsedMessage("System Error: No authorization token found. Please re-authenticate.", "ai");
+                this.resetState();
+                return;
             }
+
+            // Capture the state immediately so this specific stream response isn't lost if UI resets.
+            const streamSessionId = this.currentSessionId;
+            const preStreamHistoryLengths = this.history.length;
 
             const snapshot = this.getPlatformSnapshot();
             const personality = `
@@ -852,23 +902,25 @@ class DavidChat {
                 }
             } finally {
                 buffer += decoder.decode();
-                // Ensure any trailing data gets parsed? Usually not needed if stream properly closed.
-            }
+                
+                // Remove cursor after completion
+                const cursor = msgDiv.querySelector('.david-cursor');
+                if (cursor) cursor.remove();
 
-            this.history.push({ role: 'user', content: text }, { role: 'assistant', content: fullContent });
-            if (this.history.length > 50) this.history = this.history.slice(-50);
-            
-            // Remove cursor after completion
-            const cursor = msgDiv.querySelector('.david-cursor');
-            if (cursor) cursor.remove();
+                // Final UI Update
+                this.history.push({ role: 'user', content: text }, { role: 'assistant', content: fullContent });
+                if (this.history.length > 50) this.history = this.history.slice(-50);
+                
+                // Re-render
+                this.renderCurrentSessionMessages();
 
-            // Sync to Database
-            let newTitle = null;
-            if (this.history.length === 2 && this.currentSessionId) {
-                // Generate a brief auto-title from the first user message
-                newTitle = text.length > 30 ? text.substring(0, 30) + '...' : text;
+                // Always save to the sessionId that was active when this stream commenced!
+                let newTitle = null;
+                if (preStreamHistoryLengths === 0 && streamSessionId) {
+                    newTitle = text.length > 30 ? text.substring(0, 30) + '...' : text;
+                }
+                await this.saveSessionMessages(newTitle, streamSessionId);
             }
-            await this.saveSessionMessages(newTitle);
 
         } catch (e) {
             contentTarget.innerHTML = `<span style="color:var(--err)">Error: ${e.message}</span>`;
