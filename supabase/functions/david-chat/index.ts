@@ -1,5 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.6';
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -38,19 +38,14 @@ serve(async (req) => {
             throw new Error('Unauthorized');
         }
 
-        const { data: profile, error: profileErr } = await supabase
-            .from('sbd_portal_users')
-            .select('role, name, facility_id')
+        const { data: profile } = await supabase.from('sbd_portal_users')
+            .select('*')
             .eq('auth_uid', user.id)
             .single();
 
-        if (profileErr || !profile) {
-            console.error(`[DAVID] Profile: ${profileErr?.message || 'Not found'}`);
-            throw new Error('Unauthorized: User profile not found.');
-        }
-
-        if (profile.role !== 'master_admin') {
-            throw new Error('Access Restricted: DAVID is only available to master_admin accounts.');
+        if (!profile || profile.role !== 'master_admin') {
+            console.error(`[DAVID] Blocked: ${user.email} is role: ${profile?.role}`);
+            throw new Error('Restricted to Master Admin accounts only.');
         }
 
         console.log(`[DAVID] ${user.email} (${profile.role}) → calling OpenRouter`);
@@ -81,9 +76,9 @@ serve(async (req) => {
                 'X-Title': 'DAVID Intelligence - SBD Belt Platform',
             },
             body: JSON.stringify({
-                model: 'anthropic/claude-3.5-sonnet',
+                model: 'anthropic/claude-3.7-sonnet',
                 messages,
-                max_tokens: 4096,
+                max_tokens: 800,
                 temperature: 0.7,
                 stream: true, // Enable streaming
             }),
@@ -112,12 +107,16 @@ serve(async (req) => {
                     return;
                 }
 
+                const utf8Decoder = new TextDecoder('utf-8');
+                let buffer = '';
+
                 while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
 
-                    const chunk = new TextDecoder().decode(value);
-                    const lines = chunk.split('\n');
+                    buffer += utf8Decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
 
                     for (const line of lines) {
                         if (line.startsWith('data: ')) {
@@ -132,11 +131,12 @@ serve(async (req) => {
                                     await writer.write(encoder.encode(`data: ${JSON.stringify({ text: content })}\n\n`));
                                 }
                             } catch (e) {
-                                // Silent skip for partial JSON
+                                // Mismatched or partial json string, silently ignore for now
                             }
                         }
                     }
                 }
+
 
                 // Append [DONE] signal
                 await writer.write(encoder.encode('data: [DONE]\n\n'));

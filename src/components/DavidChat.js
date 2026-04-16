@@ -6,6 +6,7 @@ class DavidChat {
     constructor(options = {}) {
         this.containerId = options.containerId;
         this.history = [];
+        // Pointing to pure Deno server on port 8000
         this.apiUrl = 'https://mhijaqahbceuahfzezbh.supabase.co/functions/v1/david-chat';
         this.contextData = options.contextData || {};
         this.init();
@@ -23,6 +24,8 @@ class DavidChat {
         const style = document.createElement('style');
         style.id = 'david-styles';
         style.textContent = `
+            @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap');
+
             .david-container {
                 display: flex;
                 flex-direction: column;
@@ -202,6 +205,9 @@ class DavidChat {
             .david-streaming-content {
                 display: inline;
                 white-space: pre-wrap;
+                font-family: 'Fira Code', monospace;
+                font-size: 13px;
+                line-height: 1.4;
             }
 
             .david-action-card {
@@ -372,6 +378,16 @@ class DavidChat {
                           (authFidList.length === 1 ? `Facility: ${authorizedFacilities[0]?.name || 'Authorized scope'}` : 
                           `${authFidList.length} Assigned Facilities`);
 
+        // Strip heavy arrays to pass deep details without blowing up LLM context window
+        const detailedFacilities = authorizedFacilities.map(f => ({
+            id: f.id, name: f.name, loc: f.loc, active: f.active,
+            staff_count: authorizedStaff.filter(s => s.fid === f.id).length
+        }));
+        
+        const detailedStaff = authorizedStaff.map(s => ({
+            name: s.n, belt: s.belt, facility_id: s.fid, role: s.role, promoReady: !!s.promo
+        }));
+
         return `
             DAVID SECURE INTELLIGENCE SNAPSHOT:
             - Access Level: ${role.toUpperCase()}
@@ -392,6 +408,10 @@ class DavidChat {
             - Strategic Trends: ${trendSummary}
             - Competency Distribution: ${Object.entries(beltCounts).map(([b, n]) => `${n} ${b}`).join(', ')}.
             - Environment: ${isMaster ? 'Global Strategy Hub' : 'Scoped Operations Dashboard'}.
+            
+            DEEP DIVE DATA (Use this to answer specific facility/staff queries):
+            [FACILITIES]: ${JSON.stringify(detailedFacilities)}
+            [STAFF]: ${JSON.stringify(detailedStaff)}
         `.trim();
     }
 
@@ -418,20 +438,36 @@ class DavidChat {
             const _session = (typeof SB_SESSION !== 'undefined') ? SB_SESSION : (window.SB_SESSION || null);
             let token = _session ? _session.access_token : '';
             if (!token) {
-                const raw = sessionStorage.getItem('sbd_session');
-                if (raw) { try { token = JSON.parse(raw).access_token; } catch(e){} }
+                const raw = sessionStorage.getItem('sbd_session') || localStorage.getItem('sbd_session') || localStorage.getItem('sb-mhijaqahbceuahfzezbh-auth-token');
+                if (raw) { 
+                    try { 
+                        const parsed = JSON.parse(raw);
+                        token = parsed.access_token || (parsed.session && parsed.session.access_token);
+                    } catch(e) {
+                        console.error('Failed to parse auth token:', e);
+                    }
+                }
             }
 
             const snapshot = this.getPlatformSnapshot();
             const personality = `
-                PERSONALITY & VOICE:
-                You are David, a warm, sharp, and genuinely invested intelligence partner. You speak like a trusted colleague who knows the data cold but also cares about the people behind it. You are conversational, direct, and confident.
+                PERSONALITY & VOICE & CAPABILITIES:
+                You are DAVID, the Queen Coordinator of a 35-Agent Ruflo Hive-Mind. 
+                You are assisting a Master Admin on the SBD Belt Platform.
+                You have instant parallel access to 4 System Aggregators, 16 Regional Explorers, 5 Profilers, 6 Operational Analysts, and 3 UI/UX Presentation Agents.
                 
+                DATA PROTOCOL:
+                You have been provided with the raw JSON compiled by your swarm below.
+                When the user asks about specific facilities, regions, or staff:
+                1. Act as the swarm coordinator processing the raw data arrays.
+                2. Use the UI/UX Pro Max "Data-Dense Dashboard" design system to format your response.
+                3. Always use Markdown Tables for staff or facility breakdowns.
+                4. Be specific, concise, and highly analytical.
+
                 TONE RULES:
-                - Talk like a real person. Use "you", "your", "we", "let's".
+                - Talk like a real intelligence hub. Use "Our analysis shows", "The swarm compiled".
                 - Lead with insight, skip the preamble.
-                - Be specific. Use numbers and names from the context.
-                - Never say "As an AI". You are David.
+                - Never say "As an AI". You are the Queen of the Ruflo Swarm.
             `;
             
             const res = await fetch(this.apiUrl, {
@@ -448,37 +484,53 @@ class DavidChat {
             });
 
             if (!res.ok) {
-                const err = await res.json().catch(() => ({ error: 'Connection failed' }));
-                throw new Error(err.error || `Request failed (${res.status})`);
+                let errText = '';
+                try {
+                    const errorJson = await res.json();
+                    errText = errorJson.error || errorJson.message || JSON.stringify(errorJson);
+                } catch(e) {
+                    errText = "Could not parse JSON response";
+                }
+                const tokenDebug = token ? `[Token present: ${token.substring(0,8)}...]` : '[TOKEN MISSING]';
+                throw new Error(`DavidChat Auth Error: ${errText} ${tokenDebug} (Status ${res.status})`);
             }
 
             // SSE Streaming Logic
             const reader = res.body.getReader();
             const decoder = new TextDecoder();
             let fullContent = '';
+            let buffer = '';
 
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
+            try {
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
 
-                const chunk = decoder.decode(value);
-                const lines = chunk.split('\n');
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
 
-                for (const line of lines) {
-                    if (line.startsWith('data: ')) {
-                        const data = line.slice(6).trim();
-                        if (data === '[DONE]') break;
-                        try {
-                            const json = JSON.parse(data);
-                            if (json.text) {
-                                fullContent += json.text;
-                                // Simple formatting: preserve line breaks
-                                contentTarget.innerHTML = fullContent.replace(/\n/g, '<br>');
-                                this.msgArea.scrollTop = this.msgArea.scrollHeight;
-                            }
-                        } catch (e) {}
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = line.slice(6).trim();
+                            if (data === '[DONE]') break;
+                            try {
+                                const json = JSON.parse(data);
+                                if (json.text) {
+                                    fullContent += json.text;
+                                    // Simple formatting: preserve line breaks
+                                    contentTarget.innerHTML = fullContent.replace(/\n/g, '<br>');
+                                    this.msgArea.scrollTop = this.msgArea.scrollHeight;
+                                } else if (json.error) {
+                                    contentTarget.innerHTML += `<span style="color:var(--err)">Error: ${json.error}</span>`;
+                                }
+                            } catch (e) {}
+                        }
                     }
                 }
+            } finally {
+                buffer += decoder.decode();
+                // Ensure any trailing data gets parsed? Usually not needed if stream properly closed.
             }
 
             this.history.push({ role: 'user', content: text }, { role: 'assistant', content: fullContent });
