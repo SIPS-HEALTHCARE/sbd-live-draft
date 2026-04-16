@@ -442,7 +442,7 @@ class DavidChat {
 
         try {
             const uid = window.SB_SESSION.user.id;
-            const res = await window.sbFetch(\`/rest/v1/david_chat_sessions?user_id=eq.\${uid}&select=*&order=updated_at.desc\`);
+            const res = await window.sbFetch(`/rest/v1/david_chat_sessions?user_id=eq.${uid}&select=*&order=updated_at.desc`);
             if (res && res.length > 0) {
                 this.sessions = res;
                 this.currentSessionId = this.sessions[0].id;
@@ -493,7 +493,7 @@ class DavidChat {
         if (newTitle) payload.title = newTitle;
 
         try {
-            await window.sbFetch(\`/rest/v1/david_chat_sessions?id=eq.\${this.currentSessionId}\`, {
+            await window.sbFetch(`/rest/v1/david_chat_sessions?id=eq.${this.currentSessionId}`, {
                 method: 'PATCH',
                 body: payload
             });
@@ -533,7 +533,7 @@ class DavidChat {
             const date = new Date(s.created_at);
             const timeStr = isNaN(date) ? '' : date.toLocaleDateString();
 
-            div.innerHTML = \`<div>\${s.title}</div><div style="font-size:10px; opacity:0.6; margin-top:2px;">\${timeStr}</div>\`;
+            div.innerHTML = `<div>${s.title}</div><div style="font-size:10px; opacity:0.6; margin-top:2px;">${timeStr}</div>`;
             div.onclick = () => this.loadSession(s.id);
             list.appendChild(div);
         });
@@ -557,16 +557,16 @@ class DavidChat {
     renderGreetingOnly() {
         if (!this.msgArea) return;
         const user = (typeof ST !== 'undefined' && ST.user) ? ST.user : { name: 'Admin' };
-        this.msgArea.innerHTML = \`
+        this.msgArea.innerHTML = `
             <div class="david-msg david-msg-ai fade-in">
-                Greetings, \${user.name || 'Admin'}. I am DAVID, your Intelligence Assistant. I have indexed the SIPS platform data within your authorized scope. How can I assist you today?
+                Greetings, ${user.name || 'Admin'}. I am DAVID, your Intelligence Assistant. I have indexed the SIPS platform data within your authorized scope. How can I assist you today?
             </div>
-        \`;
+        `;
     }
 
     addParsedMessage(text, role) {
         const div = document.createElement('div');
-        div.className = \`david-msg david-msg-\${role} fade-in\`;
+        div.className = `david-msg david-msg-${role} fade-in`;
         if (role === 'ai' && window.marked) {
             div.innerHTML = marked.parse(text);
         } else if (role === 'ai') {
