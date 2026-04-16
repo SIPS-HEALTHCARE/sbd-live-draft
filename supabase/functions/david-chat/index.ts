@@ -137,7 +137,6 @@ serve(async (req) => {
                     }
                 }
 
-
                 // Append [DONE] signal
                 await writer.write(encoder.encode('data: [DONE]\n\n'));
 
@@ -169,17 +168,10 @@ serve(async (req) => {
         });
 
     } catch (err: any) {
-        const errorMessage = err.message || 'An unexpected error occurred.';
-        const isUnauthorized = errorMessage.includes('Unauthorized') || errorMessage.includes('Restricted');
-        
-        return new Response(JSON.stringify({ 
-            success: false,
-            error: errorMessage,
-            code: isUnauthorized ? 401 : 400,
-            timestamp: new Date().toISOString()
-        }), {
-            status: isUnauthorized ? 401 : 400,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        console.error('[DAVID] Edge Function Error:', err);
+        return new Response(JSON.stringify({ error: err.message }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
     }
 });
