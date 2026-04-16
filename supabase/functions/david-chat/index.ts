@@ -252,8 +252,21 @@ serve(async (req) => {
                     const parsedArgs = JSON.parse(currentToolCallArgs);
                     if (currentToolCallName === 'execute_database_sql') {
                         queryAttempted = parsedArgs.query;
-                        // Let user know he's executing
-                        await writer.write(encoder.encode(`data: ${JSON.stringify({ text: `\n\n> **[DAVID SUPREME]** Executing internal protocol: \`${currentToolCallName}\`\n> \`\`\`sql\n> ${queryAttempted}\n> \`\`\`\n\n` })}\n\n`));
+                        
+                        // Extract target table for conversational output
+                        let targetTable = "the database";
+                        const match = queryAttempted.match(/FROM\s+([a-zA-Z0-9_\.]+)/i);
+                        if (match && match[1]) targetTable = `the \`${match[1]}\` data`;
+
+                        const friendlyMessages = [
+                            `*Digging into ${targetTable}...*`,
+                            `*Checking ${targetTable} real quick...*`,
+                            `*Pulling records from ${targetTable}...*`
+                        ];
+                        const text = friendlyMessages[Math.floor(Math.random() * friendlyMessages.length)];
+
+                        // Let user know he's executing conversationally, while still showing the SQL in Markdown if they want to peek.
+                        await writer.write(encoder.encode(`data: ${JSON.stringify({ text: `\n\n> \u231B ${text}\n> \`\`\`sql\n> ${queryAttempted}\n> \`\`\`\n\n` })}\n\n`));
                         
                         toolResult = await executeAdminSql(supabase, queryAttempted);
                     } else {
