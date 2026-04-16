@@ -86,12 +86,32 @@ class DavidChat {
                 cursor: pointer;
                 font-size: 13px;
                 color: var(--txt);
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
                 background: transparent;
                 transition: background 0.2s, color 0.2s;
                 border: 1px solid transparent;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+            }
+            .david-session-item-content {
+                flex: 1;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .david-session-delete {
+                opacity: 0;
+                transition: opacity 0.2s, color 0.2s;
+                font-size: 14px;
+                padding: 4px;
+            }
+            .david-session-item:hover .david-session-delete {
+                opacity: 0.5;
+            }
+            .david-session-delete:hover {
+                opacity: 1 !important;
+                color: #ff4444;
             }
             .david-session-item:hover {
                 background: rgba(255,255,255,0.03);
@@ -592,10 +612,51 @@ class DavidChat {
             const date = new Date(s.created_at);
             const timeStr = isNaN(date) ? '' : date.toLocaleDateString();
 
-            div.innerHTML = `<div>${s.title}</div><div style="font-size:10px; opacity:0.6; margin-top:2px;">${timeStr}</div>`;
+            div.innerHTML = `
+                <div class="david-session-item-content">
+                    <div>${s.title}</div>
+                    <div style="font-size:10px; opacity:0.6; margin-top:2px;">${timeStr}</div>
+                </div>
+                <div class="david-session-delete" title="Delete session">🗑️</div>
+            `;
+            
             div.onclick = () => this.loadSession(s.id);
+            
+            const delBtn = div.querySelector('.david-session-delete');
+            delBtn.onclick = (e) => {
+                e.stopPropagation();
+                this.deleteSession(s.id);
+            };
+            
             list.appendChild(div);
         });
+    }
+
+    async deleteSession(sessionId) {
+        if (!confirm('Are you sure you want to delete this chat history?')) return;
+        
+        const auth = this.getAuthContext();
+        if (!auth.token) return;
+
+        try {
+            await window.sbFetch(`david_chat_sessions?id=eq.${sessionId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${auth.token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            this.sessions = this.sessions.filter(s => s.id !== sessionId);
+            this.renderSessionSidebar();
+            
+            if (this.currentSessionId === sessionId) {
+                this.createNewSession();
+            }
+        } catch (e) {
+            console.error('[DAVID] Delete failed:', e);
+            alert('Failed to delete chat session.');
+        }
     }
 
     renderCurrentSessionMessages() {
