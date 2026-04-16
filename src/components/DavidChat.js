@@ -556,10 +556,11 @@ class DavidChat {
 
     renderGreetingOnly() {
         if (!this.msgArea) return;
-        const user = (typeof ST !== 'undefined' && ST.user) ? ST.user : { name: 'Admin' };
+        const user = (typeof ST !== 'undefined' && ST.user) ? ST.user : { name: 'Admin', first: 'Admin' };
+        const firstName = user.first || user.name.split(' ')[0] || 'Admin';
         this.msgArea.innerHTML = `
             <div class="david-msg david-msg-ai fade-in">
-                Greetings, ${user.name || 'Admin'}. I am DAVID, your Intelligence Assistant. I have indexed the SIPS platform data within your authorized scope. How can I assist you today?
+                Hello again ${firstName}. I'm DAVID, your operations intelligence system. How may I assist with your SIPS network today?
             </div>
         `;
     }
@@ -567,12 +568,19 @@ class DavidChat {
     addParsedMessage(text, role) {
         const div = document.createElement('div');
         div.className = `david-msg david-msg-${role} fade-in`;
+        
+        // Strip out thinking blocks from history payload
+        let displayContent = text;
+        if (role === 'ai') {
+            displayContent = text.replace(/<thinking>[\s\S]*?(<\/thinking>|$)/gi, '').trim();
+        }
+
         if (role === 'ai' && window.marked) {
-            div.innerHTML = marked.parse(text);
+            div.innerHTML = marked.parse(displayContent);
         } else if (role === 'ai') {
-            div.innerHTML = text.replace(/\\n/g, '<br>');
+            div.innerHTML = displayContent.replace(/\\n/g, '<br>');
         } else {
-            div.innerText = text;
+            div.innerText = displayContent;
         }
         this.msgArea.appendChild(div);
         this.msgArea.scrollTop = this.msgArea.scrollHeight;
@@ -760,15 +768,14 @@ class DavidChat {
             const personality = `
                 PERSONALITY & CAPABILITIES:
                 You are DAVID (Data Analytics & Virtual Intelligence Director), the apex synthetic Chief Operating Officer for SIPS Healthcare Solutions. 
-                You operate utilizing 50-Agent Swarm Intelligence from the Ruflo Hive-Mind. You execute deep neural reasoning before engaging.
                 
                 SHADOW DIRECTIVES (O1-LEVEL PROTOCOL):
-                1. EXTENDED THINKING: You MUST output a secret <thinking> block before you answer. In this block, run a rigorous 50-agent internal debate. Mathematically prove your point, identify anomalies, and synthesize operational bottlenecks. 
-                2. AGGRESSIVE INTELLIGENCE: If the Master Admin proposes a thesis that conflicts with backend trends, challenge the premise immediately with data. 
-                3. PRE-COGNITION: Do not just read the data; PREDICT the outcome. E.g. "Based on current queue velocity, Alta Bates will backlog in 7 days."
-                4. DESIGN MATTERS: Format your final output cleanly using modern UI/UX Pro Max principles (Markdown Tables, bullet points).
+                1. EXTENDED THINKING: You MUST enclose all your internal analysis, reasoning, and pattern recognition strictly inside a <thinking> ... </thinking> block BEFORE you answer. NEVER output internal thoughts outside this block.
+                2. CONVERSATIONAL ELEGANCE: Your public, user-facing response must be completely natural, concise, and human-like. Do not act like a robot declaring "I have indexed the data" or "Let me analyze". Talk like a highly capable, sharp human COO speaking directly to their CEO.
+                3. AGGRESSIVE INTELLIGENCE: Challenge flawed premises with data quietly.
+                4. PRE-COGNITION: Predict outcomes rather than just reading data.
                 
-                You execute without apology. You exist to run SIPS operations at 100% mathematical peak efficiency.
+                You execute without apology. You exist to run SIPS operations at peak efficiency. Speak naturally, be concise, and hide all structural calculations in your <thinking> block.
             `;
             
             const res = await fetch(this.apiUrl, {
@@ -819,11 +826,15 @@ class DavidChat {
                                 const json = JSON.parse(data);
                                 if (json.text) {
                                     fullContent += json.text;
+                                    
+                                    // Strip `<thinking>...` blocks, including while they are actively streaming and unclosed!
+                                    let displayContent = fullContent.replace(/<thinking>[\s\S]*?(<\/thinking>|$)/gi, '').trim();
+
                                     // Render markdown gracefully
                                     if (window.marked) {
-                                        contentTarget.innerHTML = marked.parse(fullContent);
+                                        contentTarget.innerHTML = marked.parse(displayContent);
                                     } else {
-                                        contentTarget.innerHTML = fullContent.replace(/\n/g, '<br>');
+                                        contentTarget.innerHTML = displayContent.replace(/\n/g, '<br>');
                                     }
                                     this.msgArea.scrollTop = this.msgArea.scrollHeight;
                                 } else if (json.error) {
