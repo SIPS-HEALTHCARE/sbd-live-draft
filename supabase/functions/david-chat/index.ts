@@ -147,8 +147,8 @@ serve(async (req) => {
 
         // Internal recursive async loop
         async function runAutonomousLoop(messageChain: any[], depth: number = 0) {
-            if (depth > 4) {
-                await writer.write(encoder.encode(`data: ${JSON.stringify({ text: "\n\n[DAVID] Auto-halted tool execution to prevent recursion lock." })}\n\n`));
+            if (depth > 6) {
+                await writer.write(encoder.encode(`data: ${JSON.stringify({ text: "\n\n> **[DAVID]** Auto-halted tool execution to prevent recursion lock." })}\n\n`));
                 return;
             }
 
@@ -187,6 +187,7 @@ serve(async (req) => {
             let currentToolCallName = '';
             let currentToolCallArgs = '';
             let isUsingTool = false;
+            let currentTurnText = '';
 
             while (true) {
                 const { done, value } = await reader.read();
@@ -208,6 +209,7 @@ serve(async (req) => {
                             // Handle standard text content
                             if (delta?.content && typeof delta.content === 'string') {
                                 fullContent += delta.content;
+                                currentTurnText += delta.content;
                                 await writer.write(encoder.encode(`data: ${JSON.stringify({ text: delta.content })}\n\n`));
                             }
                             
@@ -230,12 +232,12 @@ serve(async (req) => {
             // Stream iteration finished. Did he use a tool?
             if (isUsingTool && currentToolCallName) {
                 // Let user know he's executing
-                await writer.write(encoder.encode(`data: ${JSON.stringify({ text: `\n\n<thinking>Executing internal protocol: ${currentToolCallName}...</thinking>\n\n` })}\n\n`));
+                await writer.write(encoder.encode(`data: ${JSON.stringify({ text: `\n\n> **[DAVID SUPREME]** Executing internal protocol: \`${currentToolCallName}\`...\n\n` })}\n\n`));
                 
                 // Track assistant action
                 messageChain.push({
                     role: "assistant",
-                    content: null,
+                    content: currentTurnText || null,
                     tool_calls: [{
                         id: currentToolCallId,
                         type: "function",
