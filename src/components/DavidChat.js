@@ -628,10 +628,13 @@ class DavidChat {
         const div = document.createElement('div');
         div.className = `david-msg david-msg-${role} fade-in`;
         
-        // Strip out thinking blocks from history payload
+        // Strip out thinking blocks from history payload (handling escaped and markdown wrapper versions)
         let displayContent = text;
         if (role === 'ai') {
-            displayContent = text.replace(/<thinking>[\s\S]*?(<\/thinking>|$)/gi, '').trim();
+            displayContent = text
+                .replace(/```[A-Za-z]*\s*(<|&lt;)thinking(>|&gt;)[\s\S]*?(<\/|&lt;\/)thinking(>|&gt;|$)\s*```/gi, '')
+                .replace(/(<|&lt;)thinking(>|&gt;)[\s\S]*?(<\/|&lt;\/)thinking(>|&gt;|$)/gi, '')
+                .trim();
         }
 
         if (role === 'ai' && window.marked) {
@@ -883,8 +886,10 @@ class DavidChat {
                                 if (json.text) {
                                     fullContent += json.text;
                                     
-                                    // Strip `<thinking>...` blocks, including while they are actively streaming and unclosed!
-                                    let displayContent = fullContent.replace(/<thinking>[\s\S]*?(<\/thinking>|$)/gi, '').trim();
+                                    let displayContent = fullContent
+                                        .replace(/```[A-Za-z]*\s*(<|&lt;)thinking(>|&gt;)[\s\S]*?(<\/|&lt;\/)thinking(>|&gt;|$)\s*```/gi, '')
+                                        .replace(/(<|&lt;)thinking(>|&gt;)[\s\S]*?(<\/|&lt;\/)thinking(>|&gt;|$)/gi, '')
+                                        .trim();
 
                                     // Render markdown gracefully
                                     if (window.marked) {
