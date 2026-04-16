@@ -625,21 +625,24 @@ class DavidChat {
     }
 
     addParsedMessage(text, role) {
+        // OpenRouter uses 'assistant', map it back to CSS/logic 'ai'
+        const formatRole = (role === 'assistant') ? 'ai' : role;
+        
         const div = document.createElement('div');
-        div.className = `david-msg david-msg-${role} fade-in`;
+        div.className = `david-msg david-msg-${formatRole} fade-in`;
         
         // Strip out thinking blocks from history payload (handling escaped and markdown wrapper versions)
         let displayContent = text;
-        if (role === 'ai') {
+        if (formatRole === 'ai') {
             displayContent = text
                 .replace(/```[A-Za-z]*\s*(<|&lt;)thinking(>|&gt;)[\s\S]*?(<\/|&lt;\/)thinking(>|&gt;|$)\s*```/gi, '')
                 .replace(/(<|&lt;)thinking(>|&gt;)[\s\S]*?(<\/|&lt;\/)thinking(>|&gt;|$)/gi, '')
                 .trim();
         }
 
-        if (role === 'ai' && window.marked) {
+        if (formatRole === 'ai' && window.marked) {
             div.innerHTML = marked.parse(displayContent);
-        } else if (role === 'ai') {
+        } else if (formatRole === 'ai') {
             div.innerHTML = displayContent.replace(/\\n/g, '<br>');
         } else {
             div.innerText = displayContent;
