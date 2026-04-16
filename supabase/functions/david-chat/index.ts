@@ -50,12 +50,41 @@ serve(async (req) => {
 
         console.log(`[DAVID] ${user.email} (${profile.role}) → calling OpenRouter`);
 
+        // 1.5 Fetch recent self-learning memories from the Hive-Mind
+        let memoryInjection = "";
+        try {
+            const { data: memories } = await supabase
+                .from('assistant_memory')
+                .select('raw_interaction, created_at')
+                .eq('user_id', user.id)
+                .order('created_at', { ascending: false })
+                .limit(4);
+
+            if (memories && memories.length > 0) {
+                // Reverse to chronological order
+                const recentMemories = memories.reverse()
+                    .filter(m => m.raw_interaction && m.raw_interaction.query)
+                    .map(m => `User: "${m.raw_interaction.query}"\nYour Past Decision: "${m.raw_interaction.response.substring(0, 150)}..."`)
+                    .join('\n\n');
+                
+                if (recentMemories) {
+                    memoryInjection = `
+RETAINED SWARM MEMORIES (Your most recent continuous learning decisions):
+${recentMemories}
+Extract meta-insights from these past interactions to ensure you do not repeat yourself and that you build continuously on past conclusions.
+`;
+                }
+            }
+        } catch (e) {
+            console.error('[DAVID] Memory load failed:', e);
+        }
+
         // 2. Build messages for Claude via OpenRouter
         const messages: Array<{role: string, content: string}> = [];
         
         // Add system prompt if provided
         if (systemPrompt) {
-            messages.push({ role: 'system', content: systemPrompt });
+            messages.push({ role: 'system', content: systemPrompt + '\n' + memoryInjection });
         }
 
         // Add conversation history
