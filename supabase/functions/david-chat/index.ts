@@ -147,7 +147,7 @@ serve(async (req) => {
 
         // Internal recursive async loop
         async function runAutonomousLoop(messageChain: any[], depth: number = 0) {
-            if (depth > 6) {
+            if (depth > 12) {
                 await writer.write(encoder.encode(`data: ${JSON.stringify({ text: "\n\n> **[DAVID]** Auto-halted tool execution to prevent recursion lock." })}\n\n`));
                 return;
             }
@@ -231,8 +231,6 @@ serve(async (req) => {
 
             // Stream iteration finished. Did he use a tool?
             if (isUsingTool && currentToolCallName) {
-                // Let user know he's executing
-                await writer.write(encoder.encode(`data: ${JSON.stringify({ text: `\n\n> **[DAVID SUPREME]** Executing internal protocol: \`${currentToolCallName}\`...\n\n` })}\n\n`));
                 
                 // Track assistant action
                 messageChain.push({
@@ -249,16 +247,25 @@ serve(async (req) => {
                 });
 
                 let toolResult = "";
+                let queryAttempted = "";
                 try {
                     const parsedArgs = JSON.parse(currentToolCallArgs);
                     if (currentToolCallName === 'execute_database_sql') {
-                        toolResult = await executeAdminSql(supabase, parsedArgs.query);
+                        queryAttempted = parsedArgs.query;
+                        // Let user know he's executing
+                        await writer.write(encoder.encode(`data: ${JSON.stringify({ text: `\n\n> **[DAVID SUPREME]** Executing internal protocol: \`${currentToolCallName}\`\n> \`\`\`sql\n> ${queryAttempted}\n> \`\`\`\n\n` })}\n\n`));
+                        
+                        toolResult = await executeAdminSql(supabase, queryAttempted);
                     } else {
                         toolResult = JSON.stringify({ error: 'Unknown tool requested.' });
                     }
                 } catch (err: any) {
                     toolResult = JSON.stringify({ error: err.message });
                 }
+
+                // Show user the result preview
+                const snippet = toolResult.substring(0, 150).replace(/\n/g, ' ');
+                await writer.write(encoder.encode(`data: ${JSON.stringify({ text: `> *Result preview: ${snippet}...*\n\n` })}\n\n`));
 
                 messageChain.push({
                     role: "tool",
