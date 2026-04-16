@@ -744,11 +744,12 @@ class DavidChat {
             const _session = (typeof SB_SESSION !== 'undefined') ? SB_SESSION : (window.SB_SESSION || null);
             let token = _session ? _session.access_token : '';
             if (!token) {
-                const raw = sessionStorage.getItem('sbd_session') || localStorage.getItem('sbd_session') || localStorage.getItem('sb-mhijaqahbceuahfzezbh-auth-token');
+                // Strictly prioritize the native Supabase auth token over legacy buffers
+                const raw = localStorage.getItem('sb-mhijaqahbceuahfzezbh-auth-token') || sessionStorage.getItem('sbd_session') || localStorage.getItem('sbd_session');
                 if (raw) { 
                     try { 
                         const parsed = JSON.parse(raw);
-                        token = parsed.access_token || (parsed.session && parsed.session.access_token);
+                        token = parsed.access_token || (parsed.session && parsed.session.access_token) || parsed;
                     } catch(e) {
                         console.error('Failed to parse auth token:', e);
                     }
