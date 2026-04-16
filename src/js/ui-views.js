@@ -664,6 +664,13 @@ const adminStaffFilter = {
   q:    '',
   initFromUrl() {
     try {
+      const saved = localStorage.getItem('sbd_admin_filter');
+      if (saved) {
+        const p = JSON.parse(saved);
+        if(p.belt !== undefined) this.belt = p.belt;
+        if(p.fid !== undefined) this.fid = p.fid;
+        if(p.q !== undefined) this.q = p.q;
+      }
       const p = new URLSearchParams(window.location.search);
       if(p.has('f_belt')) this.belt = p.get('f_belt');
       if(p.has('f_fid')) this.fid = p.get('f_fid');
@@ -677,6 +684,7 @@ const adminStaffFilter = {
       if(this.fid !== 'all') url.searchParams.set('f_fid', this.fid); else url.searchParams.delete('f_fid');
       if(this.q !== '') url.searchParams.set('f_q', this.q); else url.searchParams.delete('f_q');
       window.history.replaceState(window.history.state, '', url);
+      localStorage.setItem('sbd_admin_filter', JSON.stringify({belt:this.belt, fid:this.fid, q:this.q}));
     } catch(e) {}
   },
   reset(){ this.belt='All'; this.fid='all'; this.q=''; this.syncToUrl(); }
@@ -8803,10 +8811,11 @@ function scoreboardRankBadge(i){
   if(i===2) return `<div style="width:28px;height:28px;border-radius:50%;background:rgba(194,119,42,.15);border:2px solid #c2772a;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#c2772a">3</div>`;
   return `<div style="width:28px;height:28px;border-radius:50%;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--txt3)">${i+1}</div>`;
 }
-window._sbSort = { col: 'Rank', dir: 1 };
+window._sbSort = (()=>{try{const s=localStorage.getItem('sbd_sb_sort');return s?JSON.parse(s):{col:'Rank',dir:1}}catch(e){return{col:'Rank',dir:1}}})();
 function setScoreboardSort(c) {
   if (window._sbSort.col === c) window._sbSort.dir *= -1;
   else { window._sbSort.col = c; window._sbSort.dir = c==='Name'||c==='Facility'?1:-1; }
+  try { localStorage.setItem('sbd_sb_sort', JSON.stringify(window._sbSort)); } catch(e){}
   
   if (typeof ST !== 'undefined') {
     if (ST.portal === 'a' && ST.aView === 'a-scoreboard') {
@@ -9146,10 +9155,11 @@ function renderHScoreboard(){
 
 
 // ============================================================ A ALL STAFF (network-level filtered roster)
-const adminStaffSort = { col: 'Points', dir: -1 };
+const adminStaffSort = (()=>{try{const s=localStorage.getItem('sbd_admin_sort');return s?JSON.parse(s):{col:'Points',dir:-1}}catch(e){return{col:'Points',dir:-1}}})();
 function setAAllStaffSort(c) { 
   if(adminStaffSort.col===c) adminStaffSort.dir *= -1;
   else { adminStaffSort.col=c; adminStaffSort.dir=c==='Name'||c==='Facility'?1:-1; }
+  try { localStorage.setItem('sbd_admin_sort', JSON.stringify(adminStaffSort)); } catch(e){}
   renderAAllStaff();
 }
 
@@ -9233,8 +9243,8 @@ function renderAAllStaff(){
             case 'Role': return (a.role||'').localeCompare(b.role||'')*dir;
             case 'Belt': return (beltIdx(a.belt)-beltIdx(b.belt))*dir || (calcPoints(a)-calcPoints(b))*dir;
             case 'Days': return (daysAt(a.since)-daysAt(b.since))*dir;
-            case 'Cur Gates': return (a.cur-b.cur)*dir;
-            case 'Nxt Gates': return (a.nxt-b.nxt)*dir;
+            case 'Cur Gates': return (((a.cur&&a.cur.c?1:0)+(a.cur&&a.cur.s?1:0)+(a.cur&&a.cur.o?1:0))-((b.cur&&b.cur.c?1:0)+(b.cur&&b.cur.s?1:0)+(b.cur&&b.cur.o?1:0)))*dir;
+            case 'Nxt Gates': return (((a.nxt&&a.nxt.c?1:0)+(a.nxt&&a.nxt.s?1:0)+(a.nxt&&a.nxt.o?1:0))-((b.nxt&&b.nxt.c?1:0)+(b.nxt&&b.nxt.s?1:0)+(b.nxt&&b.nxt.o?1:0)))*dir;
             case 'Points': return (calcPoints(a)-calcPoints(b))*dir;
             case 'OIP Type': return ((a.oip?.primaryType||'').localeCompare(b.oip?.primaryType||''))*dir;
             case 'Promo': return ((a.promo?1:0)-(b.promo?1:0))*dir;
