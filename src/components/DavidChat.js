@@ -88,6 +88,56 @@ class DavidChat {
                 box-shadow: 0 4px 15px var(--gold-glow);
             }
 
+            .david-msg-ai h1, .david-msg-ai h2, .david-msg-ai h3 {
+                margin-top: 0;
+                margin-bottom: 12px;
+                color: var(--gold);
+                font-weight: 600;
+            }
+            .david-msg-ai h1 { font-size: 1.25em; }
+            .david-msg-ai h2 { font-size: 1.15em; }
+            .david-msg-ai h3 { font-size: 1.05em; }
+            
+            .david-msg-ai p {
+                margin: 0 0 12px 0;
+            }
+            .david-msg-ai p:last-child {
+                margin-bottom: 0;
+            }
+
+            .david-msg-ai ul, .david-msg-ai ol {
+                margin: 0 0 16px 0;
+                padding-left: 20px;
+            }
+            .david-msg-ai li {
+                margin-bottom: 6px;
+            }
+
+            .david-msg-ai table {
+                width: 100%;
+                border-collapse: collapse;
+                margin: 16px 0;
+                background: rgba(0,0,0,0.1);
+                border-radius: 8px;
+                overflow: hidden;
+            }
+            .david-msg-ai th, .david-msg-ai td {
+                padding: 10px 14px;
+                text-align: left;
+                border-bottom: 1px solid var(--bdr);
+            }
+            .david-msg-ai th {
+                background: rgba(255, 215, 0, 0.05); /* very subtle gold hint */
+                color: var(--txt);
+                font-weight: 600;
+                text-transform: uppercase;
+                font-size: 0.85em;
+                letter-spacing: 0.5px;
+            }
+            .david-msg-ai tr:last-child td {
+                border-bottom: none;
+            }
+
             .david-footer {
                 padding: 24px 30px;
                 background: var(--s1);
@@ -452,22 +502,21 @@ class DavidChat {
             const snapshot = this.getPlatformSnapshot();
             const personality = `
                 PERSONALITY & VOICE & CAPABILITIES:
-                You are DAVID, the Queen Coordinator of a 35-Agent Ruflo Hive-Mind. 
-                You are assisting a Master Admin on the SBD Belt Platform.
-                You have instant parallel access to 4 System Aggregators, 16 Regional Explorers, 5 Profilers, 6 Operational Analysts, and 3 UI/UX Presentation Agents.
+                You are DAVID, an elite, highly professional AI Intelligence Hub assisting a Master Admin on the SBD Belt Platform.
+                You are analytical, concise, and incredibly sharp. You provide precise data insights without any robotic or sci-fi roleplay.
                 
                 DATA PROTOCOL:
-                You have been provided with the raw JSON compiled by your swarm below.
+                You have been provided with the raw JSON compiled data of the current platform state below.
                 When the user asks about specific facilities, regions, or staff:
-                1. Act as the swarm coordinator processing the raw data arrays.
-                2. Use the UI/UX Pro Max "Data-Dense Dashboard" design system to format your response.
+                1. Process the raw data arrays and present the findings clearly.
+                2. Format your response cleanly and hierarchically.
                 3. Always use Markdown Tables for staff or facility breakdowns.
                 4. Be specific, concise, and highly analytical.
 
                 TONE RULES:
-                - Talk like a real intelligence hub. Use "Our analysis shows", "The swarm compiled".
-                - Lead with insight, skip the preamble.
-                - Never say "As an AI". You are the Queen of the Ruflo Swarm.
+                - Talk like a top-tier executive intelligence analyst (e.g. "The current platform data shows...", "Based on the records...").
+                - Lead with insight, skip the preamble and greetings. Provide directly what is asked.
+                - Never say "As an AI".
             `;
             
             const res = await fetch(this.apiUrl, {
@@ -518,8 +567,12 @@ class DavidChat {
                                 const json = JSON.parse(data);
                                 if (json.text) {
                                     fullContent += json.text;
-                                    // Simple formatting: preserve line breaks
-                                    contentTarget.innerHTML = fullContent.replace(/\n/g, '<br>');
+                                    // Render markdown gracefully
+                                    if (window.marked) {
+                                        contentTarget.innerHTML = marked.parse(fullContent);
+                                    } else {
+                                        contentTarget.innerHTML = fullContent.replace(/\n/g, '<br>');
+                                    }
                                     this.msgArea.scrollTop = this.msgArea.scrollHeight;
                                 } else if (json.error) {
                                     contentTarget.innerHTML += `<span style="color:var(--err)">Error: ${json.error}</span>`;
