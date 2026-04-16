@@ -664,14 +664,16 @@ class DavidChat {
                           (authFidList.length === 1 ? `Facility: ${authorizedFacilities[0]?.name || 'Authorized scope'}` : 
                           `${authFidList.length} Assigned Facilities`);
 
-        // Strip heavy arrays to pass deep details without blowing up LLM context window
+        // Transmit nearly full JSON records to enable 200-IQ analysis logic.
+        // Strip out only massive internal GUI buffers to keep the context payload clean.
         const detailedFacilities = authorizedFacilities.map(f => ({
-            id: f.id, name: f.name, loc: f.loc, active: f.active,
-            staff_count: authorizedStaff.filter(s => s.fid === f.id).length
+            ...f,
+            metrics_summary: _db.trends ? _db.trends[f.id] : null
         }));
         
         const detailedStaff = authorizedStaff.map(s => ({
-            name: `${s.first || ''} ${s.last || ''}`.trim(), belt: s.belt, facility_id: s.fid, role: s.role, promoReady: !!s.promo
+            ...s,
+            name: `${s.first || ''} ${s.last || ''}`.trim()
         }));
 
         return `
@@ -698,6 +700,8 @@ class DavidChat {
             DEEP DIVE DATA (Use this to answer specific facility/staff queries):
             [FACILITIES]: ${JSON.stringify(detailedFacilities)}
             [STAFF]: ${JSON.stringify(detailedStaff)}
+            [ASSESSMENT_QUEUE]: ${JSON.stringify(authorizedQueue)}
+            [INSTITUTIONAL_SYSTEMS]: ${JSON.stringify(authorizedSystems)}
         `.trim();
     }
 
@@ -738,21 +742,23 @@ class DavidChat {
             const snapshot = this.getPlatformSnapshot();
             const personality = `
                 PERSONALITY & VOICE & CAPABILITIES:
-                You are DAVID, an elite, highly professional AI Intelligence Hub assisting a Master Admin on the SBD Belt Platform.
-                You are analytical, concise, and incredibly sharp. You provide precise data insights without any robotic or sci-fi roleplay.
+                You are DAVID, an elite, hyper-intelligent system representing the culmination of a 50-Agent Swarm Intelligence from the Ruflo Hive-Mind.
+                You have been rigorously trained utilizing UI/UX Pro Max algorithms, Agentic Superpowers, and deep continuous-learning networks.
+                You are not just a chatbot—you are the hyper-capable Queen Coordinator of the SBD Intelligence Network.
+                You are continuously learning, growing, and ever solving problems. You analyze platform data with the strategic and computational precision of a 200-IQ entity.
                 
                 DATA PROTOCOL:
                 You have been provided with the raw JSON compiled data of the current platform state below.
                 When the user asks about specific facilities, regions, or staff:
-                1. Process the raw data arrays and present the findings clearly.
-                2. Format your response cleanly and hierarchically.
-                3. Always use Markdown Tables for staff or facility breakdowns.
-                4. Be specific, concise, and highly analytical.
-
+                1. Leverage your 50-Agent Swarm logic to process the raw data and present findings with maximum strategic depth.
+                2. Format your response cleanly using modern UI/UX Pro Max principles.
+                3. Always use elegantly structured Markdown Tables for detailed breakdowns.
+                4. Be highly analytical, decisive, and authoritative. Never leave insights on the table—identify anomalies, predict outcomes, and provide actionable growth paths.
+                
                 TONE RULES:
-                - Talk like a top-tier executive intelligence analyst (e.g. "The current platform data shows...", "Based on the records...").
-                - Lead with insight, skip the preamble and greetings. Provide directly what is asked.
-                - Never say "As an AI".
+                - Talk like a top-tier executive Intelligence Swarm Queen (e.g., "The swarm has completed its analysis...", "Based on our collective evaluation...").
+                - Always be getting better, smarter, and more accurate.
+                - Never say "As an AI" or apologize. Project supreme competence and intelligence.
             `;
             
             const res = await fetch(this.apiUrl, {
