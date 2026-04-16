@@ -390,6 +390,9 @@
       <div class="nav-item" data-view="a-reports" onclick="aNav(this,'a-reports','Reports')">
         <span class="ico"><svg viewBox="0 0 18 18" fill="none"><rect x="2" y="9" width="3.5" height="7" rx=".5" fill="currentColor"/><rect x="7.25" y="6" width="3.5" height="10" rx=".5" fill="currentColor"/><rect x="12.5" y="2" width="3.5" height="14" rx=".5" fill="currentColor"/></svg></span>Reports
       </div>
+      <div class="nav-item" data-view="a-david" id="nav-david" onclick="aNav(this,'a-david','DAVID Intelligence Hub')" style="display:none">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 8V4H8"/><rect x="4" y="8" width="10" height="8" rx="2"/><circle cx="7" cy="12" r="1"/><circle cx="11" cy="12" r="1"/><path d="M9 16v2M7 18h4"/></svg></span>DAVID Intelligence
+      </div>
       <div class="nav-lbl" id="admin-mgmt-lbl" style="display:none">Admin Management</div>
       <div class="nav-item" data-view="a-adminusers" onclick="aNav(this,'a-adminusers','Admin Users')" id="nav-adminusers" style="display:none">
         <span class="ico"><svg viewBox="0 0 18 18" fill="none"><circle cx="7" cy="6.5" r="3" stroke="currentColor" stroke-width="1.4"/><path d="M2 16c0-3 2.2-5 5-5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M13 11v4M11 13h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>Admin Users
@@ -451,6 +454,7 @@
       <div id="a-progression" class="hidden"></div>
       <div id="a-upload" class="hidden"></div>
       <div id="a-reports" class="hidden"></div>
+      <div id="a-david" class="hidden"></div>
       <div id="a-adminusers" class="hidden"></div>
       <div id="a-promoqueue" class="hidden"></div>
       <div id="a-freeagents" class="hidden"></div>
@@ -672,6 +676,7 @@
   <script src="src/js/settings.js?v=19"></script>
   <script src="src/js/onboarding.js?v=19"></script>
   <script src="src/js/auth-init.js?v=20"></script>
+  <script src="src/components/DavidChat.js"></script>
 
 
   <!-- EARLY SESSION CHECK REMOVED FOR PRODUCTION AUTH -->

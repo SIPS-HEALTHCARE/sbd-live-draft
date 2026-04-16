@@ -358,6 +358,8 @@ function enterPortal(type){
   document.getElementById('nav-adminusers').style.display=isMaster?'flex':'none';
   document.getElementById('nav-freeagents').style.display=isMaster?'flex':'none';
   document.getElementById('nav-systems').style.display=isMaster?'flex':'none';
+  const _navDavid = document.getElementById('nav-david');
+  if (_navDavid) _navDavid.style.display = isMaster ? 'flex' : 'none';
   // Placement reviews visible to all SIPS admins (master + staff_admin)
   const _navPlacement=document.getElementById('nav-placementreviews');
   if(_navPlacement) _navPlacement.style.display='flex';
@@ -579,7 +581,7 @@ function renderAView(view){
     toast('RBAC Guard: Unauthorized access to Network Portal', 'err');
     return;
   }
-  ['a-overview','a-leaderboard','a-allstaff','a-scoreboard','a-facilities','a-facility','a-registrations','a-assessments','a-progression','a-upload','a-reports','a-adminusers','a-promoqueue','a-freeagents','a-placementreviews','a-guide','a-settings','a-systems','a-systems-dashboard'].forEach(v=>{
+  ['a-overview','a-leaderboard','a-allstaff','a-scoreboard','a-facilities','a-facility','a-registrations','a-assessments','a-progression','a-upload','a-reports','a-david','a-adminusers','a-promoqueue','a-freeagents','a-placementreviews','a-guide','a-settings','a-systems','a-systems-dashboard'].forEach(v=>{
     const el=document.getElementById(v);
     if(el){ el.classList.add('hidden'); el.classList.remove('fade-in'); }
   });
@@ -592,6 +594,7 @@ function renderAView(view){
     'a-registrations':renderARegistrations,
     'a-assessments':renderAAssessments,'a-progression':renderAProgression,'a-upload':renderAUpload,
     'a-reports':renderAReports,
+    'a-david':renderADavidView,
     'a-adminusers':renderAAdminUsers,
     'a-promoqueue':renderAPromoQueue,
     'a-freeagents':renderAFreeAgents,
@@ -602,6 +605,20 @@ function renderAView(view){
     'a-settings':renderSettingsView,
   };
   if(fns[view]) setTimeout(fns[view],30);
+}
+
+function renderADavidView() {
+  const container = document.getElementById('a-david');
+  if (!container) return;
+  if (!window.DAVID) {
+    if (typeof DavidChat === 'undefined') {
+      container.innerHTML = '<div style="padding:40px; color:var(--txt2); text-align:center">Initializing DAVID Intelligence Terminal...</div>';
+      return;
+    }
+    window.DAVID = new DavidChat({ containerId: 'a-david' });
+  } else {
+    window.DAVID.renderIn('a-david');
+  }
 }
 
 window.refreshDashboard = function() {
