@@ -1630,6 +1630,10 @@ if(_origDownloadNetworkReport){
 function hasSectionBeenSeen(viewId){
   const u = ST.user;
   if(!u) return true;
+  // Robust check for individual section dismissal
+  if (localStorage.getItem('sbd_swt_dismissed_' + u.id + '_' + viewId) === 'true') {
+    return true;
+  }
   const ob = getOnboardingState(u.id);
   return ob && ob.seenSections && ob.seenSections.includes(viewId);
 }
@@ -1757,6 +1761,9 @@ function dismissSWT(viewId){
   // Also clear from collapsed list since it's fully dismissed
   const u = ST.user;
   if(u){
+    // Guaranteed persistence layer
+    localStorage.setItem('sbd_swt_dismissed_' + u.id + '_' + viewId, 'true');
+
     const ob = getOnboardingState(u.id) || {};
     let collapsed = ob.collapsedSections || [];
     collapsed = collapsed.filter(s=>s!==viewId);
@@ -1776,6 +1783,12 @@ function replayAllSectionWalkthroughs(){
   const u = ST.user;
   if(!u) return;
   setOnboardingState(u.id, { seenSections: [], collapsedSections: [] });
+  // Clear persistent local cache
+  Object.keys(localStorage).forEach(k => {
+    if (k.startsWith('sbd_swt_dismissed_' + u.id + '_')) {
+      localStorage.removeItem(k);
+    }
+  });
   toast('Section guides have been reset. Navigate to any tab to see them again.', 'ok');
 }
 
@@ -1784,6 +1797,9 @@ function replaySingleSWT(viewId, prefix){
   // Clear collapse state for this section too
   const u = ST.user;
   if(u){
+    // Clear persistent local cache
+    localStorage.removeItem('sbd_swt_dismissed_' + u.id + '_' + viewId);
+
     const ob = getOnboardingState(u.id) || {};
     let collapsed = ob.collapsedSections || [];
     collapsed = collapsed.filter(s=>s!==viewId);
