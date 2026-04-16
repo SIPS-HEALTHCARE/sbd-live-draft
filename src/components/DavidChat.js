@@ -639,7 +639,7 @@ class DavidChat {
         if (!auth.token) return;
 
         try {
-            await window.sbFetch(`david_chat_sessions?id=eq.${sessionId}`, {
+            await window.sbFetch(`/rest/v1/david_chat_sessions?id=eq.${sessionId}`, {
                 method: 'DELETE',
                 headers: {
                     'Authorization': `Bearer ${auth.token}`,
