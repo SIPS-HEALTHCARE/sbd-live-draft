@@ -370,7 +370,6 @@ class DavidChat {
         const roleLabel = (user.role || 'admin').replace('_', ' ').toUpperCase();
         
         container.innerHTML = `
-        container.innerHTML = `
             <div class="david-container">
                 <div class="david-layout">
                     <div class="david-sessions-sidebar">
