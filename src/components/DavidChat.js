@@ -143,6 +143,7 @@ class DavidChat {
                 font-size: 14.5px;
                 line-height: 1.6;
                 position: relative;
+                font-family: 'Fira Code', monospace !important;
             }
 
             .david-msg-ai { 
@@ -166,6 +167,7 @@ class DavidChat {
                 margin-bottom: 12px;
                 color: var(--gold);
                 font-weight: 600;
+                font-family: inherit;
             }
             .david-msg-ai h1 { font-size: 1.25em; }
             .david-msg-ai h2 { font-size: 1.15em; }
@@ -173,6 +175,7 @@ class DavidChat {
             
             .david-msg-ai p {
                 margin: 0 0 12px 0;
+                font-family: inherit;
             }
             .david-msg-ai p:last-child {
                 margin-bottom: 0;
@@ -184,6 +187,7 @@ class DavidChat {
             }
             .david-msg-ai li {
                 margin-bottom: 6px;
+                font-family: inherit;
             }
 
             .david-msg-ai table {
@@ -198,6 +202,7 @@ class DavidChat {
                 padding: 10px 14px;
                 text-align: left;
                 border-bottom: 1px solid var(--bdr);
+                font-family: inherit;
             }
             .david-msg-ai th {
                 background: rgba(255, 215, 0, 0.05); /* very subtle gold hint */
@@ -248,6 +253,7 @@ class DavidChat {
                 min-height: 24px;
                 max-height: 200px;
                 overflow-y: auto;
+                font-family: 'Fira Code', monospace !important;
             }
 
             .david-send-btn {
