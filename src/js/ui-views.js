@@ -11243,7 +11243,7 @@ async function openApproveRegModal(rid){
     
     <div style="display:flex;gap:12px;justify-content:center;">
       <button class="btn btn-ghost" onclick="closeModal()" style="flex:1">Cancel</button>
-      <button class="btn btn-ok" onclick="approveReg('${rid}')" style="flex:1">Approve & Activate</button>
+      <button class="btn btn-ok" id="btn-approve-reg" onclick="approveReg('${rid}')" style="flex:1">Approve & Activate</button>
     </div>
   `;
   openModal('Approve Facility', html, 'modal-md');
@@ -11257,15 +11257,21 @@ async function approveReg(rid){
   const newFacilityName = isNew ? document.getElementById('new-facility-name').value.trim() : sel.options[sel.selectedIndex].text.split(' (')[0];
   const assignSystemId = isNew ? document.getElementById('approve-sys-select').value : null;
   const assignRole = roleSel ? roleSel.value : 'hospital';
-  closeModal();
+  const btn = document.getElementById('btn-approve-reg');
+  if (btn) {
+    btn.disabled = true;
+    btn.style.opacity = '0.8';
+    btn.innerHTML = `<svg style="animation:spin 1s linear infinite;vertical-align:middle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path fill="none" stroke-linecap="round" d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> <span style="margin-left:6px;vertical-align:middle">Approving...</span>`;
+  }
   
   const r=DB.pendingRegs.find(x=>x.id===rid);
-  if(!r)return;
+  if(!r) {
+    if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.innerHTML = `Approve & Activate`; }
+    return;
+  }
   const location = r.location || r.loc || '';
   const department = r.department || r.dept || '';
   const contactName = r.name || r.contact || 'Unknown Person';
-
-  toast('Approving registration... please wait.', 'info');
   // Pass either the explicit UUID (for existing) OR the custom name (for NEW)
   const payloadFacility = isNew ? newFacilityName : chosenFacilityId;
   let finalFacilityId = isNew ? ('fac-'+Date.now()) : chosenFacilityId;
@@ -11319,15 +11325,18 @@ async function approveReg(rid){
     const pendingCnt=DB.pendingRegs.filter(x=>x.status==='pending').length;
     if(nb){nb.textContent=pendingCnt;nb.style.display=pendingCnt>0?'inline-block':'none';}
     
+    closeModal();
     if (emailErr) {
-      toast(`${newFacilityName} approved.\nHowever, the welcome email FAILED: ${emailErr}`, 'error');
+      toast(`<div style="display:flex;align-items:flex-start;gap:10px;"><svg style="flex-shrink:0;color:var(--err)" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg><div><div style="font-weight:600;margin-bottom:2px">Partially Approved</div><div style="font-size:13px;opacity:0.9">${newFacilityName} approved, but the welcome email failed.</div></div></div>`, 'err');
     } else {
-      toast(`${newFacilityName} approved.\nPortal account activated for ${contactName}. Refreshing view...`,'ok');
+      toast(`<div style="display:flex;align-items:center;gap:10px;"><svg style="color:#22c55e" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg><div style="font-weight:500">${newFacilityName} activated successfully.</div></div>`,'ok');
     }
     if(IS_LIVE) setTimeout(()=>initAppData(), emailErr ? 4000 : 1500); // Trigger clean backend re-hydrate
     renderARegistrations();
   } catch(e) {
-    toast('Registration Approval Failed: '+e.message, 'err');
+    const btn = document.getElementById('btn-approve-reg');
+    if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.innerHTML = `Approve & Activate`; }
+    toast(`<div style="display:flex;align-items:flex-start;gap:10px;"><svg style="flex-shrink:0;color:var(--err)" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg><div><div style="font-weight:600;margin-bottom:2px">Approval Failed</div><div style="font-size:13px;opacity:0.9">${e.message}</div></div></div>`, 'err');
   }
 }
 
