@@ -1,0 +1,24 @@
+{
+  "tier_1": [
+    "CensiTrac", "Censis Technologies", "Fortive", "CensisAI2", "CensisAI3", "ORLocate", "CensiMark",
+    "SPM", "STERIS SPM", "Sterile Processing Microsystem", "ORi", "SPM Endo", "SPM Loaner Solution",
+    "STERIS CS-iQ", "CS-iQ",
+    "T-DOC", "Getinge",
+    "Impress ITS", "Cardinal Health", "Impress"
+  ],
+  "tier_2": [
+    "iTraycer", "Mobile Aspects", "iRIScope", "iRISupply",
+    "Aesculap SQ.track", "SQ.track",
+    "Key Surgical Track-It", "Track-It", "Aspen Surgical",
+    "SPD360", "Surgio",
+    "SYNAPSIS",
+    "OneTracer",
+    "RFiD Discovery",
+    "Haldor Advanced Technologies", "Haldor",
+    "HealthTech CSi"
+  ],
+  "adjacent": [
+    "ReadySet Surgical", "ReadySet",
+    "Casechek"
+  ]
+}
