@@ -383,6 +383,84 @@ class DavidChat {
                 cursor: pointer;
                 text-align: center;
             }
+
+            .david-modal-overlay {
+                position: absolute;
+                top: 0; left: 0; right: 0; bottom: 0;
+                background: rgba(0, 0, 0, 0.6);
+                backdrop-filter: blur(4px);
+                z-index: 1000;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                opacity: 0;
+                animation: david-fadeIn 0.2s forwards;
+            }
+            .david-modal-content {
+                background: var(--s1);
+                border: 1px solid var(--bdr);
+                border-radius: 16px;
+                padding: 24px;
+                max-width: 400px;
+                width: 90%;
+                box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+                transform: translateY(20px);
+                animation: david-slideUp 0.3s forwards cubic-bezier(0.16, 1, 0.3, 1);
+            }
+            .david-modal-title {
+                margin: 0 0 12px 0;
+                color: var(--txt);
+                font-size: 18px;
+                font-weight: 600;
+            }
+            .david-modal-text {
+                margin: 0 0 24px 0;
+                color: var(--txt2);
+                font-size: 14.5px;
+                line-height: 1.5;
+            }
+            .david-modal-actions {
+                display: flex;
+                gap: 12px;
+                justify-content: flex-end;
+            }
+            .david-modal-btn {
+                padding: 10px 18px;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: 600;
+                cursor: pointer;
+                border: none;
+                transition: all 0.2s;
+            }
+            .david-modal-cancel {
+                background: transparent;
+                border: 1px solid var(--bdr);
+                color: var(--txt);
+            }
+            .david-modal-cancel:hover {
+                background: rgba(255, 255, 255, 0.05);
+            }
+            .david-modal-confirm {
+                background: #ff4444;
+                color: #fff;
+            }
+            .david-modal-confirm:hover {
+                background: #cc0000;
+            }
+            .david-modal-confirm.david-btn-gold {
+                background: var(--gold);
+                color: #000;
+            }
+            .david-modal-confirm.david-btn-gold:hover {
+                background: #d4a72d;
+            }
+            @keyframes david-slideUp {
+                to { transform: translateY(0); }
+            }
+            @keyframes david-fadeIn {
+                to { opacity: 1; }
+            }
         `;
         document.head.appendChild(style);
     }
@@ -427,9 +505,21 @@ class DavidChat {
                         </div>
                     </div>
                 </div>
+                <!-- Appended Modal Overlay -->
+                <div class="david-modal-overlay" id="david-modal" style="display: none;">
+                    <div class="david-modal-content">
+                        <h3 class="david-modal-title" id="david-modal-title"></h3>
+                        <p class="david-modal-text" id="david-modal-text"></p>
+                        <div class="david-modal-actions">
+                            <button class="david-modal-btn david-modal-cancel" id="david-modal-cancel">Cancel</button>
+                            <button class="david-modal-btn david-modal-confirm" id="david-modal-confirm">Confirm</button>
+                        </div>
+                    </div>
+                </div>
             </div>
         `;
 
+        this.container = container;
         this.msgArea = container.querySelector('#david-msgs');
         this.input = container.querySelector('#david-query');
         this.btn = container.querySelector('#david-btn');
@@ -456,6 +546,49 @@ class DavidChat {
 
         // Initialize Chat History from DB
         this.loadSessions();
+    }
+
+    // --- UI Overlays ---
+
+    showModal(options) {
+        if (!this.container) return;
+        const modal = this.container.querySelector('#david-modal');
+        const titleEl = this.container.querySelector('#david-modal-title');
+        const textEl = this.container.querySelector('#david-modal-text');
+        const cancelBtn = this.container.querySelector('#david-modal-cancel');
+        const confirmBtn = this.container.querySelector('#david-modal-confirm');
+
+        titleEl.textContent = options.title || 'Confirm';
+        textEl.textContent = options.text || 'Are you sure?';
+
+        if (options.isAlert) {
+            cancelBtn.style.display = 'none';
+            confirmBtn.textContent = 'OK';
+            confirmBtn.className = 'david-modal-btn david-modal-confirm david-btn-gold';
+        } else {
+            cancelBtn.style.display = 'block';
+            cancelBtn.textContent = options.cancelText || 'Cancel';
+            confirmBtn.textContent = options.confirmText || 'Yes, Delete';
+            confirmBtn.className = 'david-modal-btn david-modal-confirm';
+        }
+
+        modal.style.display = 'flex';
+
+        const closeModal = () => {
+            modal.style.display = 'none';
+            cancelBtn.onclick = null;
+            confirmBtn.onclick = null;
+        };
+
+        cancelBtn.onclick = () => {
+            closeModal();
+            if (options.onCancel) options.onCancel();
+        };
+
+        confirmBtn.onclick = () => {
+            closeModal();
+            if (options.onConfirm) options.onConfirm();
+        };
     }
 
     // --- DB Session Management ---
@@ -633,30 +766,40 @@ class DavidChat {
     }
 
     async deleteSession(sessionId) {
-        if (!confirm('Are you sure you want to delete this chat history?')) return;
-        
-        const auth = this.getAuthContext();
-        if (!auth.token) return;
+        this.showModal({
+            title: 'Delete Chat History',
+            text: 'Are you sure you want to delete this chat history? This action cannot be undone.',
+            confirmText: 'Delete',
+            cancelText: 'Cancel',
+            onConfirm: async () => {
+                const auth = this.getAuthContext();
+                if (!auth.token) return;
 
-        try {
-            await window.sbFetch(`/rest/v1/david_chat_sessions?id=eq.${sessionId}`, {
-                method: 'DELETE',
-                headers: {
-                    'Authorization': `Bearer ${auth.token}`,
-                    'Content-Type': 'application/json'
+                try {
+                    await window.sbFetch(`/rest/v1/david_chat_sessions?id=eq.${sessionId}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Authorization': `Bearer ${auth.token}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    this.sessions = this.sessions.filter(s => s.id !== sessionId);
+                    this.renderSessionSidebar();
+                    
+                    if (this.currentSessionId === sessionId) {
+                        this.createNewSession();
+                    }
+                } catch (e) {
+                    console.error('[DAVID] Delete failed:', e);
+                    this.showModal({
+                        title: 'Error',
+                        text: 'Failed to delete chat session. Please try again.',
+                        isAlert: true
+                    });
                 }
-            });
-            
-            this.sessions = this.sessions.filter(s => s.id !== sessionId);
-            this.renderSessionSidebar();
-            
-            if (this.currentSessionId === sessionId) {
-                this.createNewSession();
             }
-        } catch (e) {
-            console.error('[DAVID] Delete failed:', e);
-            alert('Failed to delete chat session.');
-        }
+        });
     }
 
     renderCurrentSessionMessages() {
