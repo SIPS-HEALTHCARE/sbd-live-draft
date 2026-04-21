@@ -776,42 +776,20 @@ class DavidChat {
                 if (!auth.token) return;
 
                 try {
-                    const deletedSession = this.sessions.find(s => s.id === sessionId);
-                    const oldTitle = deletedSession ? deletedSession.title : 'Chat session';
-                    
-                    const time = new Date().toLocaleTimeString();
-                    const newHistory = [
-                        { role: 'user', content: `[SYSTEM ACTION]: I have permanently deleted the chat history for "${oldTitle}" at ${time}. Please confirm and remember this.` },
-                        { role: 'assistant', content: `*System Log:* I acknowledge that the chat history for "**${oldTitle}**" has been permanently purged from the database.` }
-                    ];
-
-                    // "Soft Delete": Wipe messages, leave audit log, rename session.
                     await window.sbFetch(`/rest/v1/david_chat_sessions?id=eq.${sessionId}`, {
-                        method: 'PATCH',
+                        method: 'DELETE',
                         headers: {
                             'Authorization': `Bearer ${auth.token}`,
                             'Content-Type': 'application/json'
-                        },
-                        body: { 
-                            title: 'Deleted Chat',
-                            messages: newHistory,
-                            updated_at: new Date().toISOString()
                         }
                     });
                     
-                    // Update local state
-                    if (deletedSession) {
-                        deletedSession.title = 'Deleted Chat';
-                        deletedSession.messages = newHistory;
-                    }
+                    this.sessions = this.sessions.filter(s => s.id !== sessionId);
+                    this.renderSessionSidebar();
                     
                     if (this.currentSessionId === sessionId) {
-                         this.history = newHistory;
-                         this.renderCurrentSessionMessages();
+                        this.createNewSession();
                     }
-                    
-                    this.renderSessionSidebar();
-
                 } catch (e) {
                     console.error('[DAVID] Delete failed:', e);
                     this.showModal({
