@@ -254,6 +254,69 @@ class DavidChat {
                 border-top: 1px solid rgba(255,255,255,0.05);
                 color: var(--txt);
             }
+            
+            /* --- Embedded CSS Charts --- */
+            .david-chart-container {
+                background: rgba(0, 0, 0, 0.2);
+                border: 1px solid rgba(255, 255, 255, 0.05);
+                border-radius: 8px;
+                padding: 16px;
+                margin-top: 12px;
+                margin-bottom: 12px;
+            }
+            .david-chart-title {
+                color: var(--gold);
+                font-weight: 600;
+                font-size: 13px;
+                margin-bottom: 12px;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+            .david-chart-bar-wrap {
+                display: flex;
+                align-items: center;
+                margin-bottom: 8px;
+            }
+            .david-chart-label {
+                width: 90px;
+                font-size: 11px;
+                color: var(--txt2);
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                margin-right: 10px;
+            }
+            .david-chart-bar-track {
+                flex: 1;
+                background: rgba(255, 255, 255, 0.05);
+                height: 12px;
+                border-radius: 6px;
+                overflow: hidden;
+                position: relative;
+            }
+            .david-chart-bar-fill {
+                height: 100%;
+                background: linear-gradient(90deg, rgba(202, 138, 4, 0.7), rgba(234, 179, 8, 1));
+                border-radius: 6px;
+                transition: width 1s ease-out;
+            }
+            .david-chart-value {
+                width: 40px;
+                font-size: 11px;
+                color: var(--txt);
+                text-align: right;
+                font-family: 'Fira Code', monospace;
+                margin-left: 10px;
+            }
+            .david-chips-container {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+                margin-top: 16px;
+                padding-top: 12px;
+                border-top: 1px dashed rgba(255, 255, 255, 0.1);
+            }
+
             .david-meta-btn {
                 position: absolute;
                 bottom: 20px;
@@ -1015,6 +1078,18 @@ class DavidChat {
                     const cleanPayload = payload.replace(/'/g, "&apos;").replace(/"/g, "&quot;");
                     return ` <span class="david-citation-badge" onclick="DAVID.showCitationModal('${cleanPayload}')">🔍 Data Proof</span>`;
                 })
+                .replace(/<chart\s+([\s\S]*?)><\/chart>/gi, (match, attrs) => {
+                    return this.parseChartHtml(attrs);
+                })
+                .replace(/<chips>([\s\S]*?)<\/chips>/gi, (match, content) => {
+                    try {
+                        const parsed = JSON.parse(content);
+                        if (!Array.isArray(parsed)) return '';
+                        return `<div class="david-chips-container">` + 
+                            parsed.map(c => `<button class="david-qa-btn" onclick="DAVID.sendMessage('${c.replace(/'/g, "\\'")}')">${c}</button>`).join('') + 
+                            `</div>`;
+                    } catch(e) { return ''; }
+                })
                 .trim();
         }
 
@@ -1276,9 +1351,22 @@ class DavidChat {
                                         .replace(/```sql[\s\S]*?```/gi, '') // Aggressively hide raw SQL blocks
                                         .replace(/```json[\s\S]*?```/gi, '') // Aggressively hide raw JSON blocks
                                         .replace(/Result preview:\s*\{[\s\S]*?\}/gi, '') // Hide JSON previews
+                                        // Parse Citation Data dynamically into secure UI badges
                                         .replace(/<citation\s+data=(['"])(.*?)\1(?:.*?|)><\/citation>/gi, (match, quote, payload) => {
                                             const cleanPayload = payload.replace(/'/g, "&apos;").replace(/"/g, "&quot;");
                                             return ` <span class="david-citation-badge" onclick="DAVID.showCitationModal('${cleanPayload}')">🔍 Data Proof</span>`;
+                                        })
+                                        .replace(/<chart\s+([\s\S]*?)><\/chart>/gi, (match, attrs) => {
+                                            return this.parseChartHtml(attrs);
+                                        })
+                                        .replace(/<chips>([\s\S]*?)<\/chips>/gi, (match, content) => {
+                                            try {
+                                                const parsed = JSON.parse(content);
+                                                if (!Array.isArray(parsed)) return '';
+                                                return `<div class="david-chips-container">` + 
+                                                    parsed.map(c => `<button class="david-qa-btn" style="background:rgba(202,138,4,0.1); border-color:rgba(202,138,4,0.3);" onclick="DAVID.sendMessage('${c.replace(/'/g, "\\'")}')">${c}</button>`).join('') + 
+                                                    `</div>`;
+                                            } catch(e) { return ''; }
                                         })
                                         .trim();
 
@@ -1343,6 +1431,53 @@ class DavidChat {
         `;
         this.msgArea.appendChild(card);
         this.msgArea.scrollTop = this.msgArea.scrollHeight;
+    }
+
+    // --- Internal Formatters ---
+    parseChartHtml(attrString) {
+        try {
+            // Restore encoded quotes if data was generated securely
+            const cleanStr = attrString.replace(/&apos;/g, "'").replace(/&quot;/g, '"');
+            
+            let title = "Data Distibution";
+            let labels = [];
+            let data = [];
+            
+            const titleMatch = cleanStr.match(/title=['"]([^'"]+)['"]/i);
+            const labelsMatch = cleanStr.match(/labels=['"]([^]+?)['"]/i);
+            const dataMatch = cleanStr.match(/data=['"]([^]+?)['"]/i);
+            
+            if (titleMatch && titleMatch[1]) title = titleMatch[1];
+            if (labelsMatch && labelsMatch[1]) labels = JSON.parse(labelsMatch[1]);
+            if (dataMatch && dataMatch[1]) data = JSON.parse(dataMatch[1]);
+            
+            if (labels.length === 0 || data.length === 0) return '';
+            
+            // Calculate max scale for percentage
+            const maxVal = Math.max(...data.map(n => Number(n) || 0));
+            
+            let html = `<div class="david-chart-container">`;
+            html += `<div class="david-chart-title">${title} <span style="opacity:0.5; font-size:10px;">(Automated Synthesis)</span></div>`;
+            
+            for (let i = 0; i < labels.length; i++) {
+                const val = Number(data[i]) || 0;
+                const percent = maxVal > 0 ? (val / maxVal) * 100 : 0;
+                html += `
+                    <div class="david-chart-bar-wrap">
+                        <div class="david-chart-label" title="${labels[i]}">${labels[i]}</div>
+                        <div class="david-chart-bar-track">
+                            <div class="david-chart-bar-fill" style="width: ${percent}%;"></div>
+                        </div>
+                        <div class="david-chart-value">${val}</div>
+                    </div>
+                `;
+            }
+            html += `</div>`;
+            return html;
+        } catch (e) {
+            console.error("DAVID: Failed to parse native chart", e);
+            return `<div class="david-chart-container" style="color:var(--rd);">[Error rendering visual chart]</div>`;
+        }
     }
 
     // --- Interactive Evidence & Meta-Memory Logic ---

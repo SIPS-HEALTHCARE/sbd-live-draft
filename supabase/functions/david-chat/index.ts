@@ -119,13 +119,24 @@ serve(async (req) => {
             console.error('[DAVID] Memory load failed:', e);
         }
 
-        // Add verifiable citations shadow directive injection
-        const citationDirective = `\n\nSHADOW DIRECTIVE - CITATIONS:\nWhen making a statistical claim, calculating a metric, or evaluating trend data, you must provide the raw data subset that validates your claim inside an XML-style <citation> block immediately following the claim. Example: Total elite practitioners dropped by 4%. <citation data='[{"fid": "abc", "change": "-4%"}]'></citation>`;
+        // Add verbatim shadow directives for advanced intelligence features
+        const shadowDirectives = `
+SHADOW DIRECTIVE - CITATIONS:
+When making a statistical claim, calculating a metric, or evaluating trend data, you must provide the raw data subset that validates your claim inside an XML-style <citation> block immediately following the claim. Example: Total elite practitioners dropped by 4%. <citation data='[{"fid": "abc", "change": "-4%"}]'></citation>
+
+SHADOW DIRECTIVE - VISUAL CHARTING:
+When comparing distributions, benchmarking multiple facilities, or showing historical trends, you MUST generate an inline chart. Use the <chart> XML tag. Ensure labels and data arrays correspond exactly.
+Example: <chart type="bar" labels='["Jan", "Feb", "Mar"]' data="[12, 19, 15]" title="Monthly Processing Volume"></chart>
+
+SHADOW DIRECTIVE - ANTICIPATORY CHIPS:
+At the absolute end of every response, you MUST predict the 3 most likely executive follow-up questions or actions and output them in a JSON array inside a <chips> block. 
+Example: <chips>["Compare to last month", "Audit underperforming groups", "Escalate to priority"]</chips>
+`;
 
         // 2. Build initial messages
         const messages: Array<any> = [];
         if (systemPrompt) {
-            messages.push({ role: 'system', content: systemPrompt + '\n' + memoryInjection + citationDirective });
+            messages.push({ role: 'system', content: systemPrompt + '\n' + memoryInjection + '\n' + shadowDirectives });
         }
         for (const msg of history) {
             messages.push({ role: msg.role, content: msg.content });
