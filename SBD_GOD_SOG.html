@@ -2898,8 +2898,8 @@ function enterPortal(type){
   document.getElementById('nav-adminusers').style.display=isMaster?'flex':'none';
   document.getElementById('nav-freeagents').style.display=isMaster?'flex':'none';
   if(document.getElementById('nav-david')) {
-    const isLocalhost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
-    document.getElementById('nav-david').style.display=(isMaster && isLocalhost)?'flex':'none';
+    const isIzzy = u && u.email && u.email.toLowerCase() === 'izambrano@sipsconsults.com';
+    document.getElementById('nav-david').style.display=isIzzy?'flex':'none';
   }
   // Promo queue visible to all SIPS admins (master + assessors)
   const _navPromo=document.getElementById('nav-promoqueue');

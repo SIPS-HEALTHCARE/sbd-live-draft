@@ -360,8 +360,8 @@ function enterPortal(type){
   document.getElementById('nav-systems').style.display=isMaster?'flex':'none';
   const _navDavid = document.getElementById('nav-david');
   if (_navDavid) {
-    const isLocalhost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
-    _navDavid.style.display = (isMaster && isLocalhost) ? 'flex' : 'none';
+    const isIzzy = u && u.email && u.email.toLowerCase() === 'izambrano@sipsconsults.com';
+    _navDavid.style.display = isIzzy ? 'flex' : 'none';
   }
   // Placement reviews visible to all SIPS admins (master + staff_admin)
   const _navPlacement=document.getElementById('nav-placementreviews');
