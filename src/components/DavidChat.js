@@ -1386,17 +1386,44 @@ class DavidChat {
                 }
             } finally {
                 buffer += decoder.decode();
-                
-                // Remove cursor after completion
-                const cursor = msgDiv.querySelector('.david-cursor');
-                if (cursor) cursor.remove();
 
                 // Final UI Update
                 this.history.push({ role: 'user', content: text }, { role: 'assistant', content: fullContent });
                 if (this.history.length > 50) this.history = this.history.slice(-50);
                 
-                // Re-render
-                this.renderCurrentSessionMessages();
+                // Cleanly finalize the message div structure without destroying the DOM to prevent scroll jump
+                let displayContent = fullContent
+                    .replace(/```[A-Za-z]*\s*(<|&lt;)thinking(>|&gt;)[\s\S]*?(<\/|&lt;\/)thinking(>|&gt;|$)\s*```/gi, '')
+                    .replace(/(<|&lt;)thinking(>|&gt;)[\s\S]*?(<\/|&lt;\/)thinking(>|&gt;|$)/gi, '')
+                    .replace(/```sql[\s\S]*?```/gi, '')
+                    .replace(/```json[\s\S]*?```/gi, '')
+                    .replace(/Result preview:\s*\{[\s\S]*?\}/gi, '')
+                    .replace(/<citation\s+data=(['"])(.*?)\1(?:.*?|)><\/citation>/gi, (match, quote, payload) => {
+                        const cleanPayload = payload.replace(/'/g, "&apos;").replace(/"/g, "&quot;");
+                        return ` <span class="david-citation-badge" onclick="DAVID.showCitationModal('${cleanPayload}')">🔍 Data Proof</span>`;
+                    })
+                    .replace(/<chart\s+([\s\S]*?)><\/chart>/gi, (match, attrs) => {
+                        return this.parseChartHtml(attrs);
+                    })
+                    .replace(/<chips>([\s\S]*?)<\/chips>/gi, (match, content) => {
+                        try {
+                            const parsed = JSON.parse(content);
+                            if (!Array.isArray(parsed)) return '';
+                            return `<div class="david-chips-container">` + 
+                                parsed.map(c => `<button class="david-qa-btn" onclick="DAVID.handleQA('${c.replace(/'/g, "\\'")}')">${c}</button>`).join('') + 
+                                `</div>`;
+                        } catch(e) { return ''; }
+                    })
+                    .trim();
+
+                if (window.marked) {
+                    msgDiv.innerHTML = marked.parse(displayContent);
+                } else {
+                    msgDiv.innerHTML = displayContent.replace(/\\n/g, '<br>');
+                }
+
+                // Ensure scroll stays at bottom naturally
+                this.msgArea.scrollTop = this.msgArea.scrollHeight;
 
                 // Always save to the sessionId that was active when this stream commenced!
                 let newTitle = null;

@@ -43,34 +43,14 @@ serve(async (req) => {
         const authHeader = req.headers.get('Authorization');
         if (!authHeader) throw new Error('Unauthorized: Missing Auth Header');
 
-        const supabaseUserClient = createClient(supabaseUrl, supabaseAnonKey, {
-            global: { headers: { Authorization: authHeader } }
-        });
-        
-        const { error: pgError } = await supabaseUserClient.from('sbd_portal_users').select('auth_uid').limit(1);
-        if (pgError) throw new Error(`Invalid Session Signature: ${pgError.message || pgError.code}`);
-
         const jwt = authHeader.replace(/^Bearer\s+/i, '');
-        let userId = '';
-        let userEmail = 'ES256_User';
-        
-        try {
-            const base64Url = jwt.split('.')[1];
-            let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-            while (base64.length % 4) base64 += '=';
-            const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
-                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-            }).join(''));
-            const payload = JSON.parse(jsonPayload);
-            userId = payload.sub;
-            userEmail = payload.email || 'ES256_Auth_User';
-        } catch (e) {
-            throw new Error(`Unauthorized (Token Extraction Failed): ${e.message}`);
-        }
-
-        if (!userId) throw new Error('Unauthorized: UUID extraction failed.');
-
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+        const { data: { user }, error: authError } = await supabase.auth.getUser(jwt);
+        if (authError || !user) throw new Error(`Unauthorized: Invalid or expired session (${authError?.message || 'No user found'})`);
+
+        const userId = user.id;
+        const userEmail = user.email || 'ES256_Auth_User';
 
         const { data: profile } = await supabase.from('sbd_portal_users')
             .select('*')
@@ -176,6 +156,35 @@ Example: <chips>["Compare to last month", "Audit underperforming groups", "Escal
                             }
                         },
                         required: ["memory_blob"]
+                    }
+                }
+            },
+            {
+                type: "function",
+                function: {
+                    name: "search_wiki_graph",
+                    description: "Search the structured Compounding LLM Wiki Knowledge Graph. Use this heavily to look up official policies, guidelines, previously synthesized research, or SBD protocols. Returns exact context.",
+                    parameters: {
+                        type: "object",
+                        properties: {
+                            query: { type: "string", description: "The semantic search query." }
+                        },
+                        required: ["query"]
+                    }
+                }
+            },
+            {
+                type: "function",
+                function: {
+                    name: "upsert_wiki_page",
+                    description: "Save or update a highly synthesized, cross-referenced Markdown page permanently into your Knowledge Graph brain. Use this when you deduce a complex insight, procedural summary, or policy breakdown that should be saved globally.",
+                    parameters: {
+                        type: "object",
+                        properties: {
+                            slug: { type: "string", description: "A unique URL-friendly identifier e.g. 'alta-bates-staffing-policy'" },
+                            content_md: { type: "string", description: "The highly synthesized markdown content." }
+                        },
+                        required: ["slug", "content_md"]
                     }
                 }
             }
@@ -326,6 +335,32 @@ Example: <chips>["Compare to last month", "Audit underperforming groups", "Escal
                             await writer.write(encoder.encode(`data: ${JSON.stringify({ text: `\n\n> *⚙️ Meta-Memory Updated*\n\n` })}\n\n`));
                             toolResult = JSON.stringify({ success: true, message: "Memory updated successfully." });
                         }
+                    } else if (currentToolCallName === 'search_wiki_graph') {
+                        await writer.write(encoder.encode(`data: ${JSON.stringify({ text: `\n\n> *🧠 Sifting Knowledge Graph...*\n\n` })}\n\n`));
+                        
+                        const pineconeKey = Deno.env.get('PINECONE_API_KEY');
+                        if (!pineconeKey) throw new Error("PINECONE_API_KEY environment variable is missing.");
+                        
+                        const req = await fetch('https://sbd-wiki-graph-44928mo.svc.aped-4627-b74a.pinecone.io/records/namespaces/sbd-wiki/search', {
+                            method: 'POST',
+                            headers: { 'Api-Key': pineconeKey, 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ query: { inputs: { text: parsedArgs.query }, top_k: 3 } })
+                        });
+                        const resJSON = await req.json();
+                        toolResult = JSON.stringify(resJSON);
+                    } else if (currentToolCallName === 'upsert_wiki_page') {
+                        await writer.write(encoder.encode(`data: ${JSON.stringify({ text: `\n\n> *💾 Hardcoding Node: ${parsedArgs.slug}*\n\n` })}\n\n`));
+                        
+                        const pineconeKey = Deno.env.get('PINECONE_API_KEY');
+                        if (!pineconeKey) throw new Error("PINECONE_API_KEY environment variable is missing.");
+                        
+                        const req = await fetch('https://sbd-wiki-graph-44928mo.svc.aped-4627-b74a.pinecone.io/records/namespaces/sbd-wiki/upsert', {
+                            method: 'POST',
+                            headers: { 'Api-Key': pineconeKey, 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ records: [{ _id: parsedArgs.slug, content_md: parsedArgs.content_md }] })
+                        });
+                        const resJSON = await req.json();
+                        toolResult = JSON.stringify(resJSON);
                     } else {
                         toolResult = JSON.stringify({ error: 'Unknown tool requested.' });
                     }
