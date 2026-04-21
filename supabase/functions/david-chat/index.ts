@@ -86,6 +86,7 @@ serve(async (req) => {
 
         let memoryInjection = "";
         try {
+            // Fetch assistant interaction memories
             const { data: memories } = await supabase
                 .from('assistant_memory')
                 .select('raw_interaction, created_at')
@@ -100,17 +101,31 @@ serve(async (req) => {
                     .join('\n\n');
                 
                 if (recentMemories) {
-                    memoryInjection = `\nRETAINED SWARM MEMORIES:\n${recentMemories}\nExtract meta-insights from these past interactions.`;
+                    memoryInjection += `\nRETAINED SWARM MEMORIES:\n${recentMemories}\nExtract meta-insights from these past interactions.`;
                 }
+            }
+
+            // Fetch explicit meta-memory preferences
+            const { data: prefs } = await supabase
+                .from('david_user_preferences')
+                .select('memory_blob')
+                .eq('user_id', userId)
+                .single();
+
+            if (prefs && prefs.memory_blob) {
+                memoryInjection += `\n\n[USER PREFERENCES & META-MEMORY]\nYou must strictly adhere to the following learned behaviors for this specific user:\n${prefs.memory_blob}\n`;
             }
         } catch (e) {
             console.error('[DAVID] Memory load failed:', e);
         }
 
+        // Add verifiable citations shadow directive injection
+        const citationDirective = `\n\nSHADOW DIRECTIVE - CITATIONS:\nWhen making a statistical claim, calculating a metric, or evaluating trend data, you must provide the raw data subset that validates your claim inside an XML-style <citation> block immediately following the claim. Example: Total elite practitioners dropped by 4%. <citation data='[{"fid": "abc", "change": "-4%"}]'></citation>`;
+
         // 2. Build initial messages
         const messages: Array<any> = [];
         if (systemPrompt) {
-            messages.push({ role: 'system', content: systemPrompt + '\n' + memoryInjection });
+            messages.push({ role: 'system', content: systemPrompt + '\n' + memoryInjection + citationDirective });
         }
         for (const msg of history) {
             messages.push({ role: msg.role, content: msg.content });
@@ -123,7 +138,7 @@ serve(async (req) => {
                 type: "function",
                 function: {
                     name: "execute_database_sql",
-                    description: "Execute raw SQL against the Supabase database. Use this to audit logs, diagnose failures, or repair schemas.",
+                    description: "Execute raw SQL against the Supabase database. Use this to audit logs, diagnose failures, or repair schemas. When viewing metrics, try to answer based on this.",
                     parameters: {
                         type: "object",
                         properties: {
@@ -133,6 +148,23 @@ serve(async (req) => {
                             }
                         },
                         required: ["query"]
+                    }
+                }
+            },
+            {
+                type: "function",
+                function: {
+                    name: "update_meta_memory",
+                    description: "Update the user's permanent meta-memory preferences based on conversational cues (e.g., 'always use bullets').",
+                    parameters: {
+                        type: "object",
+                        properties: {
+                            memory_blob: {
+                                type: "string",
+                                description: "The updated consolidated string of user preferences."
+                            }
+                        },
+                        required: ["memory_blob"]
                     }
                 }
             }
@@ -270,6 +302,19 @@ serve(async (req) => {
                         await writer.write(encoder.encode(`data: ${JSON.stringify({ text: `\n\n> \u231B ${text}\n\n` })}\n\n`));
                         
                         toolResult = await executeAdminSql(supabase, queryAttempted);
+                    } else if (currentToolCallName === 'update_meta_memory') {
+                        const newBlob = parsedArgs.memory_blob;
+                        const { error } = await supabase
+                            .from('david_user_preferences')
+                            .upsert({ user_id: userId, memory_blob: newBlob, updated_at: new Date().toISOString() });
+                        
+                        if (error) {
+                            toolResult = JSON.stringify({ success: false, error: error.message });
+                        } else {
+                            // Inform user visually
+                            await writer.write(encoder.encode(`data: ${JSON.stringify({ text: `\n\n> *⚙️ Meta-Memory Updated*\n\n` })}\n\n`));
+                            toolResult = JSON.stringify({ success: true, message: "Memory updated successfully." });
+                        }
                     } else {
                         toolResult = JSON.stringify({ error: 'Unknown tool requested.' });
                     }

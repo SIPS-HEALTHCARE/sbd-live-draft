@@ -11,6 +11,10 @@ class DavidChat {
         // Pointing to pure Deno server on port 8000
         this.apiUrl = 'https://mhijaqahbceuahfzezbh.supabase.co/functions/v1/david-chat';
         this.contextData = options.contextData || {};
+        
+        // Expose globally so inline onclick events work reliably
+        if (typeof window !== 'undefined') window.DAVID = this;
+        
         this.init();
     }
 
@@ -203,6 +207,67 @@ class DavidChat {
                 0% { box-shadow: 0 0 5px rgba(202, 138, 4, 0.2); border-color: rgba(202, 138, 4, 0.3); }
                 50% { box-shadow: 0 0 15px rgba(202, 138, 4, 0.4); border-color: rgba(202, 138, 4, 0.6); }
                 100% { box-shadow: 0 0 5px rgba(202, 138, 4, 0.2); border-color: rgba(202, 138, 4, 0.3); }
+            }
+
+            /* --- Citation Badges & Evidence Tables --- */
+            .david-citation-badge {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                background: rgba(196, 154, 32, 0.1);
+                color: var(--gold);
+                border: 1px solid rgba(196, 154, 32, 0.3);
+                padding: 2px 8px;
+                border-radius: 12px;
+                font-size: 11px;
+                font-weight: 600;
+                cursor: pointer;
+                margin-left: 6px;
+                transition: all 0.2s;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                vertical-align: middle;
+            }
+            .david-citation-badge:hover {
+                background: rgba(196, 154, 32, 0.2);
+                transform: translateY(-1px);
+                box-shadow: 0 2px 8px rgba(196, 154, 32, 0.2);
+            }
+            .david-evidence-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 10px;
+                font-size: 12.5px;
+                background: rgba(0,0,0,0.2);
+                border-radius: 8px;
+                overflow: hidden;
+            }
+            .david-evidence-table th {
+                background: rgba(255,255,255,0.05);
+                padding: 8px 12px;
+                text-align: left;
+                color: var(--gold);
+                font-weight: 600;
+            }
+            .david-evidence-table td {
+                padding: 8px 12px;
+                border-top: 1px solid rgba(255,255,255,0.05);
+                color: var(--txt);
+            }
+            .david-meta-btn {
+                position: absolute;
+                bottom: 20px;
+                left: 20px;
+                background: transparent;
+                border: none;
+                color: var(--txt2);
+                cursor: pointer;
+                font-size: 16px;
+                transition: color 0.2s, transform 0.2s;
+            }
+            .david-meta-btn:hover {
+                color: var(--gold);
+                transform: rotate(45deg);
             }
 
             .david-msg {
@@ -574,12 +639,16 @@ class DavidChat {
                         </div>
                     </div>
                 </div>
+                <!-- Controls -->
+                <button class="david-meta-btn" onclick="DAVID.showMetaMemory()" title="Manage Meta-Memory">⚙️</button>
+
                 <!-- Appended Modal Overlay -->
                 <div class="david-modal-overlay" id="david-modal" style="display: none;">
-                    <div class="david-modal-content">
+                    <div class="david-modal-content" style="max-height: 80vh; overflow-y: auto;">
                         <h3 class="david-modal-title" id="david-modal-title"></h3>
                         <p class="david-modal-text" id="david-modal-text"></p>
-                        <div class="david-modal-actions">
+                        <div id="david-modal-custom-content"></div>
+                        <div class="david-modal-actions" style="margin-top: 20px;">
                             <button class="david-modal-btn david-modal-cancel" id="david-modal-cancel">Cancel</button>
                             <button class="david-modal-btn david-modal-confirm" id="david-modal-confirm">Confirm</button>
                         </div>
@@ -626,9 +695,11 @@ class DavidChat {
         const textEl = this.container.querySelector('#david-modal-text');
         const cancelBtn = this.container.querySelector('#david-modal-cancel');
         const confirmBtn = this.container.querySelector('#david-modal-confirm');
+        const customContent = this.container.querySelector('#david-modal-custom-content');
 
         titleEl.textContent = options.title || 'Confirm';
         textEl.textContent = options.text || 'Are you sure?';
+        customContent.innerHTML = options.customHtml || '';
 
         if (options.isAlert) {
             cancelBtn.style.display = 'none';
@@ -938,6 +1009,12 @@ class DavidChat {
                 .replace(/```sql[\s\S]*?```/gi, '') // Hide SQL Blocks
                 .replace(/```json[\s\S]*?```/gi, '') // Hide JSON Blocks
                 .replace(/Result preview:\s*\{[\s\S]*?\}/gi, '') // Hide result previews
+                // Parse Citation Data dynamically into secure UI badges
+                .replace(/<citation\s+data=(['"])(.*?)\1(?:.*?|)><\/citation>/gi, (match, quote, payload) => {
+                    // Quick sanitize payload for HTML attributes
+                    const cleanPayload = payload.replace(/'/g, "&apos;").replace(/"/g, "&quot;");
+                    return ` <span class="david-citation-badge" onclick="DAVID.showCitationModal('${cleanPayload}')">🔍 Data Proof</span>`;
+                })
                 .trim();
         }
 
@@ -1199,6 +1276,10 @@ class DavidChat {
                                         .replace(/```sql[\s\S]*?```/gi, '') // Aggressively hide raw SQL blocks
                                         .replace(/```json[\s\S]*?```/gi, '') // Aggressively hide raw JSON blocks
                                         .replace(/Result preview:\s*\{[\s\S]*?\}/gi, '') // Hide JSON previews
+                                        .replace(/<citation\s+data=(['"])(.*?)\1(?:.*?|)><\/citation>/gi, (match, quote, payload) => {
+                                            const cleanPayload = payload.replace(/'/g, "&apos;").replace(/"/g, "&quot;");
+                                            return ` <span class="david-citation-badge" onclick="DAVID.showCitationModal('${cleanPayload}')">🔍 Data Proof</span>`;
+                                        })
                                         .trim();
 
                                     // Render markdown gracefully
@@ -1262,5 +1343,78 @@ class DavidChat {
         `;
         this.msgArea.appendChild(card);
         this.msgArea.scrollTop = this.msgArea.scrollHeight;
+    }
+
+    // --- Interactive Evidence & Meta-Memory Logic ---
+    showCitationModal(payloadString) {
+        try {
+            // Restore encoded quotes if we properly escaped them earlier for html attribute safety
+            const raw = payloadString.replace(/&apos;/g, "'").replace(/&quot;/g, '"');
+            let data = null;
+            try { data = JSON.parse(raw); } catch(e) { data = raw; }
+            
+            let customHtml = '';
+            if (Array.isArray(data) && data.length > 0 && typeof data[0] === 'object') {
+                const keys = Object.keys(data[0]);
+                customHtml = '<table class="david-evidence-table"><thead><tr>';
+                keys.forEach(k => customHtml += `<th>${k.toUpperCase()}</th>`);
+                customHtml += '</tr></thead><tbody>';
+                data.forEach(row => {
+                    customHtml += '<tr>';
+                    keys.forEach(k => customHtml += `<td>${row[k]}</td>`);
+                    customHtml += '</tr>';
+                });
+                customHtml += '</tbody></table>';
+            } else if (typeof data === 'string' && data.toLowerCase().includes('select')) {
+                customHtml = `<pre style="background:rgba(0,0,0,0.3); padding:12px; border-radius:6px; font-family:'Fira Code',monospace;"><code style="color:var(--gold)">${data}</code></pre>`;
+            } else {
+                customHtml = `<pre style="background:rgba(0,0,0,0.3); padding:12px; border-radius:6px; font-family:'Fira Code',monospace; white-space:pre-wrap; word-wrap:break-word;"><code>${JSON.stringify(data, null, 2)}</code></pre>`;
+            }
+
+            this.showModal({
+                title: 'Data Evidence Citation',
+                text: 'Here is the raw data subset DAVID used to validate this specific claim:',
+                customHtml: customHtml,
+                isAlert: true
+            });
+        } catch (e) {
+            console.error('Error rendering citation data', e);
+        }
+    }
+
+    async showMetaMemory() {
+        const { uid, token } = this.getAuthContext();
+        if (!uid || !token) return;
+
+        try {
+            const res = await window.sbFetch(`/rest/v1/david_user_preferences?user_id=eq.${uid}&select=memory_blob`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            const blob = res && res[0] ? res[0].memory_blob : "No active memory overrides detected.";
+            
+            this.showModal({
+                title: 'DAVID Meta-Memory',
+                text: 'Global parameters learned from your interactions:',
+                customHtml: `<textarea id="david-meta-edit" style="width:100%; height:120px; background:var(--bg); border:1px solid var(--bdr); color:var(--txt); border-radius:8px; padding:12px; font-family:'Fira Code',monospace; outline:none; resize:none;">${blob}</textarea>`,
+                cancelText: 'Close',
+                confirmText: 'Save Memory',
+                onConfirm: async () => {
+                    const val = document.getElementById('david-meta-edit').value.trim();
+                    await window.sbFetch('/rest/v1/david_user_preferences', {
+                        method: 'POST', // Technically upsert handled by Supabase REST requires specific headers
+                        headers: { 
+                            'Authorization': `Bearer ${token}`,
+                            'Prefer': 'resolution=merge-duplicates'
+                        },
+                        body: { user_id: uid, memory_blob: val, updated_at: new Date().toISOString() }
+                    });
+                    // Refresh chat context visually
+                    this.addParsedMessage("> *⚙️ Overrode permanent memory rules.*", "ai");
+                }
+            });
+        } catch(e) {
+            console.error(e);
+        }
     }
 }
