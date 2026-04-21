@@ -776,6 +776,9 @@ class DavidChat {
                 if (!auth.token) return;
 
                 try {
+                    const deletedSession = this.sessions.find(s => s.id === sessionId);
+                    const deletedTitle = deletedSession ? deletedSession.title : 'Chat session';
+
                     await window.sbFetch(`/rest/v1/david_chat_sessions?id=eq.${sessionId}`, {
                         method: 'DELETE',
                         headers: {
@@ -788,8 +791,23 @@ class DavidChat {
                     this.renderSessionSidebar();
                     
                     if (this.currentSessionId === sessionId) {
-                        this.createNewSession();
+                        await this.createNewSession();
                     }
+                    
+                    // Log the deletion to the active session so DAVID remembers it
+                    const time = new Date().toLocaleTimeString();
+                    this.history.push({ 
+                        role: 'user', 
+                        content: `[SYSTEM ACTION]: I have permanently deleted the chat history for "${deletedTitle}" at ${time}. Please confirm and remember this.` 
+                    });
+                    this.history.push({ 
+                        role: 'assistant', 
+                        content: `*System Log:* I acknowledge that the chat history for "**${deletedTitle}**" has been permanently purged from the database.` 
+                    });
+                    
+                    this.renderCurrentSessionMessages();
+                    await this.saveSessionMessages();
+
                 } catch (e) {
                     console.error('[DAVID] Delete failed:', e);
                     this.showModal({
