@@ -194,6 +194,17 @@ class DavidChat {
                 background: var(--bg);
             }
 
+            @keyframes david-slide-up {
+                0% { opacity: 0; transform: translateY(15px); }
+                100% { opacity: 1; transform: translateY(0); }
+            }
+            
+            @keyframes border-glow-pulse {
+                0% { box-shadow: 0 0 5px rgba(202, 138, 4, 0.2); border-color: rgba(202, 138, 4, 0.3); }
+                50% { box-shadow: 0 0 15px rgba(202, 138, 4, 0.4); border-color: rgba(202, 138, 4, 0.6); }
+                100% { box-shadow: 0 0 5px rgba(202, 138, 4, 0.2); border-color: rgba(202, 138, 4, 0.3); }
+            }
+
             .david-msg {
                 max-width: 85%;
                 padding: 16px 20px;
@@ -202,21 +213,33 @@ class DavidChat {
                 line-height: 1.6;
                 position: relative;
                 font-family: 'Fira Code', monospace !important;
+                animation: david-slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
             }
 
             .david-msg-ai { 
                 align-self: flex-start; 
-                background: var(--s1); 
-                border: 1px solid var(--bdr);
+                background: rgba(28, 25, 23, 0.85); /* #1C1917 Cyberpunk dark */
+                backdrop-filter: blur(12px);
+                -webkit-backdrop-filter: blur(12px);
+                border: 1px solid rgba(255, 255, 255, 0.1);
                 color: var(--txt);
                 border-bottom-left-radius: 2px;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
             }
+            
+            .david-msg-ai:hover {
+                border-color: rgba(202, 138, 4, 0.4);
+                box-shadow: 0 8px 32px rgba(202, 138, 4, 0.1);
+                transition: all 0.3s ease;
+            }
+            
             .david-msg-user { 
                 align-self: flex-end; 
-                background: var(--gold); 
+                background: linear-gradient(135deg, var(--gold) 0%, #D4AF37 100%);
                 color: #000; 
                 font-weight: 500;
                 border-bottom-right-radius: 2px;
+                border: 1px solid rgba(255, 255, 255, 0.2);
                 box-shadow: 0 4px 15px var(--gold-glow);
             }
 
@@ -286,17 +309,20 @@ class DavidChat {
                 gap: 12px;
                 max-width: 1000px;
                 margin: 0 auto;
-                background: var(--bg);
-                border: 1px solid var(--bdr);
+                background: rgba(28, 25, 23, 0.6);
+                backdrop-filter: blur(16px);
+                -webkit-backdrop-filter: blur(16px);
+                border: 1px solid rgba(255, 255, 255, 0.1);
                 border-radius: 16px;
                 padding: 10px 18px;
-                box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-                transition: border-color 0.2s, box-shadow 0.2s;
+                box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             }
 
             .david-input-wrapper:focus-within {
-                border-color: var(--gold);
-                box-shadow: 0 4px 25px var(--gold-glow);
+                border-color: rgba(202, 138, 4, 0.5);
+                box-shadow: 0 0 20px rgba(202, 138, 4, 0.2), 0 4px 30px rgba(0,0,0,0.5);
+                transform: translateY(-2px);
             }
 
             .david-input-wrapper textarea {
@@ -313,11 +339,16 @@ class DavidChat {
                 overflow-y: auto;
                 font-family: 'Fira Code', monospace !important;
             }
+            .david-input-wrapper textarea::placeholder {
+                color: rgba(255, 255, 255, 0.3);
+            }
 
             .david-send-btn {
-                background: var(--gold);
+                background: linear-gradient(135deg, var(--gold) 0%, #D4AF37 100%);
                 color: #000;
-                border: none;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                box-shadow: 0 0 10px rgba(202, 138, 4, 0.3);
+                transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
                 border-radius: 10px;
                 width: 44px;
                 height: 44px;
