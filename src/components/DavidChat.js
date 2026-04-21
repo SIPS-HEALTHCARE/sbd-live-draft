@@ -212,7 +212,7 @@ class DavidChat {
                 font-size: 14.5px;
                 line-height: 1.6;
                 position: relative;
-                font-family: 'Fira Code', monospace !important;
+                font-family: var(--font), sans-serif !important;
                 animation: david-slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
             }
 
@@ -337,7 +337,7 @@ class DavidChat {
                 min-height: 24px;
                 max-height: 200px;
                 overflow-y: auto;
-                font-family: 'Fira Code', monospace !important;
+                font-family: var(--font), sans-serif !important;
             }
             .david-input-wrapper textarea::placeholder {
                 color: rgba(255, 255, 255, 0.3);
