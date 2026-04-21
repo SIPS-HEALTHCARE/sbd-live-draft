@@ -658,6 +658,13 @@ class DavidChat {
             @keyframes david-fadeIn {
                 to { opacity: 1; }
             }
+            @keyframes david-chip-in {
+                0% { opacity: 0; transform: translateY(10px); }
+                100% { opacity: 1; transform: translateY(0); }
+            }
+            .david-fade-in-up {
+                animation: david-chip-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            }
         `;
         document.head.appendChild(style);
     }
@@ -692,6 +699,7 @@ class DavidChat {
                         <div class="david-messages-area" id="david-msgs">
                             <!-- Chat messages injected here -->
                         </div>
+                        <div id="david-dynamic-chips" class="david-quick-actions" style="margin-top:0; margin-bottom:15px; display:none; flex-shrink:0;"></div>
                         <div class="david-footer">
                             <div class="david-input-wrapper">
                                 <textarea placeholder="Ask DAVID about staff, reports, or belt progression..." id="david-query"></textarea>
@@ -1039,8 +1047,8 @@ class DavidChat {
             return;
         }
 
-        this.history.forEach(msg => {
-            this.addParsedMessage(msg.content, msg.role);
+        this.history.forEach((msg, idx) => {
+            this.addParsedMessage(msg.content, msg.role, idx === this.history.length - 1);
         });
         this.msgArea.scrollTop = this.msgArea.scrollHeight;
     }
@@ -1056,7 +1064,7 @@ class DavidChat {
         `;
     }
 
-    addParsedMessage(text, role) {
+    addParsedMessage(text, role, isLatest = false) {
         // OpenRouter uses 'assistant', map it back to CSS/logic 'ai'
         const formatRole = (role === 'assistant') ? 'ai' : role;
         
@@ -1085,10 +1093,12 @@ class DavidChat {
                     try {
                         const parsed = JSON.parse(content);
                         if (!Array.isArray(parsed)) return '';
-                        return `<div class="david-chips-container">` + 
-                            parsed.map(c => `<button class="david-qa-btn" onclick="DAVID.handleQA('${c.replace(/'/g, "\\'")}')">${c}</button>`).join('') + 
-                            `</div>`;
-                    } catch(e) { return ''; }
+                        // Transient chips: Render outside if latest, but ALWAYS strip from message bubble
+                        if (isLatest && parsed.length > 0) {
+                            setTimeout(() => DAVID.renderDynamicChips(parsed), 50);
+                        }
+                    } catch(e) {}
+                    return ''; 
                 })
                 .trim();
         }
@@ -1249,7 +1259,9 @@ class DavidChat {
 
     async sendMessage() {
         const text = this.input.value.trim();
-        if (!text || this.isThinking) return;
+        if (!text || this.btn.disabled) return;
+
+        this.clearDynamicChips();
 
         this.addMessage(text, 'user');
         this.input.value = '';
@@ -1348,6 +1360,7 @@ class DavidChat {
                                     let displayContent = fullContent
                                         .replace(/```[A-Za-z]*\s*(<|&lt;)thinking(>|&gt;)[\s\S]*?(<\/|&lt;\/)thinking(>|&gt;|$)\s*```/gi, '')
                                         .replace(/(<|&lt;)thinking(>|&gt;)[\s\S]*?(<\/|&lt;\/)thinking(>|&gt;|$)/gi, '')
+                                        .replace(/<chips>[\s\S]*?(?:<\/chips>|$)/gi, '')
                                         .replace(/```sql[\s\S]*?```/gi, '') // Aggressively hide raw SQL blocks
                                         .replace(/```json[\s\S]*?```/gi, '') // Aggressively hide raw JSON blocks
                                         .replace(/Result preview:\s*\{[\s\S]*?\}/gi, '') // Hide JSON previews
@@ -1405,14 +1418,16 @@ class DavidChat {
                     .replace(/<chart\s+([\s\S]*?)><\/chart>/gi, (match, attrs) => {
                         return this.parseChartHtml(attrs);
                     })
-                    .replace(/<chips>([\s\S]*?)<\/chips>/gi, (match, content) => {
+                    .replace(/<chips>([\s\S]*?)(?:<\/chips>|$)/gi, (match, content) => {
                         try {
-                            const parsed = JSON.parse(content);
-                            if (!Array.isArray(parsed)) return '';
-                            return `<div class="david-chips-container">` + 
-                                parsed.map(c => `<button class="david-qa-btn" onclick="DAVID.handleQA('${c.replace(/'/g, "\\'")}')">${c}</button>`).join('') + 
-                                `</div>`;
-                        } catch(e) { return ''; }
+                            if (match.includes('</chips>')) {
+                                const parsed = JSON.parse(content);
+                                if (Array.isArray(parsed) && parsed.length > 0) {
+                                    setTimeout(() => DAVID.renderDynamicChips(parsed), 50);
+                                }
+                            }
+                        } catch(e) {}
+                        return ''; // Strip from the actual message bubble
                     })
                     .trim();
 
@@ -1443,7 +1458,26 @@ class DavidChat {
     }
 
     addMessage(text, role) {
-        this.addParsedMessage(text, role);
+        this.addParsedMessage(text, role, true);
+    }
+
+    renderDynamicChips(chipsArr) {
+        const container = document.getElementById('david-dynamic-chips');
+        if (!container) return;
+        container.innerHTML = chipsArr.map(c => 
+            `<button class="david-qa-btn david-fade-in-up" style="background:rgba(202,138,4,0.1); border-color:rgba(202,138,4,0.3);" onclick="DAVID.handleQA('${c.replace(/'/g, "\\'")}')">${c}</button>`
+        ).join('');
+        container.style.display = 'flex';
+        // Auto-scroll slightly to compensate for the new bar appearing
+        setTimeout(() => { if (this.msgArea) this.msgArea.scrollTop = this.msgArea.scrollHeight; }, 50);
+    }
+
+    clearDynamicChips() {
+        const container = document.getElementById('david-dynamic-chips');
+        if (container) {
+            container.innerHTML = '';
+            container.style.display = 'none';
+        }
     }
 
     renderActionCard(payload) {
