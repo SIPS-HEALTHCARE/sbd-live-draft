@@ -122,6 +122,44 @@ class DavidChat {
                 font-weight: 500;
                 border-color: rgba(196,154,32,0.3);
             }
+            .david-session-confirm-wrapper {
+                display: none;
+                gap: 8px;
+                align-items: center;
+                margin-left: auto;
+            }
+            .david-session-item.confirming .david-session-delete {
+                display: none;
+            }
+            .david-session-item.confirming .david-session-confirm-wrapper {
+                display: flex;
+            }
+            .david-session-action {
+                font-size: 11px;
+                padding: 4px 8px;
+                border-radius: 4px;
+                cursor: pointer;
+                transition: background 0.2s;
+                font-weight: 600;
+                user-select: none;
+            }
+            .david-session-confirm {
+                color: #ff4444;
+                background: rgba(255, 68, 68, 0.1);
+                border: 1px solid rgba(255, 68, 68, 0.3);
+            }
+            .david-session-confirm:hover {
+                background: rgba(255, 68, 68, 0.2);
+            }
+            .david-session-cancel {
+                color: var(--txt2);
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+            }
+            .david-session-cancel:hover {
+                background: rgba(255, 255, 255, 0.1);
+                color: var(--txt);
+            }
 
             .david-main {
                 flex: 1;
@@ -742,7 +780,7 @@ class DavidChat {
             div.className = 'david-session-item' + (s.id === this.currentSessionId ? ' active' : '');
             
             // Format time natively
-            const date = new Date(s.created_at);
+            const date = new Date(s.created_at || Date.now());
             const timeStr = isNaN(date) ? '' : date.toLocaleDateString();
 
             div.innerHTML = `
@@ -751,55 +789,80 @@ class DavidChat {
                     <div style="font-size:10px; opacity:0.6; margin-top:2px;">${timeStr}</div>
                 </div>
                 <div class="david-session-delete" title="Delete session">🗑️</div>
+                <div class="david-session-confirm-wrapper">
+                    <div class="david-session-action david-session-confirm" title="Confirm Delete">Delete</div>
+                    <div class="david-session-action david-session-cancel" title="Cancel">Cancel</div>
+                </div>
             `;
             
-            div.onclick = () => this.loadSession(s.id);
+            div.onclick = () => {
+                if (div.classList.contains('confirming')) return; // Prevent switching when confirming delete
+                this.loadSession(s.id);
+            };
             
             const delBtn = div.querySelector('.david-session-delete');
+            const confirmBtn = div.querySelector('.david-session-confirm');
+            const cancelBtn = div.querySelector('.david-session-cancel');
+
             delBtn.onclick = (e) => {
                 e.stopPropagation();
-                this.deleteSession(s.id);
+                // Close any other confirming items first
+                document.querySelectorAll('.david-session-item.confirming').forEach(el => el.classList.remove('confirming'));
+                div.classList.add('confirming');
+            };
+
+            cancelBtn.onclick = (e) => {
+                e.stopPropagation();
+                div.classList.remove('confirming');
+            };
+
+            confirmBtn.onclick = (e) => {
+                e.stopPropagation();
+                confirmBtn.innerText = '...';
+                confirmBtn.style.pointerEvents = 'none';
+                cancelBtn.style.pointerEvents = 'none';
+                this.executeDeleteSession(s.id);
             };
             
             list.appendChild(div);
         });
     }
 
-    async deleteSession(sessionId) {
-        this.showModal({
-            title: 'Delete Chat History',
-            text: 'Are you sure you want to delete this chat history? This action cannot be undone.',
-            confirmText: 'Delete',
-            cancelText: 'Cancel',
-            onConfirm: async () => {
-                const auth = this.getAuthContext();
-                if (!auth.token) return;
+    async executeDeleteSession(sessionId) {
+        const auth = this.getAuthContext();
+        if (!auth.token) return;
 
-                try {
-                    await window.sbFetch(`/rest/v1/david_chat_sessions?id=eq.${sessionId}`, {
-                        method: 'DELETE',
-                        headers: {
-                            'Authorization': `Bearer ${auth.token}`,
-                            'Content-Type': 'application/json'
-                        }
-                    });
-                    
-                    this.sessions = this.sessions.filter(s => s.id !== sessionId);
-                    this.renderSessionSidebar();
-                    
-                    if (this.currentSessionId === sessionId) {
-                        this.createNewSession();
-                    }
-                } catch (e) {
-                    console.error('[DAVID] Delete failed:', e);
-                    this.showModal({
-                        title: 'Error',
-                        text: 'Failed to delete chat session. Please try again.',
-                        isAlert: true
-                    });
+        try {
+            await window.sbFetch(`/rest/v1/david_chat_sessions?id=eq.${sessionId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${auth.token}`,
+                    'Content-Type': 'application/json'
                 }
+            });
+            
+            this.sessions = this.sessions.filter(s => s.id !== sessionId);
+            
+            if (this.currentSessionId === sessionId) {
+                if (this.sessions.length > 0) {
+                    // Fall back to the most recent chat to avoid infinite "New Chat" spawning
+                    this.loadSession(this.sessions[0].id);
+                } else {
+                    await this.createNewSession();
+                }
+            } else {
+                // If we didn't switch sessions, just re-render the sidebar
+                this.renderSessionSidebar();
             }
-        });
+        } catch (e) {
+            console.error('[DAVID] Delete failed:', e);
+            this.showModal({
+                title: 'Error',
+                text: 'Failed to delete chat session. Please try again.',
+                isAlert: true
+            });
+            this.renderSessionSidebar(); // Reset UI state on error
+        }
     }
 
     renderCurrentSessionMessages() {
