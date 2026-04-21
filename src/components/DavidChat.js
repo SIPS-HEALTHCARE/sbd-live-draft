@@ -904,6 +904,9 @@ class DavidChat {
             displayContent = text
                 .replace(/```[A-Za-z]*\s*(<|&lt;)thinking(>|&gt;)[\s\S]*?(<\/|&lt;\/)thinking(>|&gt;|$)\s*```/gi, '')
                 .replace(/(<|&lt;)thinking(>|&gt;)[\s\S]*?(<\/|&lt;\/)thinking(>|&gt;|$)/gi, '')
+                .replace(/```sql[\s\S]*?```/gi, '') // Hide SQL Blocks
+                .replace(/```json[\s\S]*?```/gi, '') // Hide JSON Blocks
+                .replace(/Result preview:\s*\{[\s\S]*?\}/gi, '') // Hide result previews
                 .trim();
         }
 
@@ -1104,7 +1107,8 @@ class DavidChat {
                 3. AGGRESSIVE INTELLIGENCE: Challenge flawed premises quietly when you see bad data, but keep it friendly.
                 4. PRE-COGNITION: When pulling data, anticipate the *real* "why" behind the prompt. Don't just list data—synthesize what it means for the organization.
                 5. STRICT BRAND EXCLUSIVITY: SIPS Healthcare Solutions uses SBD OS (Sterile By Design OS) and OTIS exclusively. You MUST NEVER recommend, mention, or train users on competitor technologies. If a template or user requests tracking software examples, ONLY use OTIS and SBD OS as your examples. Absolutely DO NOT mention CensiTrac, Censis, SPM, T-DOC, Impress, or any other third-party tracking system under any circumstances.
-                
+                6. NO RAW TRACES OR CODE: Unless explicitly requested by the user, NEVER output raw SQL queries, JSON result previews, or technical logs in your output. You are speaking to business executives. Synthesize the data and present the final figures conversationally.
+
                 Execute your tasks perfectly while maintaining casual, highly intelligent human conversation.
             `;
             
@@ -1160,6 +1164,9 @@ class DavidChat {
                                     let displayContent = fullContent
                                         .replace(/```[A-Za-z]*\s*(<|&lt;)thinking(>|&gt;)[\s\S]*?(<\/|&lt;\/)thinking(>|&gt;|$)\s*```/gi, '')
                                         .replace(/(<|&lt;)thinking(>|&gt;)[\s\S]*?(<\/|&lt;\/)thinking(>|&gt;|$)/gi, '')
+                                        .replace(/```sql[\s\S]*?```/gi, '') // Aggressively hide raw SQL blocks
+                                        .replace(/```json[\s\S]*?```/gi, '') // Aggressively hide raw JSON blocks
+                                        .replace(/Result preview:\s*\{[\s\S]*?\}/gi, '') // Hide JSON previews
                                         .trim();
 
                                     // Render markdown gracefully
