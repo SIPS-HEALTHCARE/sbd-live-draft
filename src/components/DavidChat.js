@@ -1473,21 +1473,12 @@ class DavidChat {
             // Calculate max scale for percentage
             const maxVal = Math.max(...data.map(n => Number(n) || 0));
             
-            let html = `<div class="david-chart-container">`;
-            html += `<div class="david-chart-title">${title} <span style="opacity:0.5; font-size:10px;">(Automated Synthesis)</span></div>`;
+            let html = `<div class="david-chart-container"><div class="david-chart-title">${title} <span style="opacity:0.5; font-size:10px;">(Automated Synthesis)</span></div>`;
             
             for (let i = 0; i < labels.length; i++) {
                 const val = Number(data[i]) || 0;
                 const percent = maxVal > 0 ? (val / maxVal) * 100 : 0;
-                html += `
-                    <div class="david-chart-bar-wrap">
-                        <div class="david-chart-label" title="${labels[i]}">${labels[i]}</div>
-                        <div class="david-chart-bar-track">
-                            <div class="david-chart-bar-fill" style="width: ${percent}%;"></div>
-                        </div>
-                        <div class="david-chart-value">${val}</div>
-                    </div>
-                `;
+                html += `<div class="david-chart-bar-wrap"><div class="david-chart-label" title="${labels[i]}">${labels[i]}</div><div class="david-chart-bar-track"><div class="david-chart-bar-fill" style="width: ${percent}%;"></div></div><div class="david-chart-value">${val}</div></div>`;
             }
             html += `</div>`;
             return html;
