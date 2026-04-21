@@ -777,36 +777,40 @@ class DavidChat {
 
                 try {
                     const deletedSession = this.sessions.find(s => s.id === sessionId);
-                    const deletedTitle = deletedSession ? deletedSession.title : 'Chat session';
+                    const oldTitle = deletedSession ? deletedSession.title : 'Chat session';
+                    
+                    const time = new Date().toLocaleTimeString();
+                    const newHistory = [
+                        { role: 'user', content: `[SYSTEM ACTION]: I have permanently deleted the chat history for "${oldTitle}" at ${time}. Please confirm and remember this.` },
+                        { role: 'assistant', content: `*System Log:* I acknowledge that the chat history for "**${oldTitle}**" has been permanently purged from the database.` }
+                    ];
 
+                    // "Soft Delete": Wipe messages, leave audit log, rename session.
                     await window.sbFetch(`/rest/v1/david_chat_sessions?id=eq.${sessionId}`, {
-                        method: 'DELETE',
+                        method: 'PATCH',
                         headers: {
                             'Authorization': `Bearer ${auth.token}`,
                             'Content-Type': 'application/json'
+                        },
+                        body: { 
+                            title: 'Deleted Chat',
+                            messages: newHistory,
+                            updated_at: new Date().toISOString()
                         }
                     });
                     
-                    this.sessions = this.sessions.filter(s => s.id !== sessionId);
-                    this.renderSessionSidebar();
-                    
-                    if (this.currentSessionId === sessionId) {
-                        await this.createNewSession();
+                    // Update local state
+                    if (deletedSession) {
+                        deletedSession.title = 'Deleted Chat';
+                        deletedSession.messages = newHistory;
                     }
                     
-                    // Log the deletion to the active session so DAVID remembers it
-                    const time = new Date().toLocaleTimeString();
-                    this.history.push({ 
-                        role: 'user', 
-                        content: `[SYSTEM ACTION]: I have permanently deleted the chat history for "${deletedTitle}" at ${time}. Please confirm and remember this.` 
-                    });
-                    this.history.push({ 
-                        role: 'assistant', 
-                        content: `*System Log:* I acknowledge that the chat history for "**${deletedTitle}**" has been permanently purged from the database.` 
-                    });
+                    if (this.currentSessionId === sessionId) {
+                         this.history = newHistory;
+                         this.renderCurrentSessionMessages();
+                    }
                     
-                    this.renderCurrentSessionMessages();
-                    await this.saveSessionMessages();
+                    this.renderSessionSidebar();
 
                 } catch (e) {
                     console.error('[DAVID] Delete failed:', e);
