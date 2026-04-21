@@ -1086,7 +1086,7 @@ class DavidChat {
                         const parsed = JSON.parse(content);
                         if (!Array.isArray(parsed)) return '';
                         return `<div class="david-chips-container">` + 
-                            parsed.map(c => `<button class="david-qa-btn" onclick="DAVID.sendMessage('${c.replace(/'/g, "\\'")}')">${c}</button>`).join('') + 
+                            parsed.map(c => `<button class="david-qa-btn" onclick="DAVID.handleQA('${c.replace(/'/g, "\\'")}')">${c}</button>`).join('') + 
                             `</div>`;
                     } catch(e) { return ''; }
                 })
@@ -1364,7 +1364,7 @@ class DavidChat {
                                                 const parsed = JSON.parse(content);
                                                 if (!Array.isArray(parsed)) return '';
                                                 return `<div class="david-chips-container">` + 
-                                                    parsed.map(c => `<button class="david-qa-btn" style="background:rgba(202,138,4,0.1); border-color:rgba(202,138,4,0.3);" onclick="DAVID.sendMessage('${c.replace(/'/g, "\\'")}')">${c}</button>`).join('') + 
+                                                    parsed.map(c => `<button class="david-qa-btn" style="background:rgba(202,138,4,0.1); border-color:rgba(202,138,4,0.3);" onclick="DAVID.handleQA('${c.replace(/'/g, "\\'")}')">${c}</button>`).join('') + 
                                                     `</div>`;
                                             } catch(e) { return ''; }
                                         })
@@ -1437,19 +1437,36 @@ class DavidChat {
     parseChartHtml(attrString) {
         try {
             // Restore encoded quotes if data was generated securely
-            const cleanStr = attrString.replace(/&apos;/g, "'").replace(/&quot;/g, '"');
+            let cleanStr = attrString.replace(/&apos;/g, "'").replace(/&quot;/g, '"');
             
-            let title = "Data Distibution";
+            let title = "Data Distribution";
             let labels = [];
             let data = [];
             
-            const titleMatch = cleanStr.match(/title=['"]([^'"]+)['"]/i);
-            const labelsMatch = cleanStr.match(/labels=['"]([^]+?)['"]/i);
-            const dataMatch = cleanStr.match(/data=['"]([^]+?)['"]/i);
+            // Extract the raw string values inside the attributes (handle both single and double quotes)
+            const titleMatch = cleanStr.match(/title=(['"])(.*?)\1/i);
+            const labelsMatch = cleanStr.match(/labels=(['"])(.*?)\1/i);
+            const dataMatch = cleanStr.match(/data=(['"])(.*?)\1/i);
             
-            if (titleMatch && titleMatch[1]) title = titleMatch[1];
-            if (labelsMatch && labelsMatch[1]) labels = JSON.parse(labelsMatch[1]);
-            if (dataMatch && dataMatch[1]) data = JSON.parse(dataMatch[1]);
+            if (titleMatch && titleMatch[2]) title = titleMatch[2];
+            
+            // Leniently parse arrays (convert single quotes to double quotes, or just manually slice brackets)
+            const lenientArrayParse = (str) => {
+                let s = str.trim();
+                if (s.startsWith('[')) s = s.slice(1);
+                if (s.endsWith(']')) s = s.slice(0, -1);
+                // match values separated by commas, honoring quotes or lack of quotes
+                return s.split(',').map(v => v.trim().replace(/^['"]|['"]$/g, ''));
+            };
+
+            if (labelsMatch && labelsMatch[2]) {
+                try { labels = JSON.parse(labelsMatch[2].replace(/'/g, '"')); } 
+                catch (e) { labels = lenientArrayParse(labelsMatch[2]); }
+            }
+            if (dataMatch && dataMatch[2]) {
+                try { data = JSON.parse(dataMatch[2]); } 
+                catch (e) { data = lenientArrayParse(dataMatch[2]); }
+            }
             
             if (labels.length === 0 || data.length === 0) return '';
             
