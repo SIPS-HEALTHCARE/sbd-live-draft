@@ -259,14 +259,15 @@ serve(async (req) => {
                         if (match && match[1]) targetTable = `the \`${match[1]}\` data`;
 
                         const friendlyMessages = [
-                            `*Digging into ${targetTable}...*`,
-                            `*Checking ${targetTable} real quick...*`,
-                            `*Pulling records from ${targetTable}...*`
+                            `*Running cross-facility analysis on ${targetTable}...*`,
+                            `*Isolating operational metrics in ${targetTable}...*`,
+                            `*Synthesizing intelligence from ${targetTable}...*`,
+                            `*Executing global query across ${targetTable}...*`
                         ];
                         const text = friendlyMessages[Math.floor(Math.random() * friendlyMessages.length)];
 
-                        // Let user know he's executing conversationally, while still showing the SQL in Markdown if they want to peek.
-                        await writer.write(encoder.encode(`data: ${JSON.stringify({ text: `\n\n> \u231B ${text}\n> \`\`\`sql\n> ${queryAttempted}\n> \`\`\`\n\n` })}\n\n`));
+                        // Let user know he's executing conversationally, WITHOUT dumping raw SQL code.
+                        await writer.write(encoder.encode(`data: ${JSON.stringify({ text: `\n\n> \u231B ${text}\n\n` })}\n\n`));
                         
                         toolResult = await executeAdminSql(supabase, queryAttempted);
                     } else {
@@ -276,9 +277,8 @@ serve(async (req) => {
                     toolResult = JSON.stringify({ error: err.message });
                 }
 
-                // Show user the result preview
-                const snippet = toolResult.substring(0, 150).replace(/\n/g, ' ');
-                await writer.write(encoder.encode(`data: ${JSON.stringify({ text: `> *Result preview: ${snippet}...*\n\n` })}\n\n`));
+                // DO NOT show the result preview to the user. The AI has it internally now.
+                // We just loop back and let the AI summarize it.
 
                 messageChain.push({
                     role: "tool",
