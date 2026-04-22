@@ -123,11 +123,11 @@ const SB = {
   deleteStaff(id){ return sbFetch(`/rest/v1/staff?id=eq.${id}`, { method:'DELETE' }); },
   // ── Assessment Queue ──
   getPendingAssessments(fid){
-    const f = fid ? `&fid=eq.${encodeURIComponent(fid)}` : '';
-    return sbFetch(`/rest/v1/assessment_queue?status=eq.pending${f}&select=*&order=requested_at.desc`);
+    const f = fid ? `&facility_id=eq.${encodeURIComponent(fid)}` : '';
+    return sbFetch(`/rest/v1/sbd_assessment_queue?status=eq.pending${f}&select=*&order=requested_at.desc`);
   },
-  submitAssessmentQueue(data){ return sbFetch('/rest/v1/assessment_queue', { method:'POST', body:data }); },
-  resolveAssessmentQueue(id, status){ return sbFetch(`/rest/v1/assessment_queue?id=eq.${id}`, { method:'PATCH', body:{ status, resolved_at:new Date().toISOString() } }); },
+  submitAssessmentQueue(data){ return sbFetch('/rest/v1/sbd_assessment_queue', { method:'POST', body:data }); },
+  resolveAssessmentQueue(id, status){ return sbFetch(`/rest/v1/sbd_assessment_queue?id=eq.${id}`, { method:'PATCH', body:{ status, resolved_at:new Date().toISOString() } }); },
   // ── Assessments (via edge function for atomic RPC + audit) ──
   recordAssessment(staff, type, targetBelt, result, notes, assessorId, timestamp){ 
     return sbFetch('/functions/v1/sbd-record-assessment', { 
@@ -387,8 +387,8 @@ function mapQueueFromBackend(row){
   return {
     id: row.id,
     sid: row.staff_id,
-    fid: row.fid,
-    type: row.type,
+    fid: row.facility_id || row.fid,
+    type: row.assessment_type || row.type,
     targetBelt: row.target_belt,
     status: row.status,
     date: row.requested_at ? new Date(row.requested_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '',
@@ -401,8 +401,8 @@ function mapQueueToBackend(item){
   if(!item) return null;
   return {
     staff_id: item.sid,
-    fid: item.fid,
-    type: item.type,
+    facility_id: item.fid,
+    assessment_type: item.type,
     target_belt: item.targetBelt,
     status: item.status || 'pending',
     requested_at: item.requested_at || new Date().toISOString()

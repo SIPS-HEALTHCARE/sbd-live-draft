@@ -34,13 +34,13 @@ function l3GenerateLocalSynopsis(title, text){
 function l3GetReadSections(){
   const u = ST.user;
   if(!u) return {};
-  const ob = getOnboardingState(u.id);
+  const ob = getOnboardingState(u.authUid || u.id);
   return (ob && ob.readSections) ? ob.readSections : {};
 }
 function l3GetCheckResults(){
   const u = ST.user;
   if(!u) return {};
-  const ob = getOnboardingState(u.id);
+  const ob = getOnboardingState(u.authUid || u.id);
   return (ob && ob.checkResults) ? ob.checkResults : {};
 }
 function l3IsRead(key){ return !!l3GetReadSections()[key]; }
@@ -60,7 +60,7 @@ function l3MarkSectionRead(type, id, idx){
   if(rs[key]) return;
   rs[key] = new Date().toISOString();
   const u = ST.user;
-  if(u) setOnboardingState(u.id, { readSections: rs });
+  if(u) setOnboardingState(u.authUid || u.id, { readSections: rs });
 
   // Update UI immediately
   l3RefreshNavDots(type, id);
@@ -208,7 +208,7 @@ function l3AnswerCheck(type, id, idx, choiceIdx){
   const cr = l3GetCheckResults();
   cr[key] = { passed:isCorrect, choice:choiceIdx, at:new Date().toISOString() };
   const u = ST.user;
-  if(u) setOnboardingState(u.id, { checkResults: cr });
+  if(u) setOnboardingState(u.authUid || u.id, { checkResults: cr });
 
   if(isCorrect){
     resultEl.innerHTML = `<div class="l3-check-result pass">
@@ -512,14 +512,14 @@ function showWelcomeOverlay(){
   if(!u) return;
 
   // DEFENSIVE: If onboarding says we are done or skipped, do not show
-  const ob = getOnboardingState(u.id);
+  const ob = getOnboardingState(u.authUid || u.id);
   if(ob && (ob.tourCompleted || ob.tourSkipped)) {
     console.log('showWelcomeOverlay: Skipping redundant popup (already completed/skipped)');
     return;
   }
 
   // IMMEDIATELY mark as skipped so it never pops up again
-  setOnboardingState(u.id, { tourSkipped: true, tourSkippedAt: new Date().toISOString() });
+  setOnboardingState(u.authUid || u.id, { tourSkipped: true, tourSkippedAt: new Date().toISOString() });
 
   const role = getTourRole();
   const roleLabels = {
@@ -548,7 +548,7 @@ function onboardingStartTour(){
 function onboardingSkipTour(){
   const u = ST.user;
   document.getElementById('welcome-overlay').classList.remove('open');
-  if(u) setOnboardingState(u.id, { tourSkipped:true, tourSkippedAt:new Date().toISOString() });
+  if(u) setOnboardingState(u.authUid || u.id, { tourSkipped:true, tourSkippedAt:new Date().toISOString() });
   // Show skip reminder banner
   setTimeout(()=>{
     const rem = document.getElementById('skip-reminder');
@@ -645,7 +645,7 @@ function tourRender(){
   }, renderDelay);
 
   // Save progress
-  if(ST.user) setOnboardingState(ST.user.id, { lastTourStep: OB.step });
+  if(ST.user) setOnboardingState(ST.user.authUid || ST.user.id, { lastTourStep: OB.step });
 }
 
 function tourPositionSpotlight(el){
@@ -719,7 +719,7 @@ function tourFinish(){
   closeSidebar(prefix);
 
   if(ST.user){
-    setOnboardingState(ST.user.id, { tourCompleted:true, tourCompletedAt:new Date().toISOString(), lastTourStep:OB.steps.length });
+    setOnboardingState(ST.user.authUid || ST.user.id, { tourCompleted:true, tourCompletedAt:new Date().toISOString(), lastTourStep:OB.steps.length });
   }
 
   // Show post-tour modal
@@ -735,7 +735,7 @@ function showPostTourPrompt(){
   html += '<div class="posttour-title">Tour Complete!</div>';
 
   if(role === 'staff_member'){
-    const ob = getOnboardingState(ST.user?.id);
+    const ob = getOnboardingState(ST.user?.authUid || ST.user?.id);
     if(ob && !ob.profileAssessmentPrompted){
       html += '<div class="posttour-desc">Great work. Your next step is to complete your Profile Assessment. This helps your facility understand your strengths and place you on the right belt track.</div>';
       html += '<div class="posttour-actions">';
@@ -743,7 +743,7 @@ function showPostTourPrompt(){
       html += '<button class="btn btn-ghost" onclick="closeModal();postTourGoTo(\'s-study\',\'Study &amp; Practice\')">Start Practicing</button>';
       html += '<button class="btn btn-ghost btn-sm" onclick="closeModal()">Maybe Later</button>';
       html += '</div>';
-      if(ST.user) setOnboardingState(ST.user.id, { profileAssessmentPrompted:true });
+      if(ST.user) setOnboardingState(ST.user.authUid || ST.user.id, { profileAssessmentPrompted:true });
     } else {
       html += '<div class="posttour-desc">You are all set. Explore the platform at your own pace. You can relaunch this tour anytime from the Platform Guide tab.</div>';
       html += '<div class="posttour-actions"><button class="btn btn-gold" onclick="closeModal()">Got It</button></div>';
@@ -783,7 +783,7 @@ function checkAttentionItems(prefix){
   const u = ST.user;
   if(!u) return;
 
-  const ob = getOnboardingState(u.id);
+  const ob = getOnboardingState(u.authUid || u.id);
   const dismissed = ob ? (ob.attentionDismissals || {}) : {};
   const today = new Date().toISOString().slice(0,10);
 
@@ -869,10 +869,10 @@ function dismissAttn(prefix){
   const itemId = bar.dataset.itemId;
   bar.classList.remove('show');
   if(itemId && ST.user){
-    const ob = getOnboardingState(ST.user.id) || {};
+    const ob = getOnboardingState(ST.user.authUid || ST.user.id) || {};
     const dismissals = ob.attentionDismissals || {};
     dismissals[itemId] = new Date().toISOString().slice(0,10);
-    setOnboardingState(ST.user.id, { attentionDismissals: dismissals });
+    setOnboardingState(ST.user.authUid || ST.user.id, { attentionDismissals: dismissals });
   }
 }
 
@@ -892,7 +892,7 @@ function renderGuideView(prefix){
   const role = getTourRole();
   const steps = TOUR_STEPS[role] || [];
   const u = ST.user;
-  const ob = u ? getOnboardingState(u.id) : null;
+  const ob = u ? getOnboardingState(u.authUid || u.id) : null;
 
   // Group steps by category
   const groups = {};
@@ -1428,18 +1428,18 @@ const SECTION_WALKTHROUGHS = {
 function hasCompletedStep(stepId){
   const u = ST.user;
   if(!u) return false;
-  const ob = getOnboardingState(u.id);
+  const ob = getOnboardingState(u.authUid || u.id);
   return ob && ob.completedSteps && ob.completedSteps.includes(stepId);
 }
 
 function markStepCompleted(stepId){
   const u = ST.user;
   if(!u) return;
-  const ob = getOnboardingState(u.id) || {};
+  const ob = getOnboardingState(u.authUid || u.id) || {};
   const steps = ob.completedSteps || [];
   if(!steps.includes(stepId)){
     steps.push(stepId);
-    setOnboardingState(u.id, { completedSteps: steps });
+    setOnboardingState(u.authUid || u.id, { completedSteps: steps });
   }
 }
 
@@ -1453,7 +1453,7 @@ function markStepCompleted(stepId){
 function getOnboardingSequence(role){
   const u = ST.user;
   const prefix = getPortalPrefix();
-  const ob = u ? getOnboardingState(u.id) : {};
+  const ob = u ? getOnboardingState(u.authUid || u.id) : {};
   const seen = (ob && ob.seenSections) || [];
   const tourDone = ob && ob.tourCompleted;
 
@@ -1634,28 +1634,28 @@ function hasSectionBeenSeen(viewId){
   if (localStorage.getItem('sbd_swt_dismissed_' + u.id + '_' + viewId) === 'true') {
     return true;
   }
-  const ob = getOnboardingState(u.id);
+  const ob = getOnboardingState(u.authUid || u.id);
   return ob && ob.seenSections && ob.seenSections.includes(viewId);
 }
 
 function markSectionSeen(viewId){
   const u = ST.user;
   if(!u) return;
-  const ob = getOnboardingState(u.id) || {};
+  const ob = getOnboardingState(u.authUid || u.id) || {};
   const seen = ob.seenSections || [];
   if(!seen.includes(viewId)){
     seen.push(viewId);
-    setOnboardingState(u.id, { seenSections: seen });
+    setOnboardingState(u.authUid || u.id, { seenSections: seen });
   }
 }
 
 function resetSectionSeen(viewId){
   const u = ST.user;
   if(!u) return;
-  const ob = getOnboardingState(u.id);
+  const ob = getOnboardingState(u.authUid || u.id);
   if(ob && ob.seenSections){
     ob.seenSections = ob.seenSections.filter(s=>s!==viewId);
-    setOnboardingState(u.id, { seenSections: ob.seenSections });
+    setOnboardingState(u.authUid || u.id, { seenSections: ob.seenSections });
   }
 }
 
@@ -1679,7 +1679,7 @@ function injectSectionWalkthrough(viewId){
 
   // Check if this section was previously collapsed by the user
   const u = ST.user;
-  const ob = u ? getOnboardingState(u.id) : null;
+  const ob = u ? getOnboardingState(u.authUid || u.id) : null;
   const collapsedList = (ob && ob.collapsedSections) ? ob.collapsedSections : [];
   const startCollapsed = collapsedList.includes(viewId);
 
@@ -1739,14 +1739,14 @@ function collapseSWT(viewId){
 function _persistCollapseState(viewId, isCollapsed){
   const u = ST.user;
   if(!u) return;
-  const ob = getOnboardingState(u.id) || {};
+  const ob = getOnboardingState(u.authUid || u.id) || {};
   let collapsed = ob.collapsedSections || [];
   if(isCollapsed && !collapsed.includes(viewId)){
     collapsed.push(viewId);
   } else if(!isCollapsed){
     collapsed = collapsed.filter(s=>s!==viewId);
   }
-  setOnboardingState(u.id, { collapsedSections: collapsed });
+  setOnboardingState(u.authUid || u.id, { collapsedSections: collapsed });
 }
 
 function dismissSWT(viewId){
@@ -1764,10 +1764,10 @@ function dismissSWT(viewId){
     // Guaranteed persistence layer
     localStorage.setItem('sbd_swt_dismissed_' + u.id + '_' + viewId, 'true');
 
-    const ob = getOnboardingState(u.id) || {};
+    const ob = getOnboardingState(u.authUid || u.id) || {};
     let collapsed = ob.collapsedSections || [];
     collapsed = collapsed.filter(s=>s!==viewId);
-    setOnboardingState(u.id, { collapsedSections: collapsed });
+    setOnboardingState(u.authUid || u.id, { collapsedSections: collapsed });
   }
 }
 
@@ -1782,7 +1782,7 @@ function swtBackToGuide(prefix){
 function replayAllSectionWalkthroughs(){
   const u = ST.user;
   if(!u) return;
-  setOnboardingState(u.id, { seenSections: [], collapsedSections: [] });
+  setOnboardingState(u.authUid || u.id, { seenSections: [], collapsedSections: [] });
   // Clear persistent local cache
   Object.keys(localStorage).forEach(k => {
     if (k.startsWith('sbd_swt_dismissed_' + u.id + '_')) {
@@ -1800,10 +1800,10 @@ function replaySingleSWT(viewId, prefix){
     // Clear persistent local cache
     localStorage.removeItem('sbd_swt_dismissed_' + u.id + '_' + viewId);
 
-    const ob = getOnboardingState(u.id) || {};
+    const ob = getOnboardingState(u.authUid || u.id) || {};
     let collapsed = ob.collapsedSections || [];
     collapsed = collapsed.filter(s=>s!==viewId);
-    setOnboardingState(u.id, { collapsedSections: collapsed });
+    setOnboardingState(u.authUid || u.id, { collapsedSections: collapsed });
   }
   // Set flag so the walkthrough shows a back button
   OB.cameFromGuide = true;
@@ -2006,7 +2006,7 @@ async function initAppData(){
         SB.getPendingRegistrations().catch(e=>{ console.error('regs load err', e); return []; }),
         SB.getFreeAgents().catch(e=>{ console.error('fa load err', e); return []; }),
         SB.getPromotionApprovals().catch(e=>{ console.error('promos load err', e); return []; }),
-        (ST.user ? SB.getUserOnboarding(ST.user.id) : Promise.resolve([])).catch(e=>{ console.error('onboarding load err', e); return []; })
+        (ST.user ? SB.getUserOnboarding(ST.user.authUid || ST.user.id) : Promise.resolve([])).catch(e=>{ console.error('onboarding load err', e); return []; })
       ]),
       new Promise((_,rej)=>setTimeout(()=>rej(new Error('Initial data load timeout')), 20000))
     ]);

@@ -6047,7 +6047,7 @@ function renderXDashboard(){
       <div class="stat-card"><div class="stat-accent" style="background:var(--gold)"></div><div class="stat-lbl">Facilities</div><div class="stat-val" style="color:var(--gold)">${facs.length}</div><div class="stat-sub">In your system</div></div>
       <div class="stat-card"><div class="stat-accent" style="background:var(--blue)"></div><div class="stat-lbl">Total Staff</div><div class="stat-val" style="color:var(--blue)">${n}</div><div class="stat-sub">System-wide enrolled</div></div>
       <div class="stat-card"><div class="stat-accent" style="background:var(--ok)"></div><div class="stat-lbl">Network Green Belt %</div><div class="stat-val" style="color:var(--ok)">${netPct}%</div><div class="stat-sub">${aboveG} of ${n} at Green+</div></div>
-      <div class="stat-card"><div class="stat-accent" style="background:var(--warn)"></div><div class="stat-lbl">Pending Assessments</div><div class="stat-val" style="color:var(--warn)">${DB.queue.filter(q=>facs.find(f=>f.id===q.fid)).length}</div><div class="stat-sub">Awaiting SBD review</div></div>
+      <div class="stat-card"><div class="stat-accent" style="background:var(--warn)"></div><div class="stat-lbl">Pending Assessments</div><div class="stat-val" style="color:var(--warn)">${DB.queue.filter(q=>facs.find(f=>f.id===(q.facility_id||q.fid))).length}</div><div class="stat-sub">Awaiting SBD review</div></div>
     </div>
     <div class="card mb16">
       <div class="card-hd"><div class="card-ttl">Facility Comparison</div></div>
