@@ -8,19 +8,20 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
-  --bg:#0a0a0f;--bg2:#12121a;--bg3:#1a1a26;--bg4:#22222e;
-  --txt:#e8e8f0;--txt2:#a0a0b8;--txt3:#606078;
+  --bg:#0d1208;--bg2:#151c10;--bg3:#1c2416;--bg4:#242e1e;
+  --txt:#e8e8e0;--txt2:#a0a8a0;--txt3:#606860;
   --gold:#c49a20;--gold2:#e8b830;--gold-glow:rgba(196,154,32,.25);
   --blue:#3b82f6;--blue-glow:rgba(59,130,246,.2);
   --purple:#8b5cf6;--purple-glow:rgba(139,92,246,.2);
   --green:#22c55e;--green-glow:rgba(34,197,94,.3);
   --red:#ef4444;--red-glow:rgba(239,68,68,.3);
   --amber:#f59e0b;--amber-glow:rgba(245,158,11,.3);
+  --yellow:#eab308;--yellow-glow:rgba(234,179,8,.25);
   --glass:rgba(255,255,255,.04);--glass-border:rgba(255,255,255,.08);
   --radius:16px;--radius-sm:10px;
 }
 body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--txt);min-height:100vh;overflow-x:hidden}
-body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%;background:radial-gradient(ellipse at 30% 20%,rgba(139,92,246,.06) 0%,transparent 50%),radial-gradient(ellipse at 70% 80%,rgba(196,154,32,.04) 0%,transparent 50%);pointer-events:none;z-index:0}
+body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%;background:radial-gradient(ellipse at 30% 20%,rgba(34,80,20,.15) 0%,transparent 50%),radial-gradient(ellipse at 70% 80%,rgba(196,154,32,.04) 0%,transparent 50%);pointer-events:none;z-index:0}
 
 .page{max-width:1280px;margin:0 auto;padding:32px 24px;position:relative;z-index:1}
 
@@ -90,9 +91,9 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
 /* ── Tier Chips ── */
 .tier-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;font-size:12px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;cursor:pointer;transition:all .2s;position:relative;z-index:1}
 .tier-base{background:rgba(255,255,255,.06);color:var(--txt3);border:1px solid rgba(255,255,255,.06)}
-.tier-enhanced{background:var(--blue-glow);color:var(--blue);border:1px solid rgba(59,130,246,.2)}
-.tier-premium{background:var(--gold-glow);color:var(--gold2);border:1px solid rgba(196,154,32,.2)}
-.tier-enterprise{background:linear-gradient(135deg,rgba(139,92,246,.15),rgba(236,72,153,.15));color:#c084fc;border:1px solid rgba(139,92,246,.2)}
+.tier-enhanced{background:var(--yellow-glow);color:var(--yellow);border:1px solid rgba(234,179,8,.25)}
+.tier-premium{background:var(--green-glow);color:var(--green);border:1px solid rgba(34,197,94,.25)}
+.tier-enterprise{background:var(--purple-glow);color:#c084fc;border:1px solid rgba(139,92,246,.2)}
 .tier-chip:hover{transform:scale(1.05)}
 
 /* ── Status Dot ── */
@@ -167,7 +168,7 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
     <div class="hero-card">
       <div class="hero-lbl">Active Deployments</div>
       <div class="hero-row">
-        <div class="hero-val" id="deploy-count">4</div>
+        <div class="hero-val" id="deploy-count">0</div>
         <div class="hero-unit">/ 16 facilities</div>
       </div>
       <div class="hero-trend trend-up">↑ 2 this month</div>
@@ -251,13 +252,13 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
 
 <script>
 const FACILITIES = [
-  {id:1,name:'Alta Bates Medical Center',system:'Sutter Health',tier:'premium',tokens:4200,active:true},
-  {id:2,name:'Boston Children\'s Hospital',system:'Boston Medical',tier:'enhanced',tokens:3100,active:true},
+  {id:1,name:'Alta Bates Medical Center',system:'Sutter Health',tier:'premium',tokens:4200,active:false},
+  {id:2,name:'Boston Children\'s Hospital',system:'Boston Medical',tier:'enhanced',tokens:3100,active:false},
   {id:3,name:'Mount Sinai',system:'Mount Sinai Health',tier:'base',tokens:0,active:false},
-  {id:4,name:'Dallas Methodist',system:'Texas Health',tier:'enterprise',tokens:8400,active:true},
+  {id:4,name:'Dallas Methodist',system:'Texas Health',tier:'enterprise',tokens:8400,active:false},
   {id:5,name:'Jetski Test Facility',system:'SIPS Internal',tier:'base',tokens:0,active:false},
   {id:6,name:'Alta Bates Surgery Center',system:'Sutter Health',tier:'base',tokens:0,active:false},
-  {id:7,name:'SIPS HQ',system:'SIPS Internal',tier:'premium',tokens:2800,active:true},
+  {id:7,name:'SIPS HQ',system:'SIPS Internal',tier:'premium',tokens:2800,active:false},
   {id:8,name:'Duplicate Test 3',system:'Test',tier:'base',tokens:0,active:false},
   {id:9,name:'Stanford Medical',system:'Stanford Health',tier:'base',tokens:0,active:false},
 ];
