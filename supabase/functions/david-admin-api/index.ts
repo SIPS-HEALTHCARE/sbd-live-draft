@@ -31,6 +31,7 @@ serve(async (req) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
     if (authError || !user) {
+      console.error('[DAVID_ADMIN_API] Auth Error:', authError);
       return new Response(JSON.stringify({ error: 'Unauthorized', details: authError }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -181,9 +182,12 @@ serve(async (req) => {
       const { data: users, error: uErr } = await adminSupabase
         .from('sbd_portal_users')
         .select('id, name, email, role, title')
-        .or(`facility_id.eq.${facilityId},assigned_facility_ids.cs.{${facilityId}}`)
+        .or(`facility_id.eq.${facilityId},assigned_facility_ids.cs.{"${facilityId}"}`)
         .order('name');
-      if (uErr) throw uErr;
+      if (uErr) {
+        console.error('[DAVID_ADMIN_API] GET_FACILITY_USERS users error:', JSON.stringify(uErr));
+        throw uErr;
+      }
 
       // Get their DAVID access status
       const { data: userAccess, error: uaErr } = await adminSupabase
