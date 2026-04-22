@@ -160,6 +160,27 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
 .up-role{font-size:9px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--txt3);margin-top:2px}
 .up-toggle{flex-shrink:0}
 
+/* ── Manage Staff Button ── */
+.manage-staff-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--txt);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.manage-staff-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+}
+
 /* ── Toast ── */
 .toast{position:fixed;bottom:32px;right:32px;padding:14px 24px;border-radius:var(--radius-sm);background:var(--bg3);border:1px solid var(--glass-border);font-size:13px;font-weight:500;color:var(--txt);box-shadow:0 8px 32px rgba(0,0,0,.5);transform:translateY(100px);opacity:0;transition:all .4s ease-out;z-index:200;display:flex;align-items:center;gap:10px}
 .toast.show{transform:translateY(0);opacity:1}
@@ -366,7 +387,7 @@ function renderCards(list){
     const cls=f.active?'fac-card active':'fac-card locked';
     return `<div class="${cls}" data-name="${f.name.toLowerCase()}" data-status="${f.active?'active':'locked'}" data-id="${f.id}">
       <div class="card-head">
-        <div><div class="card-name" style="cursor:pointer" onclick="openUserPanel('${f.id}','${f.name.replace(/'/g,"")}')"> ${f.name}</div></div>
+        <div><div class="card-name">${f.name}</div></div>
         <div class="toggle ${f.active?'on':''}" onclick="toggleAccess('${f.id}')"><div class="toggle-knob"></div></div>
       </div>
       <div class="card-meta">
@@ -383,6 +404,12 @@ function renderCards(list){
           <span class="meta-lbl">Status</span>
           <div class="status-dot">${f.active?'<div class="dot dot-green"></div><span style="color:var(--green)">Active</span>':'<div class="dot dot-red"></div><span style="color:var(--red)">Locked</span>'}</div>
         </div>
+      </div>
+      <div style="margin-top: 16px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px; display: flex; justify-content: flex-end;">
+        <button class="manage-staff-btn" onclick="openUserPanel('${f.id}','${f.name.replace(/'/g,"")}')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+          Manage Staff
+        </button>
       </div>
     </div>`;
   }).join('');
