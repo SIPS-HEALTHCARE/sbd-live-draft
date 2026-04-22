@@ -154,6 +154,85 @@ serve(async (req) => {
       });
     }
 
+    if (action === 'GET_FACILITY_USERS') {
+      const { facilityId } = payload;
+      console.log(`[DAVID_ADMIN_API] GET_FACILITY_USERS: ${facilityId}`);
+
+      // Get all portal users assigned to this facility
+      const { data: users, error: uErr } = await adminSupabase
+        .from('sbd_portal_users')
+        .select('id, name, email, role, title')
+        .or(`facility_id.eq.${facilityId},assigned_facility_ids.cs.{${facilityId}}`)
+        .order('name');
+      if (uErr) throw uErr;
+
+      // Get their DAVID access status
+      const { data: userAccess, error: uaErr } = await adminSupabase
+        .from('david_user_access')
+        .select('*')
+        .eq('facility_id', facilityId);
+      if (uaErr) throw uaErr;
+
+      const accessMap: Record<string, any> = {};
+      (userAccess || []).forEach((ua: any) => { accessMap[ua.user_id] = ua; });
+
+      const result = (users || []).map((u: any) => ({
+        ...u,
+        david_active: accessMap[u.id]?.is_active || false,
+        david_granted_at: accessMap[u.id]?.granted_at || null,
+      }));
+
+      return new Response(JSON.stringify({ success: true, data: result }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (action === 'TOGGLE_USER_ACCESS') {
+      const { userId, facilityId, isActive } = payload;
+      console.log(`[DAVID_ADMIN_API] TOGGLE_USER_ACCESS: user=${userId} fac=${facilityId} → ${isActive}`);
+
+      const { data: existing } = await adminSupabase
+        .from('david_user_access')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('facility_id', facilityId)
+        .maybeSingle();
+
+      let data, error;
+      if (existing) {
+        ({ data, error } = await adminSupabase
+          .from('david_user_access')
+          .update({ is_active: isActive, updated_at: new Date().toISOString() })
+          .eq('user_id', userId)
+          .eq('facility_id', facilityId)
+          .select()
+          .single());
+      } else {
+        ({ data, error } = await adminSupabase
+          .from('david_user_access')
+          .insert({
+            user_id: userId,
+            facility_id: facilityId,
+            is_active: isActive,
+            granted_by: user.id,
+            granted_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .select()
+          .single());
+      }
+
+      if (error) {
+        console.error('[DAVID_ADMIN_API] USER_ACCESS error:', JSON.stringify(error));
+        throw error;
+      }
+
+      console.log('[DAVID_ADMIN_API] USER_ACCESS success:', JSON.stringify(data));
+      return new Response(JSON.stringify({ success: true, data }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     throw new Error('Invalid action provided.');
 
   } catch (error: any) {

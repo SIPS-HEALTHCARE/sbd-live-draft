@@ -139,6 +139,27 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
 .btn-gold{background:linear-gradient(135deg,var(--gold),var(--gold2));color:#000}
 .btn-gold:hover{box-shadow:0 4px 16px var(--gold-glow);transform:translateY(-1px)}
 
+/* ── User Panel Drawer ── */
+.user-panel-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);backdrop-filter:blur(3px);z-index:150;display:none}
+.user-panel-overlay.show{display:block}
+.user-panel{position:fixed;top:0;right:-480px;width:460px;max-width:92vw;height:100vh;background:var(--bg2);border-left:1px solid var(--glass-border);z-index:151;transition:right .35s ease-out;display:flex;flex-direction:column;box-shadow:-8px 0 40px rgba(0,0,0,.5)}
+.user-panel.show{right:0}
+.up-header{padding:24px 24px 16px;border-bottom:1px solid var(--glass-border)}
+.up-header h3{font-size:17px;font-weight:700;margin-bottom:2px}
+.up-header .up-sub{font-size:12px;color:var(--txt3)}
+.up-close{position:absolute;top:20px;right:20px;background:none;border:none;color:var(--txt3);font-size:22px;cursor:pointer;padding:4px 8px;border-radius:6px;transition:.15s}
+.up-close:hover{background:rgba(255,255,255,.06);color:var(--txt)}
+.up-list{flex:1;overflow-y:auto;padding:12px 16px}
+.up-empty{text-align:center;padding:40px 20px;color:var(--txt3);font-size:13px}
+.up-row{display:flex;align-items:center;gap:12px;padding:14px 12px;border-radius:var(--radius-sm);border:1px solid transparent;transition:all .15s;margin-bottom:4px}
+.up-row:hover{background:rgba(255,255,255,.03);border-color:var(--glass-border)}
+.up-avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--gold),#5c3d0a);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#000;flex-shrink:0}
+.up-info{flex:1;min-width:0}
+.up-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.up-email{font-size:11px;color:var(--txt3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.up-role{font-size:9px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--txt3);margin-top:2px}
+.up-toggle{flex-shrink:0}
+
 /* ── Toast ── */
 .toast{position:fixed;bottom:32px;right:32px;padding:14px 24px;border-radius:var(--radius-sm);background:var(--bg3);border:1px solid var(--glass-border);font-size:13px;font-weight:500;color:var(--txt);box-shadow:0 8px 32px rgba(0,0,0,.5);transform:translateY(100px);opacity:0;transition:all .4s ease-out;z-index:200;display:flex;align-items:center;gap:10px}
 .toast.show{transform:translateY(0);opacity:1}
@@ -148,6 +169,7 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
   .hero{grid-template-columns:1fr}
   .cards-grid{grid-template-columns:1fr}
   .toolbar{flex-direction:column}
+  .user-panel{width:100vw;max-width:100vw}
 }
 </style>
 </head>
@@ -244,6 +266,19 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
 </div>
 
 <!-- Toast -->
+<!-- User Access Panel Drawer -->
+<div class="user-panel-overlay" id="user-panel-overlay" onclick="closeUserPanel()"></div>
+<div class="user-panel" id="user-panel">
+  <div class="up-header">
+    <button class="up-close" onclick="closeUserPanel()">&times;</button>
+    <h3 id="up-fac-name">Facility Users</h3>
+    <div class="up-sub">Toggle DAVID access for individual accounts</div>
+  </div>
+  <div class="up-list" id="up-list">
+    <div class="up-empty">Loading users...</div>
+  </div>
+</div>
+
 <div class="toast" id="toast"><span class="toast-icon"></span><span id="toast-msg"></span></div>
 
 <script>
@@ -331,7 +366,7 @@ function renderCards(list){
     const cls=f.active?'fac-card active':'fac-card locked';
     return `<div class="${cls}" data-name="${f.name.toLowerCase()}" data-status="${f.active?'active':'locked'}" data-id="${f.id}">
       <div class="card-head">
-        <div><div class="card-name">${f.name}</div></div>
+        <div><div class="card-name" style="cursor:pointer" onclick="openUserPanel('${f.id}','${f.name.replace(/'/g,"")}')"> ${f.name}</div></div>
         <div class="toggle ${f.active?'on':''}" onclick="toggleAccess('${f.id}')"><div class="toggle-knob"></div></div>
       </div>
       <div class="card-meta">
@@ -448,6 +483,64 @@ function initSparkline(){
   const data=[12,28,18,35,22,48,32,55,40,68,45,72];
   const max=Math.max(...data);
   el.innerHTML=data.map(v=>`<div class="spark-bar" style="height:${Math.max(4,v/max*100)}%"></div>`).join('');
+}
+
+// ── User Panel ──
+let userPanelFacId = null;
+async function openUserPanel(facId, facName){
+  userPanelFacId = facId;
+  document.getElementById('up-fac-name').textContent = facName + ' — Users';
+  document.getElementById('up-list').innerHTML = '<div class="up-empty">Loading users...</div>';
+  document.getElementById('user-panel-overlay').classList.add('show');
+  document.getElementById('user-panel').classList.add('show');
+  try {
+    const users = await adminAPI('GET_FACILITY_USERS', { facilityId: facId });
+    renderUserList(users, facId);
+  } catch(e){
+    document.getElementById('up-list').innerHTML = `<div class="up-empty">${e.message}</div>`;
+  }
+}
+function closeUserPanel(){
+  document.getElementById('user-panel-overlay').classList.remove('show');
+  document.getElementById('user-panel').classList.remove('show');
+  userPanelFacId = null;
+}
+function renderUserList(users, facId){
+  const list = document.getElementById('up-list');
+  if(!users || !users.length){
+    list.innerHTML = '<div class="up-empty">No users assigned to this facility</div>';
+    return;
+  }
+  list.innerHTML = users.map(u => {
+    const initials = (u.name||u.email||'??').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
+    const roleLabel = (u.role||'').replace('_',' ');
+    return `<div class="up-row" data-uid="${u.id}">
+      <div class="up-avatar">${initials}</div>
+      <div class="up-info">
+        <div class="up-name">${u.name||u.email}</div>
+        <div class="up-email">${u.email}</div>
+        <div class="up-role">${roleLabel}${u.title?' · '+u.title:''}</div>
+      </div>
+      <div class="up-toggle">
+        <div class="toggle ${u.david_active?'on':''}" onclick="toggleUserAccess('${u.id}','${facId}',this)" style="width:40px;height:22px">
+          <div class="toggle-knob" style="width:16px;height:16px"></div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+async function toggleUserAccess(userId, facId, el){
+  const isOn = el.classList.contains('on');
+  const newState = !isOn;
+  try {
+    await adminAPI('TOGGLE_USER_ACCESS', { userId, facilityId: facId, isActive: newState });
+    if(newState) el.classList.add('on'); else el.classList.remove('on');
+    const row = el.closest('.up-row');
+    const name = row?.querySelector('.up-name')?.textContent || 'User';
+    showToast(newState?'✅':'🔒', newState?`DAVID enabled for ${name}`:`DAVID revoked for ${name}`);
+  } catch(e){
+    showToast('❌','Toggle failed: '+e.message);
+  }
 }
 
 // ── Boot ──
