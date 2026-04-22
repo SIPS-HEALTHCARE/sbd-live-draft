@@ -227,17 +227,13 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
         <div class="tier-icon t-base">🔒</div>
         <div class="tier-info"><h4>Base</h4><p>Standard query access. No proactive intelligence.</p></div>
       </div>
-      <div class="tier-opt" onclick="selectTier(this,'enhanced')">
-        <div class="tier-icon t-enh">⚡</div>
-        <div class="tier-info"><h4>Enhanced</h4><p>Anomaly detection + proactive alerts.</p></div>
-      </div>
       <div class="tier-opt" onclick="selectTier(this,'premium')">
         <div class="tier-icon t-prem">👑</div>
         <div class="tier-info"><h4>Premium</h4><p>Full predictive analytics + chart rendering.</p></div>
       </div>
-      <div class="tier-opt" onclick="selectTier(this,'enterprise')">
+      <div class="tier-opt" onclick="selectTier(this,'supreme')">
         <div class="tier-icon t-ent">🚀</div>
-        <div class="tier-info"><h4>Enterprise</h4><p>Autonomous operations + action execution.</p></div>
+        <div class="tier-info"><h4>Supreme</h4><p>Autonomous operations + SQL execution + action intelligence.</p></div>
       </div>
     </div>
     <div class="modal-actions">
@@ -251,42 +247,102 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
 <div class="toast" id="toast"><span class="toast-icon"></span><span id="toast-msg"></span></div>
 
 <script>
-const FACILITIES = [
-  {id:1,name:'Alta Bates Medical Center',system:'Sutter Health',tier:'premium',tokens:4200,active:false},
-  {id:2,name:'Boston Children\'s Hospital',system:'Boston Medical',tier:'enhanced',tokens:3100,active:false},
-  {id:3,name:'Mount Sinai',system:'Mount Sinai Health',tier:'base',tokens:0,active:false},
-  {id:4,name:'Dallas Methodist',system:'Texas Health',tier:'enterprise',tokens:8400,active:false},
-  {id:5,name:'Jetski Test Facility',system:'SIPS Internal',tier:'base',tokens:0,active:false},
-  {id:6,name:'Alta Bates Surgery Center',system:'Sutter Health',tier:'base',tokens:0,active:false},
-  {id:7,name:'SIPS HQ',system:'SIPS Internal',tier:'premium',tokens:2800,active:false},
-  {id:8,name:'Duplicate Test 3',system:'Test',tier:'base',tokens:0,active:false},
-  {id:9,name:'Stanford Medical',system:'Stanford Health',tier:'base',tokens:0,active:false},
-];
-const MAX_TOKENS=10000;
-let modalFacId=null, selectedTier=null;
+// ═══════════════════════════════════════════════════════════════
+// DAVID Command Center — Live Supabase Backend
+// ═══════════════════════════════════════════════════════════════
+const SB_URL  = 'https://mhijaqahbceuahfzezbh.supabase.co';
+const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1oaWphcWFoYmNldWFoZnplemJoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4MDkwNzksImV4cCI6MjA4OTM4NTA3OX0.GZcvOFxm4uNdTFPnq-rfwHaMVhWbIJWY7QMYToPa7mQ';
+const API_URL = SB_URL + '/functions/v1/david-admin-api';
+const MAX_TOKENS = 500000;
 
-function tierClass(t){return({base:'tier-base',enhanced:'tier-enhanced',premium:'tier-premium',enterprise:'tier-enterprise'})[t]||'tier-base'}
-function tierLabel(t){return t.charAt(0).toUpperCase()+t.slice(1)}
+let FACILITIES = [];
+let modalFacId = null, selectedTier = null;
 
+// ── Auth ──
+function getToken(){
+  try {
+    const raw = localStorage.getItem('sbd_session');
+    if(!raw) return null;
+    const s = JSON.parse(raw);
+    if(s.expires_at && Date.now()/1000 > s.expires_at) return null;
+    return s.access_token;
+  } catch{ return null; }
+}
+
+// ── API call helper ──
+async function adminAPI(action, payload={}){
+  const token = getToken();
+  if(!token) throw new Error('Not authenticated');
+  const res = await fetch(API_URL, {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+token },
+    body: JSON.stringify({ action, payload })
+  });
+  const json = await res.json();
+  if(!res.ok || !json.success) throw new Error(json.error || 'API error');
+  return json.data;
+}
+
+// ── Load live data ──
+async function loadFacilities(){
+  const token = getToken();
+  if(!token){ showToast('🔒','Please log in on the main portal first'); return; }
+
+  // Fetch facilities list via REST
+  const facRes = await fetch(SB_URL+'/rest/v1/facilities?select=id,name&order=name.asc', {
+    headers:{ 'apikey':SB_KEY, 'Authorization':'Bearer '+token }
+  });
+  const rawFacs = await facRes.json();
+
+  // Fetch access + analytics from admin API
+  let accessMap = {}, analyticsMap = {};
+  try {
+    const metrics = await adminAPI('GET_METRICS');
+    (metrics.access||[]).forEach(a => accessMap[a.facility_id] = a);
+    (metrics.analytics||[]).forEach(a => analyticsMap[a.facility_id] = a);
+  } catch(e){ console.warn('Metrics load:', e.message); }
+
+  FACILITIES = rawFacs.map(f => {
+    const acc = accessMap[f.id] || {};
+    const ana = analyticsMap[f.id] || {};
+    return {
+      id: f.id,
+      name: f.name || 'Unnamed',
+      tier: acc.tier || 'base',
+      active: acc.is_active || false,
+      tokens: ana.total_tokens || 0,
+      maxTokens: acc.max_monthly_tokens || MAX_TOKENS
+    };
+  });
+
+  renderCards(FACILITIES);
+  updateDeployCount();
+}
+
+// ── Tier styling ──
+function tierClass(t){return({base:'tier-base',premium:'tier-premium',supreme:'tier-enterprise'})[t]||'tier-base'}
+function tierLabel(t){return({base:'Base',premium:'Premium',supreme:'Supreme'})[t]||'Base'}
+
+// ── Render ──
 function renderCards(list){
   const grid=document.getElementById('cards-grid');
   grid.innerHTML=list.map(f=>{
-    const pct=Math.min(100,Math.round(f.tokens/MAX_TOKENS*100));
+    const pct=Math.min(100,Math.round(f.tokens/f.maxTokens*100));
     const cls=f.active?'fac-card active':'fac-card locked';
     return `<div class="${cls}" data-name="${f.name.toLowerCase()}" data-status="${f.active?'active':'locked'}" data-id="${f.id}">
       <div class="card-head">
-        <div><div class="card-name">${f.name}</div><div class="card-system">${f.system}</div></div>
-        <div class="toggle ${f.active?'on':''}" onclick="toggleAccess(${f.id},this)"><div class="toggle-knob"></div></div>
+        <div><div class="card-name">${f.name}</div></div>
+        <div class="toggle ${f.active?'on':''}" onclick="toggleAccess('${f.id}')"><div class="toggle-knob"></div></div>
       </div>
       <div class="card-meta">
         <div class="meta-item">
           <span class="meta-lbl">Tier</span>
-          <span class="tier-chip ${tierClass(f.tier)}" onclick="openTierModal(${f.id})">${tierLabel(f.tier)}</span>
+          <span class="tier-chip ${tierClass(f.tier)}" onclick="openTierModal('${f.id}')">${tierLabel(f.tier)}</span>
         </div>
         <div class="token-bar">
           <span class="meta-lbl">Token Usage</span>
           <div class="token-bar-bg"><div class="token-bar-fill" style="width:${pct}%"></div></div>
-          <div class="token-label"><span>${f.tokens.toLocaleString()} used</span><span>${MAX_TOKENS.toLocaleString()} limit</span></div>
+          <div class="token-label"><span>${f.tokens.toLocaleString()} used</span><span>${f.maxTokens.toLocaleString()} limit</span></div>
         </div>
         <div class="meta-item" style="align-items:flex-end">
           <span class="meta-lbl">Status</span>
@@ -297,20 +353,29 @@ function renderCards(list){
   }).join('');
 }
 
-function toggleAccess(id,el){
+// ── Toggle ──
+async function toggleAccess(id){
   const f=FACILITIES.find(x=>x.id===id);
-  f.active=!f.active;
-  renderCards(FACILITIES);
-  showToast(f.active?'✅':'🔒', f.active?`DAVID Intelligence activated for ${f.name}`:`Access revoked for ${f.name}`);
-  updateDeployCount();
+  if(!f) return;
+  const newState = !f.active;
+  try {
+    await adminAPI('TOGGLE_FACILITY', { facilityId:id, isActive:newState });
+    f.active = newState;
+    renderCards(FACILITIES);
+    updateDeployCount();
+    showToast(newState?'✅':'🔒', newState?`DAVID activated for ${f.name}`:`Access revoked for ${f.name}`);
+  } catch(e){
+    showToast('❌','Toggle failed: '+e.message);
+  }
 }
 
+// ── Tier Modal ──
 function openTierModal(id){
   modalFacId=id;
   const f=FACILITIES.find(x=>x.id===id);
   document.getElementById('modal-fac-name').textContent=f.name;
   document.querySelectorAll('.tier-opt').forEach(o=>o.classList.remove('selected'));
-  const tiers=['base','enhanced','premium','enterprise'];
+  const tiers=['base','premium','supreme'];
   const idx=tiers.indexOf(f.tier);
   if(idx>=0) document.querySelectorAll('.tier-opt')[idx].classList.add('selected');
   selectedTier=f.tier;
@@ -322,18 +387,23 @@ function selectTier(el,t){
   el.classList.add('selected');
   selectedTier=t;
 }
-function applyTier(){
+async function applyTier(){
   if(!modalFacId||!selectedTier)return;
   const f=FACILITIES.find(x=>x.id===modalFacId);
-  f.tier=selectedTier;
-  renderCards(FACILITIES);
-  closeTierModal();
-  showToast('⚡',`${f.name} upgraded to ${tierLabel(selectedTier)} tier`);
+  try {
+    await adminAPI('UPDATE_TIER', { facilityId:modalFacId, tier:selectedTier });
+    f.tier = selectedTier;
+    renderCards(FACILITIES);
+    closeTierModal();
+    showToast('⚡',`${f.name} upgraded to ${tierLabel(selectedTier)} tier`);
+  } catch(e){
+    showToast('❌','Tier update failed: '+e.message);
+  }
 }
 
+// ── Filters ──
 function filterCards(q){
-  const cards=document.querySelectorAll('.fac-card');
-  cards.forEach(c=>{c.style.display=c.dataset.name.includes(q.toLowerCase())?'':'none'});
+  document.querySelectorAll('.fac-card').forEach(c=>{c.style.display=c.dataset.name.includes(q.toLowerCase())?'':'none'});
 }
 function filterByStatus(btn,status){
   document.querySelectorAll('.pill-btn').forEach(b=>b.classList.remove('active'));
@@ -344,6 +414,7 @@ function filterByStatus(btn,status){
   });
 }
 
+// ── Toast ──
 function showToast(icon,msg){
   const t=document.getElementById('toast');
   document.querySelector('.toast-icon').textContent=icon;
@@ -352,15 +423,26 @@ function showToast(icon,msg){
   setTimeout(()=>t.classList.remove('show'),3000);
 }
 
+// ── Hero Stats ──
 function updateDeployCount(){
   const active=FACILITIES.filter(f=>f.active).length;
+  const total=FACILITIES.length||1;
   document.getElementById('deploy-count').textContent=active;
-  const pct=active/FACILITIES.length;
+  document.querySelector('.hero-unit').textContent='/ '+total+' facilities';
+  const pct=active/total;
   document.getElementById('gauge-arc').style.strokeDashoffset=188.5*(1-pct);
   document.querySelector('.gauge-text').textContent=Math.round(pct*100)+'%';
+  // Update token total
+  const totalTokens=FACILITIES.reduce((s,f)=>s+f.tokens,0);
+  const tokenVal=document.querySelectorAll('.hero-val')[1];
+  if(tokenVal) tokenVal.textContent=totalTokens>=1000?(totalTokens/1000).toFixed(1)+'K':totalTokens;
+  // Update cost
+  const cost=((totalTokens/1000)*0.015).toFixed(2);
+  const costVal=document.querySelectorAll('.hero-val')[2];
+  if(costVal) costVal.textContent='$'+cost;
 }
 
-// Sparkline
+// ── Sparkline ──
 function initSparkline(){
   const el=document.getElementById('sparkline');
   const data=[12,28,18,35,22,48,32,55,40,68,45,72];
@@ -368,12 +450,9 @@ function initSparkline(){
   el.innerHTML=data.map(v=>`<div class="spark-bar" style="height:${Math.max(4,v/max*100)}%"></div>`).join('');
 }
 
-// Init
-renderCards(FACILITIES);
-updateDeployCount();
+// ── Boot ──
 initSparkline();
-// Animate gauge on load
-setTimeout(()=>{const a=FACILITIES.filter(f=>f.active).length;document.getElementById('gauge-arc').style.strokeDashoffset=188.5*(1-a/FACILITIES.length)},100);
+loadFacilities();
 </script>
 </body>
 </html>
