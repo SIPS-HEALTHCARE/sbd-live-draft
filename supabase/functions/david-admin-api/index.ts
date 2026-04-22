@@ -41,36 +41,115 @@ serve(async (req) => {
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const adminSupabase = createClient(supabaseUrl, serviceRoleKey);
 
+    // 3. Verify Master Admin role
+    const { data: profile } = await adminSupabase
+      .from('sbd_portal_users')
+      .select('role')
+      .eq('auth_uid', user.id)
+      .single();
+
+    if (!profile || profile.role !== 'master_admin') {
+      return new Response(JSON.stringify({ error: 'Forbidden: Master Admin access required' }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Parse the payload action
     const { action, payload } = await req.json();
 
     if (action === 'TOGGLE_FACILITY') {
       const { facilityId, isActive } = payload;
-      
-      const { data, error } = await adminSupabase
+      console.log(`[DAVID_ADMIN_API] TOGGLE_FACILITY: ${facilityId} → ${isActive}`);
+
+      // Check if row exists first
+      const { data: existing } = await adminSupabase
         .from('david_facility_access')
-        .upsert(
-          { facility_id: facilityId, is_active: isActive, updated_at: new Date() }, 
-          { onConflict: 'facility_id' }
-        )
-        .select()
-        .single();
+        .select('*')
+        .eq('facility_id', facilityId)
+        .maybeSingle();
 
-      if (error) throw error;
+      let data, error;
+      if (existing) {
+        // Update only is_active, preserve tier and other fields
+        ({ data, error } = await adminSupabase
+          .from('david_facility_access')
+          .update({ is_active: isActive, updated_at: new Date().toISOString() })
+          .eq('facility_id', facilityId)
+          .select()
+          .single());
+      } else {
+        // Insert new row with safe defaults
+        ({ data, error } = await adminSupabase
+          .from('david_facility_access')
+          .insert({ facility_id: facilityId, is_active: isActive, tier: 'base', updated_at: new Date().toISOString() })
+          .select()
+          .single());
+      }
 
+      if (error) {
+        console.error('[DAVID_ADMIN_API] TOGGLE error:', JSON.stringify(error));
+        throw error;
+      }
+
+      console.log('[DAVID_ADMIN_API] TOGGLE success:', JSON.stringify(data));
+      return new Response(JSON.stringify({ success: true, data }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (action === 'UPDATE_TIER') {
+      const { facilityId, tier } = payload;
+      console.log(`[DAVID_ADMIN_API] UPDATE_TIER: ${facilityId} → ${tier}`);
+
+      // Check if row exists first
+      const { data: existing } = await adminSupabase
+        .from('david_facility_access')
+        .select('*')
+        .eq('facility_id', facilityId)
+        .maybeSingle();
+
+      let data, error;
+      if (existing) {
+        // Update only tier, preserve is_active and other fields
+        ({ data, error } = await adminSupabase
+          .from('david_facility_access')
+          .update({ tier: tier, updated_at: new Date().toISOString() })
+          .eq('facility_id', facilityId)
+          .select()
+          .single());
+      } else {
+        // Insert new row with safe defaults
+        ({ data, error } = await adminSupabase
+          .from('david_facility_access')
+          .insert({ facility_id: facilityId, is_active: false, tier: tier, updated_at: new Date().toISOString() })
+          .select()
+          .single());
+      }
+
+      if (error) {
+        console.error('[DAVID_ADMIN_API] TIER error:', JSON.stringify(error));
+        throw error;
+      }
+
+      console.log('[DAVID_ADMIN_API] TIER success:', JSON.stringify(data));
       return new Response(JSON.stringify({ success: true, data }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     if (action === 'GET_METRICS') {
-      const { data, error } = await adminSupabase
+      const { data: analytics, error: aErr } = await adminSupabase
         .from('david_analytics_summary')
         .select('*');
+      if (aErr) throw aErr;
 
-      if (error) throw error;
+      const { data: access, error: accErr } = await adminSupabase
+        .from('david_facility_access')
+        .select('*');
+      if (accErr) throw accErr;
 
-      return new Response(JSON.stringify({ success: true, data }), {
+      return new Response(JSON.stringify({ success: true, data: { analytics, access } }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }

@@ -139,8 +139,18 @@ Example: <chips>["Compare to last month", "Audit underperforming groups", "Escal
 
         // 2. Build initial messages
         const messages: Array<any> = [];
+        
+        let tierDirectives = `\n[INTELLIGENCE TIER: ${facilityTier.toUpperCase()}]\n`;
+        if (facilityTier === 'base') {
+            tierDirectives += "You are operating in BASE tier. You can answer standard Q&A on SBD docs. You MUST NOT generate charts or execute SQL commands. Decline complex requests by suggesting an upgrade to Premium or Supreme.\n";
+        } else if (facilityTier === 'premium') {
+            tierDirectives += "You are operating in PREMIUM tier. You have access to chart generation, predictive analytics, and heavy document synthesis. You cannot execute live SQL automation. You may suggest upgrading to Supreme for direct database intervention.\n";
+        } else if (facilityTier === 'supreme') {
+            tierDirectives += "You are operating in SUPREME tier (God Mode). You have unrestricted access to all predictive forecasting, external integrations, chart generation, and live system automation via exec_sql.\n";
+        }
+
         if (systemPrompt) {
-            messages.push({ role: 'system', content: systemPrompt + '\n' + memoryInjection + '\n' + shadowDirectives });
+            messages.push({ role: 'system', content: systemPrompt + '\n' + memoryInjection + '\n' + shadowDirectives + '\n' + tierDirectives });
         }
         for (const msg of history) {
             messages.push({ role: msg.role, content: msg.content });

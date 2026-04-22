@@ -9,7 +9,9 @@ test_*.js
 test_*.txt
 tmp/
 tmp_*.js
+tmp-*.js
 simulate_*.js
+_archive/
 package-lock.json
 .DS_Store
 *.log

@@ -356,6 +356,8 @@ function enterPortal(type){
   document.getElementById('a-topbar-pill').textContent=isMaster?'Master Admin':'Staff Admin';
   document.getElementById('admin-mgmt-lbl').style.display=isMaster?'block':'none';
   document.getElementById('nav-adminusers').style.display=isMaster?'flex':'none';
+  const _navDavidDash = document.getElementById('nav-daviddashboard');
+  if (_navDavidDash) _navDavidDash.style.display = isMaster ? 'flex' : 'none';
   document.getElementById('nav-freeagents').style.display=isMaster?'flex':'none';
   document.getElementById('nav-systems').style.display=isMaster?'flex':'none';
   const _navDavid = document.getElementById('nav-david');
@@ -584,7 +586,7 @@ function renderAView(view){
     toast('RBAC Guard: Unauthorized access to Network Portal', 'err');
     return;
   }
-  ['a-overview','a-leaderboard','a-allstaff','a-scoreboard','a-facilities','a-facility','a-registrations','a-assessments','a-progression','a-upload','a-reports','a-david','a-adminusers','a-promoqueue','a-freeagents','a-placementreviews','a-guide','a-settings','a-systems','a-systems-dashboard'].forEach(v=>{
+  ['a-overview','a-leaderboard','a-allstaff','a-scoreboard','a-facilities','a-facility','a-registrations','a-assessments','a-progression','a-upload','a-reports','a-david','a-daviddashboard','a-adminusers','a-promoqueue','a-freeagents','a-placementreviews','a-guide','a-settings','a-systems','a-systems-dashboard'].forEach(v=>{
     const el=document.getElementById(v);
     if(el){ el.classList.add('hidden'); el.classList.remove('fade-in'); }
   });
@@ -598,6 +600,7 @@ function renderAView(view){
     'a-assessments':renderAAssessments,'a-progression':renderAProgression,'a-upload':renderAUpload,
     'a-reports':renderAReports,
     'a-david':renderADavidView,
+    'a-daviddashboard':renderADavidDashboardView,
     'a-adminusers':renderAAdminUsers,
     'a-promoqueue':renderAPromoQueue,
     'a-freeagents':renderAFreeAgents,
@@ -621,6 +624,20 @@ function renderADavidView() {
     window.DAVID = new DavidChat({ containerId: 'a-david' });
   } else {
     window.DAVID.renderIn('a-david');
+  }
+}
+
+function renderADavidDashboardView() {
+  const container = document.getElementById('a-daviddashboard');
+  if (!container) return;
+  if (!window.DAVID_ADMIN) {
+    if (typeof DavidAdminDashboard === 'undefined') {
+      container.innerHTML = '<div style="padding:40px; color:var(--txt2); text-align:center">Initializing DAVID Command Center...</div>';
+      return;
+    }
+    window.DAVID_ADMIN = new DavidAdminDashboard('a-daviddashboard');
+  } else {
+    window.DAVID_ADMIN.init();
   }
 }
 

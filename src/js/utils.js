@@ -119,13 +119,7 @@ function getFacilityShifts(fid){
 // Backward compat
 const SHIFT_DEF = SHIFT_DEF_DEFAULT;
 
-// Format time "14:00" → "2:00 PM"
-function fmtTime(t){
-  if(!t) return '';
-  const [h,m]=t.split(':').map(Number);
-  const ap=h<12?'AM':'PM'; const h12=h===0?12:h>12?h-12:h;
-  return h12+':'+(m<10?'0'+m:m)+' '+ap;
-}
+// fmtTime() — defined above (line ~50). Not re-declared here.
 const ATTEND_POINTS = { present:10, late:5, absent:-15, pto:0, excused:0, coverage:25 };
 const ATTEND_LABELS = { present:'Present', late:'Late', absent:'Absent', pto:'PTO', excused:'Excused', coverage:'Coverage' };
 const ATTEND_COLORS = { present:'#22c55e', late:'#f59e0b', absent:'#ef4444', pto:'#a78bfa', excused:'#22d3ee', coverage:'#60a5fa' };
@@ -137,19 +131,7 @@ if(!DB.psCompletionRequests) DB.psCompletionRequests = [];
 if(!DB.schNextId) DB.schNextId = 1;
 if(!DB.attNextId) DB.attNextId = 1;
 
-// ── Helpers
-function todayStr(){ return new Date().toISOString().slice(0,10); }
-function dateLabel(d){ const dt=new Date(d+'T12:00:00'); return dt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}); }
-function dateShort(d){ const dt=new Date(d+'T12:00:00'); return dt.toLocaleDateString('en-US',{month:'short',day:'numeric'}); }
-function add30Days(fromStr, n){
-  const dates=[];
-  const d=new Date(fromStr+'T12:00:00');
-  for(let i=0;i<(n||30);i++){
-    dates.push(new Date(d).toISOString().slice(0,10));
-    d.setDate(d.getDate()+1);
-  }
-  return dates;
-}
+// ── Helpers (todayStr, dateLabel, dateShort, add30Days defined above — not re-declared)
 function getSchedule(fid,date,shift){
   return DB.schedule.find(s=>s.fid===fid&&s.date===date&&s.shift===shift)||null;
 }

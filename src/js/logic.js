@@ -96,15 +96,8 @@ function getWindowStatus(staff){
 }
 
 // ── POINTS ENGINE ─────────────────────────────────────────────────────────────
-// Returns the sum of attendance points for a staff member from DB.attendance.
-// DB.attendance is initialised to [] on login and only populated if schedule/attendance
-// data has been loaded. Returns 0 safely when the array is empty.
-function calcAttendancePoints(staff){
-  if(!DB.attendance || !DB.attendance.length) return 0;
-  return DB.attendance
-    .filter(a => a.staff_id === staff.id || a.staffId === staff.id)
-    .reduce((sum, a) => sum + (a.points || 0), 0);
-}
+// calcAttendancePoints() is defined in utils.js (Schedule & Attendance Module).
+// It uses ATTEND_POINTS constants to calculate from attendance status fields.
 
 function calcPoints(staff){
   let pts = 0;
