@@ -297,9 +297,9 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
         <div class="tier-icon t-base">🔒</div>
         <div class="tier-info"><h4>Base</h4><p>Standard query access. No proactive intelligence.</p></div>
       </div>
-      <div class="tier-opt" onclick="selectTier(this,'supreme')">
-        <div class="tier-icon t-ent">🚀</div>
-        <div class="tier-info"><h4>Supreme</h4><p>Autonomous operations + SQL execution + action intelligence.</p></div>
+      <div class="tier-opt" onclick="selectTier(this,'premium')">
+        <div class="tier-icon t-prem">👑</div>
+        <div class="tier-info"><h4>Premium</h4><p>Full predictive analytics + chart rendering.</p></div>
       </div>
     </div>
     <div class="modal-actions">
@@ -532,7 +532,7 @@ function openTierModal(id){
   const f=FACILITIES.find(x=>x.id===id);
   document.getElementById('modal-fac-name').textContent=f.name;
   document.querySelectorAll('.tier-opt').forEach(o=>o.classList.remove('selected'));
-  const tiers=['base','supreme'];
+  const tiers=['base','premium'];
   const idx=tiers.indexOf(f.tier);
   if(idx>=0) document.querySelectorAll('.tier-opt')[idx].classList.add('selected');
   selectedTier=f.tier;
