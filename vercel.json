@@ -1,5 +1,5 @@
 {
-  "buildCommand": "mkdir -p public && cp -r index.html src SBD_GOD_SOG.html *.png public/ || true",
+  "buildCommand": "mkdir -p public && cp -r index.html src SBD_GOD_SOG.html david-command-center.html *.png public/ || true",
   "installCommand": "echo 'No install'",
   "outputDirectory": "public",
   "headers": [
@@ -17,9 +17,17 @@
         { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" },
         { "key": "Pragma", "value": "no-cache" }
       ]
+    },
+    {
+      "source": "/david-command-center.html",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" },
+        { "key": "Pragma", "value": "no-cache" }
+      ]
     }
   ],
   "rewrites": [
+    { "source": "/david-command-center", "destination": "/david-command-center.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
