@@ -258,6 +258,59 @@ serve(async (req) => {
       });
     }
 
+    if (action === 'GET_AUDIT_LOGS') {
+      const { data, error } = await adminSupabase
+        .from('david_audit_logs')
+        .select('id, created_at, action, facility_id, target_id, details, actor_id')
+        .order('created_at', { ascending: false })
+        .limit(100);
+      
+      if (error) {
+        console.error('[DAVID_ADMIN_API] GET_AUDIT_LOGS error:', JSON.stringify(error));
+        throw error;
+      }
+
+      // Fetch actor details manually to avoid strict FK errors if relations aren't perfect
+      const actorIds = [...new Set(data.map((d: any) => d.actor_id).filter(Boolean))];
+      let usersMap: Record<string, any> = {};
+      
+      if (actorIds.length > 0) {
+        const { data: usersData } = await adminSupabase
+          .from('sbd_portal_users')
+          .select('id, name, email')
+          .in('id', actorIds);
+        
+        (usersData || []).forEach((u: any) => { usersMap[u.id] = u; });
+      }
+
+      const enrichedData = data.map((d: any) => ({
+        ...d,
+        actor: usersMap[d.actor_id] || { name: 'Unknown Admin' }
+      }));
+
+      return new Response(JSON.stringify({ success: true, data: enrichedData }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (action === 'GLOBAL_KILLSWITCH') {
+      const { data, error } = await adminSupabase
+        .from('david_facility_access')
+        .update({ is_active: false })
+        .neq('is_active', false)
+        .select();
+
+      if (error) {
+        console.error('[DAVID_ADMIN_API] KILLSWITCH error:', JSON.stringify(error));
+        throw error;
+      }
+
+      await logAudit('GLOBAL_KILLSWITCH', 'ALL_NETWORK', null, { facilities_disabled: data?.length || 0 });
+      return new Response(JSON.stringify({ success: true, data }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     throw new Error('Invalid action provided.');
 
   } catch (error: any) {

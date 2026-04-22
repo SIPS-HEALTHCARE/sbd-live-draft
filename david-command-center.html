@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DAVID Command Center — 2027 Redesign</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -213,6 +214,9 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
     <div class="header-top">
       <h1>DAVID Command Center</h1>
       <span class="header-badge">Master Admin</span>
+      <button class="btn btn-ghost" id="global-killswitch" style="border-color:var(--red); color:var(--red); padding:4px 10px; font-size:11px; margin-left:12px;" onclick="toggleGlobalKillswitch()">
+        🚨 GLOBAL KILLSWITCH
+      </button>
       <div class="system-pulse"><div class="pulse-dot"></div>All Systems Nominal</div>
     </div>
     <div class="header-sub">Enterprise Operational Intelligence Management</div>
@@ -251,6 +255,17 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
         <div class="hero-unit">MTD</div>
       </div>
       <div class="hero-trend trend-neutral">— On budget</div>
+    </div>
+  </div>
+
+  <!-- Telemetry Chart -->
+  <div class="telemetry-panel" style="background:var(--bg2); border:1px solid var(--glass-border); border-radius:var(--radius); padding:24px; margin-bottom:36px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h3 style="font-size:16px;font-weight:700;">Live Telemetry & Token Burn Rate</h3>
+      <button class="btn btn-ghost" style="font-size:11px;padding:6px 12px;" onclick="openAuditPanel()">View Audit Trail</button>
+    </div>
+    <div style="height:250px;width:100%; position:relative;">
+      <canvas id="telemetryChart"></canvas>
     </div>
   </div>
 
@@ -316,6 +331,22 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
   </div>
   <div class="up-list" id="up-list">
     <div class="up-empty">Loading users...</div>
+  </div>
+</div>
+
+<!-- Audit Trail Panel Drawer -->
+<div class="user-panel-overlay" id="audit-panel-overlay" onclick="closeAuditPanel()"></div>
+<div class="user-panel" id="audit-panel" style="width:520px; right:-540px;">
+  <div class="up-header">
+    <button class="up-close" onclick="closeAuditPanel()">&times;</button>
+    <h3>Master Audit Trail</h3>
+    <div class="up-sub">Immutable log of intelligence access & tier changes</div>
+    <div class="up-tools">
+      <input type="text" class="up-search" id="audit-search" placeholder="Search logs..." onkeyup="filterAuditLogs()">
+    </div>
+  </div>
+  <div class="up-list" id="audit-list">
+    <div class="up-empty">Loading audit logs...</div>
   </div>
 </div>
 
@@ -432,6 +463,7 @@ async function loadFacilities(){
 
   renderCards(FACILITIES);
   updateDeployCount();
+  renderTelemetryChart();
 }
 
 // ── Tier styling ──
@@ -699,6 +731,152 @@ async function bulkToggleAccess(enable) {
   } else {
     showToast('✅', 'All users were already in the requested state.');
   }
+}
+
+// ── Chart.js ──
+let myChart = null;
+function renderTelemetryChart() {
+  const ctx = document.getElementById('telemetryChart').getContext('2d');
+  
+  // Sort facilities by tokens descending
+  const sorted = [...FACILITIES].sort((a,b)=>b.tokens - a.tokens).slice(0, 10);
+  const labels = sorted.map(f => f.name.length > 20 ? f.name.substring(0,20)+'...' : f.name);
+  const data = sorted.map(f => f.tokens);
+  
+  if (myChart) myChart.destroy();
+  
+  Chart.defaults.color = '#94a3b8';
+  Chart.defaults.font.family = "'Inter', sans-serif";
+  
+  myChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Tokens Used',
+        data: data,
+        backgroundColor: 'rgba(196,154,32,0.6)',
+        borderColor: '#c49a20',
+        borderWidth: 1,
+        borderRadius: 4
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#0e1328',
+          titleColor: '#fff',
+          bodyColor: '#c49a20',
+          borderColor: 'rgba(255,255,255,0.1)',
+          borderWidth: 1
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          grid: { color: 'rgba(255,255,255,0.05)' },
+          ticks: { color: '#64748b' }
+        },
+        x: {
+          grid: { display: false },
+          ticks: { color: '#64748b' }
+        }
+      }
+    }
+  });
+}
+
+// ── Global Killswitch ──
+async function toggleGlobalKillswitch() {
+  const confirmMsg = "CRITICAL WARNING: Are you sure you want to disable DAVID access for ALL facilities globally? This action will interrupt active sessions.";
+  if(!confirm(confirmMsg)) return;
+  
+  showToast('🚨', 'Engaging Global Killswitch...');
+  try {
+    await adminAPI('GLOBAL_KILLSWITCH');
+    showToast('✅', 'All facilities disabled.');
+    loadFacilities(); // Reload the UI to reflect changes
+  } catch(e) {
+    showToast('❌', 'Killswitch failed: '+e.message);
+  }
+}
+
+// ── Audit Panel ──
+let auditLogsCache = [];
+async function openAuditPanel() {
+  document.getElementById('audit-list').innerHTML = '<div class="up-empty">Loading audit logs...</div>';
+  document.getElementById('audit-search').value = '';
+  document.getElementById('audit-panel-overlay').classList.add('show');
+  document.getElementById('audit-panel').classList.add('show');
+  
+  try {
+    const logs = await adminAPI('GET_AUDIT_LOGS');
+    auditLogsCache = logs || [];
+    renderAuditLogs(auditLogsCache);
+  } catch(e) {
+    document.getElementById('audit-list').innerHTML = `<div class="up-empty">${e.message}</div>`;
+  }
+}
+
+function closeAuditPanel() {
+  document.getElementById('audit-panel-overlay').classList.remove('show');
+  document.getElementById('audit-panel').classList.remove('show');
+}
+
+function renderAuditLogs(logs) {
+  const list = document.getElementById('audit-list');
+  if(!logs || !logs.length) {
+    list.innerHTML = '<div class="up-empty">No audit logs found</div>';
+    return;
+  }
+  
+  list.innerHTML = logs.map(l => {
+    const d = new Date(l.created_at);
+    const dateStr = d.toLocaleString();
+    const actorName = l.actor?.name || l.actor?.email || 'System';
+    const initials = actorName.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
+    
+    let actionLbl = l.action;
+    let detailStr = JSON.stringify(l.details || {});
+    if (l.action === 'TOGGLE_FACILITY_ACCESS') actionLbl = l.details?.is_active ? 'ENABLED FACILITY' : 'DISABLED FACILITY';
+    if (l.action === 'SET_FACILITY_TIER') actionLbl = 'CHANGED TIER TO ' + (l.details?.tier||'').toUpperCase();
+    if (l.action === 'TOGGLE_USER_ACCESS') actionLbl = l.details?.is_active ? 'ENABLED USER' : 'REVOKED USER';
+    if (l.action === 'GLOBAL_KILLSWITCH') actionLbl = 'GLOBAL KILLSWITCH ACTIVATED';
+    
+    // Attempt to find facility name
+    const facName = FACILITIES.find(f => f.id === l.facility_id)?.name || l.facility_id || 'Global';
+    
+    return `<div class="up-row" style="align-items:flex-start;">
+      <div class="up-avatar" style="background:var(--bg4);color:var(--txt3);border:1px solid var(--glass-border);font-size:10px;">${initials}</div>
+      <div class="up-info">
+        <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+          <span style="font-size:11px; font-weight:700; color:var(--gold);">${actionLbl}</span>
+          <span style="font-size:10px; color:var(--txt3);">${dateStr}</span>
+        </div>
+        <div style="font-size:12px; color:var(--txt); margin-bottom:2px;">
+          <strong>By:</strong> ${actorName}
+        </div>
+        <div style="font-size:12px; color:var(--txt2); margin-bottom:2px;">
+          <strong>Target:</strong> ${facName}
+        </div>
+        <div style="font-size:10px; color:var(--txt3); background:rgba(0,0,0,0.2); padding:4px 6px; border-radius:4px; font-family:monospace; margin-top:4px;">
+          ${detailStr}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function filterAuditLogs() {
+  const q = document.getElementById('audit-search').value.toLowerCase();
+  const filtered = auditLogsCache.filter(l => {
+    const text = JSON.stringify(l).toLowerCase() + (l.actor?.name||'').toLowerCase();
+    return text.includes(q);
+  });
+  renderAuditLogs(filtered);
 }
 
 // ── Boot ──
