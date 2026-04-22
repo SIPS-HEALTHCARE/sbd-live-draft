@@ -345,17 +345,51 @@ function getToken(){
 }
 
 // ── API call helper ──
-async function adminAPI(action, payload={}){
-  const token = getToken();
+async function adminAPI(action, payload={}, isRetry=false){
+  let token = getToken();
   if(!token) throw new Error('Not authenticated');
-  const res = await fetch(API_URL, {
+  let res = await fetch(API_URL, {
     method:'POST',
     headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+token },
     body: JSON.stringify({ action, payload })
   });
-  const json = await res.json();
+  let json;
+  try {
+    json = await res.json();
+  } catch(e) {
+    throw new Error('Network error or invalid JSON response');
+  }
+
   if(!res.ok || !json.success) {
     if (res.status === 401 || json.error === 'Unauthorized') {
+      if (!isRetry) {
+        // Attempt to auto-refresh the token
+        try {
+          const raw = localStorage.getItem('sbd_session');
+          if (raw) {
+            const s = JSON.parse(raw);
+            if (s.refresh_token) {
+              const refreshRes = await fetch(SB_URL + '/auth/v1/token?grant_type=refresh_token', {
+                method: 'POST',
+                headers: {
+                  'apikey': SB_KEY,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ refresh_token: s.refresh_token })
+              });
+              if (refreshRes.ok) {
+                const refreshData = await refreshRes.json();
+                if (refreshData.access_token) {
+                  localStorage.setItem('sbd_session', JSON.stringify(refreshData));
+                  return adminAPI(action, payload, true); // Retry the original request
+                }
+              }
+            }
+          }
+        } catch(refreshErr) {
+          console.warn('Auto-refresh failed:', refreshErr);
+        }
+      }
       throw new Error('Session expired. Please log out and log back in.');
     }
     throw new Error(json.error || 'API error');
