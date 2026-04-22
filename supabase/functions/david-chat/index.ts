@@ -64,14 +64,28 @@ serve(async (req) => {
             isAuthorized = true;
             facilityTier = 'supreme';
         } else if (profile?.facility_id) {
+            // 1. Check Facility-Level Master Toggle
             const { data: access } = await supabase.from('david_facility_access')
                 .select('is_active, tier')
                 .eq('facility_id', profile.facility_id)
                 .single();
                 
             if (access && access.is_active) {
-                isAuthorized = true;
-                facilityTier = access.tier;
+                // 2. Check Granular User-Level Toggle
+                const { data: userAccess } = await supabase.from('david_user_access')
+                    .select('is_active')
+                    .eq('user_id', profile.id)
+                    .eq('facility_id', profile.facility_id)
+                    .single();
+                    
+                if (userAccess && userAccess.is_active) {
+                    isAuthorized = true;
+                    facilityTier = access.tier;
+                } else {
+                    console.log(`[DAVID] Access blocked for user ${profile.id} at facility ${profile.facility_id}: Individual user access is disabled.`);
+                }
+            } else {
+                console.log(`[DAVID] Access blocked for user ${profile.id}: Facility ${profile.facility_id} is globally disabled.`);
             }
         }
 
