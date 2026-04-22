@@ -58,6 +58,21 @@ serve(async (req) => {
     // Parse the payload action
     const { action, payload } = await req.json();
 
+    // Helper to log audit actions
+    const logAudit = async (actionName: string, facilityId: string, targetId: string | null, details: any) => {
+      try {
+        await adminSupabase.from('david_audit_logs').insert({
+          facility_id: facilityId,
+          actor_id: profile.id,
+          action: actionName,
+          target_id: targetId,
+          details: details
+        });
+      } catch (err) {
+        console.error('[DAVID_ADMIN_API] Audit Log Error:', err);
+      }
+    };
+
     if (action === 'TOGGLE_FACILITY') {
       const { facilityId, isActive } = payload;
       console.log(`[DAVID_ADMIN_API] TOGGLE_FACILITY: ${facilityId} → ${isActive}`);
@@ -91,6 +106,8 @@ serve(async (req) => {
         console.error('[DAVID_ADMIN_API] TOGGLE error:', JSON.stringify(error));
         throw error;
       }
+
+      await logAudit('TOGGLE_FACILITY_ACCESS', facilityId, null, { is_active: isActive });
 
       console.log('[DAVID_ADMIN_API] TOGGLE success:', JSON.stringify(data));
       return new Response(JSON.stringify({ success: true, data }), {
@@ -131,6 +148,8 @@ serve(async (req) => {
         console.error('[DAVID_ADMIN_API] TIER error:', JSON.stringify(error));
         throw error;
       }
+
+      await logAudit('SET_FACILITY_TIER', facilityId, null, { tier: tier });
 
       console.log('[DAVID_ADMIN_API] TIER success:', JSON.stringify(data));
       return new Response(JSON.stringify({ success: true, data }), {
@@ -226,6 +245,8 @@ serve(async (req) => {
         console.error('[DAVID_ADMIN_API] USER_ACCESS error:', JSON.stringify(error));
         throw error;
       }
+
+      await logAudit('TOGGLE_USER_ACCESS', facilityId, userId, { is_active: isActive });
 
       console.log('[DAVID_ADMIN_API] USER_ACCESS success:', JSON.stringify(data));
       return new Response(JSON.stringify({ success: true, data }), {

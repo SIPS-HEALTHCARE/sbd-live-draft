@@ -59,6 +59,7 @@ serve(async (req) => {
 
         let isAuthorized = false;
         let facilityTier = 'base';
+        let customFacilityDirective = '';
         
         if (profile?.role === 'master_admin') {
             isAuthorized = true;
@@ -66,7 +67,7 @@ serve(async (req) => {
         } else if (profile?.facility_id) {
             // 1. Check Facility-Level Master Toggle
             const { data: access } = await supabase.from('david_facility_access')
-                .select('is_active, tier')
+                .select('is_active, tier, custom_directive')
                 .eq('facility_id', profile.facility_id)
                 .single();
                 
@@ -81,6 +82,9 @@ serve(async (req) => {
                 if (userAccess && userAccess.is_active) {
                     isAuthorized = true;
                     facilityTier = access.tier;
+                    if (access.custom_directive) {
+                        customFacilityDirective = "\n[FACILITY MASTER DIRECTIVE]\n" + access.custom_directive + "\n";
+                    }
                 } else {
                     console.log(`[DAVID] Access blocked for user ${profile.id} at facility ${profile.facility_id}: Individual user access is disabled.`);
                 }
@@ -164,7 +168,7 @@ Example: <chips>["Compare to last month", "Audit underperforming groups", "Escal
         }
 
         if (systemPrompt) {
-            messages.push({ role: 'system', content: systemPrompt + '\n' + memoryInjection + '\n' + shadowDirectives + '\n' + tierDirectives });
+            messages.push({ role: 'system', content: systemPrompt + '\n' + memoryInjection + '\n' + shadowDirectives + '\n' + tierDirectives + customFacilityDirective });
         }
         for (const msg of history) {
             messages.push({ role: msg.role, content: msg.content });
@@ -244,6 +248,8 @@ Example: <chips>["Compare to last month", "Audit underperforming groups", "Escal
         const encoder = new TextEncoder();
 
         let fullContent = '';
+        let promptTokens = 0;
+        let completionTokens = 0;
 
         // Internal recursive async loop
         async function runAutonomousLoop(messageChain: any[], depth: number = 0) {
@@ -311,6 +317,12 @@ Example: <chips>["Compare to last month", "Audit underperforming groups", "Escal
                                 fullContent += delta.content;
                                 currentTurnText += delta.content;
                                 await writer.write(encoder.encode(`data: ${JSON.stringify({ text: delta.content })}\n\n`));
+                            }
+                            
+                            // Capture usage if provided by OpenRouter
+                            if (json.usage) {
+                                promptTokens += json.usage.prompt_tokens || 0;
+                                completionTokens += json.usage.completion_tokens || 0;
                             }
                             
                             // Handle tool calls streaming
@@ -446,6 +458,22 @@ Example: <chips>["Compare to last month", "Audit underperforming groups", "Escal
                     raw_interaction: { query: message, response: fullContent }
                 }).then(({ error }: { error: any }) => {
                     if (error) console.warn('[DAVID] Memory store skipped:', error.message);
+                });
+
+                // Fallback token estimation if OpenRouter did not stream usage
+                if (promptTokens === 0) promptTokens = Math.ceil(JSON.stringify(messages).length / 4);
+                if (completionTokens === 0) completionTokens = Math.ceil(fullContent.length / 4);
+                
+                // Write Telemetry
+                const cost = ((promptTokens + completionTokens) / 1000) * 0.015;
+                supabase.from('david_usage_logs').insert({
+                    facility_id: profile.facility_id || 'master-admin-global',
+                    user_id: profile.id,
+                    prompt_tokens: promptTokens,
+                    completion_tokens: completionTokens,
+                    cost: cost
+                }).then(({ error }: { error: any }) => {
+                    if (error) console.error('[DAVID] Telemetry logging failed:', error.message);
                 });
 
             } catch (err: any) {
