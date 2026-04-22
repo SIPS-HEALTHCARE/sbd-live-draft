@@ -461,6 +461,12 @@ async function loadFacilities(){
     };
   });
 
+  // Sort so unarchived facilities appear at the top
+  FACILITIES.sort((a, b) => {
+    if (a.archived === b.archived) return a.name.localeCompare(b.name);
+    return a.archived ? 1 : -1;
+  });
+
   renderCards(FACILITIES);
   updateDeployCount();
   renderTelemetryChart();
