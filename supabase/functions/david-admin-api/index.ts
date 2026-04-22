@@ -44,7 +44,7 @@ serve(async (req) => {
     // 3. Verify Master Admin role
     const { data: profile } = await adminSupabase
       .from('sbd_portal_users')
-      .select('role')
+      .select('id, role')
       .eq('auth_uid', user.id)
       .single();
 
@@ -214,7 +214,7 @@ serve(async (req) => {
             user_id: userId,
             facility_id: facilityId,
             is_active: isActive,
-            granted_by: user.id,
+            granted_by: profile.id,
             granted_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           })
