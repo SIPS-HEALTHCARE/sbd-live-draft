@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.6';
+import { verifyUserAndFacility } from './auth.ts';
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -40,69 +41,20 @@ serve(async (req) => {
         const { message, history = [], systemPrompt = '' } = await req.json();
 
         // 1. Verify Authentication & Role
-        const authHeader = req.headers.get('Authorization');
-        if (!authHeader) throw new Error('Unauthorized: Missing Auth Header');
-
-        const jwt = authHeader.replace(/^Bearer\s+/i, '');
-        const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-        const { data: { user }, error: authError } = await supabase.auth.getUser(jwt);
-        if (authError || !user) throw new Error(`Unauthorized: Invalid or expired session (${authError?.message || 'No user found'})`);
-
-        const userId = user.id;
-        const userEmail = user.email || 'ES256_Auth_User';
-
-        const { data: profile } = await supabase.from('sbd_portal_users')
-            .select('*')
-            .eq('auth_uid', userId)
-            .single();
-
-        let isAuthorized = false;
-        let facilityTier = 'base';
-        let customFacilityDirective = '';
-        
-        if (profile?.role === 'master_admin') {
-            isAuthorized = true;
-            facilityTier = 'supreme';
-        } else if (profile?.facility_id) {
-            // 1. Check Facility-Level Master Toggle
-            const { data: access } = await supabase.from('david_facility_access')
-                .select('is_active, tier, custom_directive')
-                .eq('facility_id', profile.facility_id)
-                .single();
-                
-            if (access && access.is_active) {
-                // 2. Check Granular User-Level Toggle
-                const { data: userAccess } = await supabase.from('david_user_access')
-                    .select('is_active')
-                    .eq('user_id', profile.id)
-                    .eq('facility_id', profile.facility_id)
-                    .single();
-                    
-                if (userAccess && userAccess.is_active) {
-                    isAuthorized = true;
-                    facilityTier = access.tier;
-                    if (access.custom_directive) {
-                        customFacilityDirective = "\n[FACILITY MASTER DIRECTIVE]\n" + access.custom_directive + "\n";
-                    }
-                } else {
-                    console.log(`[DAVID] Access blocked for user ${profile.id} at facility ${profile.facility_id}: Individual user access is disabled.`);
-                }
-            } else {
-                console.log(`[DAVID] Access blocked for user ${profile.id}: Facility ${profile.facility_id} is globally disabled.`);
-            }
-        }
-
-        if (!isAuthorized) {
-            console.error(`[DAVID] Blocked: User role: ${profile?.role}, Facility: ${profile?.facility_id}`);
+        const authHeader = req.headers.get('Authorization') || '';
+        let authResult;
+        try {
+            authResult = await verifyUserAndFacility(supabaseUrl, supabaseServiceKey, authHeader);
+        } catch (e: any) {
             return new Response(JSON.stringify({ 
-                error: 'DAVID Intelligence is currently locked for this facility.',
+                error: e.message || 'DAVID Intelligence is currently locked for this facility.',
                 action: 'ACTION_UPSELL'
             }), {
                 status: 403,
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
         }
+        const { userId, userEmail, profile, facilityTier, customFacilityDirective, supabase } = authResult;
 
         console.log(`[DAVID SUPREME] ${userEmail} (${profile.role}) → initiating autonomous loop`);
 
@@ -401,7 +353,7 @@ Example: <chips>["Compare to last month", "Audit underperforming groups", "Escal
                         const pineconeKey = Deno.env.get('PINECONE_API_KEY');
                         if (!pineconeKey) throw new Error("PINECONE_API_KEY environment variable is missing.");
                         
-                        const req = await fetch('https://sbd-wiki-graph-44928mo.svc.aped-4627-b74a.pinecone.io/records/namespaces/sbd-wiki/search', {
+                        const req = await fetch('https://sbd-knowledge-ai-44928mo.svc.aped-4627-b74a.pinecone.io/records/namespaces/master-docs/search', {
                             method: 'POST',
                             headers: { 'Api-Key': pineconeKey, 'Content-Type': 'application/json' },
                             body: JSON.stringify({ query: { inputs: { text: parsedArgs.query }, top_k: 3 } })
@@ -414,10 +366,10 @@ Example: <chips>["Compare to last month", "Audit underperforming groups", "Escal
                         const pineconeKey = Deno.env.get('PINECONE_API_KEY');
                         if (!pineconeKey) throw new Error("PINECONE_API_KEY environment variable is missing.");
                         
-                        const req = await fetch('https://sbd-wiki-graph-44928mo.svc.aped-4627-b74a.pinecone.io/records/namespaces/sbd-wiki/upsert', {
+                        const req = await fetch('https://sbd-knowledge-ai-44928mo.svc.aped-4627-b74a.pinecone.io/records/namespaces/master-docs/upsert', {
                             method: 'POST',
                             headers: { 'Api-Key': pineconeKey, 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ records: [{ _id: parsedArgs.slug, content_md: parsedArgs.content_md }] })
+                            body: JSON.stringify({ records: [{ _id: parsedArgs.slug, text: parsedArgs.content_md }] })
                         });
                         const resJSON = await req.json();
                         toolResult = JSON.stringify(resJSON);
