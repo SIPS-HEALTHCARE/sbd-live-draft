@@ -354,7 +354,12 @@ async function adminAPI(action, payload={}){
     body: JSON.stringify({ action, payload })
   });
   const json = await res.json();
-  if(!res.ok || !json.success) throw new Error(json.error || 'API error');
+  if(!res.ok || !json.success) {
+    if (res.status === 401 || json.error === 'Unauthorized') {
+      throw new Error('Session expired. Please log out and log back in.');
+    }
+    throw new Error(json.error || 'API error');
+  }
   return json.data;
 }
 
