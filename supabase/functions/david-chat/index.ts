@@ -57,9 +57,33 @@ serve(async (req) => {
             .eq('auth_uid', userId)
             .single();
 
-        if (!profile || profile.role !== 'master_admin') {
-            console.error(`[DAVID] Blocked: User is role: ${profile?.role}`);
-            throw new Error('Restricted to Master Admin accounts only.');
+        let isAuthorized = false;
+        let facilityTier = 'base';
+        
+        if (profile?.role === 'master_admin') {
+            isAuthorized = true;
+            facilityTier = 'supreme';
+        } else if (profile?.facility_id) {
+            const { data: access } = await supabase.from('david_facility_access')
+                .select('is_active, tier')
+                .eq('facility_id', profile.facility_id)
+                .single();
+                
+            if (access && access.is_active) {
+                isAuthorized = true;
+                facilityTier = access.tier;
+            }
+        }
+
+        if (!isAuthorized) {
+            console.error(`[DAVID] Blocked: User role: ${profile?.role}, Facility: ${profile?.facility_id}`);
+            return new Response(JSON.stringify({ 
+                error: 'DAVID Intelligence is currently locked for this facility.',
+                action: 'ACTION_UPSELL'
+            }), {
+                status: 403,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
         }
 
         console.log(`[DAVID SUPREME] ${userEmail} (${profile.role}) → initiating autonomous loop`);

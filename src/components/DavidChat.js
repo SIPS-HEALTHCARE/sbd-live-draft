@@ -1322,13 +1322,28 @@ class DavidChat {
             });
 
             if (!res.ok) {
-                let errText = '';
+                let errorJson = {};
                 try {
-                    const errorJson = await res.json();
-                    errText = errorJson.error || errorJson.message || JSON.stringify(errorJson);
-                } catch(e) {
-                    errText = "Could not parse JSON response";
+                    errorJson = await res.json();
+                } catch(e) {}
+                
+                if (res.status === 403 && errorJson.action === 'ACTION_UPSELL') {
+                    contentTarget.innerHTML = `
+                        <div class="david-upsell-card" style="padding: 16px; border-radius: 8px; background: rgba(196,154,32,0.1); border: 1px solid var(--gold); text-align: center; margin-top: 8px;">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2" style="margin-bottom: 8px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                            <h3 style="color: var(--gold); margin-top: 0; font-family: 'Fira Code', monospace; font-size: 15px;">DAVID Intelligence Locked</h3>
+                            <p style="font-size: 13px; color: var(--txt); opacity: 0.8; line-height: 1.4;">Your facility currently does not have access to SBD Operational Intelligence.</p>
+                            <button onclick="alert('Contacting Sales...')" style="margin-top: 12px; padding: 8px 16px; background: var(--gold); color: #000; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 12px; font-family: 'Fira Code', monospace; transition: all 0.2s;">Unlock Facility Intelligence</button>
+                        </div>
+                    `;
+                    const cursor = msgDiv.querySelector('.david-cursor');
+                    if (cursor) cursor.style.display = 'none';
+                    this.isThinking = false;
+                    this.btn.disabled = false;
+                    return;
                 }
+
+                const errText = errorJson.error || errorJson.message || "Unknown error";
                 const tokenDebug = token ? `[Token present: ${token.substring(0,8)}...]` : '[TOKEN MISSING]';
                 throw new Error(`DavidChat Auth Error: ${errText} ${tokenDebug} (Status ${res.status})`);
             }
