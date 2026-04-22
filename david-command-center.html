@@ -78,6 +78,7 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
 .fac-card.active::before{content:'';position:absolute;inset:-1px;border-radius:var(--radius);background:linear-gradient(135deg,rgba(196,154,32,.1),transparent 60%);pointer-events:none;z-index:0}
 .fac-card.locked{opacity:.65}
 .fac-card.locked:hover{opacity:.85}
+.fac-card.archived{opacity:0.4; pointer-events:none; filter: grayscale(100%);}
 .card-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;position:relative;z-index:1}
 .card-name{font-size:16px;font-weight:700;letter-spacing:-.3px;max-width:220px}
 .card-system{font-size:11px;color:var(--txt3);margin-top:2px}
@@ -363,7 +364,7 @@ async function loadFacilities(){
   if(!token){ showToast('🔒','Please log in on the main portal first'); return; }
 
   // Fetch facilities list via REST
-  const facRes = await fetch(SB_URL+'/rest/v1/facilities?select=id,name&order=name.asc', {
+  const facRes = await fetch(SB_URL+'/rest/v1/facilities?select=id,name,active&order=name.asc', {
     headers:{ 'apikey':SB_KEY, 'Authorization':'Bearer '+token }
   });
   const rawFacs = await facRes.json();
@@ -382,6 +383,7 @@ async function loadFacilities(){
     return {
       id: f.id,
       name: f.name || 'Unnamed',
+      archived: f.active === false,
       tier: acc.tier || 'base',
       active: acc.is_active || false,
       tokens: ana.total_tokens || 0,
@@ -402,16 +404,18 @@ function renderCards(list){
   const grid=document.getElementById('cards-grid');
   grid.innerHTML=list.map(f=>{
     const pct=Math.min(100,Math.round(f.tokens/f.maxTokens*100));
-    const cls=f.active?'fac-card active':'fac-card locked';
-    return `<div class="${cls}" data-name="${f.name.toLowerCase()}" data-status="${f.active?'active':'locked'}" data-id="${f.id}">
+    let cls=f.active?'fac-card active':'fac-card locked';
+    if (f.archived) cls = 'fac-card archived';
+    
+    return `<div class="${cls}" data-name="${f.name.toLowerCase()}" data-status="${f.archived?'archived':(f.active?'active':'locked')}" data-id="${f.id}">
       <div class="card-head">
         <div><div class="card-name">${f.name}</div></div>
-        <div class="toggle ${f.active?'on':''}" onclick="toggleAccess('${f.id}')"><div class="toggle-knob"></div></div>
+        ${f.archived ? '' : `<div class="toggle ${f.active?'on':''}" onclick="toggleAccess('${f.id}')"><div class="toggle-knob"></div></div>`}
       </div>
       <div class="card-meta">
         <div class="meta-item">
           <span class="meta-lbl">Tier</span>
-          <span class="tier-chip ${tierClass(f.tier)}" onclick="openTierModal('${f.id}')">${tierLabel(f.tier)}</span>
+          <span class="tier-chip ${tierClass(f.tier)}" ${f.archived ? '' : `onclick="openTierModal('${f.id}')"`}>${tierLabel(f.tier)}</span>
         </div>
         <div class="token-bar">
           <span class="meta-lbl">Token Usage</span>
@@ -420,15 +424,15 @@ function renderCards(list){
         </div>
         <div class="meta-item" style="align-items:flex-end">
           <span class="meta-lbl">Status</span>
-          <div class="status-dot">${f.active?'<div class="dot dot-green"></div><span style="color:var(--green)">Active</span>':'<div class="dot dot-red"></div><span style="color:var(--red)">Locked</span>'}</div>
+          <div class="status-dot">${f.archived?'<div class="dot" style="background:#555"></div><span style="color:#888">Archived</span>':(f.active?'<div class="dot dot-green"></div><span style="color:var(--green)">Active</span>':'<div class="dot dot-red"></div><span style="color:var(--red)">Locked</span>')}</div>
         </div>
       </div>
-      <div style="margin-top: 16px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px; display: flex; justify-content: flex-end;">
+      ${f.archived ? '' : `<div style="margin-top: 16px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px; display: flex; justify-content: flex-end;">
         <button class="manage-staff-btn" onclick="openUserPanel('${f.id}','${f.name.replace(/'/g,"")}')">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
           Manage Staff
         </button>
-      </div>
+      </div>`}
     </div>`;
   }).join('');
 }
