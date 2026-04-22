@@ -511,15 +511,20 @@ function renderUserList(users, facId){
     list.innerHTML = '<div class="up-empty">No users assigned to this facility</div>';
     return;
   }
+  const fac = FACILITIES.find(f => f.id === facId) || { active: false, tier: 'base' };
   list.innerHTML = users.map(u => {
     const initials = (u.name||u.email||'??').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
     const roleLabel = (u.role||'').replace('_',' ');
-    return `<div class="up-row" data-uid="${u.id}">
+    // Store role data on the row for live updates
+    return `<div class="up-row" data-uid="${u.id}" data-role="${u.role||''}">
       <div class="up-avatar">${initials}</div>
       <div class="up-info">
         <div class="up-name">${u.name||u.email}</div>
         <div class="up-email">${u.email}</div>
         <div class="up-role">${roleLabel}${u.title?' · '+u.title:''}</div>
+        <div class="up-effective-access" style="margin-top:6px;">
+          ${getEffectiveAccessBadge(u.role, fac.active, u.david_active, fac.tier)}
+        </div>
       </div>
       <div class="up-toggle">
         <div class="toggle ${u.david_active?'on':''}" onclick="toggleUserAccess('${u.id}','${facId}',this)" style="width:40px;height:22px">
@@ -537,10 +542,35 @@ async function toggleUserAccess(userId, facId, el){
     if(newState) el.classList.add('on'); else el.classList.remove('on');
     const row = el.closest('.up-row');
     const name = row?.querySelector('.up-name')?.textContent || 'User';
+    
+    // Update live access badge
+    const role = row.getAttribute('data-role');
+    const fac = FACILITIES.find(f => f.id === facId) || { active: false, tier: 'base' };
+    const badgeContainer = row.querySelector('.up-effective-access');
+    if (badgeContainer) {
+      badgeContainer.innerHTML = getEffectiveAccessBadge(role, fac.active, newState, fac.tier);
+    }
+
     showToast(newState?'✅':'🔒', newState?`DAVID enabled for ${name}`:`DAVID revoked for ${name}`);
   } catch(e){
     showToast('❌','Toggle failed: '+e.message);
   }
+}
+
+function getEffectiveAccessBadge(role, facActive, userActive, tier) {
+  if (role === 'master_admin') {
+    return '<span style="font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; background:rgba(212,175,55,0.2); color:#D4AF37; border: 1px solid rgba(212,175,55,0.3);">SUPREME (God Mode)</span>';
+  }
+  if (!facActive) {
+    return '<span style="font-size:10px; font-weight:600; padding:2px 6px; border-radius:4px; background:rgba(255,100,100,0.1); color:#ff6b6b; border: 1px solid rgba(255,100,100,0.3);">FACILITY DISABLED</span>';
+  }
+  if (!userActive) {
+    return '<span style="font-size:10px; font-weight:600; padding:2px 6px; border-radius:4px; background:rgba(255,255,255,0.1); color:#888; border: 1px solid rgba(255,255,255,0.2);">ACCESS REVOKED</span>';
+  }
+  // If we reach here, it's enabled and active
+  const t = (tier || 'base').toUpperCase();
+  const color = t === 'BASE' ? '#4CAF50' : t === 'PREMIUM' ? '#2196F3' : '#9C27B0';
+  return `<span style="font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; background:${color}22; color:${color}; border: 1px solid ${color}33;">ACTIVE — ${t}</span>`;
 }
 
 // ── Boot ──
