@@ -319,7 +319,7 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
     <div class="up-sub">Toggle DAVID access for individual accounts</div>
     <div class="up-tools">
       <input type="text" class="up-search" id="up-search" placeholder="Search staff by name or email..." onkeyup="filterUsers()">
-      <div class="up-bulk-actions">
+      <div class="up-bulk-actions" id="up-bulk-actions">
         <button class="up-bulk-btn enable" onclick="bulkToggleAccess(true)">Bulk Enable All</button>
         <button class="up-bulk-btn revoke" onclick="bulkToggleAccess(false)">Bulk Revoke All</button>
       </div>
@@ -638,6 +638,18 @@ function renderUserList(users, facId){
     return;
   }
   const fac = FACILITIES.find(f => f.id === facId) || { active: false, tier: 'base' };
+  
+  const bulkContainer = document.getElementById('up-bulk-actions');
+  if (bulkContainer) {
+    if (!fac.active) {
+      bulkContainer.style.opacity = '0.3';
+      bulkContainer.style.pointerEvents = 'none';
+    } else {
+      bulkContainer.style.opacity = '1';
+      bulkContainer.style.pointerEvents = 'auto';
+    }
+  }
+
   list.innerHTML = users.map(u => {
     const initials = (u.name||u.email||'??').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
     const roleLabel = (u.role||'').replace('_',' ');
@@ -653,7 +665,9 @@ function renderUserList(users, facId){
         </div>
       </div>
       <div class="up-toggle">
-        <div class="toggle ${u.david_active?'on':''}" onclick="toggleUserAccess('${u.id}','${facId}',this)" style="width:40px;height:22px">
+        <div class="toggle ${u.david_active?'on':''}" 
+             ${fac.active ? `onclick="toggleUserAccess('${u.id}','${facId}',this)"` : ''} 
+             style="width:40px;height:22px; ${!fac.active ? 'opacity:0.3; cursor:not-allowed;' : ''}">
           <div class="toggle-knob" style="width:16px;height:16px"></div>
         </div>
       </div>
@@ -661,6 +675,11 @@ function renderUserList(users, facId){
   }).join('');
 }
 async function toggleUserAccess(userId, facId, el){
+  const fac = FACILITIES.find(f => f.id === facId) || { active: false, tier: 'base' };
+  if (!fac.active) {
+    showToast('⚠️', 'Cannot modify users while facility is disabled');
+    return;
+  }
   const isOn = el.classList.contains('on');
   const newState = !isOn;
   try {
@@ -709,6 +728,11 @@ function filterUsers() {
 
 async function bulkToggleAccess(enable) {
   if (!userPanelFacId) return;
+  const fac = FACILITIES.find(f => f.id === userPanelFacId) || { active: false };
+  if (!fac.active) {
+    showToast('⚠️', 'Cannot bulk modify while facility is disabled');
+    return;
+  }
   const confirmMsg = enable ? "Are you sure you want to ENABLE DAVID access for ALL staff members at this facility?" : "Are you sure you want to REVOKE DAVID access for ALL staff members at this facility?";
   if (!confirm(confirmMsg)) return;
   
