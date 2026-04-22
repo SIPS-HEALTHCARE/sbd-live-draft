@@ -160,6 +160,17 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
 .up-role{font-size:9px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--txt3);margin-top:2px}
 .up-toggle{flex-shrink:0}
 
+.up-tools { display:flex; flex-direction:column; gap:12px; margin-top:16px; }
+.up-search { width:100%; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); color:var(--txt); padding:8px 12px; border-radius:6px; font-size:13px; outline:none; transition:0.2s; }
+.up-search:focus { border-color:var(--gold); background:rgba(255,255,255,0.08); }
+.up-bulk-actions { display:flex; gap:8px; }
+.up-bulk-btn { flex:1; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:var(--txt); padding:6px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer; transition:all 0.2s; }
+.up-bulk-btn:hover { background:rgba(255,255,255,0.1); }
+.up-bulk-btn.enable { color:#4CAF50; border-color:rgba(76,175,80,0.3); }
+.up-bulk-btn.enable:hover { background:rgba(76,175,80,0.1); }
+.up-bulk-btn.revoke { color:#ff6b6b; border-color:rgba(255,107,107,0.3); }
+.up-bulk-btn.revoke:hover { background:rgba(255,107,107,0.1); }
+
 /* ── Manage Staff Button ── */
 .manage-staff-btn {
   display: inline-flex;
@@ -294,6 +305,13 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
     <button class="up-close" onclick="closeUserPanel()">&times;</button>
     <h3 id="up-fac-name">Facility Users</h3>
     <div class="up-sub">Toggle DAVID access for individual accounts</div>
+    <div class="up-tools">
+      <input type="text" class="up-search" id="up-search" placeholder="Search staff by name or email..." onkeyup="filterUsers()">
+      <div class="up-bulk-actions">
+        <button class="up-bulk-btn enable" onclick="bulkToggleAccess(true)">Bulk Enable All</button>
+        <button class="up-bulk-btn revoke" onclick="bulkToggleAccess(false)">Bulk Revoke All</button>
+      </div>
+    </div>
   </div>
   <div class="up-list" id="up-list">
     <div class="up-empty">Loading users...</div>
@@ -514,15 +532,19 @@ function initSparkline(){
 
 // ── User Panel ──
 let userPanelFacId = null;
+let userPanelUsers = [];
+
 async function openUserPanel(facId, facName){
   userPanelFacId = facId;
   document.getElementById('up-fac-name').textContent = facName + ' — Users';
   document.getElementById('up-list').innerHTML = '<div class="up-empty">Loading users...</div>';
+  document.getElementById('up-search').value = '';
   document.getElementById('user-panel-overlay').classList.add('show');
   document.getElementById('user-panel').classList.add('show');
   try {
     const users = await adminAPI('GET_FACILITY_USERS', { facilityId: facId });
-    renderUserList(users, facId);
+    userPanelUsers = users || [];
+    renderUserList(userPanelUsers, facId);
   } catch(e){
     document.getElementById('up-list').innerHTML = `<div class="up-empty">${e.message}</div>`;
   }
@@ -598,6 +620,42 @@ function getEffectiveAccessBadge(role, facActive, userActive, tier) {
   const t = (tier || 'base').toUpperCase();
   const color = t === 'BASE' ? '#4CAF50' : t === 'PREMIUM' ? '#2196F3' : '#9C27B0';
   return `<span style="font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; background:${color}22; color:${color}; border: 1px solid ${color}33;">ACTIVE — ${t}</span>`;
+}
+
+function filterUsers() {
+  const q = document.getElementById('up-search').value.toLowerCase();
+  document.querySelectorAll('.up-row').forEach(row => {
+    const text = row.innerText.toLowerCase();
+    row.style.display = text.includes(q) ? '' : 'none';
+  });
+}
+
+async function bulkToggleAccess(enable) {
+  if (!userPanelFacId) return;
+  const confirmMsg = enable ? "Are you sure you want to ENABLE DAVID access for ALL staff members at this facility?" : "Are you sure you want to REVOKE DAVID access for ALL staff members at this facility?";
+  if (!confirm(confirmMsg)) return;
+  
+  showToast('⏳', 'Processing bulk update...');
+  
+  // We will process them sequentially to avoid overloading the edge function DB pool
+  let successCount = 0;
+  for (const user of userPanelUsers) {
+    if (user.david_active === enable) continue; // Skip if already in correct state
+    try {
+      await adminAPI('TOGGLE_USER_ACCESS', { userId: user.id, facilityId: userPanelFacId, isActive: enable });
+      user.david_active = enable;
+      successCount++;
+    } catch(e) {
+      console.error('Bulk update failed for user', user.id, e);
+    }
+  }
+  
+  if (successCount > 0) {
+    showToast('✅', `Bulk update complete. Updated ${successCount} users.`);
+    renderUserList(userPanelUsers, userPanelFacId);
+  } else {
+    showToast('✅', 'All users were already in the requested state.');
+  }
 }
 
 // ── Boot ──
