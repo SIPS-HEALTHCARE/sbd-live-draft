@@ -90,16 +90,15 @@ serve(async (req) => {
         let authCreated = false;
         let authPassword = regData.password || 'TemporarySBD@123';
         
-        // Check if user already exists in auth.users by email
-        const { data: { users: existingAuthUsers } } = await supabaseAdmin.auth.admin.listUsers();
-        const existingAuthUser = existingAuthUsers.find(u => u.email === regData.email);
+        // Check if user already exists by querying sbd_portal_users
+        const { data: existingProfile } = await supabaseAdmin.from('sbd_portal_users').select('auth_uid').eq('email', regData.email).maybeSingle();
 
         // Define user true role based on assign_role passed from frontend. Fallback to requested_role, or 'staff_member'
         const accountRole = assign_role || regData.requested_role || 'staff_member';
 
-        if (existingAuthUser) {
-            console.log("User already exists in Supabase Auth:", existingAuthUser.id);
-            newUserId = existingAuthUser.id;
+        if (existingProfile && existingProfile.auth_uid) {
+            console.log("User already exists in Supabase Auth (via portal):", existingProfile.auth_uid);
+            newUserId = existingProfile.auth_uid;
         } else {
             console.log("Creating user in Supabase Auth...");
             const { data: authUser, error: authCreateError } = await supabaseAdmin.auth.admin.createUser({

@@ -11396,7 +11396,7 @@ async function denyReg(rid){
   const facilityName = r.facility || r.facilityName || 'Unknown Facility';
   r.status='denied';
   if(IS_LIVE){ 
-    SB.denyRegistration(rid).catch(e => handleSyncError(e, 'Deny sync'));
+    SB.denyRegistration(rid, window.ST?.user?.id).catch(e => handleSyncError(e, 'Deny sync'));
     // Queue denial notification email
     if(r.email){
       sbFetch('/rest/v1/sbd_email_queue', { method:'POST', prefer:'return=minimal', body:{
