@@ -5,7 +5,15 @@ const SB_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
 let SB_SESSION = null;
 
 // ── Authenticated fetch helper ──
-async function sbFetch(path, opts={}){
+async function sbFetch(path, opts={}, retryCount=0){
+  // Check if token is expired or close to expiring (within 2 minutes)
+  if (SB_SESSION && SB_SESSION.expires_at) {
+    const now = Date.now() / 1000;
+    if (now > SB_SESSION.expires_at - 120 && SB_SESSION.refresh_token) {
+      await SB_AUTH.refreshSession();
+    }
+  }
+
   const token = SB_SESSION && SB_SESSION.access_token;
   const headers = {
     'apikey': SB_ANON_KEY,
@@ -27,6 +35,15 @@ async function sbFetch(path, opts={}){
       }),
       _timeout
     ]);
+
+    // If 401 Unauthorized and we haven't retried yet, try to refresh and retry
+    if (res.status === 401 && retryCount === 0 && SB_SESSION && SB_SESSION.refresh_token) {
+      const refreshed = await SB_AUTH.refreshSession();
+      if (refreshed) {
+        return sbFetch(path, opts, 1);
+      }
+    }
+
     if(!res.ok){
       const err = await res.json().catch(()=>({message:res.statusText}));
       throw new Error(err.message || err.error || 'HTTP '+res.status);
@@ -43,6 +60,30 @@ async function sbFetch(path, opts={}){
 
 // ── Auth layer ──
 const SB_AUTH = {
+  async refreshSession() {
+    if (!SB_SESSION || !SB_SESSION.refresh_token) return false;
+    try {
+      const res = await fetch(`${SB_API_URL}/auth/v1/token?grant_type=refresh_token`, {
+        method: 'POST',
+        headers: { 'apikey': SB_ANON_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: SB_SESSION.refresh_token })
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error_description || data.error);
+      
+      SB_SESSION = data;
+      localStorage.setItem('sbd_session', JSON.stringify({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+        expires_at: data.expires_at,
+        user: data.user
+      }));
+      return true;
+    } catch (e) {
+      console.warn("Session refresh failed:", e.message);
+      return false;
+    }
+  },
   async signIn(email, password){
     const data = await fetch(`${SB_API_URL}/auth/v1/token?grant_type=password`, {
       method: 'POST',
@@ -53,6 +94,7 @@ const SB_AUTH = {
     SB_SESSION = data;
     localStorage.setItem('sbd_session', JSON.stringify({
       access_token: data.access_token,
+      refresh_token: data.refresh_token,
       expires_at: data.expires_at,
       user: data.user
     }));
@@ -321,6 +363,7 @@ function mapStaffFromBackend(row){
 function mapStaffToBackend(staff){
   if(!staff) return null;
   const obj = {
+    id: staff.id,
     fid: staff.fid,
     first: staff.first,
     last: staff.last,

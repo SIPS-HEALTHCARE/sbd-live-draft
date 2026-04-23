@@ -12,10 +12,10 @@ serve(async (req) => {
     }
     
     try {
-        const supabase = createClient(
+        const supabaseAdmin = createClient(
             Deno.env.get('SUPABASE_URL') ?? '',
             Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-            { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
+            { auth: { autoRefreshToken: false, persistSession: false } }
         );
 
         const { staff, type, targetBelt, result, notes, assessorId, timestamp } = await req.json();
@@ -27,20 +27,22 @@ serve(async (req) => {
         // Verify Caller Identity using their Authorization token
         const authHeader = req.headers.get('Authorization');
         if (!authHeader) throw new Error('Missing Authorization header');
+        const jwt = authHeader.replace(/^Bearer\s+/i, '');
         
-        const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
-        if (authError || !user) throw new Error('Unauthorized');
+        const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(jwt);
+        if (authError || !user) throw new Error('Unauthorized: Invalid or expired session');
 
-        // Check if the user is a valid assessor (admin or master)
-        const { data: profile } = await supabase.from('sbd_portal_users').select('role').eq('id', user.id).single();
-        if (!profile || (profile.role !== 'admin' && profile.role !== 'master')) {
-            throw new Error('Only admins can record assessments');
+        // Check if the user is a valid assessor
+        const { data: profile } = await supabaseAdmin.from('sbd_portal_users').select('role').eq('auth_uid', user.id).single();
+        const allowedRoles = ['master_admin', 'staff_admin', 'system_admin', 'admin', 'master', 'educator', 'preceptor'];
+        if (!profile || !allowedRoles.includes(profile.role)) {
+            throw new Error(`Unauthorized role (${profile?.role || 'none'}). Cannot record assessments.`);
         }
 
         const facility_id = staff.facility_id || staff.fid || null;
 
         // 1. Insert into sbd_assessment_queue
-        const { error: aqError } = await supabase.from('sbd_assessment_queue').insert({
+        const { error: aqError } = await supabaseAdmin.from('sbd_assessment_queue').insert({
             staff_id: staff.id,
             facility_id: facility_id,
             assessor_id: assessorId || user.id,
@@ -60,7 +62,7 @@ serve(async (req) => {
 
         // 2. If Passed, log a pending promotion for the Master Admin to approve
         if (result === 'pass') {
-            const { error: promoError } = await supabase.from('sbd_promotions').insert({
+            const { error: promoError } = await supabaseAdmin.from('sbd_promotions').insert({
                 staff_id: staff.id,
                 facility_id: facility_id,
                 requested_by: assessorId || user.id,
@@ -71,6 +73,24 @@ serve(async (req) => {
             if (promoError) {
                 console.warn('Promotion Queue Error:', promoError);
             }
+        }
+
+        // 3. Update the Staff record to persist the new gates (cur/nxt) and history!
+        // We receive the mapped staff object from mapStaffToBackend()
+        const { error: staffUpdateError } = await supabaseAdmin.from('staff').update({
+            history: staff.history || null,
+            cur_comp: staff.cur_comp || null,
+            cur_sim: staff.cur_sim || null,
+            cur_obs: staff.cur_obs || null,
+            nxt_comp: staff.nxt_comp || null,
+            nxt_sim: staff.nxt_sim || null,
+            nxt_obs: staff.nxt_obs || null,
+            updated_at: new Date().toISOString()
+        }).eq('id', staff.id);
+
+        if (staffUpdateError) {
+            console.error('Staff Update Error:', staffUpdateError);
+            throw new Error('Failed to update staff profile with assessment results');
         }
 
         return new Response(JSON.stringify({ success: true, message: 'Assessment recorded successfully.' }), {
