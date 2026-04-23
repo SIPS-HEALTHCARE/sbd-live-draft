@@ -1659,28 +1659,19 @@ function generateFallbackFeedback(answer, keywords, score){
 }
 
 async function scoreSimulationWithAI(question, answer){
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({
-      model:'claude-sonnet-4-20250514',
-      max_tokens:200,
-      messages:[{role:'user', content:`You are evaluating a sterile processing department (SPD) technician candidate's response to a situational question. Score the response 0-100 based on:
-- Understanding of patient safety principles (40%)
-- Knowledge of correct SPD procedures (30%)  
-- Professional judgment and escalation awareness (30%)
-
-Question: ${question}
-
-Candidate response: ${answer}
-
-Respond with ONLY a JSON object like: {"score":75,"feedback":"One sentence of specific constructive feedback."}
-No markdown, no preamble.`}]
-    })
-  });
-  const data = await response.json();
-  const text = (data.content||[]).find(c=>c.type==='text')?.text||'';
-  return JSON.parse(text.trim());
+  // Route through server-side Edge Function (uses OpenRouter key stored in Supabase secrets)
+  try {
+    const result = await sbFetch('/functions/v1/sbd-score-assessment', {
+      method: 'POST',
+      body: { question, answer }
+    });
+    if (result && result.score !== undefined) return result;
+    throw new Error('Invalid AI response');
+  } catch(e) {
+    // Fallback to keyword scoring if Edge Function is unavailable
+    console.warn('AI scoring unavailable, using keyword fallback:', e.message || e);
+    return null;
+  }
 }
 
 function paGoToDashboard(){
