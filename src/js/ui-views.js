@@ -1450,10 +1450,12 @@ async function submitPlacementAssessment(){
       <div style="font-size:13px;color:#64748b">This takes just a moment.</div>
     </div>`;
 
-  // Score knowledge questions locally
+  // Score knowledge questions locally, fire AI scoring in parallel
   const responses = [];
   let levelScores = {1:[], 2:[], 3:[], 4:[], 5:[]};
 
+  // Separate knowledge (instant) from simulation (needs AI)
+  const simQuestions = [];
   for(const q of PLACEMENT_QUESTIONS){
     const ans = PA.answers[q.id];
     if(q.type === 'knowledge'){
@@ -1462,19 +1464,31 @@ async function submitPlacementAssessment(){
       responses.push({qId:q.id, level:q.level, type:'knowledge', question:q.q, answer:q.options[ans]||'No answer', correct, score});
       levelScores[q.level].push({weight:1, score});
     } else {
-      // Try AI scoring, fallback to keyword match
-      let aiScore = scoreByKeywords(ans||'', q.keywords);
-      let aiFeedback = generateFallbackFeedback(ans||'', q.keywords, aiScore);
-      try {
-        const result = await scoreSimulationWithAI(q.q, ans||'');
-        if(result && result.score !== undefined){
-          aiScore = result.score;
-          aiFeedback = result.feedback || aiFeedback;
-        }
-      } catch(e){ /* use keyword fallback */ }
-      responses.push({qId:q.id, level:q.level, type:'simulation', question:q.q, answer:ans||'', aiScore, aiFeedback});
-      levelScores[q.level].push({weight:1, score:aiScore});
+      // Prepare keyword fallback immediately, queue AI call
+      const keywordScore = scoreByKeywords(ans||'', q.keywords);
+      const keywordFeedback = generateFallbackFeedback(ans||'', q.keywords, keywordScore);
+      simQuestions.push({q, ans, keywordScore, keywordFeedback});
     }
+  }
+
+  // Fire ALL simulation AI scores in parallel (~3s instead of ~40s sequential)
+  const aiPromises = simQuestions.map(({q, ans}) =>
+    scoreSimulationWithAI(q.q, ans||'').catch(() => null)
+  );
+  const aiResults = await Promise.allSettled(aiPromises);
+
+  // Merge AI results with fallbacks
+  for(let i=0; i<simQuestions.length; i++){
+    const {q, ans, keywordScore, keywordFeedback} = simQuestions[i];
+    let aiScore = keywordScore;
+    let aiFeedback = keywordFeedback;
+    const settled = aiResults[i];
+    if(settled.status === 'fulfilled' && settled.value && settled.value.score !== undefined){
+      aiScore = settled.value.score;
+      aiFeedback = settled.value.feedback || aiFeedback;
+    }
+    responses.push({qId:q.id, level:q.level, type:'simulation', question:q.q, answer:ans||'', aiScore, aiFeedback});
+    levelScores[q.level].push({weight:1, score:aiScore});
   }
 
   // Calculate level scores (40% knowledge, 60% simulation per level)
