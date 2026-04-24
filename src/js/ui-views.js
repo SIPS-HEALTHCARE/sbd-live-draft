@@ -10416,7 +10416,6 @@ function renderAAssessments() {
           </div>
         </div>
       </div>`;})()}
-    </div>
 
     ${staffRequests.length > 0 ? `
     <div style="margin-bottom:20px">
