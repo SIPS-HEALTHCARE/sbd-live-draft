@@ -2024,6 +2024,19 @@ function submitOIP(staffId, answers){
   const s=getStaff(staffId);
   if(!s) return;
   ensureOIP(s);
+
+  // Archive previous OIP result before overwriting (retake safety)
+  if(s.oip.completed && s.oip.primaryType){
+    if(!s.oip.history) s.oip.history = [];
+    s.oip.history.unshift({
+      completedAt: s.oip.completedAt,
+      primaryType: s.oip.primaryType,
+      secondaryType: s.oip.secondaryType,
+      scores: {...s.oip.scores},
+      answers: s.oip.answers ? [...s.oip.answers] : []
+    });
+  }
+
   const result=scoreOIP(answers);
   s.oip.completed=true;
   s.oip.completedAt=new Date().toISOString().slice(0,10);

@@ -500,6 +500,7 @@ function mapHospitalSystemFromBackend(row){
   return {
     id:          row.id,
     name:        row.name,
+    active:      row.active !== false,
     contact:     row.contact,
     email:       row.email,
     createdAt:   row.created_at
@@ -509,6 +510,7 @@ function mapHospitalSystemToBackend(sys){
   if(!sys) return null;
   const obj = {
     name:         sys.name,
+    active:       sys.active !== false,
     contact:      sys.contact,
     email:        sys.email
   };

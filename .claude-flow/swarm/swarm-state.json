@@ -17,6 +17,78 @@
       },
       "createdAt": "2026-04-22T20:57:27.548Z",
       "updatedAt": "2026-04-22T20:57:27.548Z"
+    },
+    "swarm-1776894292760-h6okn9": {
+      "swarmId": "swarm-1776894292760-h6okn9",
+      "topology": "hierarchical-mesh",
+      "maxAgents": 35,
+      "status": "running",
+      "agents": [],
+      "tasks": [],
+      "config": {
+        "topology": "hierarchical-mesh",
+        "maxAgents": 35,
+        "strategy": "specialized",
+        "communicationProtocol": "message-bus",
+        "autoScaling": true,
+        "consensusMechanism": "majority"
+      },
+      "createdAt": "2026-04-22T21:44:52.760Z",
+      "updatedAt": "2026-04-22T21:44:52.760Z"
+    },
+    "swarm-1776894887973-s325rn": {
+      "swarmId": "swarm-1776894887973-s325rn",
+      "topology": "hierarchical-mesh",
+      "maxAgents": 40,
+      "status": "running",
+      "agents": [],
+      "tasks": [],
+      "config": {
+        "topology": "hierarchical-mesh",
+        "maxAgents": 40,
+        "strategy": "specialized",
+        "communicationProtocol": "message-bus",
+        "autoScaling": true,
+        "consensusMechanism": "majority"
+      },
+      "createdAt": "2026-04-22T21:54:47.973Z",
+      "updatedAt": "2026-04-22T21:54:47.973Z"
+    },
+    "swarm-1776894946115-0catjz": {
+      "swarmId": "swarm-1776894946115-0catjz",
+      "topology": "hierarchical",
+      "maxAgents": 8,
+      "status": "running",
+      "agents": [],
+      "tasks": [],
+      "config": {
+        "topology": "hierarchical",
+        "maxAgents": 8,
+        "strategy": "specialized",
+        "communicationProtocol": "message-bus",
+        "autoScaling": true,
+        "consensusMechanism": "majority"
+      },
+      "createdAt": "2026-04-22T21:55:46.115Z",
+      "updatedAt": "2026-04-22T21:55:46.115Z"
+    },
+    "swarm-1776898619227-300hvp": {
+      "swarmId": "swarm-1776898619227-300hvp",
+      "topology": "hierarchical",
+      "maxAgents": 15,
+      "status": "running",
+      "agents": [],
+      "tasks": [],
+      "config": {
+        "topology": "hierarchical",
+        "maxAgents": 15,
+        "strategy": "specialized",
+        "communicationProtocol": "message-bus",
+        "autoScaling": true,
+        "consensusMechanism": "majority"
+      },
+      "createdAt": "2026-04-22T22:56:59.227Z",
+      "updatedAt": "2026-04-22T22:56:59.227Z"
     }
   },
   "version": "3.0.0"
