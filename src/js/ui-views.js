@@ -1240,15 +1240,250 @@ let PA = JSON.parse(localStorage.getItem('sbd_pa_state')||'null') || {
   shuffledQuestions: null
 };
 
+// ── Assessment Session State (in-memory only — never in localStorage for security) ──
+let ASSESSMENT_SESSION = {
+  token: null,
+  sessionId: null,
+  assessorName: null,
+  facilityId: null,
+  expiresAt: null,
+  type: null  // 'placement' | 'belt'
+};
+
 function getPAQuestions(){
   if(PA.shuffledQuestions && PA.shuffledQuestions.length) return PA.shuffledQuestions;
   PA.shuffledQuestions = shuffleArray(PLACEMENT_QUESTIONS);
   return PA.shuffledQuestions;
 }
 
-function savePAState(){ try{localStorage.setItem('sbd_pa_state',JSON.stringify(PA));}catch(e){} }
+function savePAState(){
+  try{localStorage.setItem('sbd_pa_state',JSON.stringify(PA));}catch(e){}
+  // Auto-save progress to server every 5th question
+  if(IS_LIVE && ASSESSMENT_SESSION.token && PA.currentQ > 0 && PA.currentQ % 5 === 0){
+    SB.saveAssessmentProgress(ASSESSMENT_SESSION.token, {
+      currentQ: PA.currentQ,
+      answers: PA.answers,
+      shuffledQuestions: PA.shuffledQuestions
+    }).catch(()=>{/* silent — localStorage is the fallback */});
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// ASSESSOR PIN GATE — One-Time PIN Authorization Modal
+// ════════════════════════════════════════════════════════════════════════
+
+function showAssessorPinGate(staffId, assessmentType, onSuccess){
+  const overlay = document.getElementById('placement-overlay');
+  overlay.classList.remove('hidden');
+  overlay.style.display = 'flex';
+  document.getElementById('placement-content').innerHTML = `
+    <div style="text-align:center;padding:24px 0 32px;max-width:440px;margin:0 auto">
+      <div style="width:72px;height:72px;background:rgba(139,92,246,.15);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:32px">&#128274;</div>
+      <div style="font-size:10px;font-weight:700;color:#8b5cf6;letter-spacing:.1em;margin-bottom:12px">ASSESSOR AUTHORIZATION REQUIRED</div>
+      <div style="font-size:18px;font-weight:800;color:#f1f5f9;margin-bottom:10px">Proctored Assessment</div>
+      <div style="font-size:13px;color:#94a3b8;line-height:1.65;margin-bottom:28px">
+        This assessment must be authorized by your SIPS assessor.<br>
+        Ask your assessor to generate an authorization PIN from their dashboard,<br>
+        then have them enter it below.
+      </div>
+      <div id="pin-input-row" style="display:flex;gap:10px;justify-content:center;margin-bottom:12px">
+        ${[0,1,2,3,4,5].map(i=>`<input type="password" maxlength="1" inputmode="numeric" pattern="[0-9]" class="pin-digit" id="pin-d${i}"
+          style="width:48px;height:56px;background:#0e1328;border:2px solid rgba(139,92,246,.3);border-radius:10px;text-align:center;font-size:22px;font-weight:700;color:#e2e8f0;font-family:'Poppins',sans-serif;caret-color:#8b5cf6;transition:.15s"
+          oninput="pinDigitInput(${i})" onkeydown="pinDigitKeydown(event,${i})" onfocus="this.style.borderColor='#8b5cf6'" onblur="this.style.borderColor='rgba(139,92,246,.3)'">`).join('')}
+      </div>
+      <div id="pin-error" style="font-size:12px;color:#ef4444;min-height:20px;margin-bottom:16px"></div>
+      <button id="pin-submit-btn" onclick="submitPinGate('${staffId}','${assessmentType}')" disabled
+        style="background:rgba(139,92,246,.3);border:none;border-radius:10px;padding:14px 40px;font-size:14px;font-weight:700;color:rgba(255,255,255,.4);cursor:not-allowed;font-family:'Poppins',sans-serif;transition:.15s;width:100%;max-width:320px">
+        Authorize \u0026 Begin
+      </button>
+      <div style="margin-top:20px">
+        <button onclick="hidePlacementOverlay()" style="background:none;border:none;color:#64748b;font-size:12px;cursor:pointer;font-family:'Poppins',sans-serif">Cancel</button>
+      </div>
+    </div>`;
+  // Store callback
+  window._pinGateCallback = onSuccess;
+  // Auto-focus first digit
+  setTimeout(()=>document.getElementById('pin-d0')?.focus(),100);
+}
+
+function pinDigitInput(idx){
+  const el = document.getElementById('pin-d'+idx);
+  if(!el) return;
+  // Allow only digits
+  el.value = el.value.replace(/[^0-9]/g,'');
+  if(el.value && idx < 5){
+    document.getElementById('pin-d'+(idx+1))?.focus();
+  }
+  updatePinSubmitState();
+}
+
+function pinDigitKeydown(e, idx){
+  if(e.key === 'Backspace' && !document.getElementById('pin-d'+idx)?.value && idx > 0){
+    const prev = document.getElementById('pin-d'+(idx-1));
+    if(prev){ prev.value=''; prev.focus(); }
+  }
+  // Enter to submit
+  if(e.key === 'Enter'){
+    const btn = document.getElementById('pin-submit-btn');
+    if(btn && !btn.disabled) btn.click();
+  }
+}
+
+function updatePinSubmitState(){
+  const pin = getEnteredPin();
+  const btn = document.getElementById('pin-submit-btn');
+  if(!btn) return;
+  const ready = pin.length === 6;
+  btn.disabled = !ready;
+  btn.style.background = ready ? '#8b5cf6' : 'rgba(139,92,246,.3)';
+  btn.style.color = ready ? '#fff' : 'rgba(255,255,255,.4)';
+  btn.style.cursor = ready ? 'pointer' : 'not-allowed';
+}
+
+function getEnteredPin(){
+  let pin = '';
+  for(let i=0;i<6;i++) pin += (document.getElementById('pin-d'+i)?.value||'');
+  return pin;
+}
+
+async function submitPinGate(staffId, assessmentType){
+  const pin = getEnteredPin();
+  if(pin.length !== 6) return;
+  const btn = document.getElementById('pin-submit-btn');
+  const errEl = document.getElementById('pin-error');
+  btn.disabled = true;
+  btn.textContent = 'Validating...';
+  errEl.textContent = '';
+  try {
+    if(!IS_LIVE) throw new Error('PIN validation requires live mode.');
+    const res = await SB.validateAssessmentPin(pin, staffId, assessmentType);
+    if(res.error){
+      errEl.textContent = res.error;
+      // Clear PIN inputs
+      for(let i=0;i<6;i++){ const d=document.getElementById('pin-d'+i); if(d) d.value=''; }
+      document.getElementById('pin-d0')?.focus();
+      btn.textContent = 'Authorize \u0026 Begin';
+      btn.disabled = false;
+      updatePinSubmitState();
+      return;
+    }
+    // Success — store session in memory
+    ASSESSMENT_SESSION = {
+      token: res.session_token,
+      sessionId: res.session_id,
+      assessorName: res.assessor_name,
+      facilityId: res.facility_id,
+      expiresAt: res.expires_at,
+      type: assessmentType
+    };
+    // Show brief confirmation
+    document.getElementById('placement-content').innerHTML = `
+      <div style="text-align:center;padding:40px 0">
+        <div style="width:72px;height:72px;background:rgba(34,197,94,.12);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:32px">&#10003;</div>
+        <div style="font-size:18px;font-weight:800;color:#22c55e;margin-bottom:8px">Authorized</div>
+        <div style="font-size:13px;color:#94a3b8;margin-bottom:4px">Assessor: <strong style="color:#e2e8f0">${res.assessor_name}</strong></div>
+        <div style="font-size:13px;color:#94a3b8;margin-bottom:4px">Session: <strong style="color:#e2e8f0">90 minutes</strong></div>
+        <div style="font-size:11px;color:#64748b;margin-top:8px">Starting assessment...</div>
+      </div>`;
+    // Transition to assessment after 1.5s
+    setTimeout(()=>{
+      if(window._pinGateCallback) window._pinGateCallback(res);
+    }, 1500);
+  } catch(e){
+    errEl.textContent = e.message || 'Authorization failed. Please try again.';
+    btn.textContent = 'Authorize \u0026 Begin';
+    updatePinSubmitState();
+  }
+}
+
+// ── Assessor-side: Generate PIN modal ──
+function showGeneratePinModal(staffId, assessmentType='placement'){
+  const s = getStaff(staffId);
+  if(!s){toast('Staff member not found.','err');return;}
+  openModal('Generate Authorization PIN',`
+    <div class="modal-body" style="text-align:center">
+      <div style="font-size:13px;color:var(--txt2);margin-bottom:16px;line-height:1.6">
+        Generate a one-time PIN for <strong style="color:var(--txt1)">${fullName(s)}</strong> to begin their
+        <strong style="color:var(--gold)">${assessmentType === 'placement' ? 'Placement' : 'Belt'} Assessment</strong>.
+      </div>
+      <div id="gen-pin-area">
+        <button class="btn btn-gold" style="padding:12px 32px;font-size:14px" onclick="executeGeneratePin('${staffId}','${assessmentType}')">&#128274; Generate PIN</button>
+      </div>
+      <div style="font-size:11px;color:var(--txt3);margin-top:14px;line-height:1.5">
+        The PIN is valid for <strong>10 minutes</strong> and can only be used once.<br>
+        Enter it on the staff member's device to authorize the assessment.
+      </div>
+    </div>
+    <div class="modal-ft"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>`, 'modal-sm');
+}
+
+async function executeGeneratePin(staffId, assessmentType){
+  const area = document.getElementById('gen-pin-area');
+  if(!area) return;
+  area.innerHTML = '<div style="color:var(--txt3);font-size:13px">Generating...</div>';
+  try {
+    if(!IS_LIVE) throw new Error('Requires live mode.');
+    const res = await SB.generateAssessmentPin(staffId, assessmentType);
+    if(res.error) throw new Error(res.error);
+    // Show PIN with countdown
+    const expiresAt = new Date(res.expires_at).getTime();
+    area.innerHTML = `
+      <div style="background:rgba(139,92,246,.08);border:2px solid rgba(139,92,246,.4);border-radius:16px;padding:28px 24px;margin:8px 0">
+        <div style="font-size:10px;font-weight:700;color:#8b5cf6;letter-spacing:.1em;margin-bottom:12px">AUTHORIZATION PIN</div>
+        <div style="font-size:36px;font-weight:800;color:#f1f5f9;letter-spacing:12px;font-family:'Courier New',monospace;margin-bottom:14px">${res.pin}</div>
+        <div style="font-size:12px;color:#94a3b8">For: <strong style="color:#e2e8f0">${res.staff_name}</strong></div>
+        <div id="pin-countdown" style="font-size:13px;font-weight:700;color:#f59e0b;margin-top:10px"></div>
+      </div>
+      <div style="font-size:11.5px;color:#64748b;margin-top:10px">Enter this PIN on the staff member's device now.</div>`;
+    // Countdown timer
+    const countdownEl = document.getElementById('pin-countdown');
+    const ticker = setInterval(()=>{
+      const remaining = Math.max(0, expiresAt - Date.now());
+      const mins = Math.floor(remaining / 60000);
+      const secs = Math.floor((remaining % 60000) / 1000);
+      if(countdownEl) countdownEl.textContent = remaining > 0 ? `Expires in ${mins}:${String(secs).padStart(2,'0')}` : 'PIN Expired';
+      if(remaining <= 0){
+        clearInterval(ticker);
+        if(countdownEl) countdownEl.style.color = '#ef4444';
+      }
+    }, 1000);
+  } catch(e){
+    area.innerHTML = `<div style="color:var(--err);font-size:13px">${e.message}</div>
+      <button class="btn btn-gold btn-sm" style="margin-top:10px" onclick="executeGeneratePin('${staffId}','${assessmentType}')">Retry</button>`;
+  }
+}
 
 function showPlacementAssessment(s){
+  // ── PIN GATE: Require assessor authorization before assessment ──
+  if(IS_LIVE && !ASSESSMENT_SESSION.token){
+    // No active session — show PIN gate
+    showAssessorPinGate(s.id, 'placement', function(res){
+      // PIN validated, session created — now enter the assessment
+      _enterPlacementAssessment(s);
+    });
+    return;
+  }
+  // If we have a session, validate it's still active
+  if(IS_LIVE && ASSESSMENT_SESSION.token){
+    SB.validateAssessmentSession(ASSESSMENT_SESSION.token).then(res => {
+      if(res.valid){
+        _enterPlacementAssessment(s);
+      } else {
+        // Session expired — clear and re-gate
+        ASSESSMENT_SESSION = {token:null,sessionId:null,assessorName:null,facilityId:null,expiresAt:null,type:null};
+        showAssessorPinGate(s.id, 'placement', function(){
+          // Try to restore progress from server
+          _enterPlacementAssessment(s);
+        });
+      }
+    }).catch(()=>_enterPlacementAssessment(s)); // Offline fallback: allow entry
+    return;
+  }
+  // Demo/offline mode — no PIN gate
+  _enterPlacementAssessment(s);
+}
+
+function _enterPlacementAssessment(s){
   if (PA.staffId !== s.id || PA.submitted) {
     PA.active = true;
     PA.staffId = s.id;
@@ -1546,13 +1781,19 @@ async function submitPlacementAssessment(){
           level_scores: pr.levelScores,
           submitted_at: pr.submittedAt,
           staff_name: pr.staffName,
-          staff_title: pr.staffTitle
+          staff_title: pr.staffTitle,
+          session_id: ASSESSMENT_SESSION.sessionId || null
         }
       });
       await sbFetch(`/rest/v1/staff?id=eq.${pr.staffId}`, {
         method:'PATCH',
         body: {placement_needed: false}
       });
+      // Mark the assessment session as completed
+      if(ASSESSMENT_SESSION.token){
+        SB.completeAssessmentSession(ASSESSMENT_SESSION.token).catch(()=>{});
+        ASSESSMENT_SESSION = {token:null,sessionId:null,assessorName:null,facilityId:null,expiresAt:null,type:null};
+      }
     } catch(e) { handleSyncError(e, 'Placement sync'); }
   } else {
     /* saveDemoData() removed */
@@ -10144,6 +10385,37 @@ function renderAAssessments() {
     <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
       ${['all', ...allFacs.map(f => f.id)].map(v => `<div class="fchip ${asmFilter === v ? 'on' : ''}" onclick="asmFilter='${v}';renderAAssessments()">${v === 'all' ? 'All Facilities' : getFac(v)?.name || v}</div>`).join('')}
       <button class="btn btn-gold btn-sm" style="margin-left:auto;flex-shrink:0" onclick="openRecordModal(null)">${ICO.record} Record Assessment</button>
+    </div>
+
+    ${(()=>{
+      // ── ASSESSOR PIN AUTHORIZATION: Show staff needing placement assessment ──
+      const placementStaff = DB.staff.filter(st => st.placementNeeded && (!assignedFids || assignedFids.includes(st.fid)));
+      if(!placementStaff.length) return '';
+      return `
+      <div style="margin-bottom:20px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <div style="font-size:12px;font-weight:700;color:var(--txt1);letter-spacing:.05em">&#128274; ASSESSMENT AUTHORIZATION</div>
+          <span class="pill p-purple">${placementStaff.length} awaiting</span>
+        </div>
+        <div class="card">
+          <div style="padding:10px 14px;background:rgba(139,92,246,.06);border-bottom:1px solid var(--bdr2);font-size:11.5px;color:var(--txt3);line-height:1.5">
+            Generate a one-time PIN to authorize assessments. The PIN expires in 10 minutes and can only be used once.
+          </div>
+          <div style="overflow-x:auto">
+            <table class="tbl tbl-static" style="min-width:500px">
+              <thead><tr><th>Staff Member</th><th>Facility</th><th>Assessment Type</th><th>Action</th></tr></thead>
+              <tbody>
+                ${placementStaff.map(st => `<tr>
+                  <td class="fw7">${fullName(st)}</td>
+                  <td style="font-size:11.5px;color:var(--txt3)">${getFac(st.fid)?.name||st.fid||'--'}</td>
+                  <td><span class="pill p-purple">Placement</span></td>
+                  <td><button class="btn btn-gold btn-xs" onclick="showGeneratePinModal('${st.id}','placement')">&#128274; Generate PIN</button></td>
+                </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>`;})()}
     </div>
 
     ${staffRequests.length > 0 ? `

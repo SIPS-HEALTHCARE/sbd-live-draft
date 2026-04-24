@@ -229,7 +229,13 @@ const SB = {
   getAttendance(fid, date){ return sbFetch(`/rest/v1/sbd_attendance?facility_id=eq.${encodeURIComponent(fid)}&date=eq.${date}&select=*`); },
   getStaffAttendance(staffId){ return sbFetch(`/rest/v1/sbd_attendance?staff_id=eq.${staffId}&select=*&order=date.desc`); },
   recordAttendance(data){ return sbFetch('/rest/v1/sbd_attendance', { method:'POST', body:data }); },
-  updateAttendance(id, data){ return sbFetch(`/rest/v1/sbd_attendance?id=eq.${id}`, { method:'PATCH', body:data }); }
+  updateAttendance(id, data){ return sbFetch(`/rest/v1/sbd_attendance?id=eq.${id}`, { method:'PATCH', body:data }); },
+  // ── Assessment PIN Authorization ──
+  generateAssessmentPin(staffId, assessmentType='placement'){ return sbFetch('/functions/v1/sbd-assessor-pin', { method:'POST', body:{ action:'generate_pin', staff_id:staffId, assessment_type:assessmentType } }); },
+  validateAssessmentPin(pin, staffId, assessmentType='placement'){ return sbFetch('/functions/v1/sbd-assessor-pin', { method:'POST', body:{ action:'validate_pin', pin, staff_id:staffId, assessment_type:assessmentType, device_info:{ userAgent:navigator.userAgent, screenWidth:screen.width, platform:navigator.platform } } }); },
+  validateAssessmentSession(sessionToken){ return sbFetch('/functions/v1/sbd-assessor-pin', { method:'POST', body:{ action:'validate_session', session_token:sessionToken } }); },
+  saveAssessmentProgress(sessionToken, progress){ return sbFetch('/functions/v1/sbd-assessor-pin', { method:'POST', body:{ action:'save_progress', session_token:sessionToken, progress } }); },
+  completeAssessmentSession(sessionToken){ return sbFetch('/functions/v1/sbd-assessor-pin', { method:'POST', body:{ action:'complete_session', session_token:sessionToken } }); }
 };
 if (typeof window !== 'undefined') {
   window.SB = SB;
