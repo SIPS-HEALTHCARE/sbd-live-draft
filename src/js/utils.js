@@ -57,16 +57,23 @@ function fmtTime(t){
 function staffOf(fid){ return fid ? DB.staff.filter(s=>s.fid===fid) : DB.staff; }
 function getFac(id){ return DB.facilities.find(f=>f.id===id); }
 function getStaff(id){ return DB.staff.find(s=>s.id===id); }
-function fullName(s){ 
+function fullName(s){
   const f = (s.first && s.first !== 'undefined') ? s.first.trim() : '';
   const l = (s.last && s.last !== 'undefined') ? s.last.trim() : '';
-  return `${f} ${l}`.trim() || 'Unknown'; 
+  return `${f} ${l}`.trim() || 'Unknown';
 }
+
+function cleanName(name){
+  if(!name) return '';
+  return String(name).replace(/\bundefined\b/gi, '').replace(/\s+/g, ' ').trim();
+}
+
 function userInitials(s){ 
   const f = (s.first && s.first !== 'undefined') ? s.first.trim() : '';
   const l = (s.last && s.last !== 'undefined') ? s.last.trim() : '';
   return ((f[0]||'') + (l[0]||'')).toUpperCase() || '?';
-}function beltIdx(b){ return BELT_ORDER.indexOf(b); }
+}
+function beltIdx(b){ return BELT_ORDER.indexOf(b); }
 function nextBelt(b){ const i=beltIdx(b); return i<5?BELT_ORDER[i+1]:null; }
 function daysAt(since){ return Math.round((new Date()-new Date(since))/(1000*60*60*24)); }
 function gatesStatus(g){ const vals=Object.values(g||{}); const p=vals.filter(x=>x==='pass').length; const f=vals.filter(x=>x==='fail').length; return {p,f,rem:3-p}; }

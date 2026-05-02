@@ -1431,7 +1431,7 @@ async function executeGeneratePin(staffId, assessmentType){
       <div style="background:rgba(139,92,246,.08);border:2px solid rgba(139,92,246,.4);border-radius:16px;padding:28px 24px;margin:8px 0">
         <div style="font-size:10px;font-weight:700;color:#8b5cf6;letter-spacing:.1em;margin-bottom:12px">AUTHORIZATION PIN</div>
         <div style="font-size:36px;font-weight:800;color:#f1f5f9;letter-spacing:12px;font-family:'Courier New',monospace;margin-bottom:14px">${res.pin}</div>
-        <div style="font-size:12px;color:#94a3b8">For: <strong style="color:#e2e8f0">${res.staff_name}</strong></div>
+        <div style="font-size:12px;color:#94a3b8">For: <strong style="color:#e2e8f0">${cleanName(res.staff_name)||'Unknown'}</strong></div>
         <div id="pin-countdown" style="font-size:13px;font-weight:700;color:#f59e0b;margin-top:10px"></div>
       </div>
       <div style="font-size:11.5px;color:#64748b;margin-top:10px">Enter this PIN on the staff member's device now.</div>`;
@@ -1753,7 +1753,7 @@ async function submitPlacementAssessment(){
     id: 'pr-' + Date.now(),
     staffId: PA.staffId,
     fid: s ? s.fid : 'test-a',
-    staffName: s ? (s.first+' '+s.last) : 'Unknown',
+    staffName: s ? fullName(s) : 'Unknown',
     staffTitle: s ? (s.role||s.title||'') : '',
     submittedAt: new Date().toISOString(),
     tentativeBelt: suggestedBelt,
@@ -1966,17 +1966,21 @@ function renderAPlacementReviews(){
     const isKnowledge = r.type === 'knowledge';
     const score = isKnowledge ? r.score : r.aiScore;
     const scoreClr = score >= 80 ? '#22c55e' : score >= 60 ? '#f59e0b' : '#ef4444';
+    const safeQuestion = Security.sanitize(r.question || '');
+    const safeAnswer = r.answer ? Security.sanitize(r.answer) : 'No response';
+    const safeFeedback = r.aiFeedback ? Security.sanitize(r.aiFeedback) : '';
+    const safeLevel = Security.sanitize(r.level || '');
     return `
       <div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:8px;padding:14px 16px;margin-bottom:10px">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px">
-          <div style="font-size:11px;font-weight:700;color:#64748b;letter-spacing:.05em">${isKnowledge?'KNOWLEDGE':'SIMULATION'} &middot; Level ${r.level||''}</div>
-          <div style="font-size:12px;font-weight:800;color:${scoreClr};white-space:nowrap">${score}%</div>
+          <div style="font-size:11px;font-weight:700;color:#64748b;letter-spacing:.05em">${isKnowledge?'KNOWLEDGE':'SIMULATION'} &middot; Level ${safeLevel}</div>
+          <div style="font-size:12px;font-weight:800;color:${scoreClr};white-space:nowrap">${score!=null?score+'%':'--'}</div>
         </div>
-        <div style="font-size:12.5px;color:#94a3b8;margin-bottom:8px;line-height:1.5">${r.question}</div>
+        <div style="font-size:12.5px;color:#94a3b8;margin-bottom:8px;line-height:1.5">${safeQuestion}</div>
         <div style="background:rgba(0,0,0,.2);border-radius:6px;padding:10px 12px;margin-bottom:6px">
-          <div style="font-size:11.5px;color:#e2e8f0;line-height:1.6;white-space:pre-wrap">${r.answer||'No response'}</div>
+          <div style="font-size:11.5px;color:#e2e8f0;line-height:1.6;white-space:pre-wrap">${safeAnswer}</div>
         </div>
-        ${!isKnowledge && r.aiFeedback ? `<div style="font-size:11px;color:#64748b;font-style:italic">${r.aiFeedback}</div>` : ''}
+        ${!isKnowledge && safeFeedback ? `<div style="font-size:11px;color:#64748b;font-style:italic">${safeFeedback}</div>` : ''}
         ${isKnowledge && !r.correct ? `<div style="font-size:11px;color:#f59e0b">Answered incorrectly</div>` : ''}
       </div>`;
   };
@@ -1987,7 +1991,7 @@ function renderAPlacementReviews(){
     const fac = getFac(pr.fid);
     // Resolve staff name: prefer stored name, fallback to DB.staff lookup
     const staffRec = getStaff(pr.staffId);
-    const displayName = pr.staffName || (staffRec ? (staffRec.first+' '+staffRec.last) : pr.staffId || 'Unknown');
+    const displayName = cleanName(pr.staffName) || (staffRec ? fullName(staffRec) : (pr.staffId || 'Unknown'));
     const displayTitle = pr.staffTitle || (staffRec ? (staffRec.role||'') : '');
     const displayDate = pr.submittedAt ? (pr.submittedAt.length > 10 ? new Date(pr.submittedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : pr.submittedAt) : '';
     return `
@@ -2006,7 +2010,7 @@ function renderAPlacementReviews(){
         <div id="pr-body-${pr.id}" style="display:none;padding:0 0 4px">
           <div style="height:1px;background:rgba(255,255,255,.06);margin:0 0 16px"></div>
           <div style="font-size:11px;font-weight:700;color:#64748b;letter-spacing:.06em;margin-bottom:12px">ASSESSMENT RESPONSES</div>
-          ${pr.responses.map(renderResponse).join('')}
+          ${(pr.responses && pr.responses.length) ? pr.responses.map(renderResponse).join('') : `<div style="font-size:12px;color:#64748b;font-style:italic;padding:6px 0 12px">No question-level data captured for this review.</div>`}
           ${pr.status==='pending' ? `
           <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,.06)">
             <div style="font-size:11px;font-weight:700;color:#64748b;letter-spacing:.05em;margin-bottom:10px">ASSESSOR DECISION</div>
@@ -8377,7 +8381,7 @@ function renderXSchedule(){
   const facSel=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
     <div style="font-size:11px;font-weight:700;color:var(--txt3)">FACILITY</div>
     <select class="form-select" style="width:auto;max-width:240px;font-size:12px" onchange="xSchFid=this.value;renderXSchedule()">
-      ${facs.map(f=>`<option value="${f.id}" ${f.id===xSchFid?'selected':''}>${f.name}</option>`).join('')}
+      ${facs.map(f=>`<option value="${f.id}" ${f.id===xSchFid?'selected':''}>${f.name}${f.loc?` — ${f.loc}`:''}</option>`).join('')}
     </select>
     <div style="font-size:11px;color:var(--txt3)">${staffOf(xSchFid).length} staff &bull; ${Object.keys(shifts).length} shifts defined</div>
   </div>`;
@@ -9804,7 +9808,7 @@ function renderAFacility(){
 
   // Populate switcher
   const sel=document.getElementById('fac-switcher-sel');
-  sel.innerHTML=DB.facilities.map(fac=>`<option value="${fac.id}" ${fac.id===ST.curFid?'selected':''}>${fac.name}</option>`).join('');
+  sel.innerHTML=DB.facilities.map(fac=>`<option value="${fac.id}" ${fac.id===ST.curFid?'selected':''}>${fac.name}${fac.loc?` — ${fac.loc}`:''}</option>`).join('');
   document.getElementById('fac-switcher-name').textContent=f.active===false?f.name+' (Inactive)':f.name;
   document.getElementById('fac-switcher').classList.remove('hidden');
   document.getElementById('download-btn').style.display='flex';
@@ -10579,7 +10583,7 @@ function renderAProgression() {
       const sScore = scores?.simulation || 0;
       const bothPassed = kScore >= 80 && sScore >= 80;
       const hasPending = DB.queue.some(q => q.sid===s.id && q.status==='pending');
-      return `<tr>
+      return `<tr style="cursor:pointer" onclick="openAdminProfile('${s.id}')">
         <td style="white-space:nowrap">
           <div style="font-size:13px;font-weight:600">${fullName(s)}</div>
           <div style="font-size:10.5px;color:var(--txt3)">${s.role||''}</div>
@@ -10730,7 +10734,7 @@ function renderAProgression() {
   }
 
   // Facility select
-  const facOpts = `<option value="all">All Facilities</option>` + facs.map(f=>`<option value="${f.id}" ${progFilter.fid===f.id?'selected':''}>${f.name}</option>`).join('');
+  const facOpts = `<option value="all">All Facilities</option>` + facs.map(f=>`<option value="${f.id}" ${progFilter.fid===f.id?'selected':''}>${f.name}${f.loc?` — ${f.loc}`:''}</option>`).join('');
   const beltChips = ['All','White','Yellow','Green','Blue','Brown','Black'].map(b=>`
     <div class="fchip${progFilter.belt===b?' on':''}" onclick="progFilter.belt='${b}';renderAProgression()">
       ${b==='All'?'All':beltBadge(b)}
@@ -11179,7 +11183,7 @@ function openAddStaffModal(lockedFid){
   const facAdmin = isFacilityAdmin();
   const facOpts = facAdmin && lockedFid
     ? `<option value="${lockedFid}" selected>${getFac(lockedFid)?.name||lockedFid}</option>`
-    : DB.facilities.map(f=>`<option value="${f.id}" ${f.id===targetFid?'selected':''}>${f.name}</option>`).join('');
+    : DB.facilities.map(f=>`<option value="${f.id}" ${f.id===targetFid?'selected':''}>${f.name}${f.loc?` — ${f.loc}`:''}</option>`).join('');
   openModal('Add Staff Member',`
     <div class="modal-body">
       <div class="form-group"><label class="form-label">Facility *</label><select class="form-select" id="ns-fac" ${facAdmin&&lockedFid?'disabled':''} style="${facAdmin&&lockedFid?'opacity:.7;cursor:not-allowed':''}">${facOpts}</select></div>
@@ -11238,10 +11242,10 @@ async function addStaff(lockedFid){
 function openRecordModal(sid){
   // Use hFid as the active facility when called from the hospital portal (facility admin)
   const activeFid = (ST.portal==='hospital' && ST.hFid) ? ST.hFid : ST.curFid;
-  const facOpts=DB.facilities.map(f=>`<option value="${f.id}" ${f.id===activeFid?'selected':''}>${f.name}</option>`).join('');
+  const facOpts=DB.facilities.filter(f=>f.active!==false||f.id===activeFid).map(f=>`<option value="${f.id}" ${f.id===activeFid?'selected':''}>${f.name}${f.loc?` — ${f.loc}`:''}</option>`).join('');
   const curS=sid?getStaff(sid):null;
   const staffSel=curS?`<div class="form-group"><label class="form-label">Staff Member</label><div style="padding:8px 11px;background:var(--s2);border:1px solid var(--bdr2);border-radius:var(--rs);font-size:12.5px;font-weight:600">${fullName(curS)}</div></div>`:
-    `<div class="form-group"><label class="form-label">Staff Member *</label><select class="form-select" id="ra-staff">${staffOf(activeFid).map(s=>`<option value="${s.id}">${fullName(s)} -- ${s.belt} Belt</option>`).join('')}</select></div>`;
+    `<div class="form-group"><label class="form-label">Staff Member *</label><select class="form-select" id="ra-staff">${staffOf(activeFid).map(s=>`<option value="${s.id}">${fullName(s)}${s.belt?` — ${s.belt} Belt`:''}</option>`).join('')}</select></div>`;
   const nb=curS?nextBelt(curS.belt):null;
   const gateInfo=curS&&nb?`<div style="padding:10px 12px;background:var(--s2);border-radius:var(--rs);border:1px solid var(--bdr);margin-bottom:14px;font-size:12px;color:var(--txt2);line-height:1.6">
     Advancing to <strong>${nb} Belt</strong>: ${ICO.check}<span style="color:${(curS.nxt||{}).c==='pass'?'var(--ok)':'var(--txt3)'}"> Competency</span> &bull; <span style="color:${(curS.nxt||{}).s==='pass'?'var(--ok)':'var(--txt3)'}"> Simulation</span> &bull; <span style="color:${(curS.nxt||{}).o==='pass'?'var(--ok)':'var(--txt3)'}"> Observation</span>
@@ -11259,6 +11263,12 @@ function openRecordModal(sid){
       <div class="form-group"><label class="form-label">Notes (optional)</label><textarea class="form-textarea" id="ra-notes" placeholder="Assessment notes..."></textarea></div>
     </div>
     <div class="modal-ft"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-gold" onclick="submitAssessment(${sid||0})">${ICO.record} Submit Assessment</button></div>`,'modal-md');
+}
+
+function updateRaStaff(fid){
+  const sel=document.getElementById('ra-staff');
+  if(!sel) return;
+  sel.innerHTML=staffOf(fid).map(s=>`<option value="${s.id}">${fullName(s)}${s.belt?` — ${s.belt} Belt`:''}</option>`).join('');
 }
 
 let raResult=null;
@@ -11487,7 +11497,7 @@ async function openApproveRegModal(rid){
   else if(r.requested_role) roleLabel = r.requested_role;
 
   const sortedFacilities = [...DB.facilities].sort((a,b) => a.name.localeCompare(b.name));
-  const facOptions = sortedFacilities.map(f => `<option value="${f.id}">${f.name} (${f.loc || 'Unknown'})</option>`).join('');
+  const facOptions = sortedFacilities.map(f => `<option value="${f.id}">${f.name}${f.loc?` — ${f.loc}`:''}</option>`).join('');
   
   const sortedSystems = [...(DB.hospitalSystems||[])].sort((a,b) => a.name.localeCompare(b.name));
   const sysOptions = sortedSystems.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
@@ -11622,7 +11632,7 @@ async function approveReg(rid){
     // Remove pending local status
     r.status='approved';
     const facSel=document.getElementById('fac-switcher-sel');
-    if(facSel) facSel.innerHTML=DB.facilities.map(f=>`<option value="${f.id}">${f.name}</option>`).join('');
+    if(facSel) facSel.innerHTML=DB.facilities.map(f=>`<option value="${f.id}">${f.name}${f.loc?` — ${f.loc}`:''}</option>`).join('');
     const nb=document.getElementById('reg-nb');
     const pendingCnt=DB.pendingRegs.filter(x=>x.status==='pending').length;
     if(nb){nb.textContent=pendingCnt;nb.style.display=pendingCnt>0?'inline-block':'none';}
@@ -12197,7 +12207,7 @@ function denyTransfer(trId) {
   const tr = DB.pendingTransfers&&DB.pendingTransfers.find(t => t.id === trId);
   if(!tr) return;
   openModal('Deny Transfer Request', `<div class="modal-body">
-    <div style="font-size:13.5px;font-weight:700;margin-bottom:4px">Deny: ${tr.type==='release'?'Release':'Assignment'} for ${tr.staffName}</div>
+    <div style="font-size:13.5px;font-weight:700;margin-bottom:4px">Deny: ${tr.type==='release'?'Release':'Assignment'} for ${cleanName(tr.staffName)||'Unknown'}</div>
     <div style="font-size:12px;color:var(--txt3);margin-bottom:14px">${tr.type==='release'?'From '+tr.fromFacName:'To '+tr.toFacName} &bull; Requested by ${tr.requestedByName}</div>
     <div class="form-group"><label class="form-label">Reason for Denial *</label>
       <textarea class="form-textarea" id="deny-reason-inp" placeholder="Explain why this transfer is being denied..." style="min-height:80px"></textarea>
@@ -12355,7 +12365,7 @@ function renderAFreeAgents(){
       <div style="overflow-x:auto"><table class="tbl tbl-static" style="min-width:600px">
         <thead><tr><th>Staff Member</th><th>Belt</th><th>Type</th><th>Movement</th><th>Requested By</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody>${allTransfers.map(tr=>`<tr style="background:${tr.status==='pending'?'rgba(245,158,11,.03)':'transparent'}">
-          <td class="fw7">${tr.staffName}</td>
+          <td class="fw7">${cleanName(tr.staffName)||'Unknown'}</td>
           <td>${beltBadge(tr.belt||'White')}</td>
           <td>${typeBadge(tr)}</td>
           <td style="font-size:11.5px;color:var(--txt2)">${tr.fromFacName} &rarr; ${tr.toFacName}</td>
@@ -12461,7 +12471,7 @@ function openFreeAgentProfile(faId){
 function openAssignFreeAgentModal(faId){
   const fa=DB.freeAgents.find(f=>f.id===faId);
   if(!fa){toast('Record not found.','err');return;}
-  const opts=DB.facilities.filter(f=>f.active!==false).map(f=>`<option value="${f.id}">${f.name} \u2014 ${f.loc}</option>`).join('');
+  const opts=DB.facilities.filter(f=>f.active!==false).map(f=>`<option value="${f.id}">${f.name}${f.loc?` \u2014 ${f.loc}`:''}</option>`).join('');
   openModal(`Assign ${fullName(fa)} to Facility`,`
     <div class="modal-body">
       <div style="padding:10px 12px;background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.2);border-radius:var(--rs);margin-bottom:14px;font-size:12px;color:#94a3b8;line-height:1.5">
@@ -13038,7 +13048,7 @@ function openEditUserModal(uid){
       <div id="eu-wrap-fac" style="display:${(u.role==='facility_admin'||u.role==='hospital'||u.role==='staff_member')?'block':'none'}; margin-top:8px;">
         <div class="form-group"><label class="form-label">Facility</label>
           <select class="form-select" id="eu-fid">
-            ${DB.facilities.map(f=>`<option value="${f.id}" ${u.fid===f.id?'selected':''}>${f.name} \u2014 ${f.loc}</option>`).join('')}
+            ${DB.facilities.map(f=>`<option value="${f.id}" ${u.fid===f.id?'selected':''}>${f.name}${f.loc?` \u2014 ${f.loc}`:''}</option>`).join('')}
           </select>
         </div>
       </div>
@@ -13138,7 +13148,7 @@ function openAddUserModal(type){
       extra: `
         <div class="form-group"><label class="form-label">Facility *</label>
           <select class="form-select" id="nu-fid">
-            ${DB.facilities.map(f=>`<option value="${f.id}">${f.name} \u2014 ${f.loc}</option>`).join('')}
+            ${DB.facilities.map(f=>`<option value="${f.id}">${f.name}${f.loc?` \u2014 ${f.loc}`:''}</option>`).join('')}
           </select>
           <div class="form-hint">This admin will have full management access to the selected facility portal.</div>
         </div>`,
@@ -13151,7 +13161,7 @@ function openAddUserModal(type){
       extra: `
         <div class="form-group"><label class="form-label">Facility *</label>
           <select class="form-select" id="nu-fid">
-            ${DB.facilities.map(f=>`<option value="${f.id}">${f.name} \u2014 ${f.loc}</option>`).join('')}
+            ${DB.facilities.map(f=>`<option value="${f.id}">${f.name}${f.loc?` \u2014 ${f.loc}`:''}</option>`).join('')}
           </select>
         </div>
         <div class="form-group"><label class="form-label">Portal Access Level</label>
@@ -13169,7 +13179,7 @@ function openAddUserModal(type){
       extra: `
         <div class="form-group"><label class="form-label">Facility *</label>
           <select class="form-select" id="nu-fid" onchange="updateStaffRecordOpts(this.value)">
-            ${DB.facilities.map(f=>`<option value="${f.id}">${f.name}</option>`).join('')}
+            ${DB.facilities.map(f=>`<option value="${f.id}">${f.name}${f.loc?` — ${f.loc}`:''}</option>`).join('')}
           </select>
         </div>
         <div class="form-group"><label class="form-label">Link to Staff Record (Optional)</label>
