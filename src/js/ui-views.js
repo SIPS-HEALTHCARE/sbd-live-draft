@@ -10359,7 +10359,8 @@ function updateProgBadge() {
 function renderAAssessments() {
   const el = document.getElementById('a-assessments');
   // Scope facilities to assignedFids for staff_admin -- master_admin sees all
-  const assignedFids = ST.user?.assignedFids || null;
+  const isMaster = ST.user?.role === 'master_admin';
+  const assignedFids = (!isMaster && ST.user?.assignedFids?.length) ? ST.user.assignedFids : null;
   const allFacs = DB.facilities.filter(f =>
     f.active !== false && (!assignedFids || assignedFids.includes(f.id))
   );

@@ -88,7 +88,7 @@ serve(async (req) => {
             // 2. Look up the staff member's facility
             const { data: staffRow } = await supabaseAdmin
                 .from('staff')
-                .select('id, facility_id, first, last')
+                .select('id, fid, first, last')
                 .eq('id', staff_id)
                 .single();
 
@@ -97,7 +97,7 @@ serve(async (req) => {
             // 3. Verify facility match (assessor must be assigned to staff's facility)
             const assessorFids = assessor.assigned_facility_ids || [];
             const isMaster = assessor.role === 'master_admin';
-            if (!isMaster && assessorFids.length > 0 && !assessorFids.includes(staffRow.facility_id)) {
+            if (!isMaster && assessorFids.length > 0 && !assessorFids.includes(staffRow.fid)) {
                 throw new Error('Unauthorized: You are not assigned to this staff member\'s facility.');
             }
 
@@ -120,7 +120,7 @@ serve(async (req) => {
                 .insert({
                     assessor_id: assessor.id,
                     staff_id: staff_id,
-                    facility_id: staffRow.facility_id,
+                    facility_id: staffRow.fid,
                     assessment_type: assessment_type,
                     pin_hash: pinHash,
                     expires_at: expiresAt,
