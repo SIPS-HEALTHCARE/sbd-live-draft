@@ -8917,6 +8917,8 @@ function renderHAssessments(){
       </div>
     </div>`:''}
 
+    ${renderAssessmentAuthBlock(DB.staff.filter(s => s.placementNeeded && s.fid === fid))}
+
     <!-- Assessment Queue Table -->
     <div class="card mb16">
       <div class="card-hd">
@@ -10353,6 +10355,40 @@ function updateProgBadge() {
 }
 
 // ============================================================
+// renderAssessmentAuthBlock -- shared "Generate PIN" panel
+// Used by master/staff admin (renderAAssessments) and facility
+// admin (renderHAssessments). Caller scopes the staff list.
+// ============================================================
+function renderAssessmentAuthBlock(staffList){
+  if(!staffList.length) return '';
+  return `
+    <div style="margin-bottom:20px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <div style="font-size:12px;font-weight:700;color:var(--txt1);letter-spacing:.05em">&#128274; ASSESSMENT AUTHORIZATION</div>
+        <span class="pill p-purple">${staffList.length} awaiting</span>
+      </div>
+      <div class="card">
+        <div style="padding:10px 14px;background:rgba(139,92,246,.06);border-bottom:1px solid var(--bdr2);font-size:11.5px;color:var(--txt3);line-height:1.5">
+          Generate a one-time PIN to authorize assessments. The PIN expires in 10 minutes and can only be used once.
+        </div>
+        <div style="overflow-x:auto">
+          <table class="tbl tbl-static" style="min-width:500px">
+            <thead><tr><th>Staff Member</th><th>Facility</th><th>Assessment Type</th><th>Action</th></tr></thead>
+            <tbody>
+              ${staffList.map(st => `<tr>
+                <td class="fw7">${fullName(st)}</td>
+                <td style="font-size:11.5px;color:var(--txt3)">${getFac(st.fid)?.name||st.fid||'--'}</td>
+                <td><span class="pill p-purple">Placement</span></td>
+                <td><button class="btn btn-gold btn-xs" onclick="showGeneratePinModal('${st.id}','placement')">&#128274; Generate PIN</button></td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ============================================================
 // renderAAssessments  --  ENHANCED with practice scores + requests
 // ============================================================
 function renderAAssessments() {
@@ -10391,35 +10427,7 @@ function renderAAssessments() {
       <button class="btn btn-gold btn-sm" style="margin-left:auto;flex-shrink:0" onclick="openRecordModal(null)">${ICO.record} Record Assessment</button>
     </div>
 
-    ${(()=>{
-      // ── ASSESSOR PIN AUTHORIZATION: Show staff needing placement assessment ──
-      const placementStaff = DB.staff.filter(st => st.placementNeeded && (!assignedFids || assignedFids.includes(st.fid)));
-      if(!placementStaff.length) return '';
-      return `
-      <div style="margin-bottom:20px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-          <div style="font-size:12px;font-weight:700;color:var(--txt1);letter-spacing:.05em">&#128274; ASSESSMENT AUTHORIZATION</div>
-          <span class="pill p-purple">${placementStaff.length} awaiting</span>
-        </div>
-        <div class="card">
-          <div style="padding:10px 14px;background:rgba(139,92,246,.06);border-bottom:1px solid var(--bdr2);font-size:11.5px;color:var(--txt3);line-height:1.5">
-            Generate a one-time PIN to authorize assessments. The PIN expires in 10 minutes and can only be used once.
-          </div>
-          <div style="overflow-x:auto">
-            <table class="tbl tbl-static" style="min-width:500px">
-              <thead><tr><th>Staff Member</th><th>Facility</th><th>Assessment Type</th><th>Action</th></tr></thead>
-              <tbody>
-                ${placementStaff.map(st => `<tr>
-                  <td class="fw7">${fullName(st)}</td>
-                  <td style="font-size:11.5px;color:var(--txt3)">${getFac(st.fid)?.name||st.fid||'--'}</td>
-                  <td><span class="pill p-purple">Placement</span></td>
-                  <td><button class="btn btn-gold btn-xs" onclick="showGeneratePinModal('${st.id}','placement')">&#128274; Generate PIN</button></td>
-                </tr>`).join('')}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>`;})()}
+    ${renderAssessmentAuthBlock(DB.staff.filter(st => st.placementNeeded && (!assignedFids || assignedFids.includes(st.fid))))}
 
     ${staffRequests.length > 0 ? `
     <div style="margin-bottom:20px">
