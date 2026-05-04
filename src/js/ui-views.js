@@ -1277,8 +1277,8 @@ function showAssessorPinGate(staffId, assessmentType, onSuccess){
   overlay.classList.remove('hidden');
   overlay.style.display = 'flex';
   document.getElementById('placement-content').innerHTML = `
-    <div style="text-align:center;padding:24px 0 32px;max-width:440px;margin:0 auto">
-      <div style="width:72px;height:72px;background:rgba(139,92,246,.15);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:32px">&#128274;</div>
+    <div class="pin-gate-container">
+      <div class="pin-gate-icon">&#128274;</div>
       <div style="font-size:10px;font-weight:700;color:#8b5cf6;letter-spacing:.1em;margin-bottom:12px">ASSESSOR AUTHORIZATION REQUIRED</div>
       <div style="font-size:18px;font-weight:800;color:#f1f5f9;margin-bottom:10px">Proctored Assessment</div>
       <div style="font-size:13px;color:#94a3b8;line-height:1.65;margin-bottom:28px">
@@ -1286,10 +1286,9 @@ function showAssessorPinGate(staffId, assessmentType, onSuccess){
         Ask your assessor to generate an authorization PIN from their dashboard,<br>
         then have them enter it below.
       </div>
-      <div id="pin-input-row" style="display:flex;gap:10px;justify-content:center;margin-bottom:12px">
+      <div class="pin-input-row">
         ${[0,1,2,3,4,5].map(i=>`<input type="password" maxlength="1" inputmode="numeric" pattern="[0-9]" class="pin-digit" id="pin-d${i}"
-          style="width:48px;height:56px;background:#0e1328;border:2px solid rgba(139,92,246,.3);border-radius:10px;text-align:center;font-size:22px;font-weight:700;color:#e2e8f0;font-family:'Poppins',sans-serif;caret-color:#8b5cf6;transition:.15s"
-          oninput="pinDigitInput(${i})" onkeydown="pinDigitKeydown(event,${i})" onfocus="this.style.borderColor='#8b5cf6'" onblur="this.style.borderColor='rgba(139,92,246,.3)'">`).join('')}
+          oninput="pinDigitInput(${i})" onkeydown="pinDigitKeydown(event,${i})">`).join('')}
       </div>
       <div id="pin-error" style="font-size:12px;color:#ef4444;min-height:20px;margin-bottom:16px"></div>
       <button id="pin-submit-btn" onclick="submitPinGate('${staffId}','${assessmentType}')" disabled
