@@ -2003,7 +2003,7 @@ function renderAPlacementReviews(){
               <div style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:12px;background:rgba(139,92,246,.15);color:${statusClr}">${statusLabel.toUpperCase()}</div>
               ${pr.tentativeBelt ? `<div style="font-size:10px;color:#64748b">System suggestion: <span style="color:${pr.confirmedBelt?'#22c55e':'#f59e0b'}">${pr.confirmedBelt||pr.tentativeBelt} Belt</span></div>` : ''}
             </div>
-            <div style="font-size:11.5px;color:#64748b;margin-top:4px">${displayTitle||''} &middot; ${fac?fac.name:pr.fid} &middot; Submitted ${displayDate}</div>
+            <div style="font-size:11.5px;color:#64748b;margin-top:4px">${[displayTitle, fac?.name, displayDate ? `Submitted ${displayDate}` : null].filter(Boolean).join(' · ')}</div>
           </div>
           <svg viewBox="0 0 18 18" fill="none" width="16" height="16" id="pr-chev-${pr.id}" style="transition:.2s;flex-shrink:0"><path d="M6 3l6 6-6 6" stroke="#64748b" stroke-width="1.5" stroke-linecap="round"/></svg>
         </div>
