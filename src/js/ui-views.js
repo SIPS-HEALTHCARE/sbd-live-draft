@@ -9585,7 +9585,7 @@ function renderAFacilities(){
     return`<div class="fac-card" onclick="${isActive?`goFacility('${f.id}')`:''}" style="opacity:${isActive?1:0.55};cursor:${isActive?'pointer':'default'};position:relative">
       ${!isActive?`<div style="position:absolute;top:10px;right:10px;background:var(--err-bg);color:var(--err);border:1px solid var(--err-bd);border-radius:var(--rs);font-size:9.5px;font-weight:700;padding:2px 8px;letter-spacing:.05em">INACTIVE</div>`:''}
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
-        <div><div class="fac-nm">${f.name}</div><div class="fac-loc">${f.loc} &bull; Since ${f.since}</div></div>
+        <div><div class="fac-nm">${f.name}</div><div class="fac-loc">${[f.loc, f.since ? `Since ${f.since}` : null].filter(Boolean).join(' • ')}</div></div>
         ${isActive?`<div class="rank ${ranks[Math.min(i,4)]}">${i+1}</div>`:''}
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
@@ -10124,7 +10124,7 @@ function renderFacOverview(el){
         <div class="irow"><div class="ilbl">Department</div><div class="ival">${f.dept}</div></div>
         <div class="irow"><div class="ilbl">Primary Contact</div><div class="ival">${f.contact}</div></div>
         <div class="irow"><div class="ilbl">Contact Email</div><div class="ival" style="font-size:12px">${f.email}</div></div>
-        <div class="irow"><div class="ilbl">Member Since</div><div class="ival">${f.since}</div></div>
+        <div class="irow"><div class="ilbl">Member Since</div><div class="ival">${f.since || '–'}</div></div>
         <div class="irow" style="border:none"><div class="ilbl">Status</div><div class="ival"><span class="pill p-ok">Active</span></div></div>
       </div>
     </div>`;
