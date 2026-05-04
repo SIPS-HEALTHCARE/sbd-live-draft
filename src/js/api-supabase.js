@@ -403,7 +403,7 @@ function mapFacilityFromBackend(row){
   if(!row) return null;
   return {
     id: row.id,
-    name: row.name,
+    name: typeof titleCase === 'function' ? titleCase(row.name) : row.name,
     loc: row.loc,
     dept: row.dept,
     contact: row.contact,

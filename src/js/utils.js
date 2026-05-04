@@ -57,9 +57,14 @@ function fmtTime(t){
 function staffOf(fid){ return fid ? DB.staff.filter(s=>s.fid===fid) : DB.staff; }
 function getFac(id){ return DB.facilities.find(f=>f.id===id); }
 function getStaff(id){ return DB.staff.find(s=>s.id===id); }
+function titleCase(str){
+  if(!str) return '';
+  return String(str).toLowerCase().replace(/\b([a-z])/g, (_, c) => c.toUpperCase());
+}
+
 function fullName(s){
-  const f = (s.first && s.first !== 'undefined') ? s.first.trim() : '';
-  const l = (s.last && s.last !== 'undefined') ? s.last.trim() : '';
+  const f = (s.first && s.first !== 'undefined') ? titleCase(s.first.trim()) : '';
+  const l = (s.last && s.last !== 'undefined') ? titleCase(s.last.trim()) : '';
   return `${f} ${l}`.trim() || 'Unknown';
 }
 

@@ -10707,7 +10707,7 @@ function renderAProgression() {
     <div style="overflow-x:auto">
       <table class="tbl" style="min-width:520px">
         <thead><tr>
-          <th>Belt Level</th><th>Eligible Staff</th><th>Practiced</th>
+          <th>Belt Level</th><th>Eligible to Test<div style="font-size:9.5px;font-weight:500;color:var(--txt3);margin-top:1px">at belt + ready to advance</div></th><th>Practiced</th>
           <th>Avg Knowledge</th><th>Avg Simulation</th><th>Assessment Unlocked</th>
         </tr></thead>
         <tbody>
@@ -11117,10 +11117,10 @@ function openAddFacilityModal(){
 }
 
 async function addFacility(){
-  const name=document.getElementById('nf-name').value.trim();
+  const name=titleCase(document.getElementById('nf-name').value.trim());
   const loc=document.getElementById('nf-loc').value.trim();
   const dept=document.getElementById('nf-dept').value.trim();
-  const contact=document.getElementById('nf-contact').value.trim();
+  const contact=titleCase(document.getElementById('nf-contact').value.trim());
   const email=document.getElementById('nf-email').value.trim();
   const pass=document.getElementById('nf-pass')?.value.trim();
   const errMsg=document.getElementById('fac-err-msg');
@@ -11200,8 +11200,8 @@ function openAddStaffModal(lockedFid){
 
 async function addStaff(lockedFid){
   const fid = lockedFid || document.getElementById('ns-fac').value;
-  const first=document.getElementById('ns-first').value.trim();
-  const last=document.getElementById('ns-last').value.trim();
+  const first=titleCase(document.getElementById('ns-first').value.trim());
+  const last=titleCase(document.getElementById('ns-last').value.trim());
   const role=document.getElementById('ns-role').value;
   const belt=document.getElementById('ns-belt').value;
   const since=document.getElementById('ns-since').value;
