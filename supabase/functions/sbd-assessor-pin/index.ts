@@ -133,6 +133,46 @@ serve(async (req) => {
                 throw new Error('Failed to generate authorization PIN.');
             }
 
+            // ── Notify master admins of PIN issuance (audit trail) ──
+            // Notifications go through sbd_email_queue (processed by sbd-send-emails).
+            // The staff table has no assigned-assessor column, so we notify master
+            // admins only. The PIN generator is excluded so they don't self-notify.
+            // Wrapped in try/catch so notification failure cannot block the PIN return.
+            try {
+                const { data: masterAdmins } = await supabaseAdmin
+                    .from('sbd_portal_users')
+                    .select('id, name, email')
+                    .eq('role', 'master_admin')
+                    .eq('active', true);
+
+                const recipients = (masterAdmins || []).filter(m => m.id !== assessor.id && m.email);
+                if (recipients.length > 0) {
+                    const nowIso = new Date().toISOString();
+                    const queueRows = recipients.map(m => ({
+                        recipient_email: m.email,
+                        template: 'assessment_pin_generated',
+                        subject: `Assessment PIN generated for ${staffRow.first} ${staffRow.last}`,
+                        body_data: {
+                            name: m.name,
+                            assessor_name: assessor.name,
+                            staff_name: `${staffRow.first} ${staffRow.last}`,
+                            assessment_type,
+                            facility_id: staffRow.fid,
+                            expires_at: expiresAt,
+                        },
+                        status: 'pending',
+                        attempts: 0,
+                        created_at: nowIso,
+                    }));
+                    const { error: queueErr } = await supabaseAdmin
+                        .from('sbd_email_queue')
+                        .insert(queueRows);
+                    if (queueErr) console.error('PIN notification queue insert failed:', queueErr);
+                }
+            } catch (notifyErr) {
+                console.error('PIN generated but notification queue failed:', notifyErr);
+            }
+
             return new Response(JSON.stringify({
                 success: true,
                 pin: pin,  // Plaintext returned ONCE to assessor, never stored

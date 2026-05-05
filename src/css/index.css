@@ -1124,3 +1124,19 @@ body{background:var(--bg);color:var(--txt);-webkit-text-size-adjust:100%}
 #sbd-root .ob-step-done-badge { color:#22c55e !important; }
 #sbd-root .ob-seq-complete-text { color:#22c55e !important; }
 #sbd-root .ob-seq-complete-sub { color:#64748b !important; }
+
+/* ── ASSESSOR PIN GATE ── */
+.pin-gate-container{text-align:center;padding:24px 16px 32px;max-width:440px;margin:0 auto}
+.pin-gate-icon{width:72px;height:72px;background:rgba(139,92,246,.15);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:32px}
+.pin-input-row{display:flex;gap:10px;justify-content:center;margin-bottom:12px}
+.pin-digit{width:48px;height:56px;background:var(--s1);border:2px solid rgba(139,92,246,.3);border-radius:var(--r);text-align:center;font-size:22px;font-weight:700;color:#e2e8f0;font-family:'Poppins',sans-serif;caret-color:#8b5cf6;transition:.15s}
+.pin-digit:focus{border-color:#8b5cf6;outline:none}
+@media(max-width:480px){
+  .pin-gate-container{padding:20px 12px 28px}
+  .pin-input-row{gap:6px}
+  .pin-digit{width:40px;height:50px;font-size:20px}
+}
+@media(max-width:360px){
+  .pin-input-row{gap:4px}
+  .pin-digit{width:36px;height:46px;font-size:18px}
+}

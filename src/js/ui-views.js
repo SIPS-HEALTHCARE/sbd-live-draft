@@ -1277,8 +1277,8 @@ function showAssessorPinGate(staffId, assessmentType, onSuccess){
   overlay.classList.remove('hidden');
   overlay.style.display = 'flex';
   document.getElementById('placement-content').innerHTML = `
-    <div style="text-align:center;padding:24px 0 32px;max-width:440px;margin:0 auto">
-      <div style="width:72px;height:72px;background:rgba(139,92,246,.15);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:32px">&#128274;</div>
+    <div class="pin-gate-container">
+      <div class="pin-gate-icon">&#128274;</div>
       <div style="font-size:10px;font-weight:700;color:#8b5cf6;letter-spacing:.1em;margin-bottom:12px">ASSESSOR AUTHORIZATION REQUIRED</div>
       <div style="font-size:18px;font-weight:800;color:#f1f5f9;margin-bottom:10px">Proctored Assessment</div>
       <div style="font-size:13px;color:#94a3b8;line-height:1.65;margin-bottom:28px">
@@ -1286,10 +1286,9 @@ function showAssessorPinGate(staffId, assessmentType, onSuccess){
         Ask your assessor to generate an authorization PIN from their dashboard,<br>
         then have them enter it below.
       </div>
-      <div id="pin-input-row" style="display:flex;gap:10px;justify-content:center;margin-bottom:12px">
+      <div class="pin-input-row">
         ${[0,1,2,3,4,5].map(i=>`<input type="password" maxlength="1" inputmode="numeric" pattern="[0-9]" class="pin-digit" id="pin-d${i}"
-          style="width:48px;height:56px;background:#0e1328;border:2px solid rgba(139,92,246,.3);border-radius:10px;text-align:center;font-size:22px;font-weight:700;color:#e2e8f0;font-family:'Poppins',sans-serif;caret-color:#8b5cf6;transition:.15s"
-          oninput="pinDigitInput(${i})" onkeydown="pinDigitKeydown(event,${i})" onfocus="this.style.borderColor='#8b5cf6'" onblur="this.style.borderColor='rgba(139,92,246,.3)'">`).join('')}
+          oninput="pinDigitInput(${i})" onkeydown="pinDigitKeydown(event,${i})">`).join('')}
       </div>
       <div id="pin-error" style="font-size:12px;color:#ef4444;min-height:20px;margin-bottom:16px"></div>
       <button id="pin-submit-btn" onclick="submitPinGate('${staffId}','${assessmentType}')" disabled
@@ -2003,7 +2002,7 @@ function renderAPlacementReviews(){
               <div style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:12px;background:rgba(139,92,246,.15);color:${statusClr}">${statusLabel.toUpperCase()}</div>
               ${pr.tentativeBelt ? `<div style="font-size:10px;color:#64748b">System suggestion: <span style="color:${pr.confirmedBelt?'#22c55e':'#f59e0b'}">${pr.confirmedBelt||pr.tentativeBelt} Belt</span></div>` : ''}
             </div>
-            <div style="font-size:11.5px;color:#64748b;margin-top:4px">${displayTitle||''} &middot; ${fac?fac.name:pr.fid} &middot; Submitted ${displayDate}</div>
+            <div style="font-size:11.5px;color:#64748b;margin-top:4px">${[displayTitle, fac?.name, displayDate ? `Submitted ${displayDate}` : null].filter(Boolean).join(' · ')}</div>
           </div>
           <svg viewBox="0 0 18 18" fill="none" width="16" height="16" id="pr-chev-${pr.id}" style="transition:.2s;flex-shrink:0"><path d="M6 3l6 6-6 6" stroke="#64748b" stroke-width="1.5" stroke-linecap="round"/></svg>
         </div>
@@ -8918,6 +8917,8 @@ function renderHAssessments(){
       </div>
     </div>`:''}
 
+    ${renderAssessmentAuthBlock(DB.staff.filter(s => s.placementNeeded && s.fid === fid))}
+
     <!-- Assessment Queue Table -->
     <div class="card mb16">
       <div class="card-hd">
@@ -9585,7 +9586,7 @@ function renderAFacilities(){
     return`<div class="fac-card" onclick="${isActive?`goFacility('${f.id}')`:''}" style="opacity:${isActive?1:0.55};cursor:${isActive?'pointer':'default'};position:relative">
       ${!isActive?`<div style="position:absolute;top:10px;right:10px;background:var(--err-bg);color:var(--err);border:1px solid var(--err-bd);border-radius:var(--rs);font-size:9.5px;font-weight:700;padding:2px 8px;letter-spacing:.05em">INACTIVE</div>`:''}
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
-        <div><div class="fac-nm">${f.name}</div><div class="fac-loc">${f.loc} &bull; Since ${f.since}</div></div>
+        <div><div class="fac-nm">${f.name}</div><div class="fac-loc">${[f.loc, f.since ? `Since ${f.since}` : null].filter(Boolean).join(' • ')}</div></div>
         ${isActive?`<div class="rank ${ranks[Math.min(i,4)]}">${i+1}</div>`:''}
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
@@ -10124,7 +10125,7 @@ function renderFacOverview(el){
         <div class="irow"><div class="ilbl">Department</div><div class="ival">${f.dept}</div></div>
         <div class="irow"><div class="ilbl">Primary Contact</div><div class="ival">${f.contact}</div></div>
         <div class="irow"><div class="ilbl">Contact Email</div><div class="ival" style="font-size:12px">${f.email}</div></div>
-        <div class="irow"><div class="ilbl">Member Since</div><div class="ival">${f.since}</div></div>
+        <div class="irow"><div class="ilbl">Member Since</div><div class="ival">${f.since || '–'}</div></div>
         <div class="irow" style="border:none"><div class="ilbl">Status</div><div class="ival"><span class="pill p-ok">Active</span></div></div>
       </div>
     </div>`;
@@ -10354,6 +10355,40 @@ function updateProgBadge() {
 }
 
 // ============================================================
+// renderAssessmentAuthBlock -- shared "Generate PIN" panel
+// Used by master/staff admin (renderAAssessments) and facility
+// admin (renderHAssessments). Caller scopes the staff list.
+// ============================================================
+function renderAssessmentAuthBlock(staffList){
+  if(!staffList.length) return '';
+  return `
+    <div style="margin-bottom:20px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <div style="font-size:12px;font-weight:700;color:var(--txt1);letter-spacing:.05em">&#128274; ASSESSMENT AUTHORIZATION</div>
+        <span class="pill p-purple">${staffList.length} awaiting</span>
+      </div>
+      <div class="card">
+        <div style="padding:10px 14px;background:rgba(139,92,246,.06);border-bottom:1px solid var(--bdr2);font-size:11.5px;color:var(--txt3);line-height:1.5">
+          Generate a one-time PIN to authorize assessments. The PIN expires in 10 minutes and can only be used once.
+        </div>
+        <div style="overflow-x:auto">
+          <table class="tbl tbl-static" style="min-width:500px">
+            <thead><tr><th>Staff Member</th><th>Facility</th><th>Assessment Type</th><th>Action</th></tr></thead>
+            <tbody>
+              ${staffList.map(st => `<tr>
+                <td class="fw7">${fullName(st)}</td>
+                <td style="font-size:11.5px;color:var(--txt3)">${getFac(st.fid)?.name||st.fid||'--'}</td>
+                <td><span class="pill p-purple">Placement</span></td>
+                <td><button class="btn btn-gold btn-xs" onclick="showGeneratePinModal('${st.id}','placement')">&#128274; Generate PIN</button></td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ============================================================
 // renderAAssessments  --  ENHANCED with practice scores + requests
 // ============================================================
 function renderAAssessments() {
@@ -10392,35 +10427,7 @@ function renderAAssessments() {
       <button class="btn btn-gold btn-sm" style="margin-left:auto;flex-shrink:0" onclick="openRecordModal(null)">${ICO.record} Record Assessment</button>
     </div>
 
-    ${(()=>{
-      // ── ASSESSOR PIN AUTHORIZATION: Show staff needing placement assessment ──
-      const placementStaff = DB.staff.filter(st => st.placementNeeded && (!assignedFids || assignedFids.includes(st.fid)));
-      if(!placementStaff.length) return '';
-      return `
-      <div style="margin-bottom:20px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-          <div style="font-size:12px;font-weight:700;color:var(--txt1);letter-spacing:.05em">&#128274; ASSESSMENT AUTHORIZATION</div>
-          <span class="pill p-purple">${placementStaff.length} awaiting</span>
-        </div>
-        <div class="card">
-          <div style="padding:10px 14px;background:rgba(139,92,246,.06);border-bottom:1px solid var(--bdr2);font-size:11.5px;color:var(--txt3);line-height:1.5">
-            Generate a one-time PIN to authorize assessments. The PIN expires in 10 minutes and can only be used once.
-          </div>
-          <div style="overflow-x:auto">
-            <table class="tbl tbl-static" style="min-width:500px">
-              <thead><tr><th>Staff Member</th><th>Facility</th><th>Assessment Type</th><th>Action</th></tr></thead>
-              <tbody>
-                ${placementStaff.map(st => `<tr>
-                  <td class="fw7">${fullName(st)}</td>
-                  <td style="font-size:11.5px;color:var(--txt3)">${getFac(st.fid)?.name||st.fid||'--'}</td>
-                  <td><span class="pill p-purple">Placement</span></td>
-                  <td><button class="btn btn-gold btn-xs" onclick="showGeneratePinModal('${st.id}','placement')">&#128274; Generate PIN</button></td>
-                </tr>`).join('')}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>`;})()}
+    ${renderAssessmentAuthBlock(DB.staff.filter(st => st.placementNeeded && (!assignedFids || assignedFids.includes(st.fid))))}
 
     ${staffRequests.length > 0 ? `
     <div style="margin-bottom:20px">
@@ -10707,7 +10714,7 @@ function renderAProgression() {
     <div style="overflow-x:auto">
       <table class="tbl" style="min-width:520px">
         <thead><tr>
-          <th>Belt Level</th><th>Eligible Staff</th><th>Practiced</th>
+          <th>Belt Level</th><th>Eligible to Test<div style="font-size:9.5px;font-weight:500;color:var(--txt3);margin-top:1px">at belt + ready to advance</div></th><th>Practiced</th>
           <th>Avg Knowledge</th><th>Avg Simulation</th><th>Assessment Unlocked</th>
         </tr></thead>
         <tbody>
@@ -11117,10 +11124,10 @@ function openAddFacilityModal(){
 }
 
 async function addFacility(){
-  const name=document.getElementById('nf-name').value.trim();
+  const name=titleCase(document.getElementById('nf-name').value.trim());
   const loc=document.getElementById('nf-loc').value.trim();
   const dept=document.getElementById('nf-dept').value.trim();
-  const contact=document.getElementById('nf-contact').value.trim();
+  const contact=titleCase(document.getElementById('nf-contact').value.trim());
   const email=document.getElementById('nf-email').value.trim();
   const pass=document.getElementById('nf-pass')?.value.trim();
   const errMsg=document.getElementById('fac-err-msg');
@@ -11200,8 +11207,8 @@ function openAddStaffModal(lockedFid){
 
 async function addStaff(lockedFid){
   const fid = lockedFid || document.getElementById('ns-fac').value;
-  const first=document.getElementById('ns-first').value.trim();
-  const last=document.getElementById('ns-last').value.trim();
+  const first=titleCase(document.getElementById('ns-first').value.trim());
+  const last=titleCase(document.getElementById('ns-last').value.trim());
   const role=document.getElementById('ns-role').value;
   const belt=document.getElementById('ns-belt').value;
   const since=document.getElementById('ns-since').value;
