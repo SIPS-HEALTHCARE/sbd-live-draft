@@ -2652,7 +2652,7 @@ function openPromoteModal(staffId, context){
     </div>
     <div class="modal-ft">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-gold" onclick="submitPromotion(${staffId},'${context}')">Confirm Promotion</button>
+      <button class="btn btn-gold" onclick="submitPromotion('${staffId}','${context}')">Confirm Promotion</button>
     </div>`,'modal-md');
 
   document.getElementById('pm-position').addEventListener('change', function(){
@@ -4687,7 +4687,7 @@ function submitApply(sid,gate,targetBelt){
 function renderSBelt(){
   const s=getStaff(ST.staffId);
   if(!s)return;
-  renderHProfile(s.id,'h');
+  renderHProfile(s.id,'s');
   const el=document.getElementById('h-profile');
   const target=document.getElementById('s-belt');
   if(el&&target){
@@ -7054,7 +7054,8 @@ function renderHProfile(sid,context){
   const track={White:['SBD Mindset & Discipline','PPE Protocol Standards','Decontamination Orientation','Instrument Sorting & Receiving','Manual Cleaning Procedures','Assembly Zone Introduction','Sterility Assurance Principles','Documentation Standards'],Yellow:['Zone 1 Proficiency','Zone 2 Proficiency','Zone 3 Proficiency','Zone 4 Proficiency','Zone 5 Proficiency','Zone Mastery Selection'],Green:['Quality Science Base Training','Zone Mastery 1','Zone Mastery 2','Zone Mastery 3'],Blue:['Leadership Base Training','Leadership Circle Entry','Position 1 - Quality Assurance','Position 2 - Training Coordinator','Position 3 - Shift Lead','Position 4 - Inventory Lead'],Brown:['Operations Engineering Base','HFL Program','OTIS Mastery'],Black:['Mastery Base Training','Director School','SBD Operator Certification','SBD Project Implementation']};
   const trackItems=(track[s.belt]||[]).map((t,i)=>{const done=i<Math.max(curSt.p,2);const cur=i===Math.max(curSt.p,2);return`<div class="track-item" style="display:flex;gap:8px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--bdr)"><div style="width:18px;height:18px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:9px;background:${done?'rgba(34,197,94,.15)':cur?'var(--gold-bg)':'var(--s3)'};color:${done?'var(--ok)':cur?'var(--gold)':'var(--txt3)'};">${done?ICO.check:cur?'&rsaquo;':'&bull;'}</div><div><div style="font-size:12.5px;font-weight:500">${t}</div></div></div>`}).join('');
   const backBtn=context==='admin'?`<button class="btn btn-ghost btn-sm mb16" onclick="renderAFacility()"><svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M9 3L5 7l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg> Back to Facility</button>`:
-    `<button class="btn btn-ghost btn-sm mb16" onclick="hNav(document.querySelector('[data-view=h-staff]'),'h-staff','Staff Directory')"><svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M9 3L5 7l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg> Back to Staff</button>`;
+    context==='h'?`<button class="btn btn-ghost btn-sm mb16" onclick="hNav(document.querySelector('[data-view=h-staff]'),'h-staff','Staff Directory')"><svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M9 3L5 7l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg> Back to Staff</button>`:
+    ``;
   const html=`${backBtn}
     <div class="prof-banner">
       <div class="prof-av">${userInitials(s)}</div>
@@ -9026,7 +9027,7 @@ function renderAOverview(){
           <button class="btn btn-ghost btn-sm" onclick="aNav(document.querySelector('[data-view=a-allstaff]'),'a-allstaff','All Staff')">View All Staff</button>
         </div>
         <div class="card-body">
-          <div class="g4 mb12" style="grid-template-columns:repeat(auto-fill,minmax(120px,1fr))">
+          <div class="g4 mb12" style="display:flex;flex-wrap:wrap;justify-content:center;gap:12px">
             <div style="text-align:center;padding:10px 0">
               <div style="font-size:22px;font-weight:800;color:var(--gold)">${psStars}</div>
               <div style="font-size:10.5px;color:var(--txt3)">Stars Earned</div>
