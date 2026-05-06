@@ -9026,7 +9026,7 @@ function renderAOverview(){
           <button class="btn btn-ghost btn-sm" onclick="aNav(document.querySelector('[data-view=a-allstaff]'),'a-allstaff','All Staff')">View All Staff</button>
         </div>
         <div class="card-body">
-          <div class="g4 mb12" style="grid-template-columns:repeat(auto-fill,minmax(120px,1fr))">
+          <div class="g4 mb12" style="display:flex;flex-wrap:wrap;justify-content:center;gap:12px">
             <div style="text-align:center;padding:10px 0">
               <div style="font-size:22px;font-weight:800;color:var(--gold)">${psStars}</div>
               <div style="font-size:10.5px;color:var(--txt3)">Stars Earned</div>
