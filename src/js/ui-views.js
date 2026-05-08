@@ -1268,6 +1268,45 @@ function savePAState(){
   }
 }
 
+// Manual save — fires on Save Progress button click.
+// Always writes to localStorage. Pushes to server if session is active.
+// Updates the visible #pa-save-status indicator.
+async function paManualSave(){
+  const statusEl = document.getElementById('pa-save-status');
+  const btn = document.getElementById('pa-save-btn');
+  if(btn) btn.disabled = true;
+  if(statusEl){ statusEl.textContent = 'Saving...'; statusEl.style.color = '#fbbf24'; }
+
+  // Always write to localStorage immediately (this never fails)
+  try{ localStorage.setItem('sbd_pa_state', JSON.stringify(PA)); }catch(e){}
+
+  // Push to server if we have an active session
+  if(IS_LIVE && ASSESSMENT_SESSION.token){
+    try {
+      await SB.saveAssessmentProgress(ASSESSMENT_SESSION.token, {
+        currentQ: PA.currentQ,
+        answers: PA.answers,
+        shuffledQuestions: PA.shuffledQuestions
+      });
+      if(statusEl){ statusEl.textContent = '✓ Saved'; statusEl.style.color = '#22c55e'; }
+    } catch(e) {
+      if(statusEl){ statusEl.textContent = 'Save failed — saved locally'; statusEl.style.color = '#fca5a5'; }
+    }
+  } else {
+    if(statusEl){ statusEl.textContent = '✓ Saved locally'; statusEl.style.color = '#22c55e'; }
+  }
+
+  if(btn) btn.disabled = false;
+
+  // Reset to default after 3 seconds
+  setTimeout(()=>{
+    if(statusEl && document.body.contains(statusEl)){
+      statusEl.textContent = 'Saved automatically';
+      statusEl.style.color = '#64748b';
+    }
+  }, 3000);
+}
+
 let _paTimerInterval = null;
 
 function startAssessmentTimer(){
@@ -1549,6 +1588,9 @@ function _enterPlacementAssessment(s){
   const overlay = document.getElementById('placement-overlay');
   overlay.classList.remove('hidden');
   overlay.style.display = 'flex';
+  // Mark body so portal sidebars hide while assessment is active (prevents
+  // sidebar drawer pull-tab from bleeding into the overlay on mobile).
+  document.body.classList.add('placement-active');
   // Ensure timer banner exists (lives outside #placement-content so it survives innerHTML re-renders)
   if(!document.getElementById('pa-timer')){
     const tb = document.createElement('div');
@@ -1566,6 +1608,8 @@ function hidePlacementOverlay(){
   overlay.classList.add('hidden');
   overlay.style.display = '';
   PA.active = false;
+  // Restore portal sidebars now that the overlay is closed.
+  document.body.classList.remove('placement-active');
   // Clean up the timer banner + interval so they don't leak across sessions
   if(_paTimerInterval){ clearInterval(_paTimerInterval); _paTimerInterval = null; }
   const tb = document.getElementById('pa-timer');
@@ -1633,11 +1677,13 @@ function renderPAScreen(){
       <div style="font-size:16px;font-weight:600;color:#f1f5f9;line-height:1.55;margin-bottom:22px">${q.q}</div>
       ${qHtml}
     </div>
-    <div style="display:flex;gap:12px;justify-content:space-between">
-      <button onclick="paPrev()" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:12px 22px;font-size:13px;font-weight:600;color:#94a3b8;cursor:pointer;font-family:'Poppins',sans-serif;visibility:${qNum<=1?'hidden':'visible'}">Back</button>
-      <button onclick="paNext()" id="pa-next-btn" style="background:${canContinue?'#8b5cf6':'rgba(139,92,246,.3)'};border:none;border-radius:8px;padding:12px 28px;font-size:13px;font-weight:700;color:${canContinue?'#fff':'rgba(255,255,255,.4)'};cursor:${canContinue?'pointer':'not-allowed'};font-family:'Poppins',sans-serif;transition:.15s">
-        ${isLast?'Submit Assessment':'Next Question'}
-      </button>
+    <div style="display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap">
+      <button onclick="paPrev()" id="pa-back-btn" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:12px 22px;font-size:13px;font-weight:600;color:#94a3b8;cursor:pointer;font-family:'Poppins',sans-serif;visibility:${qNum<=1?'hidden':'visible'}">Back</button>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+        <span id="pa-save-status" style="font-size:11px;color:#64748b;font-style:italic;font-family:'Poppins',sans-serif;white-space:nowrap">Saved automatically</span>
+        <button onclick="paManualSave()" id="pa-save-btn" style="background:transparent;border:1.5px solid rgba(139,92,246,.5);border-radius:8px;padding:12px 22px;font-size:13px;font-weight:600;color:#a78bfa;cursor:pointer;font-family:'Poppins',sans-serif;transition:.15s">Save Progress</button>
+        <button onclick="paNext()" id="pa-next-btn" style="background:${canContinue?'#8b5cf6':'rgba(139,92,246,.3)'};border:none;border-radius:8px;padding:12px 28px;font-size:13px;font-weight:700;color:${canContinue?'#fff':'rgba(255,255,255,.4)'};cursor:${canContinue?'pointer':'not-allowed'};font-family:'Poppins',sans-serif;transition:.15s">${isLast?'Submit Assessment':'Next Question'}</button>
+      </div>
     </div>`;
 }
 
