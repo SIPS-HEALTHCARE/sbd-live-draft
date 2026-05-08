@@ -1140,3 +1140,32 @@ body{background:var(--bg);color:var(--txt);-webkit-text-size-adjust:100%}
   .pin-input-row{gap:4px}
   .pin-digit{width:36px;height:46px;font-size:18px}
 }
+
+/* ── PA Save Button + Mobile Responsive (Placement Assessment flow) ── */
+#pa-save-btn:hover{background:rgba(139,92,246,.08);border-color:#a78bfa}
+#pa-save-btn:disabled{opacity:.6;cursor:wait}
+
+/* When placement assessment is active, hide all portal sidebars/drawers so
+   the chevron pull-tab on mobile does not bleed into the overlay. */
+body.placement-active .sidebar{display:none !important}
+
+@media(max-width:480px){
+  /* Timer banner — smaller, less intrusive on narrow screens */
+  #pa-timer{font-size:12px !important;padding:6px 10px !important;top:8px !important;right:8px !important;max-width:calc(100vw - 16px) !important}
+  /* PA controls row buttons — smaller padding/font, allow wrap */
+  #pa-back-btn{padding:10px 16px !important;font-size:12px !important}
+  #pa-save-btn{padding:10px 14px !important;font-size:12px !important}
+  #pa-next-btn{padding:10px 18px !important;font-size:12px !important}
+  /* Save status — hide the helper text on narrow screens; the button itself communicates intent */
+  #pa-save-status{display:none !important}
+  /* Placement content — guarantee horizontal breathing room so headings/questions don't clip */
+  #placement-content{padding:0 16px !important;width:100% !important;max-width:100% !important;box-sizing:border-box !important}
+  /* Placement overlay — make sure inner padding is consistent at narrow widths */
+  #placement-overlay{padding-top:0 !important}
+}
+
+@media(max-width:360px){
+  #pa-timer{font-size:11px !important;padding:5px 8px !important}
+  #pa-back-btn,#pa-save-btn,#pa-next-btn{padding:9px 12px !important;font-size:11.5px !important}
+  #placement-content{padding:0 12px !important}
+}
