@@ -2288,6 +2288,8 @@ function submitOIP(staffId, answers){
   s.oip.secondaryType=result.secondaryType;
   s.oip.scores=result.scores;
   s.oip.answers=answers;
+  OIP.submitted = true;
+  saveOIPState();
   closeOIPQuiz();
   document.getElementById('modal-overlay').classList.remove('open');
   if(IS_LIVE){
@@ -2795,17 +2797,38 @@ function gateDots(g){
 // Uses #oip-quiz-overlay (fixed full-screen, not bottom-sheet) to prevent
 // answer option / footer overlap that occurred inside the standard modal.
 
-let oipAnswers   = new Array(30).fill(null);
-let oipCurrentQ  = 0;
-let oipActiveStaffId = null;
+let OIP = JSON.parse(localStorage.getItem('sbd_oip_state')||'null') || {
+  active: false,
+  staffId: null,
+  answers: new Array(30).fill(null),
+  currentQ: 0,
+  submitted: false,
+  shuffledQuestions: null
+};
+
+function saveOIPState(){
+  try{localStorage.setItem('sbd_oip_state',JSON.stringify(OIP));}catch(e){}
+}
+
+function getOIPQuestions(){
+  if(OIP.shuffledQuestions && OIP.shuffledQuestions.length === OIP_QUESTIONS.length) return OIP.shuffledQuestions;
+  OIP.shuffledQuestions = shuffleArray(OIP_QUESTIONS);
+  return OIP.shuffledQuestions;
+}
 
 function openOIPModal(staffId){
   const sid = staffId || ST.staffId;
   const s   = getStaff(sid);
   if(!s){ toast('Staff record not found.','err'); return; }
-  oipAnswers      = new Array(30).fill(null);
-  oipCurrentQ     = 0;
-  oipActiveStaffId = sid;
+  if (OIP.staffId !== sid || OIP.submitted) {
+    OIP.staffId = sid;
+    OIP.answers = new Array(30).fill(null);
+    OIP.currentQ = 0;
+    OIP.submitted = false;
+    OIP.shuffledQuestions = shuffleArray(OIP_QUESTIONS);
+  }
+  OIP.active = true;
+  saveOIPState();
   // Close any open modal to prevent stacking
   document.getElementById('modal-overlay').classList.remove('open');
   const ov = document.getElementById('oip-quiz-overlay');
@@ -2816,20 +2839,22 @@ function openOIPModal(staffId){
 function closeOIPQuiz(){
   const ov = document.getElementById('oip-quiz-overlay');
   ov.style.display = 'none';
-  oipActiveStaffId = null;
+  OIP.active = false;
+  saveOIPState();
 }
 
 function _renderOIPOverlay(){
-  const q        = OIP_QUESTIONS[oipCurrentQ];
-  const answered = oipAnswers[oipCurrentQ];
-  const progress = oipAnswers.filter(a=>a!==null).length;
+  const questions = getOIPQuestions();
+  const q        = questions[OIP.currentQ];
+  const answered = OIP.answers[OIP.currentQ];
+  const progress = OIP.answers.filter(a=>a!==null).length;
   const pct      = Math.max(5, Math.round(progress / 30 * 100));
-  const allDone  = oipAnswers.every(a=>a!==null);
+  const allDone  = OIP.answers.every(a=>a!==null);
 
   // Progress bar + label
   document.getElementById('oip-quiz-pbar').style.width = pct + '%';
   document.getElementById('oip-quiz-progress-label').textContent =
-    'Question ' + (oipCurrentQ + 1) + ' of 30  \u2022  ' + progress + ' answered';
+    'Question ' + (OIP.currentQ + 1) + ' of 30  \u2022  ' + progress + ' answered';
 
   // Question
   document.getElementById('oip-quiz-question').textContent = q.q;
@@ -2854,7 +2879,7 @@ function _renderOIPOverlay(){
   const submitBtn = document.getElementById('oip-quiz-submit');
   const remaining = document.getElementById('oip-quiz-remaining');
 
-  backBtn.style.display   = oipCurrentQ > 0 ? 'inline-flex' : 'none';
+  backBtn.style.display   = OIP.currentQ > 0 ? 'inline-flex' : 'none';
   submitBtn.style.display = allDone ? 'inline-flex' : 'none';
 
   if(!allDone){
@@ -2870,16 +2895,18 @@ function _renderOIPOverlay(){
 }
 
 function oipSelectOverlay(idx){
-  oipAnswers[oipCurrentQ] = idx;
+  OIP.answers[OIP.currentQ] = idx;
+  saveOIPState();
   _renderOIPOverlay(); // update UI immediately to show selection
   // Auto-advance after brief pause
   setTimeout(()=>{
-    if(oipCurrentQ < 29){
-      oipCurrentQ++;
+    if(OIP.currentQ < 29){
+      OIP.currentQ++;
     } else {
-      const firstMissing = oipAnswers.findIndex(a => a === null);
-      if(firstMissing !== -1) oipCurrentQ = firstMissing;
+      const firstMissing = OIP.answers.findIndex(a => a === null);
+      if(firstMissing !== -1) OIP.currentQ = firstMissing;
     }
+    saveOIPState();
     _renderOIPOverlay();
     // Scroll question back to top
     const body = document.getElementById('oip-quiz-body');
@@ -2888,13 +2915,14 @@ function oipSelectOverlay(idx){
 }
 
 function oipNavNext(){
-  if(oipAnswers[oipCurrentQ] !== null){
-    if(oipCurrentQ < 29){
-      oipCurrentQ++;
+  if(OIP.answers[OIP.currentQ] !== null){
+    if(OIP.currentQ < 29){
+      OIP.currentQ++;
     } else {
-      const firstMissing = oipAnswers.findIndex(a => a === null);
-      if(firstMissing !== -1) oipCurrentQ = firstMissing;
+      const firstMissing = OIP.answers.findIndex(a => a === null);
+      if(firstMissing !== -1) OIP.currentQ = firstMissing;
     }
+    saveOIPState();
     _renderOIPOverlay();
     const body = document.getElementById('oip-quiz-body');
     if(body) body.scrollTop = 0;
@@ -2902,20 +2930,21 @@ function oipNavNext(){
 }
 
 function oipNav(dir){
-  oipCurrentQ = Math.max(0, Math.min(29, oipCurrentQ + dir));
+  OIP.currentQ = Math.max(0, Math.min(29, OIP.currentQ + dir));
+  saveOIPState();
   _renderOIPOverlay();
   const body = document.getElementById('oip-quiz-body');
   if(body) body.scrollTop = 0;
 }
 
 function oipSubmitFromOverlay(){
-  if(!oipAnswers.every(a=>a!==null)){
+  if(!OIP.answers.every(a=>a!==null)){
     toast('Please answer all 30 questions before submitting.','err');
     return;
   }
-  const s = getStaff(oipActiveStaffId);
+  const s = getStaff(OIP.staffId);
   if(!s){ toast('Staff record not found.','err'); return; }
-  submitOIP(oipActiveStaffId, oipAnswers);
+  submitOIP(OIP.staffId, OIP.answers);
   closeOIPQuiz();
 }
 
