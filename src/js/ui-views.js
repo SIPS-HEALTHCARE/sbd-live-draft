@@ -1268,6 +1268,58 @@ function savePAState(){
   }
 }
 
+let _paTimerInterval = null;
+
+function startAssessmentTimer(){
+  // Defensive: clear any existing timer first to prevent duplicates on resume
+  if(_paTimerInterval){ clearInterval(_paTimerInterval); _paTimerInterval = null; }
+
+  const expiresAt = ASSESSMENT_SESSION.expiresAt
+    ? new Date(ASSESSMENT_SESSION.expiresAt).getTime()
+    : null;
+  if(!expiresAt) return; // No active session — nothing to time
+
+  _paTimerInterval = setInterval(() => {
+    const el = document.getElementById('pa-timer');
+    if(!el){
+      // Element gone (assessment closed) — kill the timer
+      clearInterval(_paTimerInterval);
+      _paTimerInterval = null;
+      return;
+    }
+
+    const remaining = expiresAt - Date.now();
+
+    if(remaining <= 0){
+      // Time's up — auto-submit regardless of how many questions answered
+      clearInterval(_paTimerInterval);
+      _paTimerInterval = null;
+      el.textContent = 'Time up — submitting...';
+      el.style.background = 'rgba(239,68,68,.2)';
+      el.style.borderColor = 'rgba(239,68,68,.6)';
+      el.style.color = '#fca5a5';
+      if(!PA.submitting && !PA.submitted){
+        submitPlacementAssessment();
+      }
+      return;
+    }
+
+    const mins = Math.floor(remaining / 60000);
+    const secs = Math.floor((remaining % 60000) / 1000);
+    el.textContent = `Time remaining: ${mins}:${String(secs).padStart(2,'0')}`;
+
+    if(remaining < 5 * 60 * 1000){
+      el.style.background = 'rgba(239,68,68,.15)';
+      el.style.borderColor = 'rgba(239,68,68,.5)';
+      el.style.color = '#fca5a5';
+    } else if(remaining < 15 * 60 * 1000){
+      el.style.background = 'rgba(245,158,11,.15)';
+      el.style.borderColor = 'rgba(245,158,11,.5)';
+      el.style.color = '#fbbf24';
+    }
+  }, 1000);
+}
+
 // ════════════════════════════════════════════════════════════════════════
 // ASSESSOR PIN GATE — One-Time PIN Authorization Modal
 // ════════════════════════════════════════════════════════════════════════
@@ -1497,7 +1549,16 @@ function _enterPlacementAssessment(s){
   const overlay = document.getElementById('placement-overlay');
   overlay.classList.remove('hidden');
   overlay.style.display = 'flex';
+  // Ensure timer banner exists (lives outside #placement-content so it survives innerHTML re-renders)
+  if(!document.getElementById('pa-timer')){
+    const tb = document.createElement('div');
+    tb.id = 'pa-timer';
+    tb.style.cssText = "position:fixed;top:12px;right:12px;z-index:10000;background:rgba(139,92,246,.15);border:1.5px solid rgba(139,92,246,.5);padding:8px 14px;border-radius:10px;font-family:monospace;font-size:14px;font-weight:700;color:#f1f5f9";
+    tb.textContent = 'Time remaining: --:--';
+    overlay.appendChild(tb);
+  }
   renderPAScreen();
+  startAssessmentTimer();
 }
 
 function hidePlacementOverlay(){
@@ -1505,6 +1566,10 @@ function hidePlacementOverlay(){
   overlay.classList.add('hidden');
   overlay.style.display = '';
   PA.active = false;
+  // Clean up the timer banner + interval so they don't leak across sessions
+  if(_paTimerInterval){ clearInterval(_paTimerInterval); _paTimerInterval = null; }
+  const tb = document.getElementById('pa-timer');
+  if(tb) tb.remove();
   savePAState();
 }
 
@@ -1793,7 +1858,13 @@ async function submitPlacementAssessment(){
         SB.completeAssessmentSession(ASSESSMENT_SESSION.token).catch(()=>{});
         ASSESSMENT_SESSION = {token:null,sessionId:null,assessorName:null,facilityId:null,expiresAt:null,type:null};
       }
-    } catch(e) { handleSyncError(e, 'Placement sync'); }
+    } catch(e) {
+      handleSyncError(e, 'Placement sync');
+      // Submission failed — do not show fake success. Keep PA.submitted = false so the user can retry after re-PIN.
+      PA.submitting = false;
+      alert('Time expired or network error. Your answers are saved locally. Please ask your assessor for a new PIN to resubmit, or have them record your responses manually.');
+      return; // CRITICAL: do NOT proceed to renderPAComplete
+    }
   } else {
     /* saveDemoData() removed */
   }
