@@ -11417,7 +11417,7 @@ function openRecordModal(sid){
       </div></div>
       <div class="form-group"><label class="form-label">Notes (optional)</label><textarea class="form-textarea" id="ra-notes" placeholder="Assessment notes..."></textarea></div>
     </div>
-    <div class="modal-ft"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-gold" onclick="submitAssessment(${sid||0})">${ICO.record} Submit Assessment</button></div>`,'modal-md');
+    <div class="modal-ft"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-gold" onclick="submitAssessment('${sid||''}')">${ICO.record} Submit Assessment</button></div>`,'modal-md');
 }
 
 function updateRaStaff(fid){
@@ -11437,7 +11437,7 @@ function selectResult(r){
 
 function submitAssessment(sid){
   if(!raResult){toast('Please select Pass or Fail.','err');return;}
-  const staffId=sid||parseInt(document.getElementById('ra-staff')?.value||'0');
+  const staffId=sid||document.getElementById('ra-staff')?.value||null;
   const s=getStaff(staffId);
   if(!s){toast('Please select a staff member.','err');return;}
   const type=document.getElementById('ra-type').value;
@@ -13423,7 +13423,7 @@ async function submitAddUser(type){
   }
   else if(type==='staff'){
     const fid=document.getElementById('nu-fid')?.value||null;
-    const sid=parseInt(document.getElementById('nu-sid')?.value)||null;
+    const sid=document.getElementById('nu-sid')?.value||null;
     newUser.fid=fid;
     newUser.sid=sid;
     const fac=getFac(fid);
