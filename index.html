@@ -19,7 +19,7 @@
   <meta http-equiv="Expires" content="0">
 
   <!-- MODULAR CSS -->
-  <link rel="stylesheet" href="src/css/index.css?v=23">
+  <link rel="stylesheet" href="src/css/index.css?v=24">
 </head>
 <body>
   <!-- MAIN APP CONTAINER -->
@@ -73,13 +73,13 @@
             </div>
             
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px" class="reg-grid">
-            <div class="form-group"><label class="form-label">Facility Name *</label><input class="form-input" id="reg-fname" placeholder="Hospital or Health System Name"></div>
+            <div class="form-group"><label class="form-label">Facility Name *</label><input class="form-input" id="reg-fname" placeholder="Hospital or Health System Name" data-mobile-placeholder="Hospital name"></div>
               <div class="form-group"><label class="form-label">City, State *</label><input class="form-input" id="reg-loc" placeholder="Dallas, TX"></div>
             </div>
-            <div class="form-group"><label class="form-label">Department *</label><input class="form-input" id="reg-dept" placeholder="Sterile Processing Department"></div>
+            <div class="form-group"><label class="form-label">Department *</label><input class="form-input" id="reg-dept" placeholder="Sterile Processing Department" data-mobile-placeholder="Sterile Processing"></div>
             <div class="g2" style="gap:10px">
               <div class="form-group"><label class="form-label">Contact Name *</label><input class="form-input" id="reg-contact" placeholder="Full name"></div>
-              <div class="form-group"><label class="form-label">Work Email *</label><input class="form-input" id="reg-email" type="email" placeholder="contact@hospital.com"></div>
+              <div class="form-group"><label class="form-label">Work Email *</label><input class="form-input" id="reg-email" type="email" placeholder="contact@hospital.com" data-mobile-placeholder="you@hospital.com"></div>
             </div>
             <div class="g2" style="gap:10px">
               <div class="form-group" style="position: relative;">
@@ -126,26 +126,7 @@
 
     <!-- MAIN PORTALS (Dynamically loaded) -->
     <!-- Removed duplicate empty portal elements -->
-    <!-- OVERLAYS -->
-    <div id="modal-overlay" class="modal-overlay" onclick="closeModal(event)">
-      <div id="modal-box" class="modal">
-        <div class="modal-hdr">
-          <div id="modal-title" class="modal-title"></div>
-          <div class="modal-close" onclick="closeModal()">×</div>
-        </div>
-        <div id="modal-content" class="modal-body"></div>
-      </div>
-    </div>
-    <div id="toast" class="toast-wrap"></div>
-    <div id="pending-screen" class="hidden" style="position:fixed;top:0;left:0;width:100%;height:100%;background:var(--bg);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px">
-      <div style="max-width:400px;text-align:center">
-        <div style="font-size:32px;color:var(--gold);margin-bottom:20px">✓</div>
-        <div style="font-size:20px;font-weight:700;margin-bottom:10px">Application Received</div>
-        <div style="font-size:14px;color:var(--txt3);line-height:1.6">Your facility registration is pending review. We will contact you once your portal is active.</div>
-        <div id="pending-details" style="margin-top:24px;padding:16px;background:var(--s1);border:1px solid var(--bdr);border-radius:var(--r);text-align:left"></div>
-        <button class="btn btn-gold" style="margin-top:32px;width:100%;justify-content:center" onclick="showLogin()">Back to Login</button>
-      </div>
-    </div>
+    <!-- Modal overlay + pending screen moved below to avoid duplicate IDs -->
   </div>
 
   <!-- PASSWORD RESET OVERLAY -->
@@ -313,7 +294,7 @@
   <div class="main">
     <div class="topbar">
       <div class="tb-left">
-        <div class="hamburger" id="h-hamburger" onclick="toggleSidebar('h')"><span></span><span></span><span></span></div>
+        <div class="hamburger" id="h-hamburger" role="button" tabindex="0" aria-label="Toggle navigation" aria-controls="h-sidebar" aria-expanded="false" onclick="toggleSidebar('h')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleSidebar('h')}"><span></span><span></span><span></span></div>
         <div class="tb-title" id="h-topbar-title">Department Dashboard</div>
         <span class="pill p-blue topbar-pill-hide" id="h-topbar-role-pill">Hospital Portal</span>
       </div>
@@ -428,7 +409,7 @@
   <div class="main">
     <div class="topbar">
       <div class="tb-left">
-        <div class="hamburger" id="a-hamburger" onclick="toggleSidebar('a')"><span></span><span></span><span></span></div>
+        <div class="hamburger" id="a-hamburger" role="button" tabindex="0" aria-label="Toggle navigation" aria-controls="a-sidebar" aria-expanded="false" onclick="toggleSidebar('a')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleSidebar('a')}"><span></span><span></span><span></span></div>
         <div class="tb-title" id="a-topbar-title">Network Overview</div>
         <span class="pill p-gold topbar-pill-hide" id="a-topbar-pill">SIPS Admin</span>
         <div class="fac-switcher hidden" id="fac-switcher">
@@ -531,7 +512,7 @@
   <div class="main">
     <div class="topbar">
       <div class="tb-left">
-        <div class="hamburger" id="s-hamburger" onclick="toggleSidebar('s')"><span></span><span></span><span></span></div>
+        <div class="hamburger" id="s-hamburger" role="button" tabindex="0" aria-label="Toggle navigation" aria-controls="s-sidebar" aria-expanded="false" onclick="toggleSidebar('s')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleSidebar('s')}"><span></span><span></span><span></span></div>
         <div class="tb-title" id="s-topbar-title">My Dashboard</div>
         <span class="pill p-blue topbar-pill-hide">Staff Portal</span>
       </div>
@@ -599,7 +580,7 @@
   <div class="main">
     <div class="topbar">
       <div class="tb-left">
-        <div class="hamburger" id="x-hamburger" onclick="toggleSidebar('x')"><span></span><span></span><span></span></div>
+        <div class="hamburger" id="x-hamburger" role="button" tabindex="0" aria-label="Toggle navigation" aria-controls="x-sidebar" aria-expanded="false" onclick="toggleSidebar('x')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleSidebar('x')}"><span></span><span></span><span></span></div>
         <div class="tb-title" id="x-topbar-title">System Overview</div>
         <span class="pill" style="background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue-bd);font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:20px;white-space:nowrap" class="topbar-pill-hide">System Admin</span>
       </div>
@@ -677,11 +658,11 @@
   <script src="src/js/utils.js?v=23"></script>
   <script src="src/js/api-supabase.js?v=24"></script>
   <script src="src/js/auth-password.js?v=19"></script>
-  <script src="src/js/ui-views.js?v=62"></script>
+  <script src="src/js/ui-views.js?v=63"></script>
   <script src="src/js/settings.js?v=19"></script>
   <script src="src/js/onboarding.js?v=19"></script>
   <script src="src/js/auth-init.js?v=20"></script>
-  <script src="src/components/DavidChat.js"></script>
+  <script src="src/components/DavidChat.js?v=2"></script>
   <script src="src/components/DavidAdminDashboard.js"></script>
 
 

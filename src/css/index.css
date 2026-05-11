@@ -87,6 +87,7 @@ body{background:var(--bg);color:var(--txt);-webkit-text-size-adjust:100%}
 .tb-left{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
 .tb-title{font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .view-body{flex:1;overflow-y:auto;overflow-x:hidden;padding:22px 20px 40px;-webkit-overflow-scrolling:touch;min-width:0}
+@media(max-width:768px){.view-body{overflow-x:visible}}
 
 /* ── FACILITY SWITCHER ── */
 .fac-switcher{display:flex;align-items:center;gap:6px;padding:5px 10px;background:var(--s2);border:1px solid var(--bdr2);border-radius:var(--rs);cursor:pointer;font-size:12px;font-weight:500;position:relative;max-width:200px}
@@ -109,6 +110,9 @@ body{background:var(--bg);color:var(--txt);-webkit-text-size-adjust:100%}
 .card-body{padding:16px}
 .g2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr)}
+@media(max-width:768px){.grid-4{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:420px){.grid-4{grid-template-columns:repeat(2,1fr)}}
 
 /* ── BUTTONS ── */
 .btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--rs);font-size:12.5px;font-weight:600;cursor:pointer;border:none;transition:all .15s;font-family:'Poppins',sans-serif;white-space:nowrap;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
@@ -133,9 +137,12 @@ body{background:var(--bg);color:var(--txt);-webkit-text-size-adjust:100%}
 .tbl tbody tr{cursor:pointer;transition:.1s}
 .tbl tbody tr:hover td{background:var(--s2)}
 .tbl-static tbody tr{cursor:default}
-/* Scrollable table wrapper  --  every table scrolls on mobile */
+/* Scrollable table wrapper  --  tables scroll horizontally on overflow */
 .card>.tbl,.tbl-wrap{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;-ms-overflow-style:-ms-autohiding-scrollbar}
-.card>.tbl table,.tbl-wrap .tbl,.tbl-wrap table{min-width:520px}
+/* 520px floor only on desktop  --  mobile tables shrink/stack via .mob-stack */
+@media(min-width:769px){
+  .card>.tbl table,.tbl-wrap .tbl,.tbl-wrap table,table.tbl--scrollable{min-width:520px}
+}
 /* Ensure card overflow is visible so table scroll works */
 .card{overflow:visible}
 .card>.tbl{overflow-x:auto;border-radius:0 0 var(--r) var(--r)}
@@ -328,8 +335,9 @@ body{background:var(--bg);color:var(--txt);-webkit-text-size-adjust:100%}
   /* Topbar compact */
   .topbar{padding:0 12px;height:52px}
   .tb-title{font-size:14px}
-  .fac-switcher{max-width:130px;font-size:11px;padding:4px 8px}
-  .fac-switcher-text{max-width:90px}
+  /* Facility switcher: more room on mobile, allow full name to show */
+  .fac-switcher{max-width:none;font-size:11px;padding:4px 8px;flex-shrink:1;min-width:0}
+  .fac-switcher-text{max-width:160px;overflow:hidden;text-overflow:ellipsis}
 
   /* View body */
   .view-body{padding:14px 12px 80px}
@@ -370,9 +378,13 @@ body{background:var(--bg);color:var(--txt);-webkit-text-size-adjust:100%}
   /* Tables  --  stacked card layout on mobile */
   .mob-stack thead{display:none}
   .mob-stack tbody tr{display:block;border:1px solid var(--bdr);border-radius:var(--rs);margin-bottom:8px;padding:2px 0;background:var(--s2)}
-  .mob-stack td{display:flex;justify-content:space-between;align-items:center;padding:8px 14px;font-size:12px;border-bottom:1px solid var(--bdr);gap:8px}
+  .mob-stack td{display:flex;justify-content:space-between;align-items:center;padding:8px 14px;font-size:12px;border-bottom:1px solid var(--bdr);gap:8px;white-space:normal !important}
   .mob-stack td:last-child{border-bottom:none}
   .mob-stack td::before{content:attr(data-label);font-size:9.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--txt3);flex-shrink:0;margin-right:8px}
+  /* Override inline min-width on tables and their wrappers so the .mob-stack
+     pattern can actually shrink to viewport width. */
+  table.tbl,table.tbl-static{min-width:0 !important}
+  .card>.tbl > table,.tbl-wrap > table{min-width:0 !important}
   /* All tables scroll on mobile by default */
   .card>.tbl,.tbl-wrap{-webkit-overflow-scrolling:touch}
   
@@ -382,6 +394,19 @@ body{background:var(--bg);color:var(--txt);-webkit-text-size-adjust:100%}
   /* Filter */
   .filter-bar{gap:6px}
   .fchip{padding:4px 10px;font-size:10.5px}
+
+  /* Charts: override fixed inline heights so labels don't overlap on narrow screens */
+  .chart-wrap[style*="height:180px"],
+  .chart-wrap[style*="height:160px"],
+  .chart-wrap[style*="height:200px"]{height:clamp(140px,42vw,200px) !important}
+
+  /* Position School / belt curriculum split view: collapse the fixed nav rail
+     into a horizontally-scrolling strip above the content. */
+  .cs-split{flex-direction:column !important;max-height:none !important}
+  .cs-split-nav{width:100% !important;min-width:0 !important;max-height:none !important;max-height:38vh !important;border-right:none !important;border-bottom:1px solid var(--bdr) !important;display:flex !important;flex-direction:column;overflow-y:auto !important;padding:6px 8px !important}
+  .cs-split-content{max-height:none !important;padding:14px 16px !important}
+  /* Tighten nav items so the scroll list isn't visually heavy */
+  .cs-split-nav .cs-ps-nav-item{font-size:11.5px !important;padding:7px 10px !important}
 
   /* Hide pill in topbar */
   .topbar-pill-hide{display:none}
@@ -394,6 +419,11 @@ body{background:var(--bg);color:var(--txt);-webkit-text-size-adjust:100%}
 
 /* SMALL MOBILE (≤ 420px) */
 @media(max-width:420px){
+  /* Collapse inline 2-up grids to single column on small phones. The
+     attribute-selector + !important combination overrides inline styles. */
+  div[style*="grid-template-columns:1fr 1fr"],
+  div[style*="grid-template-columns: 1fr 1fr"],
+  div[style*="grid-template-columns:repeat(2,1fr)"]{grid-template-columns:1fr !important}
   .stat-grid{grid-template-columns:1fr 1fr;gap:8px}
   .stat-val{font-size:22px}
   .stat-card{padding:12px 10px}
@@ -842,11 +872,16 @@ body{background:var(--bg);color:var(--txt);-webkit-text-size-adjust:100%}
 .posttour-actions .btn{width:100%;justify-content:center}
 
 /* ── Skip Reminder Banner ── */
-.skip-reminder{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(80px);z-index:1200;background:var(--s1);border:1px solid var(--gold-bd);border-radius:10px;padding:12px 20px;display:flex;align-items:center;gap:10px;font-size:12px;box-shadow:0 8px 30px rgba(0,0,0,.5);transition:transform .35s cubic-bezier(.4,0,.2,1);max-width:calc(100vw - 40px)}
+.skip-reminder{position:fixed;bottom:calc(20px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%) translateY(120px);z-index:1200;background:var(--s1);border:1px solid var(--gold-bd);border-radius:10px;padding:12px 20px;display:flex;align-items:center;gap:10px;font-size:12px;box-shadow:0 8px 30px rgba(0,0,0,.5);transition:transform .35s cubic-bezier(.4,0,.2,1);max-width:calc(100vw - 40px)}
 .skip-reminder.show{transform:translateX(-50%) translateY(0)}
 .skip-reminder-text{color:var(--txt2)}
 .skip-reminder-link{color:var(--gold);font-weight:600;cursor:pointer;white-space:nowrap;transition:.12s}
 .skip-reminder-link:hover{color:var(--txt)}
+/* Suppress skip-reminder when a modal or placement assessment is active */
+body.placement-active .skip-reminder,
+body:has(#modal-overlay.open) .skip-reminder,
+body:has(#oip-quiz-overlay[style*="display: flex"]) .skip-reminder,
+body:has(#placement-overlay:not(.hidden)) .skip-reminder{display:none !important}
 
 /* ── Responsive: Tour/Guide/Attention ── */
 @media(max-width:768px){
@@ -1150,8 +1185,10 @@ body{background:var(--bg);color:var(--txt);-webkit-text-size-adjust:100%}
 body.placement-active .sidebar{display:none !important}
 
 @media(max-width:480px){
-  /* Timer banner — smaller, less intrusive on narrow screens */
-  #pa-timer{font-size:12px !important;padding:6px 10px !important;top:8px !important;right:8px !important;max-width:calc(100vw - 16px) !important}
+  /* Timer banner — pull out of the fixed layer on narrow screens so it does
+     not overlap the centered "Question X of Y" heading. Appears as a pill
+     inline at the top of the overlay instead. */
+  #pa-timer{position:static !important;display:block !important;margin:12px 16px 0 !important;font-size:12px !important;padding:6px 10px !important;max-width:none !important;text-align:center}
   /* PA controls row buttons — smaller padding/font, allow wrap */
   #pa-back-btn{padding:10px 16px !important;font-size:12px !important}
   #pa-save-btn{padding:10px 14px !important;font-size:12px !important}

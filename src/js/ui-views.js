@@ -194,11 +194,11 @@ function toggleSidebar(portal){
   if(isOpen){
     sidebar.classList.remove('open');
     if(overlay) overlay.classList.remove('open');
-    if(hamburger) hamburger.classList.remove('open');
+    if(hamburger){ hamburger.classList.remove('open'); hamburger.setAttribute('aria-expanded','false'); }
   } else {
     sidebar.classList.add('open');
     if(overlay) overlay.classList.add('open');
-    if(hamburger) hamburger.classList.add('open');
+    if(hamburger){ hamburger.classList.add('open'); hamburger.setAttribute('aria-expanded','true'); }
   }
 }
 
@@ -208,7 +208,7 @@ function closeSidebar(portal){
   const hamburger=document.getElementById(portal+'-hamburger');
   if(sidebar) sidebar.classList.remove('open');
   if(overlay) overlay.classList.remove('open');
-  if(hamburger) hamburger.classList.remove('open');
+  if(hamburger){ hamburger.classList.remove('open'); hamburger.setAttribute('aria-expanded','false'); }
 }
 
 function initSwipeClose(portal){
@@ -3299,7 +3299,7 @@ function downloadFacilityReportV2(fid){
     }).join('')}</tbody></table>
 
     ${pSection('OIP Team Composition')}
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px" class="no-break">
+    <div class="grid-4 no-break" style="gap:10px;margin-bottom:14px">
       ${Object.values(OIP_TYPES).map(t=>{const k=t.key;const clrs={S:'#2563eb',St:'#7c3aed',Su:'#ea580c',A:'#0891b2'};const bgs={S:'#dbeafe',St:'#ede9fe',Su:'#ffedd5',A:'#cffafe'};return`<div style="background:${bgs[k]};border:1px solid ${clrs[k]}33;border-radius:6px;padding:10px;text-align:center">
         <div style="font-size:22pt;margin-bottom:3px">${t.icon}</div>
         <div style="font-size:16pt;font-weight:900;color:${clrs[k]}">${oipDist[k]||0}</div>
@@ -3419,7 +3419,7 @@ function downloadSystemReportV2(){
     }).join('')}</tbody></table>
 
     ${pSection('OIP Type Distribution')}
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px" class="no-break">
+    <div class="grid-4 no-break" style="gap:10px;margin-bottom:14px">
       ${Object.values(OIP_TYPES).map(t=>{const k=t.key;const clrs={S:'#2563eb',St:'#7c3aed',Su:'#ea580c',A:'#0891b2'};const bgs={S:'#dbeafe',St:'#ede9fe',Su:'#ffedd5',A:'#cffafe'};return`<div style="background:${bgs[k]};border:1px solid ${clrs[k]}33;border-radius:6px;padding:10px;text-align:center">
         <div style="font-size:18pt;font-weight:900;color:${clrs[k]}">${oipDist[k]||0}</div>
         <div style="font-size:8pt;font-weight:700;color:${clrs[k]}">${t.name}</div>
@@ -3539,7 +3539,7 @@ function downloadNetworkReport(){
     }).join('')}</tbody></table>
 
     ${pSection('OIP Type Distribution: Full Network')}
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px" class="no-break">
+    <div class="grid-4 no-break" style="gap:10px;margin-bottom:14px">
       ${Object.values(OIP_TYPES).map(t=>{const k=t.key;const clrs={S:'#2563eb',St:'#7c3aed',Su:'#ea580c',A:'#0891b2'};const bgs={S:'#dbeafe',St:'#ede9fe',Su:'#ffedd5',A:'#cffafe'};return`<div style="background:${bgs[k]};border:1px solid ${clrs[k]}33;border-radius:6px;padding:12px;text-align:center">
         <div style="font-size:26pt;margin-bottom:4px">${t.icon}</div>
         <div style="font-size:22pt;font-weight:900;color:${clrs[k]}">${oipDist[k]||0}</div>
@@ -3758,9 +3758,9 @@ function _getPSCurriculumHTML(tid) {
   }).join('');
   var firstContent = _buildPSSectionHTML(data[0], tid, 0);
   return l3BuildProgressHeader('ps', tid, totalSec)
-    + '<div class="cs-ps-wrap" id="ps-wrap-' + tid + '" style="display:flex;gap:0;border:1px solid var(--bdr);border-radius:0 0 var(--r) var(--r);overflow:hidden;background:var(--bg)">'
-    + '<div style="width:195px;min-width:155px;border-right:1px solid var(--bdr);overflow-y:auto;max-height:62vh;flex-shrink:0;background:var(--s1);padding:8px 4px">' + navItems + '</div>'
-    + '<div class="cs-ps-content" id="ps-content-' + tid + '" style="flex:1;min-width:0;overflow-y:auto;max-height:62vh;padding:18px 20px">' + firstContent + '</div>'
+    + '<div class="cs-ps-wrap cs-split" id="ps-wrap-' + tid + '" style="display:flex;gap:0;border:1px solid var(--bdr);border-radius:0 0 var(--r) var(--r);overflow:hidden;background:var(--bg)">'
+    + '<div class="cs-split-nav" style="width:195px;min-width:155px;border-right:1px solid var(--bdr);overflow-y:auto;max-height:62vh;flex-shrink:0;background:var(--s1);padding:8px 4px">' + navItems + '</div>'
+    + '<div class="cs-ps-content cs-split-content" id="ps-content-' + tid + '" style="flex:1;min-width:0;overflow-y:auto;max-height:62vh;padding:18px 20px">' + firstContent + '</div>'
     + '</div>';
 }
 
@@ -6253,13 +6253,13 @@ function renderSStudy() {
 
     tabContent = `
       ${l3BuildProgressHeader('belt', beltKey, totalSec)}
-      <div style="display:flex;gap:0;border:1px solid var(--bdr);border-radius:0 0 var(--r) var(--r);overflow:hidden;background:var(--bg)">
+      <div class="cs-split" style="display:flex;gap:0;border:1px solid var(--bdr);border-radius:0 0 var(--r) var(--r);overflow:hidden;background:var(--bg)">
         <!-- Section nav sidebar -->
-        <div style="width:200px;min-width:160px;border-right:1px solid var(--bdr);overflow-y:auto;max-height:70vh;flex-shrink:0;background:var(--s1);padding:8px 4px">
+        <div class="cs-split-nav" style="width:200px;min-width:160px;border-right:1px solid var(--bdr);overflow-y:auto;max-height:70vh;flex-shrink:0;background:var(--s1);padding:8px 4px">
           ${navItems}
         </div>
         <!-- Section content -->
-        <div style="flex:1;min-width:0;overflow-y:auto;max-height:70vh;padding:20px 22px">
+        <div class="cs-split-content" style="flex:1;min-width:0;overflow-y:auto;max-height:70vh;padding:20px 22px">
           <div style="font-size:11px;font-weight:700;color:var(--gold);letter-spacing:.07em;margin-bottom:8px;text-transform:uppercase">${curSection.title}</div>
           <div class="cs-body">${_styleCurriculumHTML(curSection.html)}</div>
           ${l3BuildMarkBtn('belt', beltKey, secIdx)}
@@ -6839,7 +6839,7 @@ function renderXReports(){
     ${rptSection('OIP Type Distribution')}
     <div class="card mb16">
       <div class="card-body">
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px">
+        <div class="grid-4" style="gap:8px;margin-bottom:12px">
           ${Object.values(OIP_TYPES).map(t=>`<div style="background:${t.bg};border:1px solid ${t.bd};border-radius:var(--rs);padding:12px;text-align:center">
             <div style="font-size:22px;margin-bottom:4px">${t.icon}</div>
             <div style="font-size:24px;font-weight:900;color:${t.color}">${oipDist[t.key]||0}</div>
@@ -7467,7 +7467,7 @@ function buildScheduleBuilder(fid, shifts){
       <button class="btn btn-ghost btn-sm" onclick="openScheduleUploadModal('${fid}')">📥 Upload CSV</button>
     </div>
 
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px">
+    <div class="grid-4" style="gap:8px;margin-bottom:12px">
       <div class="stat-card"><div class="stat-accent" style="background:var(--ok)"></div><div class="stat-lbl">Shifts Filled</div><div class="stat-val" style="color:var(--ok)">${totalFilled}/${totalSlots}</div></div>
       <div class="stat-card"><div class="stat-accent" style="background:var(--blue)"></div><div class="stat-lbl">Total Assignments</div><div class="stat-val" style="color:var(--blue)">${totalStaff}</div></div>
       <div class="stat-card"><div class="stat-accent" style="background:var(--gold)"></div><div class="stat-lbl">Active Shifts</div><div class="stat-val" style="color:var(--gold)">${shiftKeys.length}</div></div>
@@ -8921,7 +8921,7 @@ function renderHReports(){
     ${rptSection('OIP Team Composition')}
     <div class="card mb16">
       <div class="card-body">
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px">
+        <div class="grid-4" style="gap:8px;margin-bottom:12px">
           ${Object.values(OIP_TYPES).map(t=>`<div style="background:${t.bg};border:1px solid ${t.bd};border-radius:var(--rs);padding:12px 8px;text-align:center">
             <div style="font-size:30px;margin-bottom:6px;line-height:1">${t.icon}</div>
             <div style="font-size:22px;font-weight:800;color:${t.color}">${oipDist[t.key]||0}</div>
@@ -11176,7 +11176,7 @@ function renderAReports(){
     ${rptSection('OIP Type Distribution: Full Network')}
     <div class="card mb16">
       <div class="card-body">
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
+        <div class="grid-4" style="gap:10px;margin-bottom:14px">
           ${Object.values(OIP_TYPES).map(t=>`<div style="background:${t.bg};border:1.5px solid ${t.bd};border-radius:var(--r);padding:14px;text-align:center">
             <div style="font-size:24px;margin-bottom:4px">${t.icon}</div>
             <div style="font-size:26px;font-weight:900;color:${t.color}">${oipDist[t.key]||0}</div>
@@ -14877,3 +14877,65 @@ function changeStaffRoleInline(staffId, newRole){
   // Re-render optimistically (don't lose scroll position)
   if(window._sv === 'a-allstaff') renderAAllStaff();
 }
+
+// ============================================================ MOBILE TABLE STACKING
+// Synthesize data-label attrs on every .tbl <td> from its column header so the
+// CSS .mob-stack rules can render tables as stacked cards below 768px.
+// Adds mob-stack class to every .tbl; the CSS only kicks in on mobile viewports.
+(function initMobStack(){
+  function applyTo(table){
+    if(!table || table.__mobStackApplied) return;
+    const headers = Array.from(table.querySelectorAll(':scope > thead > tr > th, :scope > tr > th'))
+      .map(th => (th.textContent || '').trim());
+    if(!headers.length) return;
+    table.classList.add('mob-stack');
+    const rows = table.querySelectorAll(':scope > tbody > tr, :scope > tr');
+    rows.forEach(tr => {
+      const cells = tr.children;
+      for(let i=0;i<cells.length;i++){
+        if(cells[i].tagName !== 'TD') continue;
+        if(!cells[i].hasAttribute('data-label') && headers[i]){
+          cells[i].setAttribute('data-label', headers[i]);
+        }
+      }
+    });
+    table.__mobStackApplied = true;
+  }
+  function scan(root){
+    if(!root || !root.querySelectorAll) return;
+    if(root.matches && root.matches('table.tbl')) applyTo(root);
+    root.querySelectorAll('table.tbl').forEach(applyTo);
+  }
+  function init(){
+    scan(document.body);
+    const mo = new MutationObserver(muts => {
+      for(const m of muts){
+        m.addedNodes && m.addedNodes.forEach(n => { if(n.nodeType === 1) scan(n); });
+      }
+    });
+    mo.observe(document.body, { childList:true, subtree:true });
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+
+// ============================================================ MOBILE PLACEHOLDER SWAP
+// Inputs with a data-mobile-placeholder attr swap to that shorter text at ≤375.
+(function initMobilePlaceholders(){
+  const QUERY = '(max-width: 375px)';
+  function apply(){
+    const small = window.matchMedia(QUERY).matches;
+    document.querySelectorAll('input[data-mobile-placeholder], textarea[data-mobile-placeholder]').forEach(el => {
+      if(!el.dataset.desktopPlaceholder) el.dataset.desktopPlaceholder = el.getAttribute('placeholder') || '';
+      el.setAttribute('placeholder', small ? el.dataset.mobilePlaceholder : el.dataset.desktopPlaceholder);
+    });
+  }
+  function init(){
+    apply();
+    try { window.matchMedia(QUERY).addEventListener('change', apply); } catch(_){
+      try { window.matchMedia(QUERY).addListener(apply); } catch(__){}
+    }
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
