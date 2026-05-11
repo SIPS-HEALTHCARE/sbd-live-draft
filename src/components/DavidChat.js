@@ -25,6 +25,15 @@ class DavidChat {
         }
     }
 
+    toggleSidebar(open) {
+        const sb = document.getElementById('david-sessions-sidebar');
+        const bd = document.getElementById('david-sidebar-backdrop');
+        if (!sb) return;
+        const next = (typeof open === 'boolean') ? open : !sb.classList.contains('open');
+        sb.classList.toggle('open', next);
+        if (bd) bd.classList.toggle('open', next);
+    }
+
     injectStyles() {
         if (document.getElementById('david-styles')) return;
         const style = document.createElement('style');
@@ -665,6 +674,67 @@ class DavidChat {
             .david-fade-in-up {
                 animation: david-chip-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
             }
+
+            /* --- Mobile drawer for DAVID chat --- */
+            .david-mobile-toggle {
+                display: none;
+                width: 36px;
+                height: 36px;
+                align-items: center;
+                justify-content: center;
+                background: var(--s2);
+                border: 1px solid var(--bdr2);
+                border-radius: 8px;
+                color: var(--txt);
+                cursor: pointer;
+                margin-right: 10px;
+                flex-shrink: 0;
+                -webkit-tap-highlight-color: transparent;
+            }
+            .david-mobile-toggle:hover { background: var(--s3); }
+            .david-sidebar-backdrop {
+                display: none;
+                position: absolute;
+                inset: 0;
+                background: rgba(0,0,0,.55);
+                z-index: 9;
+                -webkit-backdrop-filter: blur(2px);
+                backdrop-filter: blur(2px);
+            }
+            .david-sidebar-backdrop.open { display: block; }
+
+            @media (max-width: 768px) {
+                .david-container { position: relative; }
+                .david-mobile-toggle { display: inline-flex; }
+                .david-chat-header { padding: 14px 16px; }
+                .david-chat-header h2 { font-size: 16px; }
+                .david-chat-header p { font-size: 11px; }
+                .david-messages-area { padding: 16px; gap: 16px; }
+                .david-footer { padding: 12px 14px; }
+                .david-input-wrapper { padding: 8px 12px; border-radius: 12px; }
+                .david-input-wrapper textarea { font-size: 14px; }
+
+                .david-sessions-sidebar {
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    height: 100%;
+                    width: 78%;
+                    max-width: 300px;
+                    z-index: 10;
+                    transform: translateX(-100%);
+                    transition: transform .25s ease;
+                    box-shadow: 8px 0 32px rgba(0,0,0,.5);
+                }
+                .david-sessions-sidebar.open { transform: translateX(0); }
+                .david-main { width: 100%; }
+                .david-quick-actions { padding: 10px 14px 0; gap: 6px; }
+                .david-qa-btn { font-size: 11px; padding: 6px 10px; }
+            }
+            @media (max-width: 480px) {
+                .david-chat-header h2 { font-size: 15px; }
+                .david-messages-area { padding: 12px; }
+            }
         `;
         document.head.appendChild(style);
     }
@@ -680,16 +750,22 @@ class DavidChat {
         container.innerHTML = `
             <div class="david-container">
                 <div class="david-layout">
-                    <div class="david-sessions-sidebar">
+                    <div class="david-sidebar-backdrop" id="david-sidebar-backdrop" onclick="DAVID.toggleSidebar(false)"></div>
+                    <div class="david-sessions-sidebar" id="david-sessions-sidebar">
                         <button class="david-new-chat-btn" id="david-new-chat">➕ New Chat</button>
                         <div class="david-session-list" id="david-session-list">
                             <!-- Sessions injected here -->
                         </div>
                     </div>
                     <div class="david-main">
-                        <div class="david-chat-header">
-                            <h2><span style="font-size:24px">🧠</span> DAVID Intelligence Hub</h2>
-                            <p>Strategic Intelligence Dashboard &bull; Access Level: ${roleLabel}</p>
+                        <div class="david-chat-header" style="display:flex;align-items:center;gap:10px">
+                            <button class="david-mobile-toggle" aria-label="Toggle DAVID sessions" onclick="DAVID.toggleSidebar()" type="button">
+                                <svg viewBox="0 0 18 18" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 4h14M2 9h14M2 14h14"/></svg>
+                            </button>
+                            <div style="flex:1;min-width:0">
+                                <h2><span style="font-size:24px">🧠</span> DAVID Intelligence Hub</h2>
+                                <p>Strategic Intelligence Dashboard &bull; Access Level: ${roleLabel}</p>
+                            </div>
                         </div>
                         <div class="david-quick-actions" id="david-qa">
                             <button class="david-qa-btn" onclick="DAVID.handleQA('Summarize authorized facility activity')">📊 Scope Audit</button>
@@ -971,6 +1047,9 @@ class DavidChat {
             div.onclick = () => {
                 if (div.classList.contains('confirming')) return; // Prevent switching when confirming delete
                 this.loadSession(s.id);
+                if (window.matchMedia && window.matchMedia('(max-width: 768px)').matches) {
+                    this.toggleSidebar(false);
+                }
             };
             
             const delBtn = div.querySelector('.david-session-delete');
