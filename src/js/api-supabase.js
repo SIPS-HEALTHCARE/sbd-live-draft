@@ -171,11 +171,18 @@ const SB = {
   submitAssessmentQueue(data){ return sbFetch('/rest/v1/sbd_assessment_queue', { method:'POST', body:data }); },
   resolveAssessmentQueue(id, status){ return sbFetch(`/rest/v1/sbd_assessment_queue?id=eq.${id}`, { method:'PATCH', body:{ status, resolved_at:new Date().toISOString() } }); },
   // ── Assessments (via edge function for atomic RPC + audit) ──
-  recordAssessment(staff, type, targetBelt, result, notes, assessorId, timestamp){ 
-    return sbFetch('/functions/v1/sbd-record-assessment', { 
-      method:'POST', 
-      body: { staff, type, targetBelt, result, notes, assessorId, timestamp } 
-    }); 
+  recordAssessment(staff, type, targetBelt, result, notes, assessorId, timestamp){
+    return sbFetch('/functions/v1/sbd-record-assessment', {
+      method:'POST',
+      body: { staff, type, targetBelt, result, notes, assessorId, timestamp }
+    });
+  },
+  // ── Reset Test Assessment (master_admin-only utility, mode = 'preview' | 'execute') ──
+  resetTestAssessment(email, mode){
+    return sbFetch('/functions/v1/sbd-reset-test-assessment', {
+      method:'POST',
+      body: { email, mode }
+    });
   },
   // ── User Profiles ──
   getUserProfile(userId){ return sbFetch(`/rest/v1/sbd_portal_users?auth_uid=eq.${userId}&select=*`); },
