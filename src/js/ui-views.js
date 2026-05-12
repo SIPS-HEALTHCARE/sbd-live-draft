@@ -14939,3 +14939,206 @@ function changeStaffRoleInline(staffId, newRole){
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })();
+
+// ============================================================ RESET TEST ASSESSMENT (master_admin utility)
+// Hash-route #reset-test page. Visible only on direct URL; not linked from nav.
+// Wipes a staff member's placement-assessment state so they can re-take cleanly.
+// Server-side auth gate is the source of truth (sbd-reset-test-assessment edge function).
+// Spec: /Users/depreshawn/Downloads/Work/SIPS_Report_2026-04-27/specs/reset-test-assessment-utility.md
+
+function _rtaEl(){ return document.getElementById('reset-test-overlay'); }
+function _rtaContent(){ return document.getElementById('reset-test-content'); }
+
+function checkForResetTestHash(){
+  if(window.location.hash !== '#reset-test') return;
+  const ov = _rtaEl();
+  if(!ov) return; // overlay div not present in DOM
+  ov.classList.remove('hidden');
+  renderResetTestOverlay();
+}
+
+function renderResetTestOverlay(){
+  const c = _rtaContent();
+  if(!c) return;
+
+  // Auth check: must be master_admin
+  const u = (typeof ST !== 'undefined') ? ST.user : null;
+  if(!u){
+    c.innerHTML = `
+      <div style="background:var(--s1);border:1px solid var(--bdr2);border-radius:var(--r);padding:28px 24px;color:var(--txt1)">
+        <div style="font-size:18px;font-weight:700;margin-bottom:10px">Reset Test Assessment</div>
+        <div style="color:var(--txt2);font-size:13px;line-height:1.6;margin-bottom:20px">Please log in as a master admin to use this utility.</div>
+        <button class="btn btn-ghost" onclick="closeResetTestOverlay()">Close</button>
+      </div>`;
+    return;
+  }
+  if(u.role !== 'master_admin'){
+    c.innerHTML = `
+      <div style="background:var(--s1);border:1px solid var(--bdr2);border-radius:var(--r);padding:28px 24px;color:var(--txt1)">
+        <div style="font-size:18px;font-weight:700;margin-bottom:10px">Master admins only</div>
+        <div style="color:var(--txt2);font-size:13px;line-height:1.6;margin-bottom:20px">This utility resets test assessment state and is restricted to master administrators. Your current role: <strong>${u.role}</strong>.</div>
+        <button class="btn btn-ghost" onclick="closeResetTestOverlay()">Close</button>
+      </div>`;
+    return;
+  }
+
+  // Master admin: render the email entry form
+  c.innerHTML = `
+    <div style="background:var(--s1);border:1px solid var(--bdr2);border-radius:var(--r);padding:28px 24px;color:var(--txt1)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div style="font-size:18px;font-weight:700">Reset Test Assessment</div>
+        <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="closeResetTestOverlay()">Close</button>
+      </div>
+      <div style="color:var(--txt2);font-size:12.5px;line-height:1.6;margin-bottom:18px">Internal utility. Enter a tester's email to clear their placement-assessment state (belt, gates, in-progress answers, past reviews, queue entries). The user's <em>history</em> audit trail is preserved.</div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label class="form-label">Tester's email</label>
+        <input type="email" id="rta-email" class="form-input" placeholder="shan@thebizcofirm.com" autocomplete="off" style="width:100%" />
+      </div>
+      <div id="rta-error" style="display:none;background:rgba(239,68,68,.10);border:1px solid var(--err-bd);color:var(--err);border-radius:var(--rs);padding:10px 12px;font-size:12px;line-height:1.5;margin-bottom:14px"></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="closeResetTestOverlay()">Cancel</button>
+        <button class="btn btn-gold" id="rta-resolve-btn" onclick="resetTestResolve()">Resolve</button>
+      </div>
+      <div style="margin-top:14px;font-size:11px;color:var(--txt3);line-height:1.5">Resolve looks up the staff record without making any changes. You'll see what will be affected before confirming the reset.</div>
+    </div>`;
+  setTimeout(() => { const i = document.getElementById('rta-email'); if(i) i.focus(); }, 50);
+}
+
+function _rtaShowError(msg){
+  const e = document.getElementById('rta-error');
+  if(!e) return;
+  e.textContent = msg;
+  e.style.display = 'block';
+}
+
+function _rtaClearError(){
+  const e = document.getElementById('rta-error');
+  if(!e) return;
+  e.style.display = 'none';
+  e.textContent = '';
+}
+
+async function resetTestResolve(){
+  _rtaClearError();
+  const input = document.getElementById('rta-email');
+  const email = (input?.value || '').trim();
+  if(!email){ _rtaShowError('Please enter an email.'); return; }
+  const btn = document.getElementById('rta-resolve-btn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Resolving...'; }
+  try {
+    const res = await SB.resetTestAssessment(email, 'preview');
+    if(res && res.success){
+      _rtaRenderConfirm(email, res);
+    } else {
+      _rtaShowError(res?.error || 'Lookup failed.');
+    }
+  } catch(err){
+    _rtaShowError(err?.message || 'Network error.');
+  } finally {
+    if(btn){ btn.disabled = false; btn.textContent = 'Resolve'; }
+  }
+}
+
+function _rtaRenderConfirm(email, preview){
+  const c = _rtaContent();
+  if(!c) return;
+  const s = preview.target_staff || {};
+  const pu = preview.target_portal_user || {};
+  const name = `${s.first || ''} ${s.last || ''}`.trim() || '(unnamed staff record)';
+  const beltStr = s.belt || '(none)';
+  const placementStr = s.placement_needed ? 'true' : 'false';
+  c.innerHTML = `
+    <div style="background:var(--s1);border:1px solid var(--bdr2);border-radius:var(--r);padding:28px 24px;color:var(--txt1)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div style="font-size:18px;font-weight:700">Confirm Reset</div>
+        <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="closeResetTestOverlay()">Close</button>
+      </div>
+      <div style="color:var(--txt2);font-size:12.5px;line-height:1.6;margin-bottom:18px">Review the resolved record below. Click <strong>Confirm Reset</strong> to wipe placement state for this user.</div>
+
+      <div style="background:var(--s2);border:1px solid var(--bdr);border-radius:var(--rs);padding:14px 16px;margin-bottom:16px;font-size:12.5px;line-height:1.8">
+        <div><strong>Email entered:</strong> ${email}</div>
+        <div><strong>Portal user:</strong> ${pu.email || '?'} <span style="color:var(--txt3)">(${pu.role || '?'})</span></div>
+        <div><strong>Staff record:</strong> ${name}</div>
+        <div><strong>Staff ID:</strong> <code style="font-size:11px">${s.id || '?'}</code></div>
+        <div><strong>Current belt:</strong> ${beltStr}</div>
+        <div><strong>Current placement_needed:</strong> ${placementStr}</div>
+        <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--bdr2)">
+          <div><strong>Will delete:</strong> ${preview.placement_reviews_count || 0} placement_reviews row(s)</div>
+          <div><strong>Will delete:</strong> ${preview.assessment_queue_count || 0} sbd_assessment_queue row(s)</div>
+          <div><strong>Will null:</strong> belt, since, cur_*, nxt_*, oip</div>
+          <div><strong>Will set:</strong> placement_needed = true</div>
+          <div><strong>Preserves:</strong> history (audit trail)</div>
+        </div>
+      </div>
+
+      <div id="rta-error" style="display:none;background:rgba(239,68,68,.10);border:1px solid var(--err-bd);color:var(--err);border-radius:var(--rs);padding:10px 12px;font-size:12px;line-height:1.5;margin-bottom:14px"></div>
+
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="renderResetTestOverlay()">Back</button>
+        <button class="btn btn-gold" id="rta-confirm-btn" onclick="resetTestConfirm('${email.replace(/'/g, "\\'")}')">Confirm Reset</button>
+      </div>
+    </div>`;
+}
+
+async function resetTestConfirm(email){
+  _rtaClearError();
+  const btn = document.getElementById('rta-confirm-btn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Resetting...'; }
+  try {
+    const res = await SB.resetTestAssessment(email, 'execute');
+    if(res && res.success){
+      _rtaRenderDone(email, res);
+    } else {
+      _rtaShowError(res?.error || 'Reset failed.');
+      if(btn){ btn.disabled = false; btn.textContent = 'Confirm Reset'; }
+    }
+  } catch(err){
+    _rtaShowError(err?.message || 'Network error.');
+    if(btn){ btn.disabled = false; btn.textContent = 'Confirm Reset'; }
+  }
+}
+
+function _rtaRenderDone(email, res){
+  const c = _rtaContent();
+  if(!c) return;
+  const ts = res.target_staff || {};
+  c.innerHTML = `
+    <div style="background:var(--s1);border:1px solid var(--bdr2);border-radius:var(--r);padding:28px 24px;color:var(--txt1)">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <div style="width:36px;height:36px;border-radius:50%;background:var(--ok-bg);border:1px solid var(--ok-bd);display:flex;align-items:center;justify-content:center">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 12l5 5L20 7" stroke="var(--ok)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div style="font-size:18px;font-weight:700">Reset complete</div>
+      </div>
+      <div style="background:var(--s2);border:1px solid var(--bdr);border-radius:var(--rs);padding:14px 16px;margin-bottom:18px;font-size:12.5px;line-height:1.8">
+        <div><strong>Staff:</strong> ${ts.name || '(unnamed)'}</div>
+        <div><strong>Staff ID:</strong> <code style="font-size:11px">${ts.id || '?'}</code></div>
+        <div><strong>Previous belt:</strong> ${ts.previous_belt || '(none)'} → cleared</div>
+        <div><strong>placement_reviews deleted:</strong> ${res.placement_reviews_deleted || 0}</div>
+        <div><strong>sbd_assessment_queue deleted:</strong> ${res.assessment_queue_deleted || 0}</div>
+        <div><strong>placement_needed:</strong> set to true</div>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="closeResetTestOverlay()">Close</button>
+        <button class="btn btn-gold" onclick="renderResetTestOverlay()">Reset another</button>
+      </div>
+    </div>`;
+}
+
+function closeResetTestOverlay(){
+  const ov = _rtaEl();
+  if(ov) ov.classList.add('hidden');
+  // Clear the hash so refreshing doesn't reopen the overlay accidentally
+  if(window.location.hash === '#reset-test'){
+    try { history.replaceState(null, '', window.location.pathname + window.location.search); } catch(_){}
+  }
+}
+
+// Wire up the hash check on DOMContentLoaded (matches pattern in auth-password.js)
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', checkForResetTestHash);
+} else {
+  checkForResetTestHash();
+}
+// Also respond to hash changes after initial load (user navigates to URL in same session)
+window.addEventListener('hashchange', checkForResetTestHash);
