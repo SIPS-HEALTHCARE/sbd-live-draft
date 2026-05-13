@@ -31,8 +31,6 @@ body{background:var(--bg);color:var(--txt);-webkit-text-size-adjust:100%}
 .ico svg{display:block}
 
 /* ── LOGIN ── */
-.boot-spinner{width:28px;height:28px;border:2px solid rgba(196,154,32,.25);border-top-color:var(--gold);border-radius:50%;animation:boot-spin .8s linear infinite}
-@keyframes boot-spin{to{transform:rotate(360deg)}}
 #login{min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;padding:20px}
 #pending-screen{min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;padding:20px}
 .lg-bg{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,0.016) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.016) 1px,transparent 1px);background-size:40px 40px}

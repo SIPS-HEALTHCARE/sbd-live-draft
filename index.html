@@ -19,17 +19,13 @@
   <meta http-equiv="Expires" content="0">
 
   <!-- MODULAR CSS -->
-  <link rel="stylesheet" href="src/css/index.css?v=25">
+  <link rel="stylesheet" href="src/css/index.css?v=24">
 </head>
 <body>
   <!-- MAIN APP CONTAINER -->
   <div id="sbd-root">
-    <!-- BOOTSTRAP SPINNER (shown until restoreSessionOnLoad decides what to render) -->
-    <div id="boot-screen" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--s0,#0b0e14);z-index:9999">
-      <div class="boot-spinner" aria-label="Loading"></div>
-    </div>
     <!-- LOGIN OVERLAY -->
-    <div id="login" class="hidden">
+    <div id="login">
       <div class="lg-bg"></div>
       <div class="lg-glow"></div>
       <div class="lg-wrap" style="max-width:460px">
@@ -672,7 +668,7 @@
   <script src="src/js/ui-views.js?v=64"></script>
   <script src="src/js/settings.js?v=19"></script>
   <script src="src/js/onboarding.js?v=19"></script>
-  <script src="src/js/auth-init.js?v=21"></script>
+  <script src="src/js/auth-init.js?v=20"></script>
   <script src="src/components/DavidChat.js?v=2"></script>
   <script src="src/components/DavidAdminDashboard.js"></script>
 

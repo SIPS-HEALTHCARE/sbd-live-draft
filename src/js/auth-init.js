@@ -2115,28 +2115,20 @@ async function initAppData(){
 
 async function restoreSessionOnLoad(){
   console.log('SBD Platform: Checking for active session...');
-  const boot   = document.getElementById('boot-screen');
-  const login  = document.getElementById('login');
-  const reveal = () => { boot?.remove(); login?.classList.remove('hidden'); };
-  const finish = () => { boot?.remove(); };
-
-  if(typeof SB_AUTH === 'undefined'){ reveal(); return; }
+  if(typeof SB_AUTH === 'undefined') return;
   const session = SB_AUTH.restoreSession();
-  if(!session){
+  if(session){
+    console.log('SBD Platform: Active session found. Restoring portal...');
+    if(typeof doLogin === 'function'){
+      try {
+        await doLogin(session);
+      } catch(e){
+        console.error('Session restoration failed:', e);
+        if(typeof logout === 'function') logout();
+      }
+    }
+  } else {
     console.log('SBD Platform: No active session. Waiting for login.');
-    reveal();
-    return;
-  }
-
-  console.log('SBD Platform: Active session found. Restoring portal...');
-  if(typeof doLogin !== 'function'){ reveal(); return; }
-  try {
-    await doLogin(session);
-    finish();
-  } catch(e){
-    console.error('Session restoration failed:', e);
-    if(typeof logout === 'function') logout();
-    finish();
   }
 }
 
