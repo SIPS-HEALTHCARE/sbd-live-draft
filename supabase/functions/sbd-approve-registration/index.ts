@@ -145,13 +145,32 @@ serve(async (req) => {
         const nameParts = (regData.name || '').trim().split(' ');
         const firstName = nameParts[0] || '';
         const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
-        
+
+        // Mirror of positionToAccess in src/js/ui-views.js:14834 — kept in the
+        // same shape so the two stay easy to sync. The default staff position
+        // for each portal access role is the first key that maps to it.
+        const positionToAccess: Record<string, string> = {
+            'SPD Technician I':'staff_member',  
+            'SPD Technician II':'staff_member',
+            'SPD Technician III':'staff_member',
+            'Lead Technician':'hospital',       
+            'Shift Supervisor':'hospital',
+            'Department Supervisor':'facility_admin',
+            'SPD Manager':'facility_admin',
+            'Director of Sterile Processing':'facility_admin'
+        };
+        const accessToPosition: Record<string, string> = {};
+        for (const [position, access] of Object.entries(positionToAccess)) {
+            if (!accessToPosition[access]) accessToPosition[access] = position;
+        }
+        const staffPosition = accessToPosition[accountRole] || 'SPD Technician I';
+
         const { error: staffError } = await supabaseAdmin.from('staff').upsert({
             id: newUserId,
             first: firstName,
             last: lastName,
             fid: facilityId,
-            role: 'manager', // department manager role
+            role: staffPosition,
             belt: 'White',
             since: new Date().toISOString().split('T')[0]
         }, { onConflict: 'id' });
