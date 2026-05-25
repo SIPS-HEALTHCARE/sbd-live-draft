@@ -120,8 +120,8 @@ function doRegister(){
   const pass2=(document.getElementById('reg-pass2').value||'').trim();
   const errEl=document.getElementById('reg-error');
   if(!fname||!loc||!dept||!contact||!email){errEl.textContent='Please fill in all required fields.';errEl.style.display='block';return;}
-  if(!pass||pass.length<6){errEl.textContent='Password must be at least 6 characters.';errEl.style.display='block';return;}
-  if(pass!==pass2){errEl.textContent='Passwords do not match.';errEl.style.display='block';return;}
+  const pwErr = (typeof validatePasswordStrict === 'function') ? validatePasswordStrict(pass, pass2) : null;
+  if(pwErr){errEl.textContent=pwErr;errEl.style.display='block';return;}
   if(DB.users.find(u=>u.email.toLowerCase()===email.toLowerCase())||DB.pendingRegs.find(r=>r.email.toLowerCase()===email.toLowerCase())){errEl.textContent='An account with this email already exists or is pending review.';errEl.style.display='block';return;}
   
   // Disable submit button to prevent double-submissions

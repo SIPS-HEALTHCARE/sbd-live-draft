@@ -89,6 +89,17 @@ async function doForgotPassword() {
   }
 }
 
+// ── Canonical password rule (registration, reset, settings all delegate here) ──
+// Returns null when valid; otherwise returns a user-facing error string.
+// pass2 is optional — when provided, also enforces the confirm-match check.
+function validatePasswordStrict(pass, pass2) {
+  if (!pass || pass.length < 8) return 'Password must be at least 8 characters.';
+  if (!/[A-Z]/.test(pass))      return 'Password must include at least one uppercase letter.';
+  if (!/[0-9]/.test(pass))      return 'Password must include at least one number.';
+  if (pass2 !== undefined && pass !== pass2) return 'Passwords do not match.';
+  return null;
+}
+
 // ── Password strength (0–3) ──
 function calcPasswordStrength(pass) {
   if (!pass || pass.length < 6) return 0;
@@ -107,6 +118,11 @@ function updateResetStrengthBar(pass) {
 // ── Strength bar: settings form ──
 function updateSettingsStrengthBar(pass) {
   _updateStrengthBar('settings-strength-bar', 'settings-strength-label', pass);
+}
+
+// ── Strength bar: registration form ──
+function updateRegisterStrengthBar(pass) {
+  _updateStrengthBar('register-strength-bar', 'register-strength-label', pass);
 }
 
 function _updateStrengthBar(barId, labelId, pass) {
@@ -134,10 +150,8 @@ async function doResetPassword() {
 
   if (errEl) errEl.style.display = 'none';
 
-  if (pass.length < 8) { _resetErr('Password must be at least 8 characters.', errEl); return; }
-  if (!/[A-Z]/.test(pass)) { _resetErr('Password must include at least one uppercase letter.', errEl); return; }
-  if (!/[0-9]/.test(pass)) { _resetErr('Password must include at least one number.', errEl); return; }
-  if (pass !== pass2) { _resetErr('Passwords do not match.', errEl); return; }
+  const ruleErr = validatePasswordStrict(pass, pass2);
+  if (ruleErr) { _resetErr(ruleErr, errEl); return; }
   if (!_recoveryToken) { _resetErr('Reset link has expired. Please request a new one.', errEl); return; }
 
   if (btn) { btn.disabled = true; btn.textContent = 'Updating…'; }

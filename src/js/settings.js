@@ -183,10 +183,8 @@ async function changePasswordFromSettings() {
   const pass2    = pass2El?.value || '';
   if (resultEl) resultEl.style.display = 'none';
 
-  if (pass.length < 8) { _showSettingsMsg(resultEl,'Password must be at least 8 characters.','err'); return; }
-  if (!/[A-Z]/.test(pass)) { _showSettingsMsg(resultEl,'Must include at least one uppercase letter.','err'); return; }
-  if (!/[0-9]/.test(pass)) { _showSettingsMsg(resultEl,'Must include at least one number.','err'); return; }
-  if (pass !== pass2) { _showSettingsMsg(resultEl,'Passwords do not match.','err'); return; }
+  const pwErr = (typeof validatePasswordStrict === 'function') ? validatePasswordStrict(pass, pass2) : null;
+  if (pwErr) { _showSettingsMsg(resultEl, pwErr, 'err'); return; }
 
   const token = (typeof SB_SESSION !== 'undefined' && SB_SESSION && SB_SESSION.access_token) ? SB_SESSION.access_token : null;
   if (!token) { _showSettingsMsg(resultEl,'Session expired. Please sign in again.','err'); return; }

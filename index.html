@@ -88,7 +88,7 @@
             <div class="g2" style="gap:10px">
               <div class="form-group" style="position: relative;">
                 <label class="form-label">Password *</label>
-                <input class="form-input" id="reg-pass" type="password" placeholder="Create a password" style="padding-right: 36px;">
+                <input class="form-input" id="reg-pass" type="password" placeholder="Create a password" style="padding-right: 36px;" oninput="updateRegisterStrengthBar(this.value)">
                 <span class="pw-toggle" onclick="togglePasswordVisibility('reg-pass', this)" style="position: absolute; right: 12px; bottom: 8px; cursor: pointer; color: var(--txt3); display: flex; align-items: center; justify-content: center; height: 24px; width: 24px; border-radius: 4px; transition: .15s;" title="Toggle password visibility">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                 </span>
@@ -100,6 +100,13 @@
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                 </span>
               </div>
+            </div>
+            <div class="form-group" style="margin-top:-6px">
+              <div style="height:3px;background:var(--bdr);border-radius:2px;overflow:hidden">
+                <div id="register-strength-bar" style="height:100%;width:0%;border-radius:2px;transition:width .3s,background .3s"></div>
+              </div>
+              <div id="register-strength-label" style="font-size:10px;color:var(--txt3);margin-top:3px;min-height:14px"></div>
+              <div style="font-size:10.5px;color:var(--txt3);margin-top:6px;line-height:1.45">8+ characters with at least one uppercase letter and one number.</div>
             </div>
             <button class="btn btn-gold" style="width:100%;justify-content:center;padding:11px;margin-top:4px" onclick="doRegister()">Submit Registration Request</button>
             <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--bdr);font-size:11.5px;color:var(--txt3);text-align:center">Already have an account? <span style="color:var(--gold);cursor:pointer;font-weight:600" onclick="switchAuthTab('signin')">Sign in here</span></div>
@@ -668,9 +675,9 @@
   <script src="src/js/logic.js?v=21"></script>
   <script src="src/js/utils.js?v=23"></script>
   <script src="src/js/api-supabase.js?v=25"></script>
-  <script src="src/js/auth-password.js?v=19"></script>
-  <script src="src/js/ui-views.js?v=64"></script>
-  <script src="src/js/settings.js?v=19"></script>
+  <script src="src/js/auth-password.js?v=20"></script>
+  <script src="src/js/ui-views.js?v=65"></script>
+  <script src="src/js/settings.js?v=20"></script>
   <script src="src/js/onboarding.js?v=19"></script>
   <script src="src/js/auth-init.js?v=21"></script>
   <script src="src/components/DavidChat.js?v=2"></script>

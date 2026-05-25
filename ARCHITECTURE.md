@@ -321,6 +321,10 @@ DAVID is an AI assistant integrated into the admin portal.
 10. Default view rendered
 ```
 
+### Password rule (canonical)
+
+All three password-entry flows (registration, password reset, settings change-password) and the `sbd-approve-registration` edge function enforce the **same** rule: 8+ chars, ≥ 1 uppercase, ≥ 1 digit, confirm-match. The single source of truth is `validatePasswordStrict(pass, pass2)` in `src/js/auth-password.js`; the edge function mirrors it. Do not add weaker checks anywhere else.
+
 ---
 
 ## 13. Data Mapping Layer
