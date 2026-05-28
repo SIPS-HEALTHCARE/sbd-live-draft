@@ -10574,7 +10574,7 @@ function renderAAssessments() {
       <button class="btn btn-gold btn-sm" style="margin-left:auto;flex-shrink:0" onclick="openRecordModal(null)">${ICO.record} Record Assessment</button>
     </div>
 
-    ${renderAssessmentAuthBlock(DB.staff.filter(st => st.placementNeeded && (!assignedFids || assignedFids.includes(st.fid))))}
+    ${renderAssessmentAuthBlock(DB.staff.filter(st => st.placementNeeded && (!assignedFids || assignedFids.includes(st.fid)) && (asmFilter === 'all' || st.fid === asmFilter)))}
 
     ${staffRequests.length > 0 ? `
     <div style="margin-bottom:20px">
