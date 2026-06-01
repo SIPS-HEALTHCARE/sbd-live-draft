@@ -744,8 +744,8 @@ function adminFilterBar(showFacility, facList, onChangeFn){
     <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px">
       <div class="search-wrap" style="min-width:180px;flex:1;max-width:280px">
         <div class="search-ico"><svg viewBox="0 0 18 18" fill="none" width="14" height="14"><circle cx="7.5" cy="7.5" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M12 12l3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
-        <input class="search-inp" placeholder="Search by name or role..." value="${adminStaffFilter.q}"
-          oninput="adminStaffFilter.q=this.value;${onChangeFn}()">
+        <input id="adminStaffSearch" class="search-inp" placeholder="Search by name or role..." value="${adminStaffFilter.q}"
+          oninput="adminStaffSearchInput(this,'${onChangeFn}')">
       </div>
       ${facSelect}
       <div class="filter-bar" style="margin:0;flex-wrap:nowrap;overflow-x:auto;padding-bottom:0">
@@ -754,6 +754,20 @@ function adminFilterBar(showFacility, facList, onChangeFn){
       ${adminStaffFilter.belt!=='All'||adminStaffFilter.fid!=='all'||adminStaffFilter.q?
         `<button class="btn btn-ghost btn-xs" onclick="adminStaffFilter.reset();${onChangeFn}()" style="white-space:nowrap">Clear</button>`:''}
     </div>`;
+}
+
+// Keep focus + caret in the admin staff search box across the re-render each keystroke triggers.
+// Typing sets the filter then re-renders the whole view (including this input), which would
+// otherwise destroy the focused box and force the user to click back in after every letter.
+function adminStaffSearchInput(el, fnName){
+  adminStaffFilter.q = el.value;
+  const caret = el.selectionStart;
+  if(typeof window[fnName] === 'function') window[fnName]();
+  const fresh = document.getElementById('adminStaffSearch');
+  if(fresh){
+    fresh.focus();
+    try { fresh.setSelectionRange(caret, caret); } catch(e){}
+  }
 }
 
 // Filter a staff array by the current adminStaffFilter
