@@ -1715,7 +1715,7 @@ function renderPAIntro(){
         <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:14px;letter-spacing:.05em">WHAT TO EXPECT</div>
         <div style="display:flex;flex-direction:column;gap:10px">
           <div style="display:flex;align-items:flex-start;gap:10px"><div style="width:24px;height:24px;background:rgba(139,92,246,.15);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#a78bfa;flex-shrink:0">60</div><div style="font-size:13px;color:#cbd5e1;line-height:1.5">60 questions covering SPD knowledge and practical scenarios</div></div>
-          <div style="display:flex;align-items:flex-start;gap:10px"><div style="width:24px;height:24px;background:rgba(139,92,246,.15);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#a78bfa;flex-shrink:0">25</div><div style="font-size:13px;color:#cbd5e1;line-height:1.5">Takes about 25 minutes to complete thoughtfully</div></div>
+          <div style="display:flex;align-items:flex-start;gap:10px"><div style="width:24px;height:24px;background:rgba(139,92,246,.15);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#a78bfa;flex-shrink:0">90</div><div style="font-size:13px;color:#cbd5e1;line-height:1.5">Takes about 90 minutes to complete thoughtfully</div></div>
           <div style="display:flex;align-items:flex-start;gap:10px"><div style="width:24px;height:24px;background:rgba(139,92,246,.15);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#a78bfa;flex-shrink:0">&#128274;</div><div style="font-size:13px;color:#cbd5e1;line-height:1.5">Your responses are reviewed by a certified SIPS assessor before placement is confirmed</div></div>
         </div>
       </div>
@@ -4675,7 +4675,7 @@ function renderSDashboard(){
           <div style="width:28px;height:28px;background:#7c3aed;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:13px;font-weight:800;color:#fff">1</div>
           <div style="flex:1">
             <div style="font-size:12.5px;font-weight:700;color:#e2e8f0">Placement Assessment</div>
-            <div style="font-size:11px;color:#94a3b8;margin-top:2px">60 questions, ~25 minutes. Helps your assessor confirm your starting point.</div>
+            <div style="font-size:11px;color:#94a3b8;margin-top:2px">60 questions, ~90 minutes. Helps your assessor confirm your starting point.</div>
           </div>
           <div style="background:#8b5cf6;border-radius:6px;padding:5px 12px;font-size:11.5px;font-weight:700;color:#fff;white-space:nowrap">Start</div>
         </div>
