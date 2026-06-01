@@ -2121,7 +2121,7 @@ async function restoreSessionOnLoad(){
   const finish = () => { boot?.remove(); };
 
   if(typeof SB_AUTH === 'undefined'){ reveal(); return; }
-  const session = SB_AUTH.restoreSession();
+  const session = await SB_AUTH.restoreSession();
   if(!session){
     console.log('SBD Platform: No active session. Waiting for login.');
     reveal();

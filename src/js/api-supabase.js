@@ -110,18 +110,32 @@ const SB_AUTH = {
     SB_SESSION = null;
     localStorage.removeItem('sbd_session');
   },
-  restoreSession(){
+  async restoreSession(){
     try {
       const raw = localStorage.getItem('sbd_session');
       if(!raw) return null;
       const session = JSON.parse(raw);
-      if(session.expires_at && Date.now()/1000 > session.expires_at){
-        localStorage.removeItem('sbd_session');
-        return null;
+      SB_SESSION = session; // set first so refreshSession() can read refresh_token
+
+      // Access token still valid (or no expiry recorded) → use as-is
+      if(!session.expires_at || Date.now()/1000 < session.expires_at - 120){
+        return session;
       }
-      SB_SESSION = session;
-      return session;
-    } catch{ return null; }
+
+      // Access token expired or within 2 min of expiring → refresh instead of logging out
+      if(session.refresh_token){
+        const ok = await this.refreshSession();
+        if(ok) return SB_SESSION; // refreshSession() updated SB_SESSION + localStorage
+      }
+
+      // No refresh token, or refresh genuinely failed → now it is safe to clear
+      SB_SESSION = null;
+      localStorage.removeItem('sbd_session');
+      return null;
+    } catch {
+      SB_SESSION = null;
+      return null;
+    }
   },
   // ── Send password recovery email ──
   async requestPasswordReset(email){
