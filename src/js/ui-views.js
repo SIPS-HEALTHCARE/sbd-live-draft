@@ -12318,8 +12318,9 @@ function approveTransfer(trId) {
       ]
     };
     faRecord.history = [...(s.history||[]), {dt:date, type:'Release', belt:s.belt, res:'released', note:`Released from ${fac?.name||'--'}. Reason: ${tr.reason}${tr.notes?' \u2014 '+tr.notes:''}. Approved by ${adminName}.`}];
-    if(IS_LIVE){ SB.releaseToFreeAgent(mapFreeAgentToBackend(faRecord)).catch(e => handleSyncError(e, 'Release sync')); }
-  DB.freeAgents.push(faRecord);
+    // Backend release already executed at request time via releaseToFreeAgentRemote().
+    // (The old SB.releaseToFreeAgent() call here hit a non-existent endpoint — 404 — and is removed.)
+    DB.freeAgents.push(faRecord);
     DB.staff = DB.staff.filter(x => x.id !== tr.staffId);
     DB.users = DB.users.filter(u => !(u.sid === tr.staffId && u.role === 'staff_member'));
 
@@ -12340,15 +12341,19 @@ function approveTransfer(trId) {
     const fac = getFac(tr.toFacId);
     const date = tr.effectDate;
 
-    const restoredStaff = {...fa, fid: tr.toFacId, id: fa.originalId||fa.id};
-    if(!DB.staff.find(s => s.id === restoredStaff.id)) {
-      if(IS_LIVE){ SB.assignFreeAgent(tr.faId,tr.toFacId,mapStaffToBackend(restoredStaff)).catch(e => handleSyncError(e, 'Assign sync')); }
-      DB.staff.push(restoredStaff);
-    } else {
-      restoredStaff.id = ++DB.nextId;
-      if(IS_LIVE){ SB.createStaff(mapStaffToBackend(restoredStaff)).catch(e => handleSyncError(e, 'Staff sync')); }
-      DB.staff.push(restoredStaff);
+    // The released staff row still exists on the backend with no facility (fid=null);
+    // re-attach it to the new facility and clear free-agent status. The deployed
+    // sbd-assign-free-agent function expects { staffId, facilityId }. (The previous call
+    // hit a non-existent /assign-free-agent endpoint with mismatched args, so the
+    // assignment never persisted and the person vanished from every facility view.)
+    const origStaffId = fa.staffId || fa.originalId || fa.id;
+    const restoredStaff = {...fa, fid: tr.toFacId, id: origStaffId};
+    if(IS_LIVE){
+      SB.assignFreeAgentRemote({ staffId: origStaffId, facilityId: tr.toFacId, claimedBy: adminName }).catch(e => handleSyncError(e, 'Assign sync'));
     }
+    // Local mirror: replace any stale local row for this staff id with the restored record.
+    DB.staff = DB.staff.filter(s => s.id !== origStaffId);
+    DB.staff.push(restoredStaff);
     if(!restoredStaff.facilityHistory) restoredStaff.facilityHistory = [];
     restoredStaff.facilityHistory.push({facName:fac?.name||tr.toFacName, fid:tr.toFacId, loc:fac?.loc||'', from:date, to:'Present'});
     restoredStaff.history = [...(restoredStaff.history||[]), {dt:date, type:'Assignment', belt:restoredStaff.belt, res:'placement', note:`Assigned to ${fac?.name||tr.toFacName}${tr.notes?' \u2014 '+tr.notes:''}. Approved by ${adminName}.`}];
@@ -12696,11 +12701,9 @@ function executeFreeAgentAssign(faId){
   };
 
   DB.pendingTransfers.push(transfer);
-  if(IS_LIVE){
-    SB.assignFreeAgentRemote(transfer).catch(e => handleSyncError(e, 'Assign sync'));
-  } else {
-    /* saveDemoData() removed */
-  }
+  // Execution is deferred to approval (approveTransfer) so a second admin must verify
+  // before the staff record is moved. (Previously this fired assignFreeAgentRemote with a
+  // raw transfer object whose field names the edge function rejected.)
   closeModal();
   toast(`Assignment request submitted for <strong>${fullName(fa)}</strong> to <strong>${fac?.name||fid}</strong>. Awaiting second-admin verification.`,'ok');
   updateFANB();
