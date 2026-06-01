@@ -11352,7 +11352,7 @@ function openAddStaffModal(lockedFid){
   const facAdmin = isFacilityAdmin();
   const facOpts = facAdmin && lockedFid
     ? `<option value="${lockedFid}" selected>${getFac(lockedFid)?.name||lockedFid}</option>`
-    : DB.facilities.map(f=>`<option value="${f.id}" ${f.id===targetFid?'selected':''}>${f.name}${f.loc?` — ${f.loc}`:''}</option>`).join('');
+    : DB.facilities.filter(f=>f.active!==false||f.id===targetFid).map(f=>`<option value="${f.id}" ${f.id===targetFid?'selected':''}>${f.name}${f.loc?` — ${f.loc}`:''}</option>`).join('');
   openModal('Add Staff Member',`
     <div class="modal-body">
       <div class="form-group"><label class="form-label">Facility *</label><select class="form-select" id="ns-fac" ${facAdmin&&lockedFid?'disabled':''} style="${facAdmin&&lockedFid?'opacity:.7;cursor:not-allowed':''}">${facOpts}</select></div>
@@ -11666,7 +11666,7 @@ async function openApproveRegModal(rid){
   else if(r.requested_role) roleLabel = r.requested_role;
 
   const sortedFacilities = [...DB.facilities].sort((a,b) => a.name.localeCompare(b.name));
-  const facOptions = sortedFacilities.map(f => `<option value="${f.id}">${f.name}${f.loc?` — ${f.loc}`:''}</option>`).join('');
+  const facOptions = sortedFacilities.filter(f=>f.active!==false).map(f => `<option value="${f.id}">${f.name}${f.loc?` — ${f.loc}`:''}</option>`).join('');
   
   const sortedSystems = [...(DB.hospitalSystems||[])].sort((a,b) => a.name.localeCompare(b.name));
   const sysOptions = sortedSystems.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
@@ -13158,7 +13158,7 @@ function openAssignFacilitiesModal(uid){
   openModal(`Assign Facilities: ${u.name}`,`
     <div class="modal-body">
       <div style="font-size:12px;color:var(--txt2);margin-bottom:14px">Select which facilities this assessor can access. They will only see staff and assessments from these facilities.</div>
-      ${DB.facilities.map(f=>`
+      ${DB.facilities.filter(f=>f.active!==false||current.includes(f.id)).map(f=>`
         <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--s2);border-radius:var(--rs);margin-bottom:6px;cursor:pointer;border:1px solid var(--bdr2)">
           <input type="checkbox" id="af-${f.id}" ${current.includes(f.id)?'checked':''} style="width:16px;height:16px;accent-color:var(--gold)">
           <div><div style="font-size:13px;font-weight:600">${f.name}</div><div style="font-size:11px;color:var(--txt3)">${f.loc} &bull; ${f.dept}</div></div>
@@ -13212,7 +13212,7 @@ function openEditUserModal(uid){
       <div id="eu-wrap-fac-assigned" style="display:${u.role==='staff_admin'?'block':'none'}; margin-top:8px;">
         <div class="form-group"><label class="form-label">Assigned Facilities</label>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px;max-height:150px;overflow-y:auto;">
-            ${DB.facilities.map(f=>`<label style="display:flex;align-items:center;gap:6px;padding:7px 10px;background:var(--s2);border-radius:var(--rs);cursor:pointer;font-size:11.5px;border:1px solid var(--bdr2)"><input type="checkbox" id="eu-fac-${f.id}" ${(u.assignedFids||[]).includes(f.id)?'checked':''} style="accent-color:var(--gold)"> ${f.name}</label>`).join('')}
+            ${DB.facilities.filter(f=>f.active!==false||(u.assignedFids||[]).includes(f.id)).map(f=>`<label style="display:flex;align-items:center;gap:6px;padding:7px 10px;background:var(--s2);border-radius:var(--rs);cursor:pointer;font-size:11.5px;border:1px solid var(--bdr2)"><input type="checkbox" id="eu-fac-${f.id}" ${(u.assignedFids||[]).includes(f.id)?'checked':''} style="accent-color:var(--gold)"> ${f.name}</label>`).join('')}
           </div>
         </div>
       </div>
@@ -13220,7 +13220,7 @@ function openEditUserModal(uid){
       <div id="eu-wrap-fac" style="display:${(u.role==='facility_admin'||u.role==='hospital'||u.role==='staff_member')?'block':'none'}; margin-top:8px;">
         <div class="form-group"><label class="form-label">Facility</label>
           <select class="form-select" id="eu-fid">
-            ${DB.facilities.map(f=>`<option value="${f.id}" ${u.fid===f.id?'selected':''}>${f.name}${f.loc?` \u2014 ${f.loc}`:''}</option>`).join('')}
+            ${DB.facilities.filter(f=>f.active!==false||f.id===u.fid).map(f=>`<option value="${f.id}" ${u.fid===f.id?'selected':''}>${f.name}${f.loc?` \u2014 ${f.loc}`:''}</option>`).join('')}
           </select>
         </div>
       </div>
@@ -13295,7 +13295,7 @@ function openAddUserModal(type){
       extra: `
         <div class="form-group"><label class="form-label">Assign Facilities <span style="color:#64748b;font-weight:400">(for Assessors)</span></label>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px">
-            ${DB.facilities.map(f=>`<label style="display:flex;align-items:center;gap:6px;padding:7px 10px;background:var(--s2);border-radius:var(--rs);cursor:pointer;font-size:11.5px;border:1px solid var(--bdr2)"><input type="checkbox" id="nu-fac-${f.id}" style="accent-color:var(--gold)"> ${f.name}</label>`).join('')}
+            ${DB.facilities.filter(f=>f.active!==false).map(f=>`<label style="display:flex;align-items:center;gap:6px;padding:7px 10px;background:var(--s2);border-radius:var(--rs);cursor:pointer;font-size:11.5px;border:1px solid var(--bdr2)"><input type="checkbox" id="nu-fac-${f.id}" style="accent-color:var(--gold)"> ${f.name}</label>`).join('')}
           </div>
         </div>`,
       emailHint: 'name@sipsconsults.com',
@@ -13320,7 +13320,7 @@ function openAddUserModal(type){
       extra: `
         <div class="form-group"><label class="form-label">Facility *</label>
           <select class="form-select" id="nu-fid">
-            ${DB.facilities.map(f=>`<option value="${f.id}">${f.name}${f.loc?` \u2014 ${f.loc}`:''}</option>`).join('')}
+            ${DB.facilities.filter(f=>f.active!==false).map(f=>`<option value="${f.id}">${f.name}${f.loc?` \u2014 ${f.loc}`:''}</option>`).join('')}
           </select>
           <div class="form-hint">This admin will have full management access to the selected facility portal.</div>
         </div>`,
@@ -13333,7 +13333,7 @@ function openAddUserModal(type){
       extra: `
         <div class="form-group"><label class="form-label">Facility *</label>
           <select class="form-select" id="nu-fid">
-            ${DB.facilities.map(f=>`<option value="${f.id}">${f.name}${f.loc?` \u2014 ${f.loc}`:''}</option>`).join('')}
+            ${DB.facilities.filter(f=>f.active!==false).map(f=>`<option value="${f.id}">${f.name}${f.loc?` \u2014 ${f.loc}`:''}</option>`).join('')}
           </select>
         </div>
         <div class="form-group"><label class="form-label">Portal Access Level</label>
@@ -13351,13 +13351,13 @@ function openAddUserModal(type){
       extra: `
         <div class="form-group"><label class="form-label">Facility *</label>
           <select class="form-select" id="nu-fid" onchange="updateStaffRecordOpts(this.value)">
-            ${DB.facilities.map(f=>`<option value="${f.id}">${f.name}${f.loc?` — ${f.loc}`:''}</option>`).join('')}
+            ${DB.facilities.filter(f=>f.active!==false).map(f=>`<option value="${f.id}">${f.name}${f.loc?` — ${f.loc}`:''}</option>`).join('')}
           </select>
         </div>
         <div class="form-group"><label class="form-label">Link to Staff Record (Optional)</label>
           <select class="form-select" id="nu-sid">
             <option value="">-- No linked staff record yet --</option>
-            ${staffOf(DB.facilities[0]?.id).map(s=>`<option value="${s.id}">${fullName(s)} \u2014 ${s.belt} Belt</option>`).join('')}
+            ${staffOf(DB.facilities.filter(f=>f.active!==false)[0]?.id).map(s=>`<option value="${s.id}">${fullName(s)} \u2014 ${s.belt} Belt</option>`).join('')}
           </select>
           <div class="form-hint">Optional: Select an existing staff record this login belongs to.</div>
         </div>
