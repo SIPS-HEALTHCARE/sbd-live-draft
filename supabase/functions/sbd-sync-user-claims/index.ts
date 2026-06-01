@@ -192,22 +192,49 @@ serve(async (req) => {
             const first = nameParts[0] || 'Unknown';
             const last = nameParts.slice(1).join(' ') || '-';
             
-            const { data: existingStaff } = await supabaseAdmin.from('staff').select('id').eq('id', finalUserId).maybeSingle();
-            
-            const staffPayload: any = {
-                id: finalUserId,
-                first: first,
-                last: last,
-                fid: fid || null,
-                role: title || 'Staff Member'
-            };
-            if (!existingStaff) staffPayload.belt = 'White';
+            const resolvedFid = fid || facilityId || null;
 
-            const { error: staffUpsertErr } = await supabaseAdmin.from('staff').upsert(staffPayload, { onConflict: 'id' });
-            
-            if (staffUpsertErr) {
-                console.error("staff upsert error:", staffUpsertErr);
-                throw new Error('Failed to sync staff record: ' + staffUpsertErr.message);
+            const { data: existingStaff } = await supabaseAdmin.from('staff').select('id').eq('id', finalUserId).maybeSingle();
+
+            if (existingStaff) {
+                // Existing staff: targeted UPDATE of editable fields only. Do NOT use upsert here —
+                // an upsert re-inserts the row without `belt`, which trips the NOT NULL constraint on
+                // `belt` (the "Failed to sync staff record" error when changing a user's facility).
+                // Updating only these columns also preserves belt/oip/history/ps_tracks/gate data.
+                // Only write `fid` when a facility was actually provided, so we never null it out.
+                const staffUpdate: any = {
+                    first: first,
+                    last: last,
+                    role: title || 'Staff Member'
+                };
+                if (resolvedFid) staffUpdate.fid = resolvedFid;
+
+                const { error: staffUpdateErr } = await supabaseAdmin
+                    .from('staff')
+                    .update(staffUpdate)
+                    .eq('id', finalUserId);
+
+                if (staffUpdateErr) {
+                    console.error("staff update error:", staffUpdateErr);
+                    throw new Error('Failed to sync staff record: ' + staffUpdateErr.message);
+                }
+            } else {
+                // New staff: insert with a default belt so the NOT NULL constraint is satisfied.
+                const staffInsert: any = {
+                    id: finalUserId,
+                    first: first,
+                    last: last,
+                    fid: resolvedFid,
+                    role: title || 'Staff Member',
+                    belt: 'White'
+                };
+
+                const { error: staffInsertErr } = await supabaseAdmin.from('staff').insert(staffInsert);
+
+                if (staffInsertErr) {
+                    console.error("staff insert error:", staffInsertErr);
+                    throw new Error('Failed to sync staff record: ' + staffInsertErr.message);
+                }
             }
         }
 
