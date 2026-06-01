@@ -28,3 +28,4 @@ WHEALTHY/
 *.tar.gz
 *.csv
 !sample_staff_upload.csv
+.claude/settings.local.json
