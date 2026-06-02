@@ -10971,7 +10971,7 @@ function markQueue(qid,result){
   s.history.push({dt:new Date().toISOString().slice(0,10),type:item.type,belt:item.targetBelt,res:result});
   if(IS_LIVE){
     SB.recordAssessment(mapStaffToBackend(s),item.type,item.targetBelt,result,'',ST.user?.id,new Date().toISOString()).catch(e => handleSyncError(e, 'Backend sync'));
-    SB.resolveAssessmentQueue(item.sid,item.type,item.targetBelt,result).catch(e => { if (e instanceof ReferenceError || e instanceof TypeError || e instanceof SyntaxError) throw e; });
+    SB.resolveAssessmentQueue(item.id,'resolved').catch(e => { if (e instanceof ReferenceError || e instanceof TypeError || e instanceof SyntaxError) throw e; });
   }
   // Remove from queue
   DB.queue=DB.queue.filter(q=>q.id!==qid);
@@ -11464,7 +11464,8 @@ function submitAssessment(sid){
   s.history.push({dt:new Date().toISOString().slice(0,10),type,belt:targetBelt,res:raResult});
   if(IS_LIVE){
     SB.recordAssessment(mapStaffToBackend(s),type,targetBelt,raResult,'',ST.user?.id,new Date().toISOString()).catch(e => handleSyncError(e, 'Backend sync'));
-    SB.resolveAssessmentQueue(staffId,type,targetBelt,raResult).catch(e => { if (e instanceof ReferenceError || e instanceof TypeError || e instanceof SyntaxError) throw e; });
+    const _q = DB.queue.find(q=>q.sid===staffId&&q.type===type&&q.targetBelt===targetBelt);
+    if(_q) SB.resolveAssessmentQueue(_q.id,'resolved').catch(e => { if (e instanceof ReferenceError || e instanceof TypeError || e instanceof SyntaxError) throw e; });
   }
   DB.queue=DB.queue.filter(q=>!(q.sid===staffId&&q.type===type&&q.targetBelt===targetBelt));
   const nb=document.getElementById('assess-nb');
