@@ -2251,7 +2251,7 @@ function confirmPlacement(prId){
     /* saveDemoData() removed */
   }
   updatePlacementBadge();
-  toast('Placement confirmed: ' + pr.staffName + ' placed at ' + chosenBelt + ' Belt.', 'ok');
+  toast('Placement confirmed: ' + cleanName(pr.staffName) + ' placed at ' + chosenBelt + ' Belt.', 'ok');
   renderAPlacementReviews();
 }
 
@@ -12334,7 +12334,7 @@ function approveTransfer(trId) {
       assignedBy: adminName, outcome: 'released', notes: tr.notes
     });
 
-    toast(`Release approved. ${tr.staffName} is now in the Free Agent Registry.`,'ok');
+    toast(`Release approved. ${cleanName(tr.staffName)} is now in the Free Agent Registry.`,'ok');
 
   } else if(tr.type === 'assignment') {
     // Execute the assignment
@@ -12371,7 +12371,7 @@ function approveTransfer(trId) {
       assignedBy: adminName, outcome:'placed', notes: tr.notes
     });
 
-    toast(`Assignment approved. ${tr.staffName} is now active at <strong>${fac?.name||tr.toFacName}</strong>.`,'ok');
+    toast(`Assignment approved. ${cleanName(tr.staffName)} is now active at <strong>${fac?.name||tr.toFacName}</strong>.`,'ok');
   }
 
   updateFANB();
@@ -12407,7 +12407,7 @@ function executeDenyTransfer(trId) {
   tr.deniedAt = new Date().toISOString().slice(0,10);
   tr.denyReason = reason;
   closeModal();
-  toast(`Transfer denied. ${tr.staffName} was not moved.`,'err');
+  toast(`Transfer denied. ${cleanName(tr.staffName)} was not moved.`,'err');
   updateFANB();
   /* saveDemoData() removed */
   renderAFreeAgents();
@@ -13636,7 +13636,7 @@ function previewScheduleCSV(fid){
         +'<span style="color:'+(isMatch?'#22c55e':'#ef4444')+';font-size:14px">'+(isMatch?'✓':'✗')+'</span>'
         +'<span style="min-width:80px">'+r.date+'</span>'
         +'<span style="min-width:40px">'+r.shift+'</span>'
-        +'<span style="flex:1">'+r.first+' '+r.last+tag+'</span>'
+        +'<span style="flex:1">'+cleanName(r.first+' '+r.last)+tag+'</span>'
         +'</div>';
     }).join('');
 
