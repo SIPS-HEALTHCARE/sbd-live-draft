@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DAVID Command Center — 2027 Redesign</title>
+<title>David OG Command Center — 2027 Redesign</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <style>
@@ -212,7 +212,7 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
   <!-- Header -->
   <div class="header">
     <div class="header-top">
-      <h1>DAVID Command Center</h1>
+      <h1>David OG Command Center</h1>
       <span class="header-badge">Master Admin</span>
       <button class="btn btn-ghost" id="global-killswitch" style="border-color:var(--red); color:var(--red); padding:4px 10px; font-size:11px; margin-left:12px;" onclick="toggleGlobalKillswitch()">
         🚨 GLOBAL KILLSWITCH
@@ -316,7 +316,7 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
   <div class="up-header">
     <button class="up-close" onclick="closeUserPanel()">&times;</button>
     <h3 id="up-fac-name">Facility Users</h3>
-    <div class="up-sub">Toggle DAVID access for individual accounts</div>
+    <div class="up-sub">Toggle David OG access for individual accounts</div>
     <div class="up-tools">
       <input type="text" class="up-search" id="up-search" placeholder="Search staff by name or email..." onkeyup="filterUsers()">
       <div class="up-bulk-actions" id="up-bulk-actions">
@@ -520,7 +520,7 @@ async function toggleAccess(id){
     f.active = newState;
     renderCards(FACILITIES);
     updateDeployCount();
-    showToast(newState?'✅':'🔒', newState?`DAVID activated for ${f.name}`:`Access revoked for ${f.name}`);
+    showToast(newState?'✅':'🔒', newState?`David OG activated for ${f.name}`:`Access revoked for ${f.name}`);
   } catch(e){
     showToast('❌','Toggle failed: '+e.message);
   }
@@ -696,7 +696,7 @@ async function toggleUserAccess(userId, facId, el){
       badgeContainer.innerHTML = getEffectiveAccessBadge(role, fac.active, newState, fac.tier);
     }
 
-    showToast(newState?'✅':'🔒', newState?`DAVID enabled for ${name}`:`DAVID revoked for ${name}`);
+    showToast(newState?'✅':'🔒', newState?`David OG enabled for ${name}`:`David OG revoked for ${name}`);
   } catch(e){
     showToast('❌','Toggle failed: '+e.message);
   }
@@ -733,7 +733,7 @@ async function bulkToggleAccess(enable) {
     showToast('⚠️', 'Cannot bulk modify while facility is disabled');
     return;
   }
-  const confirmMsg = enable ? "Are you sure you want to ENABLE DAVID access for ALL staff members at this facility?" : "Are you sure you want to REVOKE DAVID access for ALL staff members at this facility?";
+  const confirmMsg = enable ? "Are you sure you want to ENABLE David OG access for ALL staff members at this facility?" : "Are you sure you want to REVOKE David OG access for ALL staff members at this facility?";
   if (!confirm(confirmMsg)) return;
   
   showToast('⏳', 'Processing bulk update...');
@@ -817,7 +817,7 @@ function renderTelemetryChart() {
 
 // ── Global Killswitch ──
 async function toggleGlobalKillswitch() {
-  const confirmMsg = "CRITICAL WARNING: Are you sure you want to disable DAVID access for ALL facilities globally? This action will interrupt active sessions.";
+  const confirmMsg = "CRITICAL WARNING: Are you sure you want to disable David OG access for ALL facilities globally? This action will interrupt active sessions.";
   if(!confirm(confirmMsg)) return;
   
   showToast('🚨', 'Engaging Global Killswitch...');
