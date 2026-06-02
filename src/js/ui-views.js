@@ -10533,13 +10533,14 @@ function renderAssessmentAuthBlock(staffList){
           Generate a one-time PIN to authorize assessments. The PIN expires in 10 minutes and can only be used once.
         </div>
         <div style="overflow-x:auto">
-          <table class="tbl tbl-static" style="min-width:500px">
-            <thead><tr><th>Staff Member</th><th>Facility</th><th>Assessment Type</th><th>Action</th></tr></thead>
+          <table class="tbl tbl-static" style="min-width:620px">
+            <thead><tr><th>Staff Member</th><th>Facility</th><th>Assessment Type</th><th>Requested</th><th>Action</th></tr></thead>
             <tbody>
               ${staffList.map(st => `<tr>
                 <td class="fw7">${fullName(st)}</td>
                 <td style="font-size:11.5px;color:var(--txt3)">${getFac(st.fid)?.name||st.fid||'--'}</td>
                 <td><span class="pill p-purple">Placement</span></td>
+                <td style="font-size:11px;color:var(--txt3)">${st.created_at ? new Date(st.created_at).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}) : '--'}</td>
                 <td><button class="btn btn-gold btn-xs" onclick="showGeneratePinModal('${st.id}','placement')">&#128274; Generate PIN</button></td>
               </tr>`).join('')}
             </tbody>
