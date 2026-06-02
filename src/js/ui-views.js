@@ -618,7 +618,7 @@ function renderADavidView() {
   if (!container) return;
   if (!window.DAVID) {
     if (typeof DavidChat === 'undefined') {
-      container.innerHTML = '<div style="padding:40px; color:var(--txt2); text-align:center">Initializing DAVID Intelligence Terminal...</div>';
+      container.innerHTML = '<div style="padding:40px; color:var(--txt2); text-align:center">Initializing David OG Intelligence Terminal...</div>';
       return;
     }
     window.DAVID = new DavidChat({ containerId: 'a-david' });

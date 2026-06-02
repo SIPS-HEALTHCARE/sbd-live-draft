@@ -763,7 +763,7 @@ class DavidChat {
                                 <svg viewBox="0 0 18 18" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 4h14M2 9h14M2 14h14"/></svg>
                             </button>
                             <div style="flex:1;min-width:0">
-                                <h2><span style="font-size:24px">🧠</span> DAVID Intelligence Hub</h2>
+                                <h2><span style="font-size:24px">🧠</span> David OG Intelligence Hub</h2>
                                 <p>Strategic Intelligence Dashboard &bull; Access Level: ${roleLabel}</p>
                             </div>
                         </div>
@@ -778,7 +778,7 @@ class DavidChat {
                         <div id="david-dynamic-chips" class="david-quick-actions" style="margin-top:0; margin-bottom:15px; display:none; flex-shrink:0;"></div>
                         <div class="david-footer">
                             <div class="david-input-wrapper">
-                                <textarea placeholder="Ask DAVID about staff, reports, or belt progression..." id="david-query"></textarea>
+                                <textarea placeholder="Ask David OG about staff, reports, or belt progression..." id="david-query"></textarea>
                                 <button class="david-send-btn" id="david-btn">
                                     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
                                 </button>
@@ -1373,7 +1373,7 @@ class DavidChat {
             const snapshot = this.getPlatformSnapshot();
             const personality = `
                 PERSONALITY & CAPABILITIES:
-                You are DAVID, the highly intelligent and highly conversational operational partner for SIPS Healthcare Solutions.
+                You are David OG, the highly intelligent and highly conversational operational partner for SIPS Healthcare Solutions.
                 
                 SHADOW DIRECTIVES (O1-LEVEL PROTOCOL):
                 1. EXTENDED THINKING: You MUST enclose all your internal analysis, reasoning, and pattern recognition strictly inside a <thinking> ... </thinking> block BEFORE you answer. NEVER output internal thoughts outside this block.
@@ -1410,7 +1410,7 @@ class DavidChat {
                     contentTarget.innerHTML = `
                         <div class="david-upsell-card" style="padding: 16px; border-radius: 8px; background: rgba(196,154,32,0.1); border: 1px solid var(--gold); text-align: center; margin-top: 8px;">
                             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2" style="margin-bottom: 8px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-                            <h3 style="color: var(--gold); margin-top: 0; font-family: 'Fira Code', monospace; font-size: 15px;">DAVID Intelligence Locked</h3>
+                            <h3 style="color: var(--gold); margin-top: 0; font-family: 'Fira Code', monospace; font-size: 15px;">David OG Intelligence Locked</h3>
                             <p style="font-size: 13px; color: var(--txt); opacity: 0.8; line-height: 1.4;">Your facility currently does not have access to SBD Operational Intelligence.</p>
                             <button onclick="alert('Contacting Sales...')" style="margin-top: 12px; padding: 8px 16px; background: var(--gold); color: #000; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 12px; font-family: 'Fira Code', monospace; transition: all 0.2s;">Unlock Facility Intelligence</button>
                         </div>
