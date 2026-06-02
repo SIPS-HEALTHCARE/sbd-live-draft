@@ -461,7 +461,7 @@ function mapQueueFromBackend(row){
     type: row.assessment_type || row.type,
     targetBelt: row.target_belt,
     status: row.status,
-    date: row.requested_at ? new Date(row.requested_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '',
+    date: row.requested_at ? new Date(row.requested_at).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}) : '',
     requested_at: row.requested_at,
     resolved_at: row.resolved_at || null
   };
