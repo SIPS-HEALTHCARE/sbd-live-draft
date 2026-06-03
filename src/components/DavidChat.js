@@ -1143,6 +1143,18 @@ class DavidChat {
         `;
     }
 
+    // If aggressive content-stripping (thinking / sql / json / chips) removed everything,
+    // never show a blank bubble: fall back to the reply with only <thinking> removed,
+    // or a clear placeholder if the model truly produced no visible answer.
+    revealIfEmpty(stripped, raw) {
+        if (stripped && stripped.trim()) return stripped;
+        const noThinking = (raw || '')
+            .replace(/```[A-Za-z]*\s*(<|&lt;)thinking(>|&gt;)[\s\S]*?(<\/|&lt;\/)thinking(>|&gt;|$)\s*```/gi, '')
+            .replace(/(<|&lt;)thinking(>|&gt;)[\s\S]*?(<\/|&lt;\/)thinking(>|&gt;|$)/gi, '')
+            .trim();
+        return noThinking || "_(No visible answer was produced — David OG's content knowledge for this isn't wired up yet.)_";
+    }
+
     addParsedMessage(text, role, isLatest = false) {
         // OpenRouter uses 'assistant', map it back to CSS/logic 'ai'
         const formatRole = (role === 'assistant') ? 'ai' : role;
@@ -1181,6 +1193,8 @@ class DavidChat {
                 })
                 .trim();
         }
+
+        if (formatRole === 'ai') displayContent = this.revealIfEmpty(displayContent, text);
 
         if (formatRole === 'ai' && window.marked) {
             div.innerHTML = marked.parse(displayContent);
@@ -1543,6 +1557,8 @@ class DavidChat {
                         return ''; // Strip from the actual message bubble
                     })
                     .trim();
+
+                displayContent = this.revealIfEmpty(displayContent, fullContent);
 
                 if (window.marked) {
                     msgDiv.innerHTML = marked.parse(displayContent);
