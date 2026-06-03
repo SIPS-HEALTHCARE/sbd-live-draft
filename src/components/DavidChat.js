@@ -369,6 +369,35 @@ class DavidChat {
                 box-shadow: 0 8px 32px rgba(202, 138, 4, 0.1);
                 transition: all 0.3s ease;
             }
+            .david-msg-actions {
+                display: flex;
+                gap: 6px;
+                margin-top: 10px;
+                opacity: 0;
+                transition: opacity .15s;
+            }
+            .david-msg-ai:hover .david-msg-actions {
+                opacity: 1;
+            }
+            .david-action-btn {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                padding: 3px 9px;
+                border: 1px solid rgba(255,255,255,.1);
+                border-radius: 6px;
+                background: rgba(255,255,255,.04);
+                color: #64748b;
+                font-size: 11px;
+                font-family: 'Poppins', sans-serif;
+                cursor: pointer;
+                transition: background .12s, color .12s, border-color .12s;
+            }
+            .david-action-btn:hover {
+                background: rgba(196,154,32,.12);
+                border-color: rgba(196,154,32,.35);
+                color: #c49a20;
+            }
             
             .david-msg-user { 
                 align-self: flex-end; 
@@ -1189,8 +1218,46 @@ class DavidChat {
         } else {
             div.innerText = displayContent;
         }
+
+        if (formatRole === 'ai') {
+            const actions = document.createElement('div');
+            actions.className = 'david-msg-actions';
+            actions.innerHTML = `
+                <button class="david-action-btn" title="Copy response" onclick="DAVID.copyMessage(this)">
+                    <svg width="13" height="13" viewBox="0 0 18 18" fill="none"><rect x="6" y="6" width="10" height="10" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M4 12H3a1 1 0 01-1-1V3a1 1 0 011-1h8a1 1 0 011 1v1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+                    Copy
+                </button>
+                <button class="david-action-btn" title="Edit your message" onclick="DAVID.editLastUserMessage()">
+                    <svg width="13" height="13" viewBox="0 0 18 18" fill="none"><path d="M11 2l5 5L6 17H1v-5L11 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+                    Edit
+                </button>`;
+            div.appendChild(actions);
+        }
+
         this.msgArea.appendChild(div);
         this.msgArea.scrollTop = this.msgArea.scrollHeight;
+    }
+
+    copyMessage(btn) {
+        const msgDiv = btn.closest('.david-msg-ai');
+        if (!msgDiv) return;
+        const actionsDiv = msgDiv.querySelector('.david-msg-actions');
+        const text = actionsDiv ? msgDiv.innerText.replace(actionsDiv.innerText, '').trim() : msgDiv.innerText.trim();
+        navigator.clipboard.writeText(text).then(() => {
+            const copyBtn = btn.tagName === 'BUTTON' ? btn : btn.closest('button');
+            if (!copyBtn) return;
+            const orig = copyBtn.innerHTML;
+            copyBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 18 18" fill="none"><path d="M2 9l4.5 4.5 9-9" stroke="#22c55e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg> Copied`;
+            setTimeout(() => { copyBtn.innerHTML = orig; }, 1800);
+        }).catch(() => {});
+    }
+
+    editLastUserMessage() {
+        const lastUser = [...this.history].reverse().find(m => m.role === 'user');
+        if (!lastUser || !this.input) return;
+        this.input.value = lastUser.content;
+        this.input.focus();
+        this.input.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
     handleQA(text) {

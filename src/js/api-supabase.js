@@ -256,7 +256,8 @@ const SB = {
   validateAssessmentPin(pin, staffId, assessmentType='placement'){ return sbFetch('/functions/v1/sbd-assessor-pin', { method:'POST', body:{ action:'validate_pin', pin, staff_id:staffId, assessment_type:assessmentType, device_info:{ userAgent:navigator.userAgent, screenWidth:screen.width, platform:navigator.platform } } }); },
   validateAssessmentSession(sessionToken){ return sbFetch('/functions/v1/sbd-assessor-pin', { method:'POST', body:{ action:'validate_session', session_token:sessionToken } }); },
   saveAssessmentProgress(sessionToken, progress){ return sbFetch('/functions/v1/sbd-assessor-pin', { method:'POST', body:{ action:'save_progress', session_token:sessionToken, progress } }); },
-  completeAssessmentSession(sessionToken){ return sbFetch('/functions/v1/sbd-assessor-pin', { method:'POST', body:{ action:'complete_session', session_token:sessionToken } }); }
+  completeAssessmentSession(sessionToken){ return sbFetch('/functions/v1/sbd-assessor-pin', { method:'POST', body:{ action:'complete_session', session_token:sessionToken } }); },
+  notifyPlacementEvent(type, data){ return sbFetch('/functions/v1/sbd-emails', { method:'POST', body:{ type, data } }); }
 };
 if (typeof window !== 'undefined') {
   window.SB = SB;

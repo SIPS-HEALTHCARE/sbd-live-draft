@@ -24,14 +24,6 @@ serve(async (req) => {
   }
 
   try {
-    const WEBHOOK_SECRET = Deno.env.get("WEBHOOK_SECRET");
-    if (WEBHOOK_SECRET) {
-      const authHeader = req.headers.get("Authorization");
-      if (authHeader !== `Bearer ${WEBHOOK_SECRET}`) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), { headers: corsHeaders, status: 403 });
-      }
-    }
-
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
@@ -46,6 +38,52 @@ serve(async (req) => {
     }
 
     const emailsQueued: string[] = [];
+
+    // ── Placement assessment events (direct frontend calls, authenticated via user JWT) ──
+    if (payload.type === 'placement_started' || payload.type === 'placement_completed') {
+      const authHeader = req.headers.get("Authorization") || '';
+      const jwt = authHeader.replace(/^Bearer\s+/i, '');
+      if (!jwt) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), { headers: corsHeaders, status: 403 });
+      }
+      const { data: { user }, error: authErr } = await supabaseAdmin.auth.getUser(jwt);
+      if (authErr || !user) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), { headers: corsHeaders, status: 403 });
+      }
+
+      const d = payload.data || {};
+      const template = payload.type; // 'placement_started' | 'placement_completed'
+      const bodyData = {
+        staff_name:  d.staff_name  || '—',
+        staff_role:  d.staff_role  || '—',
+        facility:    d.facility    || '—',
+        belt:        d.belt        || '—',
+        timestamp:   d.timestamp   || new Date().toISOString(),
+      };
+
+      for (const adminEmail of ADMIN_EMAILS) {
+        await supabaseAdmin.from('sbd_email_queue').insert({
+          recipient_email: adminEmail,
+          template,
+          body_data: bodyData,
+          status: 'pending',
+          attempts: 0,
+          created_at: new Date().toISOString()
+        });
+        emailsQueued.push(`${template} → ${adminEmail}`);
+      }
+
+      return new Response(JSON.stringify({ success: true, emailType: template, queued: emailsQueued }), { headers: corsHeaders });
+    }
+
+    // ── Webhook events (DB triggers, verified via WEBHOOK_SECRET if configured) ──
+    const WEBHOOK_SECRET = Deno.env.get("WEBHOOK_SECRET");
+    if (WEBHOOK_SECRET) {
+      const authHeader = req.headers.get("Authorization");
+      if (authHeader !== `Bearer ${WEBHOOK_SECRET}`) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), { headers: corsHeaders, status: 403 });
+      }
+    }
 
     // 1. New Facility Registration Request → queue emails
     if (payload.type === 'INSERT' && payload.table === 'registrations') {
