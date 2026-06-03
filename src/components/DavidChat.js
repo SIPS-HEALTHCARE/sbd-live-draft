@@ -1187,7 +1187,26 @@ class DavidChat {
         } else if (formatRole === 'ai') {
             div.innerHTML = displayContent.replace(/\\n/g, '<br>');
         } else {
-            div.innerText = displayContent;
+            // User message: render text safely, plus an Edit button that pulls it
+            // back into the input so it can be edited and resent (works in every portal).
+            const span = document.createElement('span');
+            span.innerText = displayContent;
+            div.appendChild(span);
+            const editBtn = document.createElement('button');
+            editBtn.type = 'button';
+            editBtn.className = 'david-edit-btn';
+            editBtn.title = 'Edit & resend';
+            editBtn.textContent = '✎ Edit';
+            editBtn.style.cssText = 'margin-left:8px;font-size:10px;line-height:1;padding:3px 7px;border-radius:5px;border:1px solid rgba(255,255,255,.2);background:transparent;color:inherit;cursor:pointer;opacity:.6;vertical-align:middle';
+            editBtn.onmouseenter = () => { editBtn.style.opacity = '1'; };
+            editBtn.onmouseleave = () => { editBtn.style.opacity = '.6'; };
+            editBtn.onclick = () => {
+                this.input.value = displayContent;
+                this.input.style.height = 'auto';
+                this.input.focus();
+                this.input.scrollIntoView({ block: 'nearest' });
+            };
+            div.appendChild(editBtn);
         }
         this.msgArea.appendChild(div);
         this.msgArea.scrollTop = this.msgArea.scrollHeight;
