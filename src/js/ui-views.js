@@ -3130,7 +3130,7 @@ function downloadStaffReport(staffId){
       <div>
         <div class="rpt-brand">SIPS Healthcare Solutions &bull; Sterile By Design</div>
         <div class="rpt-title">${fullName(s)}</div>
-        <div class="rpt-sub">${s.role} &bull; ${getFac(s.fid)?.name||'–'} &bull; Sterile Processing Department<br>Belt: ${s.belt} (${BELT_CERT[s.belt]}) &bull; Since ${s.since}</div>
+        <div class="rpt-sub">${s.role} &bull; ${getFac(s.fid)?.name||'–'} &bull; Sterile Processing Department<br>Belt: ${s.belt} (${BELT_CERT[s.belt]}) &bull; Since ${s.since || '—'}</div>
       </div>
       <div class="rpt-grade-box">
         <div class="rpt-grade" style="color:${BELT_CLR_PRINT[s.belt]||'#0f172a'}">${psStars>0?Array(psStars).fill('★').join(''):'–'}</div>
@@ -3139,7 +3139,7 @@ function downloadStaffReport(staffId){
     </div>
 
     ${pStatGrid([
-      ['Days at Belt', daysAt(s.since)+'d', s.belt+' Belt', BELT_CLR_PRINT[s.belt]||'#0f172a'],
+      ['Days at Belt', daysAtLabel(s.since), s.belt+' Belt', BELT_CLR_PRINT[s.belt]||'#0f172a'],
       ['Points', pts.toLocaleString(), 'Rank #'+rank+' system-wide', '#d97706'],
       ['Pass Rate', passRate!==null?passRate+'%':'–', (s.history||[]).length+' assessments', passRate>=80?'#16a34a':passRate>=60?'#d97706':'#dc2626'],
       ['PS Stars', psStars, psStars===0?'No tracks yet':'Tracks done', '#d97706'],
@@ -3340,7 +3340,7 @@ function downloadFacilityReportV2(fid){
       <td style="font-weight:700">${fullName(s)}</td>
       <td style="font-size:8pt;color:#475569">${renderRoleDropdown(s)}</td>
       <td>${pBelt(s.belt)}</td>
-      <td style="color:#64748b">${daysAt(s.since)}d</td>
+      <td style="color:#64748b">${daysAtLabel(s.since)}</td>
       <td>${[s.cur?.c,s.cur?.s,s.cur?.o].filter(g=>g==='pass').length}/3</td>
       <td style="font-weight:700;color:#d97706">${calcPoints(s).toLocaleString()}</td>
       <td style="color:#d97706">${calcTotalPSStars(s)>0?Array(calcTotalPSStars(s)).fill('★').join(''):'–'}</td>
@@ -3660,7 +3660,7 @@ async function renderSReport(){
 
     <!-- Key Metrics Row -->
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;margin-bottom:16px">
-      ${rptStat('Days at Belt', daysAt(s.since), s.belt+' Belt', BELT_CLR[s.belt])}
+      ${rptStat('Days at Belt', daysAtLabel(s.since,''), s.belt+' Belt', BELT_CLR[s.belt])}
       ${rptStat('Current Gates', [s.cur?.c,s.cur?.s,s.cur?.o].filter(g=>g==='pass').length+'/3', 'Passed', 'var(--ok)')}
       ${rptStat('Adv. Gates', [s.nxt?.c,s.nxt?.s,s.nxt?.o].filter(g=>g==='pass').length+'/3', nextBelt(s.belt)||'Max', 'var(--blue)')}
       ${rptStat('PS Stars', psStars, psStars===0?'No tracks yet':psStars+' completed', 'var(--gold)')}
@@ -3734,7 +3734,7 @@ async function renderSReport(){
           <div style="flex:1">
             <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
               <span style="font-size:13px;font-weight:${isLast?'700':'500'};color:${isLast?BELT_CLR[b]:'var(--txt2)'}">${b} Belt${isLast?' (current)':''}</span>
-              ${isLast?`<span style="font-size:11px;color:var(--txt3)">${daysAt(s.since)} days</span>`:''}
+              ${isLast?`<span style="font-size:11px;color:var(--txt3)">${daysAtLabel(s.since,' days')}</span>`:''}
             </div>
             <div style="font-size:11.5px;color:var(--txt3);margin-top:2px">${BELT_CERT[b]}</div>
           </div>
@@ -6518,7 +6518,7 @@ function renderXFacilityDetail(fid){
   // "Since" date = when they earned their current belt. Sort by most recent.
   const recentProgressions=[...st]
     .map(s=>({s, daysAgo:daysAt(s.since), sinceDate:new Date(s.since)}))
-    .filter(x=>x.daysAgo<=90) // last 90 days
+    .filter(x=>x.daysAgo!=null&&x.daysAgo<=90) // last 90 days
     .sort((a,b)=>a.daysAgo-b.daysAgo);
 
   // ── STAGNATION ANALYSIS ───────────────────────────────────────────────
@@ -6592,7 +6592,7 @@ function renderXFacilityDetail(fid){
 
   // 8. No recent progressions
   if(recentProgressions.length===0&&st.length>0){
-    const daysSinceLast=Math.min(...st.map(s=>daysAt(s.since)));
+    const daysSinceLast=Math.min(...st.map(s=>daysAt(s.since)).filter(d=>d!=null));
     focuses.push({priority:'low',icon:'📅',label:'No Recent Belt Progressions',
       detail:`No staff members have progressed to a new belt in the past 90 days. The last progression was ${daysSinceLast} days ago. Review whether assessment windows have been missed or if pending assessments need to be scheduled with SIPS.`});
   }
@@ -6733,7 +6733,7 @@ function renderXFacilityDetail(fid){
             return`<tr>
               <td class="fw7" style="white-space:nowrap">${fullName(s)}</td>
               <td style="white-space:nowrap">${beltBadge(s.belt)}</td>
-              <td style="font-size:12px;color:var(--txt2)">${daysAt(s.since)}d</td>
+              <td style="font-size:12px;color:var(--txt2)">${daysAtLabel(s.since)}</td>
               <td style="font-size:12px;font-weight:700;color:${velColor}">${velocity}</td>
               <td style="font-size:11.5px;font-weight:600;color:${wc}">${win.status==='open'?'Open':win.status==='closed'?'Closed':win.status==='locked'?'Locked':'Max'}</td>
               <td style="font-size:11.5px;color:var(--txt2)">${proj.nextBelt?('~'+proj.projectedWeeks+'w → '+proj.nextBelt):'Max belt'}</td>
@@ -7002,7 +7002,7 @@ function renderHDashboard(){
     <div class="card">
       <div class="card-hd"><div class="card-ttl">Recent Staff Activity</div><button class="btn btn-ghost btn-sm" onclick="hNav(document.querySelector('[data-view=h-staff]'),'h-staff','Staff Directory')">View All</button></div>
       <div style="overflow-x:auto"><table class="tbl" style="min-width:380px"><thead><tr><th>Name</th><th class="hide-sm">Role</th><th>Belt</th><th class="hide-sm">Days</th><th>Adv. Gates</th><th class="hide-sm">Pos School</th></tr></thead>
-      <tbody>${st.slice(0,6).map(s=>`<tr onclick="openHProfile('${s.id}')"><td class="fw7" style="white-space:nowrap">${fullName(s)}</td><td class="tc-dim hide-sm">${renderRoleDropdown(s)}</td><td style="white-space:nowrap">${beltBadge(s.belt)}</td><td class="hide-sm" style="font-size:12px;color:var(--txt3)">${daysAt(s.since)}d</td><td>${gateDots(s.nxt)}</td><td class="hide-sm">${(()=>{const st2=calcTotalPSStars(s);const et=getEligibleTracks(s);const at=[...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].filter(t=>['active','testing'].includes(getTrackStatus(s,t)));return at.length>0?'<span class="pill p-warn" style="font-size:9px">In Progress</span>':st2>0?'<span class="pill p-ok" style="font-size:9px">'+Array(st2).fill('★').join('')+'</span>':et.length>0?'<span class="pill p-gold" style="font-size:9px">Available</span>':'<span style="font-size:11px;color:var(--txt3)">--</span>';})()}</td></tr>`).join('')}</tbody>
+      <tbody>${st.slice(0,6).map(s=>`<tr onclick="openHProfile('${s.id}')"><td class="fw7" style="white-space:nowrap">${fullName(s)}</td><td class="tc-dim hide-sm">${renderRoleDropdown(s)}</td><td style="white-space:nowrap">${beltBadge(s.belt)}</td><td class="hide-sm" style="font-size:12px;color:var(--txt3)">${daysAtLabel(s.since)}</td><td>${gateDots(s.nxt)}</td><td class="hide-sm">${(()=>{const st2=calcTotalPSStars(s);const et=getEligibleTracks(s);const at=[...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].filter(t=>['active','testing'].includes(getTrackStatus(s,t)));return at.length>0?'<span class="pill p-warn" style="font-size:9px">In Progress</span>':st2>0?'<span class="pill p-ok" style="font-size:9px">'+Array(st2).fill('★').join('')+'</span>':et.length>0?'<span class="pill p-gold" style="font-size:9px">Available</span>':'<span style="font-size:11px;color:var(--txt3)">--</span>';})()}</td></tr>`).join('')}</tbody>
       </table></div>
     </div>`;
 }
@@ -7025,7 +7025,7 @@ function renderHStaff(){
         <td class="fw7" style="white-space:nowrap">${fullName(s)}</td>
         <td class="tc-dim" style="font-size:11.5px;white-space:nowrap">${renderRoleDropdown(s)}</td>
         <td style="white-space:nowrap">${beltBadge(s.belt)}</td>
-        <td class="hide-sm" style="font-size:12px;color:var(--txt3)">${daysAt(s.since)} days</td>
+        <td class="hide-sm" style="font-size:12px;color:var(--txt3)">${daysAtLabel(s.since,' days')}</td>
         <td>${gateDots(s.cur)}</td>
         <td>${nb?gateDots(s.nxt):'<span style="font-size:10px;color:var(--txt3)">Max</span>'}</td>
         <td>${s.promo?'<span class="pill p-gold">Eligible</span>':[...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].some(t=>['active','testing'].includes(getTrackStatus(s,t)))?'<span class="pill p-warn">PS Active</span>':calcTotalPSStars(s)>0?'<span class="pill p-ok" style="font-size:9px">'+Array(calcTotalPSStars(s)).fill('★').join('')+'</span>':'<span style="font-size:10.5px;color:var(--txt3)">--</span>'}</td>
@@ -7234,7 +7234,7 @@ function renderHProfile(sid,context){
           })()}
         </div>
         <div style="margin-bottom:8px">${beltBadge(s.belt)} <span style="font-size:12px;color:var(--txt3);margin-left:6px">${BELT_CERT[s.belt]}</span></div>
-        <div class="prof-meta"><span class="pmeta"><svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="2" y="3" width="10" height="10" rx="1" stroke="currentColor" stroke-width="1.3"/><path d="M5 1v3M9 1v3M2 7h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>Since ${s.since}</span><span class="pmeta">${daysAt(s.since)} days at current belt</span>${s.stars>0?`<span class="pmeta tc-gold">${'* '.repeat(s.stars).trim()}</span>`:''}</div>
+        <div class="prof-meta"><span class="pmeta"><svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="2" y="3" width="10" height="10" rx="1" stroke="currentColor" stroke-width="1.3"/><path d="M5 1v3M9 1v3M2 7h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>Since ${s.since || '—'}</span><span class="pmeta">${daysAtLabel(s.since,' days')} at current belt</span>${s.stars>0?`<span class="pmeta tc-gold">${'* '.repeat(s.stars).trim()}</span>`:''}</div>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         ${context==='admin'?`<button class="btn btn-gold btn-sm" onclick="openRecordModal('${s.id}')">${ICO.record} Record Assessment</button>`:''}
@@ -8980,7 +8980,7 @@ function renderHReports(){
           <td class="fw7" style="white-space:nowrap">${fullName(s)}</td>
           <td style="font-size:11.5px;color:var(--txt2)">${renderRoleDropdown(s)}</td>
           <td style="white-space:nowrap">${beltBadge(s.belt,s)}</td>
-          <td style="font-size:11.5px;color:var(--txt3)">${daysAt(s.since)}d</td>
+          <td style="font-size:11.5px;color:var(--txt3)">${daysAtLabel(s.since)}</td>
           <td>${gateDots(s.cur)}</td>
           <td style="font-weight:700;color:var(--gold);font-size:12px">${calcPoints(s).toLocaleString()}</td>
           <td style="color:var(--gold)">${calcTotalPSStars(s)>0?Array(calcTotalPSStars(s)).fill('★').join(''):'--'}</td>
@@ -9716,7 +9716,7 @@ function renderAAllStaff(){
             <td class="hide-sm tc-dim" style="font-size:11.5px;white-space:nowrap">${fac?fac.name:'--'}</td>
             <td class="hide-sm tc-dim" style="font-size:11.5px">${renderRoleDropdown(s)}</td>
             <td style="white-space:nowrap">${beltBadge(s.belt)}</td>
-            <td class="hide-sm" style="font-size:12px;color:var(--txt3)">${daysAt(s.since)}d</td>
+            <td class="hide-sm" style="font-size:12px;color:var(--txt3)">${daysAtLabel(s.since)}</td>
             <td>${gateDots(s.cur)}</td>
             <td>${nb?gateDots(s.nxt):'<span style="font-size:10px;color:var(--txt3)">Max</span>'}</td>
             <td style="font-weight:700;color:var(--gold);font-size:12px">${pts.toLocaleString()}</td>
@@ -10022,7 +10022,7 @@ function renderFacIntel(el){
   // Belt progression recency
   const recentProgressions=[...st]
     .map(s=>({s,daysAgo:daysAt(s.since)}))
-    .filter(x=>x.daysAgo<=90)
+    .filter(x=>x.daysAgo!=null&&x.daysAgo<=90)
     .sort((a,b)=>a.daysAgo-b.daysAgo);
 
   // Stagnation
@@ -10083,7 +10083,7 @@ function renderFacIntel(el){
       <div class="card-hd"><div class="card-ttl">Progression Velocity – Full Roster</div></div>
       <div style="overflow-x:auto"><table class="tbl" style="min-width:520px">
         <thead><tr><th>Name</th><th>Belt</th><th>Days</th><th>Gates/Mo</th><th>Window</th><th>ETA</th><th>Promo</th></tr></thead>
-        <tbody>${staffWithVelocity.map(({s,proj,win,velocity})=>{const wc=win.status==='open'?'var(--ok)':win.status==='closed'?'var(--err)':'var(--txt3)';const vc=velocity>=1.5?'var(--ok)':velocity>=0.5?'var(--txt2)':'var(--warn)';return`<tr onclick="openAdminProfile('${s.id}')"><td class="fw7" style="white-space:nowrap">${fullName(s)}</td><td>${beltBadge(s.belt)}</td><td style="color:var(--txt3);font-size:12px">${daysAt(s.since)}d</td><td style="font-weight:700;color:${vc}">${velocity}</td><td style="color:${wc};font-size:11.5px;font-weight:600">${win.status==='open'?'Open':win.status==='closed'?'Closed':'Locked'}</td><td style="font-size:11.5px;color:var(--txt2)">${proj.nextBelt?'~'+proj.projectedWeeks+'w':'Max'}</td><td>${s.promo?'<span class="pill p-gold" style="font-size:9px">Yes</span>':'–'}</td></tr>`;}).join('')}
+        <tbody>${staffWithVelocity.map(({s,proj,win,velocity})=>{const wc=win.status==='open'?'var(--ok)':win.status==='closed'?'var(--err)':'var(--txt3)';const vc=velocity>=1.5?'var(--ok)':velocity>=0.5?'var(--txt2)':'var(--warn)';return`<tr onclick="openAdminProfile('${s.id}')"><td class="fw7" style="white-space:nowrap">${fullName(s)}</td><td>${beltBadge(s.belt)}</td><td style="color:var(--txt3);font-size:12px">${daysAtLabel(s.since)}</td><td style="font-weight:700;color:${vc}">${velocity}</td><td style="color:${wc};font-size:11.5px;font-weight:600">${win.status==='open'?'Open':win.status==='closed'?'Closed':'Locked'}</td><td style="font-size:11.5px;color:var(--txt2)">${proj.nextBelt?'~'+proj.projectedWeeks+'w':'Max'}</td><td>${s.promo?'<span class="pill p-gold" style="font-size:9px">Yes</span>':'–'}</td></tr>`;}).join('')}
         </tbody>
       </table></div>
     </div>`;
@@ -10319,7 +10319,7 @@ function renderFacStaff(el){
           <td class="fw7" style="white-space:nowrap">${fullName(s)}</td>
           <td class="tc-dim hide-sm" style="font-size:11.5px">${renderRoleDropdown(s)}</td>
           <td style="white-space:nowrap">${beltBadge(s.belt)}</td>
-          <td class="hide-sm" style="font-size:12px;color:var(--txt3)">${daysAt(s.since)}d</td>
+          <td class="hide-sm" style="font-size:12px;color:var(--txt3)">${daysAtLabel(s.since)}</td>
           <td>${gateDots(s.cur)}</td>
           <td>${nb?gateDots(s.nxt):'<span style="font-size:10px;color:var(--txt3)">Max</span>'}</td>
           <td>${s.promo?'<span class="pill p-gold">Yes</span>':'<span style="font-size:10px;color:var(--txt3)">--</span>'}</td>
@@ -10422,7 +10422,7 @@ function renderFacReports(el){
           <td class="fw7">${fullName(s)}</td>
           <td style="font-size:11.5px;color:var(--txt2)">${renderRoleDropdown(s)}</td>
           <td>${beltBadge(s.belt,s)}</td>
-          <td style="font-size:11.5px;color:var(--txt3)">${daysAt(s.since)}d</td>
+          <td style="font-size:11.5px;color:var(--txt3)">${daysAtLabel(s.since)}</td>
           <td>${gateDots(s.cur)}</td>
           <td style="font-weight:700;color:var(--gold);font-size:12px">${calcPoints(s).toLocaleString()}</td>
           <td style="color:var(--gold)">${calcTotalPSStars(s)>0?Array(calcTotalPSStars(s)).fill('★').join(''):'--'}</td>
@@ -11539,7 +11539,7 @@ function downloadFacilityReport(fid){
       <td>${fullName(s)}</td>
       <td>${renderRoleDropdown(s)}</td>
       <td style="font-weight:700">${s.belt}</td>
-      <td>${daysAt(s.since)}d</td>
+      <td>${daysAtLabel(s.since)}</td>
       <td style="text-align:center">${[(s.nxt||{}).c,(s.nxt||{}).s,(s.nxt||{}).o].filter(x=>x==='pass').length}/3</td>
       <td style="font-weight:700">${pts.toLocaleString()}</td>
       <td style="color:${win.status==='open'?'#16a34a':'#dc2626'};font-weight:700">${win.status==='open'?'Open':'Closed'}</td>
