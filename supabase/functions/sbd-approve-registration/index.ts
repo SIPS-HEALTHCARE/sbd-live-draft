@@ -88,7 +88,21 @@ serve(async (req) => {
         // CREATE OR FIND USER
         let newUserId = null;
         let authCreated = false;
-        let authPassword = regData.password || 'TemporarySBD@123';
+
+        // Enforce the canonical password rule server-side (8+ chars, 1 uppercase, 1 number).
+        // Mirrors the client checks in doRegister()/doResetPassword()/settings change-password.
+        // The client validator is bypassable (direct POST to the registrations table), so this
+        // is the real gate: a weak password must never become a live auth credential here.
+        const providedPass = (regData.password || '').trim();
+        if (providedPass) {
+            if (providedPass.length < 8 || !/[A-Z]/.test(providedPass) || !/[0-9]/.test(providedPass)) {
+                return new Response(
+                    JSON.stringify({ error: 'Password does not meet complexity requirements (8+ chars, one uppercase, one number).' }),
+                    { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+                );
+            }
+        }
+        let authPassword = providedPass || 'TemporarySBD@123';
         
         // Check if user already exists by querying sbd_portal_users
         const { data: existingProfile } = await supabaseAdmin.from('sbd_portal_users').select('auth_uid').eq('email', regData.email).maybeSingle();
