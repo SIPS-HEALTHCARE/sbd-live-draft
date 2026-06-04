@@ -18,7 +18,10 @@ function checkForPasswordRecovery() {
     history.replaceState(null, '', window.location.pathname);
     const loginEl = document.getElementById('login');
     const resetEl = document.getElementById('auth-reset-overlay');
-    if (loginEl) loginEl.classList.add('hidden');
+    if (loginEl) {
+      loginEl.classList.add('hidden');
+      loginEl.style.display = 'none';   // overrides inline display set on the login screen
+    }
     if (resetEl) resetEl.classList.remove('hidden');
   }
 }
