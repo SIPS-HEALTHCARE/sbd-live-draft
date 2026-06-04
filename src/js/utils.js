@@ -86,6 +86,9 @@ function daysAt(since){
   if(isNaN(d.getTime())) return null;
   return Math.round((new Date()-d)/(1000*60*60*24));
 }
+// Display-safe label for daysAt(): "<n>d" (or a custom unit), or '—' when the
+// belt-start date is missing/invalid — so views never render literal "null"/"NaN".
+function daysAtLabel(since, unit){ const d = daysAt(since); return d === null ? '—' : d + (unit === undefined ? 'd' : unit); }
 function gatesStatus(g){ const vals=Object.values(g||{}); const p=vals.filter(x=>x==='pass').length; const f=vals.filter(x=>x==='fail').length; return {p,f,rem:3-p}; }
 
 function facStats(fid){
