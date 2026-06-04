@@ -2554,6 +2554,16 @@ function rptHandoffStatus(staffArr){
 
 // ============================================================ ASSESSMENT REPORT GENERATOR
 
+// Belt scoring thresholds — White Belt values from SBD OS Governing Standards §2
+const BELT_THRESHOLDS = {
+  White:  { blended: 75, sim: 72, knowledge: 80 },
+  Yellow: { blended: 78, sim: 74, knowledge: 82 },
+  Green:  { blended: 80, sim: 76, knowledge: 83 },
+  Blue:   { blended: 82, sim: 78, knowledge: 84 },
+  Brown:  { blended: 85, sim: 80, knowledge: 85 },
+  Black:  { blended: 88, sim: 83, knowledge: 88 },
+};
+
 const DANGEROUS_PATTERNS = [
   /re.?use.{0,20}(single.?use|disposable|instrument|pack)/i,
   /skip.{0,20}decontam|no.{0,10}need.{0,10}(to.{0,5})?clean|just.{0,10}wipe/i,
@@ -2563,38 +2573,126 @@ const DANGEROUS_PATTERNS = [
   /(still|is).{0,10}sterile|open.{0,15}pack.{0,15}(is.{0,5})?(fine|ok|sterile)|re.?package/i,
 ];
 
+const _DANGEROUS_RISKS = [
+  'Reusing a single-use item bypasses sterilization barriers, creating a direct cross-contamination pathway to patients.',
+  'Skipping decontamination leaves organic material that shields pathogens during sterilization, producing a non-sterile instrument.',
+  'Using a wet pack releases the sterility event-related barrier; moisture is a direct contamination pathway.',
+  'Disregarding a biological indicator failure means releasing a load that may not be sterile into the OR.',
+  'Proceeding without appropriate PPE exposes the technician to blood-borne pathogens and risks contaminating clean areas.',
+  'An open or compromised package cannot be considered sterile regardless of contents or perceived integrity.',
+];
+
+function _dangerousRiskDesc(answer) {
+  const ans = (answer || '').toLowerCase();
+  for (let i = 0; i < DANGEROUS_PATTERNS.length; i++) {
+    if (DANGEROUS_PATTERNS[i].test(ans)) return _DANGEROUS_RISKS[i];
+  }
+  return 'This response, if acted upon, would create a direct patient safety risk in the sterile processing department.';
+}
+
+// Checks both knowledge AND simulation responses per §5
 function detectDangerousAnswers(responses) {
   const flagged = [];
   (responses || []).forEach(r => {
-    if (r.type !== 'simulation') return;
     const ans = (r.answer || '').toLowerCase();
     if (DANGEROUS_PATTERNS.some(p => p.test(ans))) flagged.push(r.qId || r.id);
   });
   return flagged;
 }
 
-function deriveOutcome(levelScores, dangerousFlags) {
-  const scores = Object.values(levelScores || {}).map(Number).filter(n => !isNaN(n));
-  const avg = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
-  const hasDangerous = dangerousFlags && dangerousFlags.length > 0;
+function deriveOutcome(pr) {
+  const responses = pr.responses || [];
+  const knowledge = responses.filter(r => r.type === 'knowledge');
+  const simulation = responses.filter(r => r.type === 'simulation');
 
-  let outcome, classification, tone, conditions = [];
-  if (hasDangerous || avg < 40) {
-    outcome = 'NO BELT'; classification = 'D'; tone = '#ef4444';
-    conditions.push({ severity: 'BLOCKING', text: 'One or more responses indicate a safety concern. Immediate remediation required before assessment.' });
-  } else if (avg < 65) {
-    outcome = 'KNOWLEDGE FOUNDATION'; classification = 'C'; tone = '#f59e0b';
-    conditions.push({ severity: 'REQUIRED', text: 'Candidate requires targeted knowledge remediation before re-assessment.' });
-    conditions.push({ severity: 'ADVISORY', text: 'Review low-scoring competency areas with department educator.' });
-  } else if (avg < 80) {
-    outcome = 'CONDITIONAL'; classification = 'B'; tone = '#60a5fa';
-    conditions.push({ severity: 'SUPERVISED PRACTICE REQUIRED', text: 'Candidate may begin at recommended belt under direct supervision.' });
-    const weakLevels = Object.entries(levelScores || {}).filter(([, v]) => Number(v) < 65).map(([k]) => 'Level ' + k);
-    if (weakLevels.length) conditions.push({ severity: 'REQUIRED', text: 'Remediation focus: ' + weakLevels.join(', ') + '.' });
-  } else {
-    outcome = 'CLEAN'; classification = 'A'; tone = '#22c55e';
+  const kTotal = knowledge.length;
+  const kCorrect = knowledge.filter(r => r.correct).length;
+  const knowledgeOverall = kTotal ? (kCorrect / kTotal) * 100 : 0;
+  const simScored = simulation.filter(r => r.aiScore != null);
+  const simOverall = simScored.length ? simScored.reduce((a, r) => a + r.aiScore, 0) / simScored.length : 0;
+  const blended = (knowledgeOverall + simOverall) / 2;
+
+  const dangerousIds = detectDangerousAnswers(responses);
+  const dangerousKnowledge = knowledge.filter(r => dangerousIds.includes(r.qId || r.id));
+  const dangerousSim = simulation.filter(r => dangerousIds.includes(r.qId || r.id));
+  const hasDangerousKnowledge = dangerousKnowledge.length > 0;
+  const hasDangerous = dangerousIds.length > 0;
+
+  const targetBelt = pr.confirmedBelt || pr.tentativeBelt || 'White';
+  const thresh = BELT_THRESHOLDS[targetBelt] || BELT_THRESHOLDS.White;
+  const levelEntries = Object.entries(pr.levelScores || {});
+  const floorFails = levelEntries.filter(([, v]) => Number(v) < 65).map(([k]) => k);
+  const nearMisses = levelEntries.filter(([, v]) => { const p = Number(v); return p >= 60 && p < 65; }).map(([k]) => k);
+
+  let outcome, classification, tone;
+  const conditions = [];
+
+  // SUPERVISED PRACTICE REQUIRED first for every dangerous answer per §5.2, §7
+  if (hasDangerous) {
+    dangerousIds.forEach(id => {
+      const r = responses.find(x => (x.qId || x.id) === id);
+      if (!r) return;
+      const q = String(r.question || '');
+      conditions.push({ severity: 'SUPERVISED PRACTICE REQUIRED', text: `"${q.slice(0, 90)}${q.length > 90 ? '…' : ''}" — Must be resolved through direct supervisor observation of correct practice before any other conditions are evaluated.` });
+    });
   }
-  return { outcome, classification, tone, conditions, avg: Math.round(avg) };
+
+  if (blended >= thresh.blended && floorFails.length === 0 && !hasDangerous) {
+    outcome = 'CLEAN'; tone = '#16a34a';
+    classification = (blended - thresh.blended) >= 10 ? 'A+' : 'A';
+  } else if (blended >= thresh.blended) {
+    outcome = 'CONDITIONAL'; classification = 'B'; tone = '#60a5fa';
+    if (simOverall < thresh.sim) conditions.push({ severity: 'BLOCKING', text: `Simulation overall of ${Math.round(simOverall)}% is below the ${thresh.sim}% floor for ${targetBelt} Belt. A supervisor-observed competency demonstration is required before advancement.` });
+    floorFails.forEach(k => {
+      const pct = Number(pr.levelScores[k]);
+      const sev = (65 - pct) > 8 ? 'REQUIRED' : 'ADVISORY';
+      conditions.push({ severity: sev, text: `Level ${k} score of ${Math.round(pct)}% is below the competency floor. ${sev === 'REQUIRED' ? 'Targeted re-study with a minimum passing re-test is required.' : 'A documented development plan is recommended.'}` });
+    });
+    nearMisses.forEach(k => { if (!floorFails.includes(k)) conditions.push({ severity: 'ADVISORY', text: `Level ${k} is within 5 points of the competency floor. A documented development plan is recommended.` }); });
+  } else if (knowledgeOverall >= thresh.knowledge && !hasDangerousKnowledge && simOverall < thresh.sim) {
+    outcome = 'KNOWLEDGE FOUNDATION'; tone = '#f59e0b';
+    const gap = thresh.blended - blended;
+    classification = gap <= 3 ? 'A' : gap <= 7 ? 'B' : 'C';
+    conditions.push({ severity: 'REQUIRED', text: `Simulation overall of ${Math.round(simOverall)}% does not yet meet the ${thresh.sim}% floor for ${targetBelt} Belt. Scenario practice targeting the specific areas identified in this report is required before re-assessment.` });
+    nearMisses.forEach(k => conditions.push({ severity: 'ADVISORY', text: `Level ${k} is within 5 points of the competency floor. Review alongside simulation practice.` }));
+  } else {
+    outcome = 'NO BELT'; tone = '#ef4444';
+    const gap = thresh.blended - blended;
+    classification = (hasDangerous && gap > 7) ? 'D' : (hasDangerous || gap > 7) ? 'C' : 'A';
+    if (simOverall < thresh.sim) conditions.push({ severity: 'BLOCKING', text: `Simulation overall of ${Math.round(simOverall)}% does not meet the ${thresh.sim}% floor for ${targetBelt} Belt. Direct remediation of simulation competency gaps is required.` });
+    if (knowledgeOverall < thresh.knowledge) {
+      const kg = thresh.knowledge - knowledgeOverall;
+      conditions.push({ severity: kg > 8 ? 'REQUIRED' : 'ADVISORY', text: `Knowledge overall of ${Math.round(knowledgeOverall)}% is below the ${thresh.knowledge}% floor. ${kg > 8 ? 'Targeted re-study with re-test is required.' : 'A documented development plan is recommended.'}` });
+    }
+    floorFails.forEach(k => {
+      const pct = Number(pr.levelScores[k]);
+      conditions.push({ severity: (65 - pct) > 8 ? 'REQUIRED' : 'ADVISORY', text: `Level ${k} of ${Math.round(pct)}% is below the competency floor. ${(65 - pct) > 8 ? 'Structured study with documented sign-off is required.' : 'A development plan is recommended.'}` });
+    });
+    nearMisses.forEach(k => { if (!floorFails.includes(k)) conditions.push({ severity: 'ADVISORY', text: `Level ${k} is within 5 points of the competency floor.` }); });
+  }
+
+  const hasSPR = conditions.some(c => c.severity === 'SUPERVISED PRACTICE REQUIRED');
+  const hasBlocking = conditions.some(c => c.severity === 'BLOCKING');
+  const hasRequired = conditions.some(c => c.severity === 'REQUIRED');
+  let timeframe = null;
+  if (outcome === 'NO BELT') {
+    if (hasSPR && classification === 'D') timeframe = '60 days minimum';
+    else if (hasSPR) timeframe = '45 days minimum';
+    else if (classification === 'A') timeframe = '30 days';
+    else if (hasBlocking || hasRequired) timeframe = '45 days';
+    else timeframe = '30 days';
+  } else if (outcome === 'CONDITIONAL') {
+    if (hasSPR || hasBlocking) timeframe = '45 days minimum';
+    else if (hasRequired) timeframe = '30 days recommended';
+  }
+
+  return {
+    outcome, classification, tone, conditions, timeframe,
+    blended: Math.round(blended * 10) / 10,
+    knowledgeOverall: Math.round(knowledgeOverall * 10) / 10,
+    simOverall: Math.round(simOverall * 10) / 10,
+    thresh, targetBelt, dangerousIds, dangerousKnowledge, dangerousSim,
+  };
 }
 
 function generateAssessmentReport(prId) {
@@ -2607,40 +2705,105 @@ function generateAssessmentReport(prId) {
 }
 
 function buildAssessmentReportHTML(pr, staff, fac) {
-  const dangerous = detectDangerousAnswers(pr.responses);
-  const { outcome, classification, tone, conditions, avg } = deriveOutcome(pr.levelScores, dangerous);
-  const knowledge = (pr.responses || []).filter(r => r.type === 'knowledge');
-  const simulation = (pr.responses || []).filter(r => r.type === 'simulation');
+  const { outcome, classification, tone, conditions, timeframe, blended, knowledgeOverall, simOverall, thresh, targetBelt, dangerousIds, dangerousKnowledge, dangerousSim } = deriveOutcome(pr);
+  const responses = pr.responses || [];
+  const knowledge = responses.filter(r => r.type === 'knowledge');
+  const simulation = responses.filter(r => r.type === 'simulation');
   const kPass = knowledge.filter(r => r.correct).length;
   const submittedDate = pr.submittedAt ? new Date(pr.submittedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '—';
-  const confirmedDate = pr.confirmedAt || '—';
   const beltColors = { White: '#cbd5e1', Yellow: '#eab308', Green: '#22c55e', Blue: '#60a5fa', Brown: '#c2772a', Black: '#6b7280' };
-  const beltClr = beltColors[pr.confirmedBelt || pr.tentativeBelt] || '#c49a20';
+  const displayBelt = pr.confirmedBelt || null; // §2: only show assessor-confirmed result, not platform suggestion
+  const beltClr = beltColors[displayBelt || targetBelt] || '#c49a20';
+  const safe = s => Security.sanitize(String(s || ''));
+  const nextB = nextBelt(targetBelt) || '—';
+  const sevClr = s => s === 'SUPERVISED PRACTICE REQUIRED' ? '#dc2626' : s === 'BLOCKING' ? '#b45309' : s === 'REQUIRED' ? '#d97706' : '#64748b';
 
-  const levelTable = Object.entries(pr.levelScores || {}).map(([lvl, pct]) => {
+  // Role amplification per §6 — based on candidate title, not belt value
+  const titleLower = (pr.staffTitle || staff.role || '').toLowerCase();
+  const isManager = /manager|director|vp|chief/i.test(titleLower);
+  const isSupervisor = /supervisor/i.test(titleLower);
+  const isLeadTech = /lead.{0,5}tech/i.test(titleLower);
+  const hasDangerous = dangerousIds.length > 0;
+  let roleAmplification, signOffRoles;
+  if (isManager) {
+    roleAmplification = 'This candidate holds a managerial title. A manager with certification gaps cannot credibly hold staff to standards they have not demonstrated. Director-level or above sign-off is required — this assessment cannot be self-directed.';
+    signOffRoles = ['Assessor / Evaluator', 'Director or Above'];
+  } else if (isSupervisor) {
+    roleAmplification = 'This candidate holds a supervisory title. A supervisor who demonstrates incorrect workflow creates systemic exposure across the team they direct. Manager or director sign-off is required.';
+    signOffRoles = hasDangerous ? ['Assessor / Evaluator', 'Manager', 'Director'] : ['Assessor / Evaluator', 'Manager or Director'];
+  } else if (isLeadTech) {
+    roleAmplification = 'This candidate holds a Lead Technician title. A lead tech who holds an incorrect belief is positioned to teach wrong practice to every technician they guide. Supervisor and manager co-sign is required for patient safety conditions.';
+    signOffRoles = hasDangerous ? ['Assessor / Evaluator', 'Supervisor', 'Manager'] : ['Assessor / Evaluator', 'Supervisor'];
+  } else {
+    roleAmplification = 'Supervisor sign-off required.';
+    signOffRoles = ['Assessor / Evaluator', 'Supervisor'];
+  }
+
+  // Strength acknowledgment per §4 — always before gaps
+  const levelEntries = Object.entries(pr.levelScores || {});
+  const strongLevels = levelEntries.filter(([, v]) => Number(v) >= 75).map(([k]) => 'Level ' + k);
+  const strongSims = simulation.filter(r => (r.aiScore || 0) >= 80);
+  let strengthText;
+  if (knowledgeOverall >= 80) {
+    strengthText = `The candidate demonstrated strong knowledge competency overall, scoring ${knowledgeOverall}% across the knowledge assessment.${strongLevels.length ? ' ' + strongLevels.join(', ') + ' showed particularly solid performance.' : ''}`;
+  } else if (strongLevels.length) {
+    strengthText = `The candidate demonstrated competency at or above the performance threshold in ${strongLevels.join(', ')}.${strongSims.length ? ' Simulation responses showed correct applied instincts in ' + strongSims.length + ' scenario' + (strongSims.length > 1 ? 's' : '') + '.' : ''}`;
+  } else if (strongSims.length) {
+    strengthText = `The candidate showed correct applied instincts in ${strongSims.length} simulation scenario${strongSims.length > 1 ? 's' : ''}, scoring ${Math.round(strongSims.reduce((a, r) => a + r.aiScore, 0) / strongSims.length)}% on those responses.`;
+  } else {
+    const best = [...levelEntries].sort((a, b) => Number(b[1]) - Number(a[1]))[0];
+    if (best) strengthText = `The candidate's highest competency area was Level ${best[0]} at ${Math.round(Number(best[1]))}%. This area forms the foundation of the remediation pathway.`;
+    else if (kPass > 0) strengthText = `The candidate answered ${kPass} of ${knowledge.length} knowledge question${knowledge.length !== 1 ? 's' : ''} correctly, demonstrating partial foundational knowledge.`;
+    else strengthText = 'The candidate completed the full assessment, establishing a baseline from which the remediation pathway can be structured.';
+  }
+
+  // Level score table
+  const levelTable = levelEntries.map(([lvl, pct]) => {
     const p = Math.round(Number(pct));
     const pass = p >= 65;
-    return `<tr><td style="padding:5px 10px;font-size:9.5pt;border-bottom:1px solid #e2e8f0">Level ${Security.sanitize(lvl)}</td><td style="padding:5px 10px;font-size:9.5pt;border-bottom:1px solid #e2e8f0">${p}%</td><td style="padding:5px 10px;font-size:9.5pt;border-bottom:1px solid #e2e8f0;color:${pass ? '#16a34a' : '#dc2626'};font-weight:600">${pass ? 'Pass' : 'Below Threshold'}</td></tr>`;
+    return `<tr><td style="padding:5px 10px;font-size:9.5pt;border-bottom:1px solid #e2e8f0">Level ${safe(lvl)}</td><td style="padding:5px 10px;font-size:9.5pt;border-bottom:1px solid #e2e8f0">${p}%</td><td style="padding:5px 10px;font-size:9.5pt;border-bottom:1px solid #e2e8f0;color:${pass ? '#16a34a' : '#dc2626'};font-weight:600">${pass ? 'Pass' : 'Below Threshold'}</td></tr>`;
   }).join('');
 
+  // Next Belt Target table per §8.3 — 3 rows with gap column
+  const nextTargetBelt = (outcome === 'CLEAN' || outcome === 'CONDITIONAL') ? (nextB !== '—' ? nextB : targetBelt) : targetBelt;
+  const nextThresh = BELT_THRESHOLDS[nextTargetBelt] || thresh;
+  const gapStr = (current, required) => { const g = required - current; return g > 0 ? `+${Math.round(g * 10) / 10} pts needed` : 'Already meets'; };
+  const gapClr = (current, required) => current >= required ? '#16a34a' : '#d97706';
+  const nextBeltTable = `<table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden">
+    <thead><tr style="background:#f1f5f9"><th style="padding:6px 10px;font-size:8.5pt;text-align:left">Metric</th><th style="padding:6px 10px;font-size:8.5pt;text-align:right">Current</th><th style="padding:6px 10px;font-size:8.5pt;text-align:right">Required</th><th style="padding:6px 10px;font-size:8.5pt;text-align:right">Gap</th></tr></thead>
+    <tbody>
+      <tr><td style="padding:5px 10px;font-size:9pt;border-bottom:1px solid #e2e8f0">Blended Score</td><td style="padding:5px 10px;font-size:9pt;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:600">${blended}%</td><td style="padding:5px 10px;font-size:9pt;border-bottom:1px solid #e2e8f0;text-align:right">${nextThresh.blended}%</td><td style="padding:5px 10px;font-size:9pt;border-bottom:1px solid #e2e8f0;text-align:right;color:${gapClr(blended, nextThresh.blended)}">${gapStr(blended, nextThresh.blended)}</td></tr>
+      <tr><td style="padding:5px 10px;font-size:9pt;border-bottom:1px solid #e2e8f0">Knowledge Overall</td><td style="padding:5px 10px;font-size:9pt;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:600">${knowledgeOverall}%</td><td style="padding:5px 10px;font-size:9pt;border-bottom:1px solid #e2e8f0;text-align:right">${nextThresh.knowledge}%</td><td style="padding:5px 10px;font-size:9pt;border-bottom:1px solid #e2e8f0;text-align:right;color:${gapClr(knowledgeOverall, nextThresh.knowledge)}">${gapStr(knowledgeOverall, nextThresh.knowledge)}</td></tr>
+      <tr><td style="padding:5px 10px;font-size:9pt">Simulation Overall</td><td style="padding:5px 10px;font-size:9pt;text-align:right;font-weight:600">${simOverall}%</td><td style="padding:5px 10px;font-size:9pt;text-align:right">${nextThresh.sim}%</td><td style="padding:5px 10px;font-size:9pt;text-align:right;color:${gapClr(simOverall, nextThresh.sim)}">${gapStr(simOverall, nextThresh.sim)}</td></tr>
+    </tbody>
+  </table>`;
+
+  // Knowledge rows — WRONG -- DANGEROUS marking per §5.2
+  const kDangerousIds = dangerousKnowledge.map(r => r.qId || r.id);
   const knowledgeRows = knowledge.map((r, i) => {
-    const safe = s => Security.sanitize(String(s || ''));
-    return `<tr style="background:${i % 2 === 0 ? '#f8fafc' : '#fff'}"><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;vertical-align:top;width:30px">${i + 1}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;vertical-align:top">${safe(r.question)}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;vertical-align:top">${safe(r.answer)}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;text-align:center;color:${r.correct ? '#16a34a' : '#dc2626'};font-weight:700">${r.correct ? '✓' : '✗'}</td></tr>`;
+    const isDang = kDangerousIds.includes(r.qId || r.id);
+    const rowBg = isDang ? '#450a0a' : (i % 2 === 0 ? '#f8fafc' : '#fff');
+    const txtClr = isDang ? '#fca5a5' : '';
+    const resultLabel = isDang ? 'WRONG — DANGEROUS' : (r.correct ? '✓' : '✗');
+    const resultClr = isDang ? '#fca5a5' : (r.correct ? '#16a34a' : '#dc2626');
+    return `<tr style="background:${rowBg}"><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #3f0707;vertical-align:top;width:30px;color:${txtClr}">${i + 1}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid ${isDang ? '#3f0707' : '#e2e8f0'};vertical-align:top;color:${txtClr}">${safe(r.question)}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid ${isDang ? '#3f0707' : '#e2e8f0'};vertical-align:top;color:${txtClr}">${safe(r.answer)}</td><td style="padding:6px 10px;font-size:${isDang ? '7pt' : '8.5pt'};border-bottom:1px solid ${isDang ? '#3f0707' : '#e2e8f0'};text-align:center;color:${resultClr};font-weight:700">${resultLabel}</td></tr>`;
   }).join('');
 
+  // Footnote below knowledge table for dangerous knowledge answers per §5.2
+  const knowledgeFootnote = kDangerousIds.length ? `<div style="margin-top:8px;padding:12px 14px;background:#450a0a;border-radius:6px;color:#fca5a5;font-size:8pt;line-height:1.6"><div style="font-weight:800;font-size:8.5pt;margin-bottom:6px">PATIENT SAFETY FINDINGS</div>${dangerousKnowledge.map(r => `<div style="margin-bottom:8px"><span style="font-weight:700">Response to: "${safe(String(r.question || '').slice(0, 70))}${(r.question || '').length > 70 ? '…' : ''}"</span><br>Answer given: "${safe(r.answer)}"<br>Risk: ${safe(_dangerousRiskDesc(r.answer))}</div>`).join('')}</div>` : '';
+
+  // Simulation rows
+  const sDangerousIds = dangerousSim.map(r => r.qId || r.id);
   const simRows = simulation.map((r, i) => {
-    const safe = s => Security.sanitize(String(s || ''));
-    const isDangerous = dangerous.includes(r.qId || r.id);
+    const isDang = sDangerousIds.includes(r.qId || r.id);
     const scoreClr = (r.aiScore || 0) >= 70 ? '#16a34a' : (r.aiScore || 0) >= 50 ? '#d97706' : '#dc2626';
-    return `<tr style="background:${isDangerous ? '#fef2f2' : i % 2 === 0 ? '#f8fafc' : '#fff'}"><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;vertical-align:top;width:30px">${i + 1}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;vertical-align:top">${safe(r.question)}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;vertical-align:top;white-space:pre-wrap">${safe(r.answer)}${isDangerous ? '<div style="margin-top:4px;font-size:7.5pt;font-weight:700;color:#dc2626">⚠ Safety concern detected</div>' : ''}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;vertical-align:top;font-style:italic;color:#475569">${safe(r.aiFeedback || '—')}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;text-align:center;font-weight:700;color:${scoreClr}">${r.aiScore != null ? r.aiScore + '%' : '—'}</td></tr>`;
+    return `<tr style="background:${isDang ? '#fef2f2' : i % 2 === 0 ? '#f8fafc' : '#fff'}"><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;vertical-align:top;width:30px">${i + 1}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;vertical-align:top">${safe(r.question)}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;vertical-align:top;white-space:pre-wrap">${safe(r.answer)}${isDang ? `<div style="margin-top:4px;padding:4px 6px;background:#fef2f2;border-left:3px solid #dc2626;font-size:7.5pt;font-weight:700;color:#dc2626">⚠ PATIENT SAFETY CONCERN — ${safe(_dangerousRiskDesc(r.answer))}</div>` : ''}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;vertical-align:top;font-style:italic;color:#475569">${safe(r.aiFeedback || '—')}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;text-align:center;font-weight:700;color:${scoreClr}">${r.aiScore != null ? r.aiScore + '%' : '—'}</td></tr>`;
   }).join('');
 
-  const conditionRows = conditions.map(c => `<tr><td style="padding:7px 10px;font-size:9pt;border-bottom:1px solid #e2e8f0;font-weight:700;color:${c.severity === 'BLOCKING' ? '#dc2626' : c.severity === 'REQUIRED' ? '#d97706' : '#2563eb'};white-space:nowrap">${Security.sanitize(c.severity)}</td><td style="padding:7px 10px;font-size:9pt;border-bottom:1px solid #e2e8f0;color:#374151">${Security.sanitize(c.text)}</td></tr>`).join('');
+  const conditionRows = conditions.map(c => `<tr><td style="padding:7px 10px;font-size:9pt;border-bottom:1px solid #e2e8f0;font-weight:700;color:${sevClr(c.severity)};white-space:nowrap;vertical-align:top">${safe(c.severity)}</td><td style="padding:7px 10px;font-size:9pt;border-bottom:1px solid #e2e8f0;color:#374151">${safe(c.text)}</td></tr>`).join('');
 
-  const beltValue = BELT_VAL[pr.confirmedBelt || pr.tentativeBelt] || 1;
-  const nextB = nextBelt(pr.confirmedBelt || pr.tentativeBelt || 'White') || '—';
-  const gatesLeft = simulation.filter(r => r.aiScore == null || r.aiScore < 65).length;
-  const roleAmplification = beltValue >= 4 ? 'Manager sign-off required' : beltValue >= 3 ? 'Supervisor sign-off required' : 'Lead Technician sign-off required';
+  const signOffAuth = isManager ? 'Director-level or above' : isSupervisor ? 'Manager or Director' : (isLeadTech && hasDangerous) ? 'Supervisor and Manager (co-sign)' : 'Supervisor';
+  const reAssessLevel = (outcome === 'NO BELT') ? 'White Belt assessment (regardless of level assessed)' : `${safe(nextB)} Belt assessment`;
 
   return `
     <div style="font-family:'Poppins',Arial,sans-serif;color:#0f172a;max-width:800px;margin:0 auto">
@@ -2649,30 +2812,37 @@ function buildAssessmentReportHTML(pr, staff, fac) {
       <div style="page-break-after:always;padding:40px 48px">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px">
           <div><div style="font-size:11pt;font-weight:800;letter-spacing:.08em;color:#0f172a">SIPS HEALTHCARE SOLUTIONS</div><div style="font-size:9pt;color:#64748b;margin-top:2px">Sterile By Design — Belt Intelligence Platform</div></div>
-          <div style="font-size:8.5pt;color:#64748b;text-align:right">${Security.sanitize(fac.name)}<br>Assessment Report</div>
+          <div style="font-size:8.5pt;color:#64748b;text-align:right">${safe(fac.name)}<br>Assessment Report</div>
         </div>
         <div style="height:4px;background:linear-gradient(90deg,#c49a20,#7a5c0d);border-radius:2px;margin-bottom:40px"></div>
         <div style="font-size:22pt;font-weight:800;color:#0f172a;margin-bottom:6px">Placement Assessment Report</div>
-        <div style="font-size:13pt;font-weight:600;color:#475569;margin-bottom:32px">${Security.sanitize(pr.staffName || fullName(staff))}</div>
+        <div style="font-size:13pt;font-weight:600;color:#475569;margin-bottom:32px">${safe(pr.staffName || fullName(staff))}</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:32px">
-          <div><div style="font-size:8pt;font-weight:700;color:#94a3b8;letter-spacing:.08em;margin-bottom:4px">ROLE / TITLE</div><div style="font-size:10pt">${Security.sanitize(pr.staffTitle || staff.role || '—')}</div></div>
-          <div><div style="font-size:8pt;font-weight:700;color:#94a3b8;letter-spacing:.08em;margin-bottom:4px">FACILITY</div><div style="font-size:10pt">${Security.sanitize(fac.name)}</div></div>
+          <div><div style="font-size:8pt;font-weight:700;color:#94a3b8;letter-spacing:.08em;margin-bottom:4px">ROLE / TITLE</div><div style="font-size:10pt">${safe(pr.staffTitle || staff.role || '—')}</div></div>
+          <div><div style="font-size:8pt;font-weight:700;color:#94a3b8;letter-spacing:.08em;margin-bottom:4px">FACILITY</div><div style="font-size:10pt">${safe(fac.name)}</div></div>
           <div><div style="font-size:8pt;font-weight:700;color:#94a3b8;letter-spacing:.08em;margin-bottom:4px">SUBMITTED</div><div style="font-size:10pt">${submittedDate}</div></div>
-          <div><div style="font-size:8pt;font-weight:700;color:#94a3b8;letter-spacing:.08em;margin-bottom:4px">ASSESSOR</div><div style="font-size:10pt">${Security.sanitize(pr.confirmedBy || '—')}</div></div>
+          <div><div style="font-size:8pt;font-weight:700;color:#94a3b8;letter-spacing:.08em;margin-bottom:4px">ASSESSOR</div><div style="font-size:10pt">${safe(pr.confirmedBy || '—')}</div></div>
         </div>
         <div style="background:${tone}18;border:2px solid ${tone};border-radius:12px;padding:24px 28px;text-align:center">
           <div style="font-size:10pt;font-weight:700;color:#475569;letter-spacing:.1em;margin-bottom:8px">OUTCOME</div>
           <div style="font-size:24pt;font-weight:900;color:${tone};letter-spacing:.04em">${outcome}</div>
-          <div style="font-size:10pt;color:#64748b;margin-top:6px">Classification ${classification} &bull; Overall Score ${avg}%</div>
-          <div style="margin-top:10px;font-size:11pt;font-weight:700;color:${beltClr}">Recommended Belt: ${Security.sanitize(pr.confirmedBelt || pr.tentativeBelt || '—')}</div>
+          <div style="font-size:10pt;color:#64748b;margin-top:6px">Classification ${classification} &bull; Blended Score ${blended}%</div>
+          ${displayBelt ? `<div style="margin-top:10px;font-size:11pt;font-weight:700;color:${beltClr}">Belt Awarded: ${safe(displayBelt)}</div>` : `<div style="margin-top:10px;font-size:9pt;color:#94a3b8">Pending assessor confirmation</div>`}
         </div>
-        <div style="margin-top:auto;padding-top:40px;font-size:8pt;color:#94a3b8;text-align:center;border-top:1px solid #e2e8f0;margin-top:48px">CONFIDENTIAL — For internal use only &bull; Generated ${new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}</div>
+        <div style="padding-top:40px;font-size:8pt;color:#94a3b8;text-align:center;border-top:1px solid #e2e8f0;margin-top:48px">CONFIDENTIAL — For internal use only &bull; Generated ${new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}</div>
       </div>
 
       <!-- PAGE 2: Executive Summary -->
       <div style="page-break-after:always;padding:40px 48px">
-        <div style="font-size:13pt;font-weight:800;color:#0f172a;margin-bottom:4px;padding-bottom:8px;border-bottom:2px solid #e2e8f0">Executive Summary</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:24px;margin-bottom:28px">
+        <div style="font-size:13pt;font-weight:800;color:#0f172a;margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid #e2e8f0">Executive Summary</div>
+
+        <!-- Demonstrated Strengths — always before gaps per §4 -->
+        <div style="margin-bottom:20px;padding:14px 16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px">
+          <div style="font-size:8.5pt;font-weight:700;color:#15803d;letter-spacing:.06em;margin-bottom:6px">DEMONSTRATED STRENGTHS</div>
+          <div style="font-size:9.5pt;color:#374151;line-height:1.6">${safe(strengthText)}</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:28px">
           <div>
             <div style="font-size:9pt;font-weight:700;color:#64748b;margin-bottom:12px;letter-spacing:.06em">COMPETENCY LEVEL SCORES</div>
             <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden">
@@ -2681,29 +2851,22 @@ function buildAssessmentReportHTML(pr, staff, fac) {
             </table>
           </div>
           <div>
-            <div style="font-size:9pt;font-weight:700;color:#64748b;margin-bottom:12px;letter-spacing:.06em">NEXT BELT TARGET</div>
-            <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden">
-              <thead><tr style="background:#f1f5f9"><th style="padding:6px 10px;font-size:8.5pt;text-align:left">Item</th><th style="padding:6px 10px;font-size:8.5pt;text-align:left">Value</th></tr></thead>
-              <tbody>
-                <tr><td style="padding:5px 10px;font-size:9pt;border-bottom:1px solid #e2e8f0">Current Belt</td><td style="padding:5px 10px;font-size:9pt;border-bottom:1px solid #e2e8f0;font-weight:600">${Security.sanitize(pr.confirmedBelt || pr.tentativeBelt || '—')}</td></tr>
-                <tr><td style="padding:5px 10px;font-size:9pt;border-bottom:1px solid #e2e8f0">Next Target</td><td style="padding:5px 10px;font-size:9pt;border-bottom:1px solid #e2e8f0;font-weight:600">${Security.sanitize(nextB)}</td></tr>
-                <tr><td style="padding:5px 10px;font-size:9pt">Knowledge score</td><td style="padding:5px 10px;font-size:9pt;font-weight:600">${knowledge.length ? Math.round(kPass / knowledge.length * 100) + '%' : '—'}</td></tr>
-              </tbody>
-            </table>
+            <div style="font-size:9pt;font-weight:700;color:#64748b;margin-bottom:12px;letter-spacing:.06em">NEXT BELT TARGET — ${safe(nextTargetBelt)} BELT</div>
+            ${nextBeltTable}
             <div style="margin-top:16px;padding:12px 14px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0">
               <div style="font-size:8pt;font-weight:700;color:#64748b;margin-bottom:4px">ROLE AMPLIFICATION</div>
-              <div style="font-size:9pt;color:#374151">${roleAmplification}</div>
+              <div style="font-size:9pt;color:#374151;line-height:1.5">${safe(roleAmplification)}</div>
             </div>
           </div>
         </div>
-        ${conditions.length ? `<div style="font-size:9pt;font-weight:700;color:#64748b;margin-bottom:10px;letter-spacing:.06em">CONDITIONS SUMMARY</div><table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden"><thead><tr style="background:#f1f5f9"><th style="padding:6px 10px;font-size:8.5pt;text-align:left;width:200px">Severity</th><th style="padding:6px 10px;font-size:8.5pt;text-align:left">Requirement</th></tr></thead><tbody>${conditionRows}</tbody></table>` : `<div style="padding:14px 16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;font-size:9pt;color:#16a34a;font-weight:600">No conditions. Candidate is cleared for placement at the recommended belt level.</div>`}
+        ${conditions.length ? `<div style="font-size:9pt;font-weight:700;color:#64748b;margin-bottom:10px;letter-spacing:.06em">CONDITIONS SUMMARY</div><table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden"><thead><tr style="background:#f1f5f9"><th style="padding:6px 10px;font-size:8.5pt;text-align:left;width:220px">Severity</th><th style="padding:6px 10px;font-size:8.5pt;text-align:left">Requirement</th></tr></thead><tbody>${conditionRows}</tbody></table>` : `<div style="padding:14px 16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;font-size:9pt;color:#16a34a;font-weight:600">No conditions attached. Candidate is cleared for placement at the awarded belt level.</div>`}
       </div>
 
       <!-- PAGE 3: Knowledge Assessment -->
       <div style="page-break-after:always;padding:40px 48px">
         <div style="font-size:13pt;font-weight:800;color:#0f172a;margin-bottom:4px;padding-bottom:8px;border-bottom:2px solid #e2e8f0">Knowledge Assessment Results</div>
         <div style="font-size:9pt;color:#64748b;margin:10px 0 20px">${kPass} of ${knowledge.length} questions answered correctly &bull; Pass rate: ${knowledge.length ? Math.round(kPass / knowledge.length * 100) : 0}%</div>
-        ${knowledge.length ? `<table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden"><thead><tr style="background:#f1f5f9"><th style="padding:7px 10px;font-size:8.5pt;text-align:left;width:30px">#</th><th style="padding:7px 10px;font-size:8.5pt;text-align:left">Question</th><th style="padding:7px 10px;font-size:8.5pt;text-align:left">Answer Given</th><th style="padding:7px 10px;font-size:8.5pt;text-align:center;width:50px">Result</th></tr></thead><tbody>${knowledgeRows}</tbody></table>` : '<div style="font-size:9pt;color:#94a3b8;font-style:italic">No knowledge questions in this assessment.</div>'}
+        ${knowledge.length ? `<table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden"><thead><tr style="background:#f1f5f9"><th style="padding:7px 10px;font-size:8.5pt;text-align:left;width:30px">#</th><th style="padding:7px 10px;font-size:8.5pt;text-align:left">Question</th><th style="padding:7px 10px;font-size:8.5pt;text-align:left">Answer Given</th><th style="padding:7px 10px;font-size:8.5pt;text-align:center;width:120px">Result</th></tr></thead><tbody>${knowledgeRows}</tbody></table>${knowledgeFootnote}` : '<div style="font-size:9pt;color:#94a3b8;font-style:italic">No knowledge questions in this assessment.</div>'}
       </div>
 
       <!-- PAGE 4: Simulation Assessment -->
@@ -2716,21 +2879,29 @@ function buildAssessmentReportHTML(pr, staff, fac) {
       <!-- PAGE 5: Conditions (only if applicable) -->
       ${conditions.length ? `<div style="page-break-after:always;padding:40px 48px">
         <div style="font-size:13pt;font-weight:800;color:#0f172a;margin-bottom:4px;padding-bottom:8px;border-bottom:2px solid #e2e8f0">Conditions &amp; Requirements</div>
-        <div style="font-size:9pt;color:#64748b;margin:10px 0 20px">The following conditions apply to this placement and require documented follow-up.</div>
-        ${conditions.map((c, i) => {
-          const sevClr = c.severity === 'BLOCKING' ? '#dc2626' : c.severity === 'SUPERVISED PRACTICE REQUIRED' ? '#2563eb' : c.severity === 'REQUIRED' ? '#d97706' : '#64748b';
-          return `<div style="margin-bottom:14px;padding:16px 18px;border-left:4px solid ${sevClr};background:${sevClr}0d;border-radius:0 8px 8px 0"><div style="font-size:8.5pt;font-weight:800;color:${sevClr};letter-spacing:.06em;margin-bottom:6px">${Security.sanitize(c.severity)}</div><div style="font-size:9.5pt;color:#374151;line-height:1.6">${Security.sanitize(c.text)}</div></div>`;
-        }).join('')}
+        <div style="font-size:9pt;color:#64748b;margin:10px 0 20px">The following conditions apply to this placement. Supervised Practice Required conditions must be resolved before any other condition evaluation begins.</div>
+        ${conditions.map(c => { const clr = sevClr(c.severity); return `<div style="margin-bottom:14px;padding:16px 18px;border-left:4px solid ${clr};background:${clr}12;border-radius:0 8px 8px 0"><div style="font-size:8.5pt;font-weight:800;color:${clr};letter-spacing:.06em;margin-bottom:6px">${safe(c.severity)}</div><div style="font-size:9.5pt;color:#374151;line-height:1.6">${safe(c.text)}</div></div>`; }).join('')}
       </div>` : ''}
 
-      <!-- PAGE 6: Sign-Off -->
+      <!-- PAGE 6: Path Forward & Sign-Off -->
       <div style="padding:40px 48px">
-        <div style="font-size:13pt;font-weight:800;color:#0f172a;margin-bottom:4px;padding-bottom:8px;border-bottom:2px solid #e2e8f0">Sign-Off &amp; Authorization</div>
-        <div style="font-size:9pt;color:#64748b;margin:10px 0 24px">${roleAmplification}</div>
+        <div style="font-size:13pt;font-weight:800;color:#0f172a;margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid #e2e8f0">Path Forward &amp; Sign-Off</div>
+
+        ${outcome !== 'CLEAN' ? `<div style="margin-bottom:24px;padding:16px 18px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px">
+          <div style="font-size:9pt;font-weight:800;color:#0f172a;margin-bottom:12px;letter-spacing:.04em">RE-ASSESSMENT ELIGIBILITY</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:9pt;color:#374151">
+            <div><span style="font-weight:700;color:#64748b;display:block;margin-bottom:2px">Next assessment level</span>${reAssessLevel}</div>
+            <div><span style="font-weight:700;color:#64748b;display:block;margin-bottom:2px">Sign-off authority</span>${safe(signOffAuth)}</div>
+            ${timeframe ? `<div><span style="font-weight:700;color:#64748b;display:block;margin-bottom:2px">Minimum timeframe</span>${safe(timeframe)}</div>` : ''}
+            <div><span style="font-weight:700;color:#64748b;display:block;margin-bottom:2px">Open conditions</span>${conditions.length ? conditions.map(c => safe(c.severity)).join(', ') : 'None'}</div>
+          </div>
+        </div>` : `<div style="margin-bottom:24px;padding:14px 16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;font-size:9pt;color:#15803d">Candidate is cleared for placement at the awarded belt level. Path forward: progress toward ${safe(nextB)} Belt assessment when eligible.</div>`}
+
+        <div style="font-size:9pt;color:#64748b;margin-bottom:20px;line-height:1.5">${safe(roleAmplification)}</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-bottom:40px">
-          ${['Assessor / Evaluator', 'Lead Technician', 'Supervisor', ...(beltValue >= 4 ? ['Manager'] : [])].map(role => `<div><div style="font-size:8.5pt;font-weight:700;color:#64748b;letter-spacing:.06em;margin-bottom:24px">${role.toUpperCase()}</div><div style="border-top:1.5px solid #0f172a;padding-top:6px;font-size:8pt;color:#64748b">Signature &amp; Date</div></div>`).join('')}
+          ${signOffRoles.map(role => `<div><div style="font-size:8.5pt;font-weight:700;color:#64748b;letter-spacing:.06em;margin-bottom:24px">${safe(role).toUpperCase()}</div><div style="border-top:1.5px solid #0f172a;padding-top:6px;font-size:8pt;color:#64748b">Signature &amp; Date</div></div>`).join('')}
         </div>
-        ${pr.assessorNote ? `<div style="margin-bottom:20px;padding:14px 16px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0"><div style="font-size:8.5pt;font-weight:700;color:#64748b;margin-bottom:6px">ASSESSOR NOTE</div><div style="font-size:9.5pt;color:#374151">${Security.sanitize(pr.assessorNote)}</div></div>` : ''}
+        ${pr.assessorNote ? `<div style="margin-bottom:20px;padding:14px 16px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0"><div style="font-size:8.5pt;font-weight:700;color:#64748b;margin-bottom:6px">ASSESSOR NOTE</div><div style="font-size:9.5pt;color:#374151">${safe(pr.assessorNote)}</div></div>` : ''}
         <div style="margin-top:48px;padding-top:16px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:7.5pt;color:#94a3b8">
           <span>SIPS Healthcare Solutions &bull; Sterile By Design OS &bull; Confidential</span>
           <span>Generated ${new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}</span>
