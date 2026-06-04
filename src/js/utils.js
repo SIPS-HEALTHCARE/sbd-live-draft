@@ -80,7 +80,12 @@ function userInitials(s){
 }
 function beltIdx(b){ return BELT_ORDER.indexOf(b); }
 function nextBelt(b){ const i=beltIdx(b); return i<5?BELT_ORDER[i+1]:null; }
-function daysAt(since){ return Math.round((new Date()-new Date(since))/(1000*60*60*24)); }
+function daysAt(since){
+  if(!since) return null;
+  const d = new Date(since);
+  if(isNaN(d.getTime())) return null;
+  return Math.round((new Date()-d)/(1000*60*60*24));
+}
 function gatesStatus(g){ const vals=Object.values(g||{}); const p=vals.filter(x=>x==='pass').length; const f=vals.filter(x=>x==='fail').length; return {p,f,rem:3-p}; }
 
 function facStats(fid){

@@ -120,7 +120,9 @@ function doRegister(){
   const pass2=(document.getElementById('reg-pass2').value||'').trim();
   const errEl=document.getElementById('reg-error');
   if(!fname||!loc||!dept||!contact||!email){errEl.textContent='Please fill in all required fields.';errEl.style.display='block';return;}
-  if(!pass||pass.length<6){errEl.textContent='Password must be at least 6 characters.';errEl.style.display='block';return;}
+  if(!pass||pass.length<8){errEl.textContent='Password must be at least 8 characters.';errEl.style.display='block';return;}
+  if(!/[A-Z]/.test(pass)){errEl.textContent='Password must include at least one uppercase letter.';errEl.style.display='block';return;}
+  if(!/[0-9]/.test(pass)){errEl.textContent='Password must include at least one number.';errEl.style.display='block';return;}
   if(pass!==pass2){errEl.textContent='Passwords do not match.';errEl.style.display='block';return;}
   if(DB.users.find(u=>u.email.toLowerCase()===email.toLowerCase())||DB.pendingRegs.find(r=>r.email.toLowerCase()===email.toLowerCase())){errEl.textContent='An account with this email already exists or is pending review.';errEl.style.display='block';return;}
   
@@ -4738,8 +4740,8 @@ function renderSDashboard(){
       </div>
       <div class="stat-card"><div class="stat-accent" style="background:var(--blue)"></div>
         <div class="stat-lbl">Days at ${s.belt} Belt</div>
-        <div class="stat-val" style="color:var(--blue)">${daysAt(s.since)}</div>
-        <div class="stat-sub">Since ${s.since}</div>
+        <div class="stat-val" style="color:var(--blue)">${daysAt(s.since) ?? '—'}</div>
+        <div class="stat-sub">Since ${s.since || '—'}</div>
       </div>
     </div>
     <div class="g2 mb16">
