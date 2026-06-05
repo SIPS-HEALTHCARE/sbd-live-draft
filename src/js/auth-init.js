@@ -1969,13 +1969,22 @@ window.onload = function(){
 
   // Note: Session restoration is handled exclusively by restoreSessionOnLoad on DOMContentLoaded to avoid duplicate race conditions.
 
-  // Set up inactivity auto-logout (2 minutes)
+  // Set up inactivity auto-logout (2 minutes) — suppressed during onboarding tour
   let inactivityTimer;
+  const onboardingActive = () => {
+    // Tour engine running, or the welcome/tour overlays are visible on screen
+    if (typeof OB !== 'undefined' && OB.tourRunning) return true;
+    const w = document.getElementById('welcome-overlay');
+    const t = document.getElementById('tour-overlay');
+    return (w && w.classList.contains('open')) || (t && t.classList.contains('active'));
+  };
   const resetInactivityTimer = () => {
     clearTimeout(inactivityTimer);
     // Only auto-logout if we have an active session
     if (localStorage.getItem('sbd_session') && typeof logout === 'function') {
       inactivityTimer = setTimeout(() => {
+        // Never log out mid-tour — reschedule and re-check after another interval
+        if (onboardingActive()) { resetInactivityTimer(); return; }
         console.log('User inactive for 2 minutes. Auto-logging out.');
         logout();
       }, 120000); // 2 minutes
