@@ -203,6 +203,28 @@ const SB = {
   getAllAdminProfiles(){ return sbFetch('/rest/v1/sbd_portal_users?select=*&order=name.asc'); },
   updateUserProfile(userId, data){ return sbFetch(`/rest/v1/sbd_portal_users?auth_uid=eq.${userId}`, { method:'PATCH', body:data }); },
   syncUserClaims(data){ return sbFetch('/functions/v1/sbd-sync-user-claims', { method:'POST', body:data }); },
+  // ── David OG access ──
+  // Mirrors supabase/functions/david-chat/auth.ts so the nav matches what the
+  // backend will actually authorize. master_admin → always (supreme); otherwise
+  // the facility toggle AND the per-user toggle must both be active. RLS scopes
+  // david_user_access to the caller's own row. Returns {authorized, tier}.
+  async getDavidAccess(user){
+    try {
+      if(!user) return { authorized:false, tier:null };
+      if(user.role === 'master_admin') return { authorized:true, tier:'supreme' };
+      if(!user.fid) return { authorized:false, tier:null };
+      const fac = await sbFetch(`/rest/v1/david_facility_access?facility_id=eq.${encodeURIComponent(user.fid)}&select=is_active,tier`);
+      const facRow = Array.isArray(fac) ? fac[0] : null;
+      if(!facRow || !facRow.is_active) return { authorized:false, tier:null };
+      const usr = await sbFetch(`/rest/v1/david_user_access?user_id=eq.${encodeURIComponent(user.id)}&select=is_active`);
+      const usrRow = Array.isArray(usr) ? usr[0] : null;
+      if(!usrRow || !usrRow.is_active) return { authorized:false, tier:null };
+      return { authorized:true, tier: facRow.tier || 'base' };
+    } catch(e){
+      console.warn('getDavidAccess failed:', e);
+      return { authorized:false, tier:null };
+    }
+  },
   // ── Registrations ──
   getPendingRegistrations(){ return sbFetch('/rest/v1/registrations?status=eq.pending&select=*&order=requested_at.desc'); },
   submitRegistration(data){ return sbFetch('/rest/v1/registrations', { method:'POST', prefer:'return=minimal', body:data }); },
