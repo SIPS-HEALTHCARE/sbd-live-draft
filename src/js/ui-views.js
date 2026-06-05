@@ -364,8 +364,17 @@ function enterPortal(type){
   document.getElementById('nav-systems').style.display=isMaster?'flex':'none';
   const _navDavid = document.getElementById('nav-david');
   if (_navDavid) {
-    const isIzzy = u && u.email && u.email.toLowerCase() === 'izambrano@sipsconsults.com';
-    _navDavid.style.display = isIzzy ? 'flex' : 'none';
+    // David OG visibility mirrors the backend (david-chat/auth.ts): master_admin
+    // always; otherwise the facility + per-user access toggles must both be on.
+    // Backend still enforces access on every call, so this is UX only.
+    _navDavid.style.display = 'none';
+    if (u && u.role === 'master_admin') {
+      _navDavid.style.display = 'flex';
+    } else if (u && typeof IS_LIVE !== 'undefined' && IS_LIVE && typeof SB !== 'undefined' && SB.getDavidAccess) {
+      SB.getDavidAccess(u)
+        .then(acc => { if (acc && acc.authorized) _navDavid.style.display = 'flex'; })
+        .catch(() => {});
+    }
   }
   // Placement reviews visible to all SIPS admins (master + staff_admin)
   const _navPlacement=document.getElementById('nav-placementreviews');
