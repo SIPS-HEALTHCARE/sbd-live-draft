@@ -28,12 +28,17 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
 
-    // ── Auth: require a valid session (grading is assessor/admin work) ──
+    // ── Auth: require a valid session (grading is assessor/admin work). ──
+    // Two accepted callers: (1) a logged-in user session (production — an assessor/
+    // admin in the app), or (2) the service-role key, which is never exposed to
+    // clients (backend / server-to-server / controlled testing).
     const authHeader = req.headers.get('Authorization') || '';
     const jwt = authHeader.replace(/^Bearer\s+/i, '');
-    if (!jwt) return json({ error: 'Unauthorized: missing session.' }, 401);
-    const { data: { user }, error: authErr } = await supabase.auth.getUser(jwt);
-    if (authErr || !user) return json({ error: 'Unauthorized: invalid or expired session.' }, 401);
+    if (!jwt) return json({ error: 'Unauthorized: missing token.' }, 401);
+    if (jwt !== serviceKey) {
+      const { data: { user }, error: authErr } = await supabase.auth.getUser(jwt);
+      if (authErr || !user) return json({ error: 'Unauthorized: invalid or expired session.' }, 401);
+    }
 
     const { attempt_id, dry_run = false } = await req.json();
     if (!attempt_id) return json({ error: 'attempt_id is required.' }, 400);
