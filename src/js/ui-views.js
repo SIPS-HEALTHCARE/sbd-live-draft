@@ -255,8 +255,12 @@ function logout(){
   // CLEANUP UI MODALS/OVERLAYS
   if(typeof closeModal === 'function') closeModal();
   document.getElementById('welcome-overlay')?.classList.remove('open');
-  document.getElementById('tour-overlay')?.classList.remove('open');
+  const _tourOv = document.getElementById('tour-overlay');
+  if(_tourOv){ _tourOv.classList.remove('active'); _tourOv.classList.remove('open'); }
+  const _spot = document.getElementById('tour-spotlight'); if(_spot) _spot.style.display = 'none';
   document.getElementById('skip-reminder')?.classList.remove('show');
+  // Reset tour engine state so a stale tour can't suppress walkthroughs / reposition a spotlight
+  if(typeof OB !== 'undefined'){ OB.tourRunning = false; OB.step = 0; if(OB.skipReminderTimer){ clearTimeout(OB.skipReminderTimer); } }
 }
 
 function enterPortal(type){
