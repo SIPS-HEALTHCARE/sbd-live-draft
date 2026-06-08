@@ -2214,7 +2214,7 @@ function renderAPlacementReviews(){
     const staffRec = getStaff(pr.staffId);
     const displayName = cleanName(pr.staffName) || (staffRec ? fullName(staffRec) : (pr.staffId || 'Unknown'));
     const displayTitle = pr.staffTitle || (staffRec ? (staffRec.role||'') : '');
-    const displayDate = pr.submittedAt ? (pr.submittedAt.length > 10 ? new Date(pr.submittedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : pr.submittedAt) : '';
+    const displayDate = pr.submittedAt ? (pr.submittedAt.length > 10 ? new Date(pr.submittedAt).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}) : pr.submittedAt) : '';
     return `
       <div class="card" style="margin-bottom:16px" id="pr-card-${pr.id}">
         <div class="card-hd" style="cursor:pointer" onclick="togglePRCard('${pr.id}')">
