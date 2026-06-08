@@ -1495,6 +1495,10 @@ async function submitPinGate(staffId, assessmentType){
       expiresAt: res.expires_at,
       type: assessmentType
     };
+    // Resume support: if the server carried over saved progress for this re-PIN
+    // (wifi drop / expiry / new device), stash it so the assessment restores the
+    // candidate's answers instead of starting blank.
+    window._restoredProgress = (res.progress && res.progress.answers && Object.keys(res.progress.answers).length > 0) ? res.progress : null;
     // Show brief confirmation
     document.getElementById('placement-content').innerHTML = `
       <div style="text-align:center;padding:40px 0">
@@ -1603,7 +1607,21 @@ function showPlacementAssessment(s){
 }
 
 function _enterPlacementAssessment(s){
-  if (PA.staffId !== s.id || PA.submitted) {
+  const restore = window._restoredProgress;
+  window._restoredProgress = null;
+  if (restore && restore.answers && Object.keys(restore.answers).length > 0) {
+    // Resume from SERVER-saved progress — survives a re-PIN, expiry, or a new
+    // device (local state gone). This is what was missing: a new PIN used to
+    // reset to a blank test even though the answers were saved server-side.
+    PA.active = true;
+    PA.staffId = s.id;
+    PA.answers = restore.answers || {};
+    PA.shuffledQuestions = (Array.isArray(restore.shuffledQuestions) && restore.shuffledQuestions.length)
+      ? restore.shuffledQuestions
+      : ((PA.shuffledQuestions && PA.shuffledQuestions.length) ? PA.shuffledQuestions : shuffleArray(PLACEMENT_QUESTIONS));
+    PA.currentQ = restore.currentQ || 1;
+    PA.submitted = false;
+  } else if (PA.staffId !== s.id || PA.submitted) {
     PA.active = true;
     PA.staffId = s.id;
     PA.answers = {};
@@ -1611,7 +1629,7 @@ function _enterPlacementAssessment(s){
     PA.submitted = false;
     PA.shuffledQuestions = shuffleArray(PLACEMENT_QUESTIONS);
   } else {
-    PA.active = true; // resume
+    PA.active = true; // resume from local state
   }
   savePAState();
   const overlay = document.getElementById('placement-overlay');
@@ -1739,19 +1757,30 @@ function renderPAIntro(){
     </div>`;
 }
 
-function renderPAComplete(){
+function renderPAComplete(pendingSync){
+  const headline = pendingSync ? 'Assessment Saved' : 'Assessment Submitted';
+  const subtitle = pendingSync
+    ? 'You appear to be offline, so your responses are saved on this device and will be submitted automatically as soon as your connection is restored. You do not need a new PIN or to retake anything.'
+    : 'Your responses have been received. A certified SIPS assessor will review them and confirm your starting point. You will see a notification on your dashboard once the review is complete.';
+  const boxAccent = pendingSync ? '245,158,11' : '139,92,246';   // amber when pending sync, purple otherwise
+  const boxTitleClr = pendingSync ? '#fbbf24' : '#a78bfa';
+  const boxIcon = pendingSync ? '&#128229;' : '&#9203;';
+  const boxTitle = pendingSync ? 'SAVED — WILL SUBMIT WHEN ONLINE' : 'PENDING ASSESSOR REVIEW';
+  const boxBody = pendingSync
+    ? 'Keep this device connected when you can; your submission will sync on its own — nothing is lost.'
+    : 'You can access your dashboard while you wait. Your placement will be confirmed shortly.';
   document.getElementById('placement-content').innerHTML = `
     <div style="text-align:center;padding:20px 0 32px">
       <div style="width:72px;height:72px;background:rgba(34,197,94,.12);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:32px">&#10003;</div>
-      <div style="font-size:24px;font-weight:800;color:#f1f5f9;margin-bottom:10px">Assessment Submitted</div>
+      <div style="font-size:24px;font-weight:800;color:#f1f5f9;margin-bottom:10px">${headline}</div>
       <div style="font-size:14px;color:#94a3b8;line-height:1.65;max-width:480px;margin:0 auto 28px">
-        Your responses have been received. A certified SIPS assessor will review them and confirm your starting point. You will see a notification on your dashboard once the review is complete.
+        ${subtitle}
       </div>
-      <div style="background:rgba(139,92,246,.08);border:1px solid rgba(139,92,246,.25);border-radius:12px;padding:16px 20px;max-width:400px;margin:0 auto 28px;display:flex;align-items:center;gap:14px">
-        <div style="font-size:28px">&#9203;</div>
+      <div style="background:rgba(${boxAccent},.08);border:1px solid rgba(${boxAccent},.25);border-radius:12px;padding:16px 20px;max-width:400px;margin:0 auto 28px;display:flex;align-items:center;gap:14px">
+        <div style="font-size:28px">${boxIcon}</div>
         <div style="text-align:left">
-          <div style="font-size:12px;font-weight:700;color:#a78bfa;margin-bottom:3px">PENDING ASSESSOR REVIEW</div>
-          <div style="font-size:12.5px;color:#94a3b8">You can access your dashboard while you wait. Your placement will be confirmed shortly.</div>
+          <div style="font-size:12px;font-weight:700;color:${boxTitleClr};margin-bottom:3px">${boxTitle}</div>
+          <div style="font-size:12.5px;color:#94a3b8">${boxBody}</div>
         </div>
       </div>
       <button onclick="paGoToDashboard()" style="background:#8b5cf6;border:none;border-radius:10px;padding:14px 36px;font-size:14px;font-weight:700;color:#fff;cursor:pointer;font-family:'Poppins',sans-serif">Go to My Dashboard</button>
@@ -1807,6 +1836,50 @@ function paPrev(){
   savePAState();
   renderPAScreen();
 }
+
+// ── Durable placement submit: retry + on-device queue + auto-flush ──────────
+// A finished assessment must never be lost to flaky wifi. We retry the write,
+// and if it still fails we persist it on-device and flush when back online or
+// on next authenticated load (with an existence check so a lost response that
+// actually succeeded server-side can't create a duplicate).
+async function sbFetchWithRetry(path, opts, attempts){
+  let lastErr;
+  for(let i=0;i<attempts;i++){
+    try { return await sbFetch(path, opts); }
+    catch(e){ lastErr = e; if(i < attempts-1) await new Promise(r=>setTimeout(r, 800*Math.pow(2,i))); }
+  }
+  throw lastErr;
+}
+function queuePendingPlacement(item){
+  try {
+    const q = JSON.parse(localStorage.getItem('sbd_pending_placement')||'[]');
+    q.push({ ...item, queuedAt: new Date().toISOString() });
+    localStorage.setItem('sbd_pending_placement', JSON.stringify(q));
+  } catch(e){ console.warn('queuePendingPlacement failed:', e); }
+}
+let _flushingPlacements = false;
+async function flushPendingPlacements(){
+  if(!IS_LIVE || _flushingPlacements) return;
+  let q;
+  try { q = JSON.parse(localStorage.getItem('sbd_pending_placement')||'[]'); } catch(e){ return; }
+  if(!q || !q.length) return;
+  _flushingPlacements = true;
+  const remaining = [];
+  for(const item of q){
+    try {
+      // Dedupe: if a review already landed for this staff, treat as delivered.
+      let exists = false;
+      try { const ex = await sbFetch(`/rest/v1/placement_reviews?staff_id=eq.${item.body.staff_id}&select=id&limit=1`); exists = !!(ex && ex.length); } catch(_){ exists = false; }
+      if(!exists) await sbFetchWithRetry('/rest/v1/placement_reviews', { method:'POST', body: item.body }, 2);
+      if(item.staffId) sbFetch(`/rest/v1/staff?id=eq.${item.staffId}`, { method:'PATCH', body:{placement_needed:false} }).catch(()=>{});
+      if(item.token) SB.completeAssessmentSession(item.token).catch(()=>{});
+    } catch(e){ remaining.push(item); }
+  }
+  localStorage.setItem('sbd_pending_placement', JSON.stringify(remaining));
+  _flushingPlacements = false;
+  if(remaining.length < q.length){ try { updatePlacementBadge(); } catch(_){} }
+}
+if(typeof window !== 'undefined'){ window.addEventListener('online', function(){ flushPendingPlacements(); }); }
 
 async function submitPlacementAssessment(){
   // [CRITICAL GUARDRAIL - DO NOT REMOVE OR BREAK]
@@ -1907,38 +1980,40 @@ async function submitPlacementAssessment(){
   DB.placementReviews.push(pr);
   // Mark staff no longer needs placement (assessment done, awaiting review)
   if(s) s.placementNeeded = false;
+  let pendingSync = false;
   if(IS_LIVE){
+    // [GUARDRAIL] These payload keys map directly to the placement_reviews schema.
+    // Do NOT rename them unless the backend schema explicitly changes.
+    const prBody = {
+      staff_id: pr.staffId,
+      fid: pr.fid,
+      status: pr.status,
+      tentative_belt: pr.tentativeBelt,
+      responses: pr.responses,
+      level_scores: pr.levelScores,
+      submitted_at: pr.submittedAt,
+      staff_name: pr.staffName,
+      staff_title: pr.staffTitle,
+      session_id: ASSESSMENT_SESSION.sessionId || null
+    };
+    const sessionToken = ASSESSMENT_SESSION.token || null;
     try {
-      await sbFetch('/rest/v1/placement_reviews', {
-        method:'POST',
-        body: {
-          staff_id: pr.staffId,
-          fid: pr.fid,
-          status: pr.status,
-          tentative_belt: pr.tentativeBelt,
-          responses: pr.responses,
-          level_scores: pr.levelScores,
-          submitted_at: pr.submittedAt,
-          staff_name: pr.staffName,
-          staff_title: pr.staffTitle,
-          session_id: ASSESSMENT_SESSION.sessionId || null
-        }
-      });
-      await sbFetch(`/rest/v1/staff?id=eq.${pr.staffId}`, {
-        method:'PATCH',
-        body: {placement_needed: false}
-      });
+      // Durable submit: retry through transient network blips before giving up.
+      await sbFetchWithRetry('/rest/v1/placement_reviews', { method:'POST', body: prBody }, 4);
+      await sbFetchWithRetry(`/rest/v1/staff?id=eq.${pr.staffId}`, { method:'PATCH', body:{placement_needed:false} }, 3).catch(()=>{});
       // Mark the assessment session as completed
-      if(ASSESSMENT_SESSION.token){
-        SB.completeAssessmentSession(ASSESSMENT_SESSION.token).catch(()=>{});
+      if(sessionToken){
+        SB.completeAssessmentSession(sessionToken).catch(()=>{});
         ASSESSMENT_SESSION = {token:null,sessionId:null,assessorName:null,facilityId:null,expiresAt:null,type:null};
       }
     } catch(e) {
       handleSyncError(e, 'Placement sync');
-      // Submission failed — do not show fake success. Keep PA.submitted = false so the user can retry after re-PIN.
-      PA.submitting = false;
-      alert('Time expired or network error. Your answers are saved locally. Please ask your assessor for a new PIN to resubmit, or have them record your responses manually.');
-      return; // CRITICAL: do NOT proceed to renderPAComplete
+      // Network never recovered across retries — DO NOT lose the finished test.
+      // Persist the whole submission to a durable on-device queue that auto-flushes
+      // when the connection returns or on next login. The candidate is done; they
+      // do not need a new PIN or to retake anything.
+      queuePendingPlacement({ body: prBody, staffId: pr.staffId, token: sessionToken });
+      pendingSync = true;
     }
   } else {
     /* saveDemoData() removed */
@@ -1948,7 +2023,7 @@ async function submitPlacementAssessment(){
   PA.submitting = false;
   PA.submitted = true;
   savePAState();
-  renderPAComplete();
+  renderPAComplete(pendingSync);
 }
 
 function scoreByKeywords(answer, keywords){
@@ -2075,6 +2150,7 @@ async function scoreSimulationWithAI(question, answer){
 }
 
 function paGoToDashboard(){
+  flushPendingPlacements(); // best-effort: drain any queued submission now we're navigating
   hidePlacementOverlay();
   sNav(document.querySelector('#s-portal .nav-item[data-view="s-dashboard"]'),'s-dashboard','My Dashboard');
 }

@@ -112,7 +112,9 @@ serve(async (req) => {
 
             // 5. Generate and store new PIN
             const pin = generateSecurePin();
-            const pinHash = await bcrypt.hash(pin);
+            // hashSync (not hash) — Supabase Edge runtime has no Worker global,
+            // and async bcrypt.hash() spawns a Worker internally.
+            const pinHash = bcrypt.hashSync(pin);
             const expiresAt = new Date(Date.now() + PIN_TTL_MINUTES * 60 * 1000).toISOString();
 
             const { data: pinRow, error: pinError } = await supabaseAdmin
@@ -229,8 +231,8 @@ serve(async (req) => {
 
             const pinRecord = pinRows[0];
 
-            // 3. bcrypt compare
-            const isValid = await bcrypt.compare(pin, pinRecord.pin_hash);
+            // 3. bcrypt compare — compareSync for the same Worker reason as hashSync above.
+            const isValid = bcrypt.compareSync(pin, pinRecord.pin_hash);
 
             if (!isValid) {
                 return new Response(JSON.stringify({
@@ -279,6 +281,35 @@ serve(async (req) => {
                 .update({ session_id: session.id })
                 .eq('id', pinRecord.id);
 
+            // 6b. RESUME SUPPORT — carry over the candidate's most recent saved
+            // progress into this new session, so a re-PIN (after a wifi drop /
+            // expiry / new device) picks up where they left off instead of
+            // starting blank. We pick the latest prior session that actually has
+            // answers, copy it onto the new session, and return it to the client.
+            let resumeProgress: any = {};
+            try {
+                const { data: priorSessions } = await supabaseAdmin
+                    .from('sbd_assessment_sessions')
+                    .select('progress, created_at')
+                    .eq('staff_id', staff_id)
+                    .eq('assessment_type', assessment_type)
+                    .neq('id', session.id)
+                    .order('created_at', { ascending: false })
+                    .limit(8);
+                for (const ps of (priorSessions || [])) {
+                    const p = ps.progress;
+                    if (p && p.answers && Object.keys(p.answers).length > 0) { resumeProgress = p; break; }
+                }
+                if (resumeProgress && Object.keys(resumeProgress).length > 0) {
+                    await supabaseAdmin
+                        .from('sbd_assessment_sessions')
+                        .update({ progress: resumeProgress })
+                        .eq('id', session.id);
+                }
+            } catch (resumeErr) {
+                console.error('Resume progress carry-over failed (non-blocking):', resumeErr);
+            }
+
             // 7. Get assessor name for confirmation display
             const { data: assessor } = await supabaseAdmin
                 .from('sbd_portal_users')
@@ -293,6 +324,7 @@ serve(async (req) => {
                 assessor_name: assessor?.name || 'Assessor',
                 facility_id: pinRecord.facility_id,
                 expires_at: session.expires_at,
+                progress: resumeProgress || {},
             }), {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' }
             });
