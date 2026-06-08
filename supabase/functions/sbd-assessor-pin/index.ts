@@ -112,7 +112,9 @@ serve(async (req) => {
 
             // 5. Generate and store new PIN
             const pin = generateSecurePin();
-            const pinHash = await bcrypt.hash(pin);
+            // hashSync (not hash) — Supabase Edge runtime has no Worker global,
+            // and async bcrypt.hash() spawns a Worker internally.
+            const pinHash = bcrypt.hashSync(pin);
             const expiresAt = new Date(Date.now() + PIN_TTL_MINUTES * 60 * 1000).toISOString();
 
             const { data: pinRow, error: pinError } = await supabaseAdmin
@@ -229,8 +231,8 @@ serve(async (req) => {
 
             const pinRecord = pinRows[0];
 
-            // 3. bcrypt compare
-            const isValid = await bcrypt.compare(pin, pinRecord.pin_hash);
+            // 3. bcrypt compare — compareSync for the same Worker reason as hashSync above.
+            const isValid = bcrypt.compareSync(pin, pinRecord.pin_hash);
 
             if (!isValid) {
                 return new Response(JSON.stringify({
