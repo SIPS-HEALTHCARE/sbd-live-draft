@@ -1495,6 +1495,10 @@ async function submitPinGate(staffId, assessmentType){
       expiresAt: res.expires_at,
       type: assessmentType
     };
+    // Resume support: if the server carried over saved progress for this re-PIN
+    // (wifi drop / expiry / new device), stash it so the assessment restores the
+    // candidate's answers instead of starting blank.
+    window._restoredProgress = (res.progress && res.progress.answers && Object.keys(res.progress.answers).length > 0) ? res.progress : null;
     // Show brief confirmation
     document.getElementById('placement-content').innerHTML = `
       <div style="text-align:center;padding:40px 0">
@@ -1603,7 +1607,21 @@ function showPlacementAssessment(s){
 }
 
 function _enterPlacementAssessment(s){
-  if (PA.staffId !== s.id || PA.submitted) {
+  const restore = window._restoredProgress;
+  window._restoredProgress = null;
+  if (restore && restore.answers && Object.keys(restore.answers).length > 0) {
+    // Resume from SERVER-saved progress — survives a re-PIN, expiry, or a new
+    // device (local state gone). This is what was missing: a new PIN used to
+    // reset to a blank test even though the answers were saved server-side.
+    PA.active = true;
+    PA.staffId = s.id;
+    PA.answers = restore.answers || {};
+    PA.shuffledQuestions = (Array.isArray(restore.shuffledQuestions) && restore.shuffledQuestions.length)
+      ? restore.shuffledQuestions
+      : ((PA.shuffledQuestions && PA.shuffledQuestions.length) ? PA.shuffledQuestions : shuffleArray(PLACEMENT_QUESTIONS));
+    PA.currentQ = restore.currentQ || 1;
+    PA.submitted = false;
+  } else if (PA.staffId !== s.id || PA.submitted) {
     PA.active = true;
     PA.staffId = s.id;
     PA.answers = {};
@@ -1611,7 +1629,7 @@ function _enterPlacementAssessment(s){
     PA.submitted = false;
     PA.shuffledQuestions = shuffleArray(PLACEMENT_QUESTIONS);
   } else {
-    PA.active = true; // resume
+    PA.active = true; // resume from local state
   }
   savePAState();
   const overlay = document.getElementById('placement-overlay');
