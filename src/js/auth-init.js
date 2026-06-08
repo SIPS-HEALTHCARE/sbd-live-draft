@@ -2097,6 +2097,8 @@ async function initAppData(){
     if(typeof mapOnboardingFromBackend === 'function') window.DB.onboarding = (onboarding||[]).map(mapOnboardingFromBackend); else window.DB.onboarding = onboarding||[];
 
     console.log(`SBD Platform: Hydrated ${window.DB.facilities.length} facs, ${window.DB.staff.length} staff, ${window.DB.hospitalSystems.length} systems, ${window.DB.users.length} users.`);
+    // Durable submit: flush any placement assessment that was queued offline on a prior session.
+    if(typeof flushPendingPlacements === 'function') flushPendingPlacements();
     if(window.DB.staff.length === 0) console.warn('SBD DIAG: staff array is EMPTY after hydration. Raw staff value:', staff);
     if(window.DB.facilities.length === 0) console.warn('SBD DIAG: facilities array is EMPTY after hydration. Raw facs value:', facs);
     
