@@ -180,10 +180,18 @@ const SB = {
   // ── Assessment Queue ──
   getPendingAssessments(fid){
     const f = fid ? `&facility_id=eq.${encodeURIComponent(fid)}` : '';
-    return sbFetch(`/rest/v1/sbd_assessment_queue?status=eq.pending${f}&select=*&order=requested_at.desc`);
+    return sbFetch(`/rest/v1/sbd_assessment_queue?status=in.(pending,approved)${f}&select=*&order=requested_at.desc`);
   },
   submitAssessmentQueue(data){ return sbFetch('/rest/v1/sbd_assessment_queue', { method:'POST', body:data }); },
   resolveAssessmentQueue(id, status){ return sbFetch(`/rest/v1/sbd_assessment_queue?id=eq.${id}`, { method:'PATCH', body:{ status, resolved_at:new Date().toISOString() } }); },
+  // Persist an admin review action (approve/deny) on a gate request. `data` carries the merged
+  // {practiceKnowledge, practiceSimulation, review:{...}} so the row's practice scores survive
+  // (PostgREST PATCH replaces the column wholesale). `resolved` stamps resolved_at for terminal actions.
+  reviewAssessmentQueue(id, status, data, resolved){
+    const body = { status, data };
+    if (resolved) body.resolved_at = new Date().toISOString();
+    return sbFetch(`/rest/v1/sbd_assessment_queue?id=eq.${id}`, { method:'PATCH', body });
+  },
   // ── Assessments (via edge function for atomic RPC + audit) ──
   recordAssessment(staff, type, targetBelt, result, notes, assessorId, timestamp){
     return sbFetch('/functions/v1/sbd-record-assessment', {
@@ -476,6 +484,8 @@ function mapFacilityToBackend(fac){
 
 function mapQueueFromBackend(row){
   if(!row) return null;
+  const d = row.data || {};
+  const rev = d.review || {};
   return {
     id: row.id,
     sid: row.staff_id,
@@ -485,7 +495,12 @@ function mapQueueFromBackend(row){
     status: row.status,
     date: row.requested_at ? new Date(row.requested_at).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}) : '',
     requested_at: row.requested_at,
-    resolved_at: row.resolved_at || null
+    requestedAt: row.requested_at || null,           // camel — badge + request filters depend on this
+    resolved_at: row.resolved_at || null,
+    practiceKnowledge: d.practiceKnowledge ?? undefined,
+    practiceSimulation: d.practiceSimulation ?? undefined,
+    approvedBy: rev.action==='approved' ? rev.by : undefined,
+    approvedAt: rev.action==='approved' ? rev.at : undefined
   };
 }
 
@@ -497,7 +512,11 @@ function mapQueueToBackend(item){
     assessment_type: item.type,
     target_belt: item.targetBelt,
     status: item.status || 'pending',
-    requested_at: item.requested_at || new Date().toISOString()
+    requested_at: item.requested_at || item.requestedAt || new Date().toISOString(),
+    data: {
+      practiceKnowledge: item.practiceKnowledge ?? null,
+      practiceSimulation: item.practiceSimulation ?? null
+    }
   };
 }
 

@@ -10562,27 +10562,62 @@ let asmFilter='all';
 // GATE ASSESSMENT APPROVAL SYSTEM
 // ============================================================
 
-function approveGateRequest(qid) {
+async function approveGateRequest(qid) {
   const item = DB.queue.find(q => q.id === qid);
   if (!item) return;
   const s = getStaff(item.sid);
   if (!s) return;
   if (!confirm(`Approve ${fullName(s)}'s ${item.type} assessment request for ${item.targetBelt} Belt? This confirms the assessment is scheduled.`)) return;
+
+  const prev = { status: item.status, approvedBy: item.approvedBy, approvedAt: item.approvedAt };
   item.status = 'approved';
   item.approvedBy = ST.name || 'Admin';
   item.approvedAt = new Date().toISOString().slice(0, 10);
+
+  if (IS_LIVE) {
+    try {
+      await SB.reviewAssessmentQueue(item.id, 'approved', {
+        practiceKnowledge: item.practiceKnowledge ?? null,
+        practiceSimulation: item.practiceSimulation ?? null,
+        review: { action: 'approved', by: item.approvedBy, at: item.approvedAt }
+      });
+    } catch (e) {
+      // Roll back the optimistic change so the UI never shows a false "approved".
+      item.status = prev.status; item.approvedBy = prev.approvedBy; item.approvedAt = prev.approvedAt;
+      toast('Could not save approval — please retry.', 'err');
+      if (ST.aView === 'a-progression') renderAProgression();
+      if (ST.aView === 'a-assessments') renderAAssessments();
+      return;
+    }
+  }
+
   toast(`${fullName(s)}: ${item.type} assessment for ${item.targetBelt} Belt approved.`, 'ok');
   updateProgBadge();
   if (ST.aView === 'a-progression') renderAProgression();
   if (ST.aView === 'a-assessments') renderAAssessments();
 }
 
-function denyGateRequest(qid) {
+async function denyGateRequest(qid) {
   const item = DB.queue.find(q => q.id === qid);
   if (!item) return;
   const s = getStaff(item.sid);
   if (!s) return;
   const reason = prompt(`Reason for denying ${fullName(s)}'s ${item.type} request (optional):`);
+
+  if (IS_LIVE) {
+    try {
+      await SB.reviewAssessmentQueue(item.id, 'denied', {
+        practiceKnowledge: item.practiceKnowledge ?? null,
+        practiceSimulation: item.practiceSimulation ?? null,
+        review: { action: 'denied', by: ST.name || 'Admin', at: new Date().toISOString().slice(0, 10), reason: reason || '' }
+      }, /* resolved */ true);
+    } catch (e) {
+      // Don't drop it from the queue if the DB write failed — would re-appear on refresh anyway.
+      toast('Could not save denial — please retry.', 'err');
+      return;
+    }
+  }
+
   item.status = 'denied';
   item.deniedBy = ST.name || 'Admin';
   item.deniedAt = new Date().toISOString().slice(0, 10);
