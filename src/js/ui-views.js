@@ -1938,16 +1938,23 @@ async function submitPlacementAssessment(){
     levelScores[q.level].push({weight:1, score:aiScore});
   }
 
-  // Calculate level scores (40% knowledge, 60% simulation per level)
+  // Recommend the highest belt the candidate has earned IN SEQUENCE: every
+  // level from 1 up to and including the recommended one must clear the bar.
+  // Stop at the first level that is missing or below it, so a strong score on
+  // an advanced level alone can never skip the fundamentals beneath it.
+  // (Previously this took the highest level above the bar regardless of the
+  // lower ones, which is why a lucky advanced answer could suggest Black Belt.)
+  const PLACEMENT_PASS = 65; // per-level bar; policy value -- tune with SIPS if needed
   let suggestedBelt = 'White';
   const BELTS = ['White','Yellow','Green','Blue','Brown','Black'];
   for(let lvl=1; lvl<=5; lvl++){
     const items = levelScores[lvl];
-    if(!items.length) continue;
+    if(!items.length) break;            // no questions at this level -> cannot certify beyond
     const total = items.reduce((acc,x)=>acc+(x.weight*x.score),0);
     const maxTotal = items.reduce((acc,x)=>acc+x.weight*100,0);
     const pct = maxTotal > 0 ? (total/maxTotal)*100 : 0;
-    if(pct >= 65) suggestedBelt = BELTS[lvl] || BELTS[lvl-1];
+    if(pct < PLACEMENT_PASS) break;     // failed this level -> belt is the last one passed
+    suggestedBelt = BELTS[lvl];         // cleared every level so far, including this one
   }
 
   // Create placement review record
