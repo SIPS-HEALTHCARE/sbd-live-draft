@@ -450,6 +450,23 @@ function mapStaffToBackend(staff){
   return obj;
 }
 
+// Backend column subset for Position School progress + stars, derived from the
+// canonical mapStaffToBackend mapping so the column names live in exactly one
+// place. The award-star / track flows must PATCH these real columns -- writing
+// a bare `ps` key (which is NOT a column on staff) silently 400s and loses the
+// star on the next refresh.
+function mapStaffPSToBackend(staff){
+  const full = mapStaffToBackend(staff) || {};
+  return {
+    ps_enrolled: full.ps_enrolled,
+    ps_done:     full.ps_done,
+    ps_track:    full.ps_track,
+    ps_mod:      full.ps_mod,
+    ps_tracks:   full.ps_tracks,
+    stars:       full.stars
+  };
+}
+
 function mapFacilityFromBackend(row){
   if(!row) return null;
   return {

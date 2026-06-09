@@ -999,7 +999,7 @@ function beginPSTrack(staffId, tid){
   s.ps.enrolled = true;
   toast('Position School track started. Complete all 5 criteria to earn your star.');
   if (IS_LIVE && typeof SB !== 'undefined' && SB.updateStaff) {
-    SB.updateStaff(staffId, { ps: s.ps }).catch(e=>console.warn('Sync failed:', e));
+    SB.updateStaff(staffId, mapStaffPSToBackend(s)).catch(e=>{ console.warn('PS sync failed:', e); toast('Saved on screen, but syncing to the server failed — please refresh to confirm.','err'); });
   }
   if(typeof renderSPosSchool === 'function') renderSPosSchool();
 }
@@ -1013,7 +1013,7 @@ function readyToTestPS(staffId, tid){
   s.ps.tracks[tid].status = 'testing';
   toast('Marked as ready to test. Your assessor has been notified.');
   if (IS_LIVE && typeof SB !== 'undefined' && SB.updateStaff) {
-    SB.updateStaff(staffId, { ps: s.ps }).catch(e=>console.warn('Sync failed:', e));
+    SB.updateStaff(staffId, mapStaffPSToBackend(s)).catch(e=>{ console.warn('PS sync failed:', e); toast('Saved on screen, but syncing to the server failed — please refresh to confirm.','err'); });
   }
   if(typeof renderSPosSchool === 'function') renderSPosSchool();
 }
@@ -1038,7 +1038,7 @@ function completePSTrack(staffId, tid){
   toast('Position School track complete! Star awarded.');
   
   if (IS_LIVE && typeof SB !== 'undefined' && SB.updateStaff) {
-    SB.updateStaff(staffId, { ps: s.ps, stars: s.stars }).catch(e=>console.warn('Sync failed:', e));
+    SB.updateStaff(staffId, mapStaffPSToBackend(s)).catch(e=>{ console.warn('PS sync failed:', e); toast('Star awarded on screen, but syncing to the server failed — please refresh to confirm.','err'); });
   }
 
   // Refresh whichever view is active (includes drawer redrawing or scoreboard re-rendering)
@@ -1938,16 +1938,23 @@ async function submitPlacementAssessment(){
     levelScores[q.level].push({weight:1, score:aiScore});
   }
 
-  // Calculate level scores (40% knowledge, 60% simulation per level)
+  // Recommend the highest belt the candidate has earned IN SEQUENCE: every
+  // level from 1 up to and including the recommended one must clear the bar.
+  // Stop at the first level that is missing or below it, so a strong score on
+  // an advanced level alone can never skip the fundamentals beneath it.
+  // (Previously this took the highest level above the bar regardless of the
+  // lower ones, which is why a lucky advanced answer could suggest Black Belt.)
+  const PLACEMENT_PASS = 65; // per-level bar; policy value -- tune with SIPS if needed
   let suggestedBelt = 'White';
   const BELTS = ['White','Yellow','Green','Blue','Brown','Black'];
   for(let lvl=1; lvl<=5; lvl++){
     const items = levelScores[lvl];
-    if(!items.length) continue;
+    if(!items.length) break;            // no questions at this level -> cannot certify beyond
     const total = items.reduce((acc,x)=>acc+(x.weight*x.score),0);
     const maxTotal = items.reduce((acc,x)=>acc+x.weight*100,0);
     const pct = maxTotal > 0 ? (total/maxTotal)*100 : 0;
-    if(pct >= 65) suggestedBelt = BELTS[lvl] || BELTS[lvl-1];
+    if(pct < PLACEMENT_PASS) break;     // failed this level -> belt is the last one passed
+    suggestedBelt = BELTS[lvl];         // cleared every level so far, including this one
   }
 
   // Create placement review record
@@ -14979,6 +14986,27 @@ function cleanOptimisticCache() {
 }
 
 // Inline role change from the All Staff table dropdown
+// Resolve the sbd_portal_users login tied to a staff member. The DB has no
+// reliable staff<->login key yet (the staff_id column is the wrong type and is
+// empty), so we try the explicit sid link first, then fall back to an exact
+// normalized full-name match. Protected admin logins are never returned.
+// Returns { user } on a single confident match, or { reason } when it can't.
+function resolveLoginForStaff(s){
+  if(!s) return { reason:'no_staff' };
+  const PROTECTED = ['master_admin','staff_admin','system_admin'];
+  const norm = str => (str||'').toLowerCase().replace(/\s+/g,' ').trim();
+  // 1) explicit link, if any logins actually have it populated
+  let hits = DB.users.filter(u => u.sid && u.sid === s.id);
+  // 2) fall back to an exact normalized full-name match
+  if(hits.length === 0){
+    const target = norm(`${s.first||''} ${s.last||''}`);
+    if(target) hits = DB.users.filter(u => norm(u.name) === target);
+  }
+  hits = hits.filter(u => !PROTECTED.includes(u.role));
+  if(hits.length === 1) return { user: hits[0] };
+  return { reason: hits.length === 0 ? 'no_match' : 'ambiguous' };
+}
+
 function changeStaffRoleInline(staffId, newRole){
   const s = getStaff(staffId);
   if(!s) return;
@@ -14998,23 +15026,35 @@ function changeStaffRoleInline(staffId, newRole){
   };
   const newAccess = positionToAccess[newRole];
   if(newAccess){
-    // Find linked user account(s) for this staff member
-    const linkedUsers = DB.users.filter(u => u.sid === staffId);
-    linkedUsers.forEach(u => {
-      // Only upgrade/adjust accounts at staff_member or hospital level
-      // Never downgrade system_admin, staff_admin, or master_admin
-      const protectedRoles = ['master_admin','staff_admin','system_admin'];
-      if(!protectedRoles.includes(u.role) && u.role !== newAccess){
+    // The staff<->login link is not reliably populated in the DB yet, so
+    // resolve the matching login on demand (explicit link, then exact name).
+    const match = resolveLoginForStaff(s);
+    if(match.user){
+      const u = match.user;
+      if(u.role !== newAccess){
         const oldAccess = u.role;
         u.role = newAccess;
-        console.log(`[Role] Account ${u.email}: portal access ${oldAccess} \u2192 ${newAccess}`);
+        console.log(`[Role] Account ${u.email}: portal access ${oldAccess} -> ${newAccess}`);
         if(IS_LIVE && typeof SB !== 'undefined' && SB.updateUserProfile) {
           SB.updateUserProfile(u.authUid, { role: newAccess })
-            .then(() => { if(SB.syncUserClaims) SB.syncUserClaims({ userId: u.authUid, role: newAccess }); })
-            .catch(e => console.warn('[Role] User sync failed:', e.message));
+            .then(() => {
+              if(SB.syncUserClaims) SB.syncUserClaims({ userId: u.authUid, role: newAccess });
+              toast(`Portal access updated for <strong>${u.email}</strong> (now ${newAccess}). They may need to log out and back in.`,'ok');
+            })
+            .catch(e => {
+              console.warn('[Role] User sync failed:', e.message);
+              toast(`Role saved, but updating <strong>${u.email}</strong>'s portal access failed \u2014 please set it manually.`,'err');
+            });
         }
       }
-    });
+    } else {
+      // No confident login match -- do NOT guess. Tell the admin to do it by hand.
+      const why = match.reason === 'ambiguous'
+        ? `more than one login matches "${fullName(s)}"`
+        : `no login matched "${fullName(s)}"`;
+      console.warn(`[Role] Portal access not auto-updated (${match.reason}) for ${fullName(s)}`);
+      toast(`Role set to <strong>${newRole}</strong>, but portal access was not changed (${why}). Please update their login access manually.`,'warn');
+    }
   }
 
   // Sync to backend if live
