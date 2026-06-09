@@ -53,28 +53,28 @@ serve(async (req) => {
             { auth: { autoRefreshToken: false, persistSession: false } }
         );
 
-        // Update staff record to new facility
+        // Re-attach the released staff row to the new facility.
+        // The live `staff` table is keyed on `fid` ONLY — it has no `facility_id`
+        // or `is_free_agent` column. Writing those caused PostgREST 42703 and the
+        // whole update was rejected, so the member vanished from every facility.
         const { error: staffError } = await supabaseAdmin
             .from('staff')
-            .update({ fid: newFacilityId, facility_id: newFacilityId, is_free_agent: false })
+            .update({ fid: newFacilityId })
             .eq('id', staffId);
 
-        if (staffError) throw new Error('Failed to update staff facility record');
+        if (staffError) {
+            console.error('Assign staff update error:', JSON.stringify(staffError));
+            throw new Error('Failed to update staff facility record: ' + staffError.message);
+        }
 
-        // Remove from free_agents table (or mark claimed)
+        // Remove the free-agent record (canonical table = free_agents, uuid staff_id).
         const { error: faError } = await supabaseAdmin
             .from('free_agents')
             .delete()
             .eq('staff_id', staffId);
-            
-        // We log it in sbd_placement_log if it exists
-        await supabaseAdmin.from('placement_reviews').insert({
-            staff_id: staffId,
-            facility_id: newFacilityId,
-            claimed_by: claimedBy || user.id,
-            status: 'claimed',
-            notes: 'Claimed from Free Agents'
-        }).catch(e => console.log('Placement review log skipped:', e.message));
+        if (faError) {
+            console.warn('Could not delete free_agents row (non-fatal):', JSON.stringify(faError));
+        }
 
         return new Response(JSON.stringify({ success: true, message: 'Free Agent claimed successfully' }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }

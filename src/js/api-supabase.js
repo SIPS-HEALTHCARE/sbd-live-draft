@@ -255,8 +255,8 @@ const SB = {
   updateHospitalSystem(id, data){ return sbFetch(`/rest/v1/hospital_systems?id=eq.${id}&select=id,name,active,created_at`, { method:'PATCH', body:data }); },
   deleteHospitalSystem(id){ return sbFetch(`/rest/v1/hospital_systems?id=eq.${id}`, { method:'DELETE' }); },
   // ── Free Agents ──
-  getFreeAgents(){ return sbFetch('/rest/v1/sbd_free_agents?select=*&order=released_at.desc'); },
-  purgeFreeAgent(id){ return sbFetch(`/rest/v1/sbd_free_agents?id=eq.${id}`, { method:'DELETE' }); },
+  getFreeAgents(){ return sbFetch('/rest/v1/free_agents?select=*&order=released_at.desc'); },
+  purgeFreeAgent(id){ return sbFetch(`/rest/v1/free_agents?id=eq.${id}`, { method:'DELETE' }); },
   releaseToFreeAgent(data){ return sbFetch('/functions/v1/release-to-free-agent', { method:'POST', body:data }); },
   assignFreeAgent(data){ return sbFetch('/functions/v1/assign-free-agent', { method:'POST', body:data }); },
   // ── Free Agent remote helpers (named to match IS_LIVE call sites) ──
@@ -308,33 +308,33 @@ function resetDB(){
 // All live-mode reads go through fromBackend mappers.
 // All live-mode writes go through toBackend mappers.
 
-// ── Free Agents (sbd_free_agents table) ──────────────────────────────────────
+// ── Free Agents (free_agents table) ──────────────────────────────────────────
 // The free agent record is shaped like a staff object so it can be passed to
 // calcPoints(), beltBadge(), etc. without crashing.
 function mapFreeAgentFromBackend(row){
   if(!row) return null;
   return {
     id:             row.id,
-    staffId:        row.staff_id,
+    staffId:        row.staff_id,            // uuid → matches staff.id for the assign round-trip
     // Staff-compatible shape so UI helpers (calcPoints, beltBadge etc.) work:
-    first:          row.first_name || (row.name||'').split(' ')[0] || '--',
-    last:           row.last_name  || (row.name||'').split(' ').slice(1).join(' ') || '',
-    role:           row.staff_role || '',
-    belt:           row.belt       || 'White',
-    since:          row.belt_since || null,
-    stars:          row.stars      || 0,
+    first:          row.first || (row.name||'').split(' ')[0] || '--',
+    last:           row.last  || (row.name||'').split(' ').slice(1).join(' ') || '',
+    role:           row.role        || '',
+    belt:           row.belt        || 'White',
+    since:          row.since       || null,
+    stars:          row.stars       || 0,
     promo:          false,
     cur:            { c: null, s: null, o: null },
     nxt:            { c: null, s: null, o: null },
-    ps:             row.ps_data    || { enrolled:false, done:false, track:null, mod:null, tracks:{} },
-    oip:            row.oip        || null,
+    ps:             row.ps_data       || { enrolled:false, done:false, track:null, mod:null, tracks:{} },
+    oip:            row.oip           || null,
     history:        row.staff_history || [],
-    // Free-agent specific fields:
-    fid:            row.previous_facility_id || null,
-    fromFacName:    row.from_facility_name   || '--',
-    releaseReason:  row.release_reason       || row.reason || '',
-    releaseNotes:   row.release_notes        || row.notes  || '',
-    releasedAt:     row.released_at          || null,
+    // Free-agent specific fields (free_agents table columns):
+    fid:            row.from_fac_id   || null,
+    fromFacName:    row.from_fac_name || '--',
+    releaseReason:  row.release_reason|| '',
+    releaseNotes:   row.release_notes || '',
+    releasedAt:     row.released_at   || null,
     facilityHistory:[]
   };
 }
