@@ -13740,7 +13740,7 @@ function parseScheduleCSV(text){
   }
   const rows=[]; const errors=[];
   lines.slice(1).forEach((line,i)=>{
-    const cols=line.split(',').map(c=>c.trim().replace(/^"|"$/g,''));
+    const cols=parseCsvRow(line);
     const date=cols[colDate]||'';
     const shift=(cols[colShift]||'').toUpperCase();
     const first=(cols[colFirst]||'').toLowerCase();
@@ -13860,8 +13860,8 @@ function processBulkUpload(){
     for(let i=1; i<lines.length; i++){
       const rawRow = lines[i];
       if(!rawRow.trim()) continue; // skip blank
-      // standard split by comma (ignoring quoted CSV features for simplicity as instructed by scope)
-      const row = rawRow.split(',').map(s=>s.trim().replace(/^"|"$/g, ''));
+      // quote-aware CSV parse (M7-01): a field like "Smith, Jr" no longer shifts later columns
+      const row = parseCsvRow(rawRow);
       if(row.length < 2) continue;
       payload.push({
         facilityName: colFac>=0 ? row[colFac] : '',

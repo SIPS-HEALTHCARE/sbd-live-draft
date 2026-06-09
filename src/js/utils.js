@@ -92,6 +92,24 @@ function daysAtLabel(since, unit){ const d = daysAt(since); return d === null ? 
 // Pluralized phrase: "—" / "1 day" / "N days" (M3-05: avoid "1 days").
 function daysAtPhrase(since){ const d = daysAt(since); return d === null ? '—' : d + (d === 1 ? ' day' : ' days'); }
 function gatesStatus(g){ const vals=Object.values(g||{}); const p=vals.filter(x=>x==='pass').length; const f=vals.filter(x=>x==='fail').length; return {p,f,rem:3-p}; }
+// Quote-aware CSV row parser (M7-01): a field like "Smith, Jr" stays one cell
+// instead of splitting and shifting every later column. Handles "" escaped quotes.
+function parseCsvRow(line){
+  const out = []; let cur = ''; let inQ = false;
+  for(let i = 0; i < line.length; i++){
+    const ch = line[i];
+    if(inQ){
+      if(ch === '"'){ if(line[i+1] === '"'){ cur += '"'; i++; } else inQ = false; }
+      else cur += ch;
+    } else {
+      if(ch === '"') inQ = true;
+      else if(ch === ',') { out.push(cur); cur = ''; }
+      else cur += ch;
+    }
+  }
+  out.push(cur);
+  return out.map(s => s.trim());
+}
 
 function facStats(fid){
   const st=staffOf(fid);
