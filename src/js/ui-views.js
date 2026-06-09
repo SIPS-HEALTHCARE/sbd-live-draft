@@ -10061,7 +10061,7 @@ function renderAFacility(){
 
   // Populate switcher
   const sel=document.getElementById('fac-switcher-sel');
-  sel.innerHTML=DB.facilities.map(fac=>`<option value="${fac.id}" ${fac.id===ST.curFid?'selected':''}>${fac.name}${fac.loc?` — ${fac.loc}`:''}</option>`).join('');
+  sel.innerHTML=DB.facilities.filter(fac=>fac.active!==false||fac.id===ST.curFid).map(fac=>`<option value="${fac.id}" ${fac.id===ST.curFid?'selected':''}>${fac.name}${fac.loc?` — ${fac.loc}`:''}</option>`).join('');
   document.getElementById('fac-switcher-name').textContent=f.active===false?f.name+' (Inactive)':f.name;
   document.getElementById('fac-switcher').classList.remove('hidden');
   document.getElementById('download-btn').style.display='flex';
@@ -11894,7 +11894,7 @@ async function approveReg(rid){
     // Remove pending local status
     r.status='approved';
     const facSel=document.getElementById('fac-switcher-sel');
-    if(facSel) facSel.innerHTML=DB.facilities.map(f=>`<option value="${f.id}">${f.name}${f.loc?` — ${f.loc}`:''}</option>`).join('');
+    if(facSel) facSel.innerHTML=DB.facilities.filter(f=>f.active!==false||f.id===ST.curFid).map(f=>`<option value="${f.id}">${f.name}${f.loc?` — ${f.loc}`:''}</option>`).join('');
     const nb=document.getElementById('reg-nb');
     const pendingCnt=DB.pendingRegs.filter(x=>x.status==='pending').length;
     if(nb){nb.textContent=pendingCnt;nb.style.display=pendingCnt>0?'inline-block':'none';}
