@@ -759,7 +759,7 @@ function adminFilterBar(showFacility, facList, onChangeFn){
     <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px">
       <div class="search-wrap" style="min-width:180px;flex:1;max-width:280px">
         <div class="search-ico"><svg viewBox="0 0 18 18" fill="none" width="14" height="14"><circle cx="7.5" cy="7.5" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M12 12l3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
-        <input id="adminStaffSearch" class="search-inp" placeholder="Search by name or role..." value="${adminStaffFilter.q}"
+        <input id="adminStaffSearch_${onChangeFn}" class="search-inp" placeholder="Search by name or role..." value="${adminStaffFilter.q}"
           oninput="adminStaffSearchInput(this,'${onChangeFn}')">
       </div>
       ${facSelect}
@@ -778,7 +778,7 @@ function adminStaffSearchInput(el, fnName){
   adminStaffFilter.q = el.value;
   const caret = el.selectionStart;
   if(typeof window[fnName] === 'function') window[fnName]();
-  const fresh = document.getElementById('adminStaffSearch');
+  const fresh = document.getElementById('adminStaffSearch_' + fnName);
   if(fresh){
     fresh.focus();
     try { fresh.setSelectionRange(caret, caret); } catch(e){}
@@ -3830,7 +3830,7 @@ async function renderSReport(){
           <div style="flex:1">
             <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
               <span style="font-size:13px;font-weight:${isLast?'700':'500'};color:${isLast?BELT_CLR[b]:'var(--txt2)'}">${b} Belt${isLast?' (current)':''}</span>
-              ${isLast?`<span style="font-size:11px;color:var(--txt3)">${daysAtLabel(s.since,' days')}</span>`:''}
+              ${isLast?`<span style="font-size:11px;color:var(--txt3)">${daysAtPhrase(s.since)}</span>`:''}
             </div>
             <div style="font-size:11.5px;color:var(--txt3);margin-top:2px">${BELT_CERT[b]}</div>
           </div>
@@ -7121,7 +7121,7 @@ function renderHStaff(){
         <td class="fw7" style="white-space:nowrap">${fullName(s)}</td>
         <td class="tc-dim" style="font-size:11.5px;white-space:nowrap">${renderRoleDropdown(s)}</td>
         <td style="white-space:nowrap">${beltBadge(s.belt)}</td>
-        <td class="hide-sm" style="font-size:12px;color:var(--txt3)">${daysAtLabel(s.since,' days')}</td>
+        <td class="hide-sm" style="font-size:12px;color:var(--txt3)">${daysAtPhrase(s.since)}</td>
         <td>${gateDots(s.cur)}</td>
         <td>${nb?gateDots(s.nxt):'<span style="font-size:10px;color:var(--txt3)">Max</span>'}</td>
         <td>${s.promo?'<span class="pill p-gold">Eligible</span>':[...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].some(t=>['active','testing'].includes(getTrackStatus(s,t)))?'<span class="pill p-warn">PS Active</span>':calcTotalPSStars(s)>0?'<span class="pill p-ok" style="font-size:9px">'+Array(calcTotalPSStars(s)).fill('★').join('')+'</span>':'<span style="font-size:10.5px;color:var(--txt3)">--</span>'}</td>
@@ -7330,7 +7330,7 @@ function renderHProfile(sid,context){
           })()}
         </div>
         <div style="margin-bottom:8px">${beltBadge(s.belt)} <span style="font-size:12px;color:var(--txt3);margin-left:6px">${BELT_CERT[s.belt]}</span></div>
-        <div class="prof-meta"><span class="pmeta"><svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="2" y="3" width="10" height="10" rx="1" stroke="currentColor" stroke-width="1.3"/><path d="M5 1v3M9 1v3M2 7h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>Since ${s.since || '—'}</span><span class="pmeta">${daysAtLabel(s.since,' days')} at current belt</span>${s.stars>0?`<span class="pmeta tc-gold">${'* '.repeat(s.stars).trim()}</span>`:''}</div>
+        <div class="prof-meta"><span class="pmeta"><svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="2" y="3" width="10" height="10" rx="1" stroke="currentColor" stroke-width="1.3"/><path d="M5 1v3M9 1v3M2 7h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>Since ${s.since || '—'}</span><span class="pmeta">${daysAtPhrase(s.since)} at current belt</span>${s.stars>0?`<span class="pmeta tc-gold">${'* '.repeat(s.stars).trim()}</span>`:''}</div>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         ${context==='admin'?`<button class="btn btn-gold btn-sm" onclick="openRecordModal('${s.id}')">${ICO.record} Record Assessment</button>`:''}

@@ -89,6 +89,8 @@ function daysAt(since){
 // Display-safe label for daysAt(): "<n>d" (or a custom unit), or '—' when the
 // belt-start date is missing/invalid — so views never render literal "null"/"NaN".
 function daysAtLabel(since, unit){ const d = daysAt(since); return d === null ? '—' : d + (unit === undefined ? 'd' : unit); }
+// Pluralized phrase: "—" / "1 day" / "N days" (M3-05: avoid "1 days").
+function daysAtPhrase(since){ const d = daysAt(since); return d === null ? '—' : d + (d === 1 ? ' day' : ' days'); }
 function gatesStatus(g){ const vals=Object.values(g||{}); const p=vals.filter(x=>x==='pass').length; const f=vals.filter(x=>x==='fail').length; return {p,f,rem:3-p}; }
 
 function facStats(fid){
