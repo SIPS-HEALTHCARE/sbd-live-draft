@@ -1952,7 +1952,7 @@ function initTourDrag() {
 window.onload = function(){
   initTourDrag();
   const sel = document.getElementById('fac-switcher-sel');
-  if(sel) sel.innerHTML = DB.facilities.map(f=>`<option value="${f.id}">${f.name}</option>`).join('');
+  if(sel) sel.innerHTML = DB.facilities.filter(f=>f.active!==false||f.id===ST.curFid).map(f=>`<option value="${f.id}">${f.name}</option>`).join('');
 
   // Init swipe-to-close for all four portals
   ['h','a','s','x'].forEach(p => initSwipeClose(p));
@@ -2104,7 +2104,7 @@ async function initAppData(){
     
     // Refresh UI components
     const sel = document.getElementById('fac-switcher-sel');
-    if(sel) sel.innerHTML = DB.facilities.map(f=>`<option value="${f.id}">${f.name}</option>`).join('');
+    if(sel) sel.innerHTML = DB.facilities.filter(f=>f.active!==false||f.id===ST.curFid).map(f=>`<option value="${f.id}">${f.name}</option>`).join('');
     
     // Trigger view refreshes ONLY if user is already authenticated.
     // During initial doLogin(), ST.user isn't set until AFTER initAppData() returns,
