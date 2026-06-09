@@ -14572,7 +14572,10 @@ async function updateHospitalSystem(sid) {
   
   toast('Updating system...', 'info');
   try {
-    const updateData = { name, contact, email };
+    // hospital_systems only has columns id, name, active, created_at -- sending
+    // contact/email here makes PostgREST reject the whole PATCH (400), so the
+    // name edit never saved. Send only the real column. (FAC-09)
+    const updateData = { name };
     
     if (window.IS_LIVE && (window.SB || SB).updateHospitalSystem) {
       const res = await (window.SB || SB).updateHospitalSystem(sid, updateData);
