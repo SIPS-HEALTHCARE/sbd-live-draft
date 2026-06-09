@@ -3307,6 +3307,7 @@ const BELT_CLR_PRINT = {White:'#94a3b8',Yellow:'#d97706',Green:'#16a34a',Blue:'#
 function downloadFacilityReportV2(fid){
   const facId = fid||ST.hFid||ST.curFid;
   const fac = getFac(facId); if(!fac) return;
+  try{
   const st = staffOf(facId);
   const hs = buildHealthScore(facId);
   const stats = facStats(facId);
@@ -3445,6 +3446,7 @@ function downloadFacilityReportV2(fid){
   `;
 
   openPrintWindow(`SBD Facility Report: ${fac.name}`, body);
+  }catch(e){ console.error('Facility report (V2) failed:', e); toast('Report could not be generated: '+(e.message||e),'err'); }
 }
 
 
@@ -11622,12 +11624,14 @@ function downloadReport(){ downloadFacilityReport(ST.curFid); }
 
 function downloadFacilityReport(fid){
   const f=getFac(fid);if(!f)return;
+  try{
   const st=staffOf(fid);
   const stats=facStats(fid);
   const grade=stats.greenPct>=90?'A':stats.greenPct>=75?'B':stats.greenPct>=60?'C+':stats.greenPct>=40?'C':'D';
   const beltTbl=BELT_ORDER.map(b=>{const cnt=st.filter(s=>s.belt===b).length;return`<tr><td>${b} Belt</td><td>${BELT_CERT[b]}</td><td style="text-align:center">${cnt}</td><td style="text-align:center">${st.length?Math.round(cnt/st.length*100):0}%</td></tr>`}).join('');
   const promoReady=st.filter(s=>s.promo);
   const staffTbl=st.sort((a,b)=>beltIdx(b.belt)-beltIdx(a.belt)).map(s=>{
+    try{
     const proj=generateProjection(s);
     const win=getWindowStatus(s);
     const pts=calcPoints(s);
@@ -11641,7 +11645,9 @@ function downloadFacilityReport(fid){
       <td style="color:${win.status==='open'?'#16a34a':'#dc2626'};font-weight:700">${win.status==='open'?'Open':'Closed'}</td>
       <td>${proj.projectedWeeks>0?'~'+proj.projectedWeeks+'w to '+proj.nextBelt:'Max belt'}</td>
       <td style="font-weight:700;color:${proj.promotionRecommended?'#b45309':'#666'}">${proj.promotionRecommended?'YES':'–'}</td>
-    </tr>`;}).join('');
+    </tr>`;
+    }catch(_){ return `<tr><td>${fullName(s)}</td><td colspan="8" style="color:#999">data unavailable</td></tr>`; }
+  }).join('');
   const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>SBD Belt Report – ${f.name}</title>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
   <style>*{box-sizing:border-box}body{font-family:'Poppins',Arial,sans-serif;padding:36px;color:#111;font-size:10.5pt;line-height:1.5}
@@ -11696,6 +11702,7 @@ function downloadFacilityReport(fid){
   if(w){w.document.write(html);w.document.close();}
   else toast('Please allow pop-ups to download reports.','err');
   if(ST.user) SB.logReportDownload(fid, ST.user.id).catch(e => { if (e instanceof ReferenceError || e instanceof TypeError || e instanceof SyntaxError) throw e; });
+  }catch(e){ console.error('Facility report failed:', e); toast('Report could not be generated: '+(e.message||e),'err'); }
 }
 
 // ============================================================ A REGISTRATIONS
@@ -14539,19 +14546,6 @@ function openEditSystemModal(sid) {
           style="width:100%;background:#0e1328;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:12px;color:#e2e8f0;font-size:14px;font-family:inherit;outline:none">
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
-        <div class="form-group">
-          <label class="form-label">Primary Contact</label>
-          <input id="edit-sys-contact" type="text" value="${sys.contact || ''}" placeholder="Contact name"
-            style="width:100%;background:#0e1328;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:12px;color:#e2e8f0;font-size:14px;font-family:inherit;outline:none">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Contact Email</label>
-          <input id="edit-sys-email" type="email" value="${sys.email || ''}" placeholder="email@system.org"
-            style="width:100%;background:#0e1328;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:12px;color:#e2e8f0;font-size:14px;font-family:inherit;outline:none">
-        </div>
-      </div>
-      
       <div style="display:flex;justify-content:flex-end;gap:12px;margin-top:32px">
         <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
         <button class="btn btn-primary" onclick="updateHospitalSystem('${sid}')" style="background:var(--gold);color:#000">Save Changes</button>
@@ -14565,14 +14559,14 @@ function openEditSystemModal(sid) {
  * Persists an existing hospital system update to the database.
  */
 async function updateHospitalSystem(sid) {
-  const name = document.getElementById('edit-sys-name').value;
-  const contact = document.getElementById('edit-sys-contact').value;
-  const email = document.getElementById('edit-sys-email').value;
+  const name = document.getElementById('edit-sys-name').value.trim();
   if (!name) return toast('Please enter a system name', 'warn');
-  
+
   toast('Updating system...', 'info');
   try {
-    const updateData = { name, contact, email };
+    // hospital_systems only has columns: id, name, active, created_at.
+    // Sending contact/email made PostgREST reject the whole PATCH (FAC-09).
+    const updateData = { name };
     
     if (window.IS_LIVE && (window.SB || SB).updateHospitalSystem) {
       const res = await (window.SB || SB).updateHospitalSystem(sid, updateData);
