@@ -14932,6 +14932,27 @@ function cleanOptimisticCache() {
 }
 
 // Inline role change from the All Staff table dropdown
+// Resolve the sbd_portal_users login tied to a staff member. The DB has no
+// reliable staff<->login key yet (the staff_id column is the wrong type and is
+// empty), so we try the explicit sid link first, then fall back to an exact
+// normalized full-name match. Protected admin logins are never returned.
+// Returns { user } on a single confident match, or { reason } when it can't.
+function resolveLoginForStaff(s){
+  if(!s) return { reason:'no_staff' };
+  const PROTECTED = ['master_admin','staff_admin','system_admin'];
+  const norm = str => (str||'').toLowerCase().replace(/\s+/g,' ').trim();
+  // 1) explicit link, if any logins actually have it populated
+  let hits = DB.users.filter(u => u.sid && u.sid === s.id);
+  // 2) fall back to an exact normalized full-name match
+  if(hits.length === 0){
+    const target = norm(`${s.first||''} ${s.last||''}`);
+    if(target) hits = DB.users.filter(u => norm(u.name) === target);
+  }
+  hits = hits.filter(u => !PROTECTED.includes(u.role));
+  if(hits.length === 1) return { user: hits[0] };
+  return { reason: hits.length === 0 ? 'no_match' : 'ambiguous' };
+}
+
 function changeStaffRoleInline(staffId, newRole){
   const s = getStaff(staffId);
   if(!s) return;
@@ -14951,23 +14972,35 @@ function changeStaffRoleInline(staffId, newRole){
   };
   const newAccess = positionToAccess[newRole];
   if(newAccess){
-    // Find linked user account(s) for this staff member
-    const linkedUsers = DB.users.filter(u => u.sid === staffId);
-    linkedUsers.forEach(u => {
-      // Only upgrade/adjust accounts at staff_member or hospital level
-      // Never downgrade system_admin, staff_admin, or master_admin
-      const protectedRoles = ['master_admin','staff_admin','system_admin'];
-      if(!protectedRoles.includes(u.role) && u.role !== newAccess){
+    // The staff<->login link is not reliably populated in the DB yet, so
+    // resolve the matching login on demand (explicit link, then exact name).
+    const match = resolveLoginForStaff(s);
+    if(match.user){
+      const u = match.user;
+      if(u.role !== newAccess){
         const oldAccess = u.role;
         u.role = newAccess;
-        console.log(`[Role] Account ${u.email}: portal access ${oldAccess} \u2192 ${newAccess}`);
+        console.log(`[Role] Account ${u.email}: portal access ${oldAccess} -> ${newAccess}`);
         if(IS_LIVE && typeof SB !== 'undefined' && SB.updateUserProfile) {
           SB.updateUserProfile(u.authUid, { role: newAccess })
-            .then(() => { if(SB.syncUserClaims) SB.syncUserClaims({ userId: u.authUid, role: newAccess }); })
-            .catch(e => console.warn('[Role] User sync failed:', e.message));
+            .then(() => {
+              if(SB.syncUserClaims) SB.syncUserClaims({ userId: u.authUid, role: newAccess });
+              toast(`Portal access updated for <strong>${u.email}</strong> (now ${newAccess}). They may need to log out and back in.`,'ok');
+            })
+            .catch(e => {
+              console.warn('[Role] User sync failed:', e.message);
+              toast(`Role saved, but updating <strong>${u.email}</strong>'s portal access failed \u2014 please set it manually.`,'err');
+            });
         }
       }
-    });
+    } else {
+      // No confident login match -- do NOT guess. Tell the admin to do it by hand.
+      const why = match.reason === 'ambiguous'
+        ? `more than one login matches "${fullName(s)}"`
+        : `no login matched "${fullName(s)}"`;
+      console.warn(`[Role] Portal access not auto-updated (${match.reason}) for ${fullName(s)}`);
+      toast(`Role set to <strong>${newRole}</strong>, but portal access was not changed (${why}). Please update their login access manually.`,'warn');
+    }
   }
 
   // Sync to backend if live
