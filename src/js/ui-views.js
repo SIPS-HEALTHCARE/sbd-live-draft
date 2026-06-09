@@ -999,7 +999,7 @@ function beginPSTrack(staffId, tid){
   s.ps.enrolled = true;
   toast('Position School track started. Complete all 5 criteria to earn your star.');
   if (IS_LIVE && typeof SB !== 'undefined' && SB.updateStaff) {
-    SB.updateStaff(staffId, { ps: s.ps }).catch(e=>console.warn('Sync failed:', e));
+    SB.updateStaff(staffId, mapStaffPSToBackend(s)).catch(e=>{ console.warn('PS sync failed:', e); toast('Saved on screen, but syncing to the server failed — please refresh to confirm.','err'); });
   }
   if(typeof renderSPosSchool === 'function') renderSPosSchool();
 }
@@ -1013,7 +1013,7 @@ function readyToTestPS(staffId, tid){
   s.ps.tracks[tid].status = 'testing';
   toast('Marked as ready to test. Your assessor has been notified.');
   if (IS_LIVE && typeof SB !== 'undefined' && SB.updateStaff) {
-    SB.updateStaff(staffId, { ps: s.ps }).catch(e=>console.warn('Sync failed:', e));
+    SB.updateStaff(staffId, mapStaffPSToBackend(s)).catch(e=>{ console.warn('PS sync failed:', e); toast('Saved on screen, but syncing to the server failed — please refresh to confirm.','err'); });
   }
   if(typeof renderSPosSchool === 'function') renderSPosSchool();
 }
@@ -1038,7 +1038,7 @@ function completePSTrack(staffId, tid){
   toast('Position School track complete! Star awarded.');
   
   if (IS_LIVE && typeof SB !== 'undefined' && SB.updateStaff) {
-    SB.updateStaff(staffId, { ps: s.ps, stars: s.stars }).catch(e=>console.warn('Sync failed:', e));
+    SB.updateStaff(staffId, mapStaffPSToBackend(s)).catch(e=>{ console.warn('PS sync failed:', e); toast('Star awarded on screen, but syncing to the server failed — please refresh to confirm.','err'); });
   }
 
   // Refresh whichever view is active (includes drawer redrawing or scoreboard re-rendering)
