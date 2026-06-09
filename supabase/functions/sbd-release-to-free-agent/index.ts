@@ -20,16 +20,17 @@ serve(async (req) => {
 
         const data = await req.json();
         
-        let staffId, currentFacilityId, reason, notes;
-        
+        let staffId, fromFacId, fromFacName, reason, notes;
+
         // Handle both object payload and direct arguments from frontend variations
         if (data && data.staffId) {
-            staffId = data.staffId;
-            currentFacilityId = data.currentFacilityId;
-            reason = data.reason;
-            notes = data.notes;
+            staffId     = data.staffId;
+            fromFacId   = data.fromFacId || data.currentFacilityId || null;
+            fromFacName = data.fromFacName || null;
+            reason      = data.reason;
+            notes       = data.notes;
         } else {
-            throw new Error('Invalid payload format. Expected {staffId, currentFacilityId, ...}');
+            throw new Error('Invalid payload format. Expected {staffId, ...}');
         }
 
         if (!staffId) throw new Error('staffId missing');
@@ -91,29 +92,49 @@ serve(async (req) => {
             throw new Error('Only admins can release staff to free agents');
         }
 
-        // Update staff record — set fid to null (column is uuid FK, can't use string 'unassigned')
+        // Snapshot the staff row BEFORE we null its facility, so the registry card has data.
+        const { data: staffRow, error: readErr } = await supabaseAdmin
+            .from('staff')
+            .select('first, last, role, belt, since, stars, oip, fid')
+            .eq('id', staffId)
+            .single();
+        if (readErr || !staffRow) {
+            throw new Error('Staff record not found for release: ' + (readErr?.message || 'no row'));
+        }
+
+        // Detach from facility (fid is the only facility key on staff).
         const { error: staffError } = await supabaseAdmin
             .from('staff')
             .update({ fid: null })
             .eq('id', staffId);
 
         if (staffError) {
-            console.error('Staff update error:', JSON.stringify(staffError));
-            throw new Error('Failed to update staff record to free agent: ' + staffError.message);
+            console.error('Release staff update error:', JSON.stringify(staffError));
+            throw new Error('Failed to release staff: ' + staffError.message);
         }
 
-        // Add to free_agents table
+        // Persist to the canonical free_agents table with columns that actually exist.
         const { error: faError } = await supabaseAdmin.from('free_agents').insert({
-            staff_id: staffId,
-            origin_facility_id: currentFacilityId || callerFid || 'unknown',
-            reason: reason || 'Released by Admin',
-            notes: notes || '',
-            released_by: user.id
+            staff_id:       staffId,
+            first:          staffRow.first,
+            last:           staffRow.last,
+            role:           staffRow.role,
+            belt:           staffRow.belt,
+            since:          staffRow.since,
+            stars:          staffRow.stars,
+            from_fac_id:    fromFacId || staffRow.fid,
+            from_fac_name:  fromFacName,
+            release_reason: reason || 'Released by Admin',
+            release_notes:  notes || '',
+            oip:            staffRow.oip,
+            released_at:    new Date().toISOString()
         });
 
         if (faError) {
-             console.warn("Could not insert into free_agents (might exist or missing schema):", faError);
-             // we don't throw because the core operation (staff record update) succeeded.
+            // Roll back the detach so the member isn't left orphaned (fid=null, not in pool).
+            await supabaseAdmin.from('staff').update({ fid: staffRow.fid }).eq('id', staffId);
+            console.error('free_agents insert failed, rolled back detach:', JSON.stringify(faError));
+            throw new Error('Failed to add to free agents: ' + faError.message);
         }
 
         return new Response(JSON.stringify({ success: true, message: 'Released to Free Agents' }), {

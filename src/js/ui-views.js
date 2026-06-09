@@ -10068,7 +10068,7 @@ function renderAFacility(){
 
   // Populate switcher
   const sel=document.getElementById('fac-switcher-sel');
-  sel.innerHTML=DB.facilities.map(fac=>`<option value="${fac.id}" ${fac.id===ST.curFid?'selected':''}>${fac.name}${fac.loc?` — ${fac.loc}`:''}</option>`).join('');
+  sel.innerHTML=DB.facilities.filter(fac=>fac.active!==false||fac.id===ST.curFid).map(fac=>`<option value="${fac.id}" ${fac.id===ST.curFid?'selected':''}>${fac.name}${fac.loc?` — ${fac.loc}`:''}</option>`).join('');
   document.getElementById('fac-switcher-name').textContent=f.active===false?f.name+' (Inactive)':f.name;
   document.getElementById('fac-switcher').classList.remove('hidden');
   document.getElementById('download-btn').style.display='flex';
@@ -10569,27 +10569,62 @@ let asmFilter='all';
 // GATE ASSESSMENT APPROVAL SYSTEM
 // ============================================================
 
-function approveGateRequest(qid) {
+async function approveGateRequest(qid) {
   const item = DB.queue.find(q => q.id === qid);
   if (!item) return;
   const s = getStaff(item.sid);
   if (!s) return;
   if (!confirm(`Approve ${fullName(s)}'s ${item.type} assessment request for ${item.targetBelt} Belt? This confirms the assessment is scheduled.`)) return;
+
+  const prev = { status: item.status, approvedBy: item.approvedBy, approvedAt: item.approvedAt };
   item.status = 'approved';
   item.approvedBy = ST.name || 'Admin';
   item.approvedAt = new Date().toISOString().slice(0, 10);
+
+  if (IS_LIVE) {
+    try {
+      await SB.reviewAssessmentQueue(item.id, 'approved', {
+        practiceKnowledge: item.practiceKnowledge ?? null,
+        practiceSimulation: item.practiceSimulation ?? null,
+        review: { action: 'approved', by: item.approvedBy, at: item.approvedAt }
+      });
+    } catch (e) {
+      // Roll back the optimistic change so the UI never shows a false "approved".
+      item.status = prev.status; item.approvedBy = prev.approvedBy; item.approvedAt = prev.approvedAt;
+      toast('Could not save approval — please retry.', 'err');
+      if (ST.aView === 'a-progression') renderAProgression();
+      if (ST.aView === 'a-assessments') renderAAssessments();
+      return;
+    }
+  }
+
   toast(`${fullName(s)}: ${item.type} assessment for ${item.targetBelt} Belt approved.`, 'ok');
   updateProgBadge();
   if (ST.aView === 'a-progression') renderAProgression();
   if (ST.aView === 'a-assessments') renderAAssessments();
 }
 
-function denyGateRequest(qid) {
+async function denyGateRequest(qid) {
   const item = DB.queue.find(q => q.id === qid);
   if (!item) return;
   const s = getStaff(item.sid);
   if (!s) return;
   const reason = prompt(`Reason for denying ${fullName(s)}'s ${item.type} request (optional):`);
+
+  if (IS_LIVE) {
+    try {
+      await SB.reviewAssessmentQueue(item.id, 'denied', {
+        practiceKnowledge: item.practiceKnowledge ?? null,
+        practiceSimulation: item.practiceSimulation ?? null,
+        review: { action: 'denied', by: ST.name || 'Admin', at: new Date().toISOString().slice(0, 10), reason: reason || '' }
+      }, /* resolved */ true);
+    } catch (e) {
+      // Don't drop it from the queue if the DB write failed — would re-appear on refresh anyway.
+      toast('Could not save denial — please retry.', 'err');
+      return;
+    }
+  }
+
   item.status = 'denied';
   item.deniedBy = ST.name || 'Admin';
   item.deniedAt = new Date().toISOString().slice(0, 10);
@@ -11901,7 +11936,7 @@ async function approveReg(rid){
     // Remove pending local status
     r.status='approved';
     const facSel=document.getElementById('fac-switcher-sel');
-    if(facSel) facSel.innerHTML=DB.facilities.map(f=>`<option value="${f.id}">${f.name}${f.loc?` — ${f.loc}`:''}</option>`).join('');
+    if(facSel) facSel.innerHTML=DB.facilities.filter(f=>f.active!==false||f.id===ST.curFid).map(f=>`<option value="${f.id}">${f.name}${f.loc?` — ${f.loc}`:''}</option>`).join('');
     const nb=document.getElementById('reg-nb');
     const pendingCnt=DB.pendingRegs.filter(x=>x.status==='pending').length;
     if(nb){nb.textContent=pendingCnt;nb.style.display=pendingCnt>0?'inline-block':'none';}
@@ -12379,7 +12414,7 @@ function downloadFreeAgentReport(faId) {
 
 
 // ============================================================ TRANSFER VERIFICATION ENGINE
-function approveTransfer(trId) {
+async function approveTransfer(trId) {
   if(!DB.pendingTransfers) return;
   const tr = DB.pendingTransfers.find(t => t.id === trId);
   if(!tr || tr.status !== 'pending') return;
@@ -12442,16 +12477,25 @@ function approveTransfer(trId) {
     const date = tr.effectDate;
 
     // The released staff row still exists on the backend with no facility (fid=null);
-    // re-attach it to the new facility and clear free-agent status. The deployed
-    // sbd-assign-free-agent function expects { staffId, facilityId }. (The previous call
-    // hit a non-existent /assign-free-agent endpoint with mismatched args, so the
-    // assignment never persisted and the person vanished from every facility view.)
+    // re-attach it to the new facility. The deployed sbd-assign-free-agent function
+    // expects { staffId, facilityId } and updates ONLY staff.fid (the sole facility key).
     const origStaffId = fa.staffId || fa.originalId || fa.id;
-    const restoredStaff = {...fa, fid: tr.toFacId, id: origStaffId};
+
     if(IS_LIVE){
-      SB.assignFreeAgentRemote({ staffId: origStaffId, facilityId: tr.toFacId, claimedBy: adminName }).catch(e => handleSyncError(e, 'Assign sync'));
+      try {
+        await SB.assignFreeAgentRemote({ staffId: origStaffId, facilityId: tr.toFacId, claimedBy: adminName });
+      } catch(e) {
+        // Persist failed \u2014 undo the optimistic approval and keep the agent in the pool.
+        tr.status = 'pending';
+        delete tr.approvedBy; delete tr.approvedByName; delete tr.approvedAt;
+        toast('Assignment failed to save: ' + e.message + ' \u2014 the staff member was NOT moved.','err');
+        renderAFreeAgents();
+        return;
+      }
     }
-    // Local mirror: replace any stale local row for this staff id with the restored record.
+
+    // Persisted OK \u2192 mirror locally (fallback if the re-hydration below fails).
+    const restoredStaff = {...fa, fid: tr.toFacId, id: origStaffId};
     DB.staff = DB.staff.filter(s => s.id !== origStaffId);
     DB.staff.push(restoredStaff);
     if(!restoredStaff.facilityHistory) restoredStaff.facilityHistory = [];
@@ -12470,6 +12514,9 @@ function approveTransfer(trId) {
     });
 
     toast(`Assignment approved. ${cleanName(tr.staffName)} is now active at <strong>${fac?.name||tr.toFacName}</strong>.`,'ok');
+
+    // Pull canonical staff/free-agent rows so the destination shows the real (not FA-shaped) record.
+    if(IS_LIVE && typeof initAppData === 'function'){ try { await initAppData(); } catch(_){} }
   }
 
   updateFANB();
