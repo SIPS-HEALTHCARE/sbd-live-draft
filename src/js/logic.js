@@ -65,7 +65,8 @@ function getWindowStatus(staff){
   if(bIdx >= 5) return {status:'max', label:'Black Belt – Maximum Level', pct:100};
   const cfg   = BELT_WINDOWS[belt];
   if(!cfg)     return {status:'open', label:'Window Open', pct:100};
-  const allPass = staff.cur.c==='pass' && staff.cur.s==='pass' && staff.cur.o==='pass';
+  const cur = staff.cur || {};
+  const allPass = cur.c==='pass' && cur.s==='pass' && cur.o==='pass';
   if(!allPass) return {status:'locked', label:'Complete current belt assessments first', pct:0};
   // Calculate from belt earn date
   const earnDate = new Date(staff.since);
@@ -105,9 +106,10 @@ function calcPoints(staff){
   BELT_ORDER.slice(0, beltIdx(staff.belt)+1).forEach(b => pts += BELT_POINTS[b]);
   // Gate points (current + next partial)
   ['cur','nxt'].forEach(tier => {
+    const t = staff[tier] || {};
     ['c','s','o'].forEach(g => {
-      if(staff[tier][g]==='pass') pts += GATE_POINTS.pass;
-      if(staff[tier][g]==='fail') pts += GATE_POINTS.fail;
+      if(t[g]==='pass') pts += GATE_POINTS.pass;
+      if(t[g]==='fail') pts += GATE_POINTS.fail;
     });
   });
   // Star bonus
@@ -127,7 +129,8 @@ function generateProjection(staff){
   if(!nb) return {summary:'Staff has reached Black Belt – maximum level achieved.', promotionRecommended:staff.promo, projectedWeeks:0};
 
   // Gates passed toward next belt
-  const nxtPassed = [staff.nxt.c,staff.nxt.s,staff.nxt.o].filter(x=>x==='pass').length;
+  const cur = staff.cur || {}, nxt = staff.nxt || {};
+  const nxtPassed = [nxt.c,nxt.s,nxt.o].filter(x=>x==='pass').length;
   const gatesLeft  = 3 - nxtPassed;
   // Estimate based on historical assessment cadence (avg 2-4 weeks per gate from history)
   const historyGates = (staff.history||[]).filter(h=>h.res==='pass').length;
@@ -139,7 +142,7 @@ function generateProjection(staff){
   const waitWeeks = win.status==='closed' ? Math.ceil((win.daysUntilOpen||14)/7) : 0;
   const totalWeeks = weeksForGates + waitWeeks;
   // Promotion recommendation logic
-  const allCurPassed = staff.cur.c==='pass'&&staff.cur.s==='pass'&&staff.cur.o==='pass';
+  const allCurPassed = cur.c==='pass'&&cur.s==='pass'&&cur.o==='pass';
   const beltScore    = bIdx+1;
   const promoRecommended = beltScore>=3 && allCurPassed && calcTotalPSStars(staff)>=1;
   let summary='';
