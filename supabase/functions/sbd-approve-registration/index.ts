@@ -152,6 +152,14 @@ serve(async (req) => {
 
         if (profileUpsertError) {
             console.error("Profile Upsert Error:", profileUpsertError);
+            // AUTH-F1: if we created the auth user in THIS request, roll it back so a
+            // failed approval doesn't leave an orphaned login that blocks re-registering
+            // this email. Never touch a pre-existing user (existingProfile path).
+            if (authCreated && newUserId) {
+                const { error: rbErr } = await supabaseAdmin.auth.admin.deleteUser(newUserId);
+                if (rbErr) console.error('AUTH-F1 rollback FAILED for orphaned auth user', newUserId, rbErr);
+                else console.log('AUTH-F1 rollback: deleted orphaned auth user', newUserId);
+            }
             throw new Error('Failed to create user profile: ' + profileUpsertError.message);
         }
 
