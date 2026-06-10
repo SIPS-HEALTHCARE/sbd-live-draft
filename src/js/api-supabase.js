@@ -180,10 +180,18 @@ const SB = {
   // ── Assessment Queue ──
   getPendingAssessments(fid){
     const f = fid ? `&facility_id=eq.${encodeURIComponent(fid)}` : '';
-    return sbFetch(`/rest/v1/sbd_assessment_queue?status=eq.pending${f}&select=*&order=requested_at.desc`);
+    return sbFetch(`/rest/v1/sbd_assessment_queue?status=in.(pending,approved)${f}&select=*&order=requested_at.desc`);
   },
   submitAssessmentQueue(data){ return sbFetch('/rest/v1/sbd_assessment_queue', { method:'POST', body:data }); },
   resolveAssessmentQueue(id, status){ return sbFetch(`/rest/v1/sbd_assessment_queue?id=eq.${id}`, { method:'PATCH', body:{ status, resolved_at:new Date().toISOString() } }); },
+  // Persist an admin review action (approve/deny) on a gate request. `data` carries the merged
+  // {practiceKnowledge, practiceSimulation, review:{...}} so the row's practice scores survive
+  // (PostgREST PATCH replaces the column wholesale). `resolved` stamps resolved_at for terminal actions.
+  reviewAssessmentQueue(id, status, data, resolved){
+    const body = { status, data };
+    if (resolved) body.resolved_at = new Date().toISOString();
+    return sbFetch(`/rest/v1/sbd_assessment_queue?id=eq.${id}`, { method:'PATCH', body });
+  },
   // ── Assessments (via edge function for atomic RPC + audit) ──
   recordAssessment(staff, type, targetBelt, result, notes, assessorId, timestamp){
     return sbFetch('/functions/v1/sbd-record-assessment', {
@@ -255,8 +263,8 @@ const SB = {
   updateHospitalSystem(id, data){ return sbFetch(`/rest/v1/hospital_systems?id=eq.${id}&select=id,name,active,created_at`, { method:'PATCH', body:data }); },
   deleteHospitalSystem(id){ return sbFetch(`/rest/v1/hospital_systems?id=eq.${id}`, { method:'DELETE' }); },
   // ── Free Agents ──
-  getFreeAgents(){ return sbFetch('/rest/v1/sbd_free_agents?select=*&order=released_at.desc'); },
-  purgeFreeAgent(id){ return sbFetch(`/rest/v1/sbd_free_agents?id=eq.${id}`, { method:'DELETE' }); },
+  getFreeAgents(){ return sbFetch('/rest/v1/free_agents?select=*&order=released_at.desc'); },
+  purgeFreeAgent(id){ return sbFetch(`/rest/v1/free_agents?id=eq.${id}`, { method:'DELETE' }); },
   releaseToFreeAgent(data){ return sbFetch('/functions/v1/release-to-free-agent', { method:'POST', body:data }); },
   assignFreeAgent(data){ return sbFetch('/functions/v1/assign-free-agent', { method:'POST', body:data }); },
   // ── Free Agent remote helpers (named to match IS_LIVE call sites) ──
@@ -308,33 +316,33 @@ function resetDB(){
 // All live-mode reads go through fromBackend mappers.
 // All live-mode writes go through toBackend mappers.
 
-// ── Free Agents (sbd_free_agents table) ──────────────────────────────────────
+// ── Free Agents (free_agents table) ──────────────────────────────────────────
 // The free agent record is shaped like a staff object so it can be passed to
 // calcPoints(), beltBadge(), etc. without crashing.
 function mapFreeAgentFromBackend(row){
   if(!row) return null;
   return {
     id:             row.id,
-    staffId:        row.staff_id,
+    staffId:        row.staff_id,            // uuid → matches staff.id for the assign round-trip
     // Staff-compatible shape so UI helpers (calcPoints, beltBadge etc.) work:
-    first:          row.first_name || (row.name||'').split(' ')[0] || '--',
-    last:           row.last_name  || (row.name||'').split(' ').slice(1).join(' ') || '',
-    role:           row.staff_role || '',
-    belt:           row.belt       || 'White',
-    since:          row.belt_since || null,
-    stars:          row.stars      || 0,
+    first:          row.first || (row.name||'').split(' ')[0] || '--',
+    last:           row.last  || (row.name||'').split(' ').slice(1).join(' ') || '',
+    role:           row.role        || '',
+    belt:           row.belt        || 'White',
+    since:          row.since       || null,
+    stars:          row.stars       || 0,
     promo:          false,
     cur:            { c: null, s: null, o: null },
     nxt:            { c: null, s: null, o: null },
-    ps:             row.ps_data    || { enrolled:false, done:false, track:null, mod:null, tracks:{} },
-    oip:            row.oip        || null,
+    ps:             row.ps_data       || { enrolled:false, done:false, track:null, mod:null, tracks:{} },
+    oip:            row.oip           || null,
     history:        row.staff_history || [],
-    // Free-agent specific fields:
-    fid:            row.previous_facility_id || null,
-    fromFacName:    row.from_facility_name   || '--',
-    releaseReason:  row.release_reason       || row.reason || '',
-    releaseNotes:   row.release_notes        || row.notes  || '',
-    releasedAt:     row.released_at          || null,
+    // Free-agent specific fields (free_agents table columns):
+    fid:            row.from_fac_id   || null,
+    fromFacName:    row.from_fac_name || '--',
+    releaseReason:  row.release_reason|| '',
+    releaseNotes:   row.release_notes || '',
+    releasedAt:     row.released_at   || null,
     facilityHistory:[]
   };
 }
@@ -493,6 +501,8 @@ function mapFacilityToBackend(fac){
 
 function mapQueueFromBackend(row){
   if(!row) return null;
+  const d = row.data || {};
+  const rev = d.review || {};
   return {
     id: row.id,
     sid: row.staff_id,
@@ -502,7 +512,12 @@ function mapQueueFromBackend(row){
     status: row.status,
     date: row.requested_at ? new Date(row.requested_at).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}) : '',
     requested_at: row.requested_at,
-    resolved_at: row.resolved_at || null
+    requestedAt: row.requested_at || null,           // camel — badge + request filters depend on this
+    resolved_at: row.resolved_at || null,
+    practiceKnowledge: d.practiceKnowledge ?? undefined,
+    practiceSimulation: d.practiceSimulation ?? undefined,
+    approvedBy: rev.action==='approved' ? rev.by : undefined,
+    approvedAt: rev.action==='approved' ? rev.at : undefined
   };
 }
 
@@ -514,7 +529,11 @@ function mapQueueToBackend(item){
     assessment_type: item.type,
     target_belt: item.targetBelt,
     status: item.status || 'pending',
-    requested_at: item.requested_at || new Date().toISOString()
+    requested_at: item.requested_at || item.requestedAt || new Date().toISOString(),
+    data: {
+      practiceKnowledge: item.practiceKnowledge ?? null,
+      practiceSimulation: item.practiceSimulation ?? null
+    }
   };
 }
 
