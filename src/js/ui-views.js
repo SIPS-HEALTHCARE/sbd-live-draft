@@ -2254,6 +2254,7 @@ function renderAPlacementReviews(){
                 <input type="text" id="pr-note-${pr.id}" placeholder="Add a note..." style="width:100%;background:#0e1328;border:1px solid rgba(255,255,255,.1);border-radius:6px;padding:9px 12px;color:#e2e8f0;font-size:13px;font-family:'Poppins',sans-serif;box-sizing:border-box">
               </div>
               <button onclick="confirmPlacement('${pr.id}')" style="background:#22c55e;border:none;border-radius:8px;padding:10px 22px;font-size:13px;font-weight:700;color:#052e16;cursor:pointer;font-family:'Poppins',sans-serif;white-space:nowrap">Confirm Placement</button>
+              <button onclick="downloadAssessmentReport('${pr.id}')" style="background:transparent;border:1px solid rgba(255,255,255,.18);border-radius:8px;padding:10px 16px;font-size:12.5px;font-weight:600;color:#94a3b8;cursor:pointer;font-family:'Poppins',sans-serif;white-space:nowrap">Draft Report</button>
             </div>
           </div>` : `
           <div style="margin-top:16px;padding:12px 14px;background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.2);border-radius:8px;display:flex;align-items:center;gap:10px">
@@ -2262,6 +2263,7 @@ function renderAPlacementReviews(){
               <div style="font-size:12px;font-weight:700;color:#22c55e">Placement Confirmed -- ${pr.confirmedBelt} Belt</div>
               ${pr.assessorNote ? `<div style="font-size:11.5px;color:#86efac;margin-top:3px">Note: ${pr.assessorNote}</div>` : ''}
             </div>
+            <button onclick="downloadAssessmentReport('${pr.id}')" style="margin-left:auto;background:rgba(196,154,32,.12);border:1px solid rgba(196,154,32,.4);border-radius:8px;padding:8px 16px;font-size:12.5px;font-weight:700;color:#eab308;cursor:pointer;font-family:'Poppins',sans-serif;white-space:nowrap">Assessment Report</button>
           </div>`}
         </div>
       </div>`;
@@ -2295,6 +2297,212 @@ function togglePRCard(prId){
   const open = body.style.display !== 'none';
   body.style.display = open ? 'none' : 'block';
   if(chev) chev.style.transform = open ? '' : 'rotate(90deg)';
+}
+
+// ============================================================
+// FORMAL BELT ASSESSMENT REPORT (6-page, governing standards)
+// Generated from a placement_reviews record. Source documents:
+// "SBD OS Assessment Report Governing Standards" (May 2026) and the
+// "CANDIDATE NAME Assessment Report" template (both from SIPS).
+// ============================================================
+
+// Thresholds per the governing standards + template.
+// DOCUMENTED: White (blended 75 / K 80 / Sim 72), Yellow (K 83 / Sim 75),
+// Green (blended 81 / K 86 / Sim 78). Blue/Brown/Black follow the same +3
+// progression PENDING the "SBD OS Assessment Scoring Logic Specification"
+// -- confirm those three rows against that document before relying on them.
+const RPT_STANDARDS = {
+  weights: { k: 0.6, sim: 0.4 },                  // blended = 60% knowledge + 40% simulation (template math)
+  kLevelFloor: 80,                                 // knowledge floor, every level
+  simLevelFloors: { 1: 75, 2: 70, 3: 65, 4: 65, 5: 65 },
+  simResponseMin: 50,                              // individual response minimum
+  advisoryBand: 3,                                 // passing within this of a floor -> advisory
+  belts: {
+    White:  { blended: 75, k: 80, sim: 72 },
+    Yellow: { blended: 78, k: 83, sim: 75 },
+    Green:  { blended: 81, k: 86, sim: 78 },
+    Blue:   { blended: 84, k: 89, sim: 81 },
+    Brown:  { blended: 87, k: 92, sim: 84 },
+    Black:  { blended: 90, k: 95, sim: 87 }
+  }
+};
+
+// Derive the full report model from a placement review's stored responses.
+function rptComputeModel(pr){
+  const r1 = (n)=>Math.round(n*10)/10;
+  const levels = {};
+  for(let l=1; l<=5; l++) levels[l] = { k: [], sim: [] };
+  (pr.responses||[]).forEach(r => {
+    if(!levels[r.level]) return;
+    if(r.type === 'knowledge') levels[r.level].k.push(r);
+    else levels[r.level].sim.push(r);
+  });
+  const kLevels = [], simLevels = [];
+  let kCorrect = 0, kTotal = 0, simSum = 0, simN = 0;
+  for(let l=1; l<=5; l++){
+    const ks = levels[l].k, ss = levels[l].sim;
+    const correct = ks.filter(q=>q.correct).length;
+    kCorrect += correct; kTotal += ks.length;
+    const kPct = ks.length ? r1(correct/ks.length*100) : null;
+    const scores = ss.map(q=>q.aiScore||0);
+    scores.forEach(s=>{ simSum+=s; simN++; });
+    const simPct = scores.length ? r1(scores.reduce((a,b)=>a+b,0)/scores.length) : null;
+    const sFloor = RPT_STANDARDS.simLevelFloors[l];
+    kLevels.push({ level:l, pct:kPct, correct, of:ks.length, floor:RPT_STANDARDS.kLevelFloor, pass: kPct!==null && kPct>=RPT_STANDARDS.kLevelFloor });
+    simLevels.push({ level:l, pct:simPct, scores, floor:sFloor, pass: simPct!==null && simPct>=sFloor });
+  }
+  const kOverall = kTotal ? r1(kCorrect/kTotal*100) : 0;
+  const simOverall = simN ? r1(simSum/simN) : 0;
+  const blended = r1(RPT_STANDARDS.weights.k*kOverall + RPT_STANDARDS.weights.sim*simOverall);
+  const belt = pr.confirmedBelt || pr.tentativeBelt || 'White';
+  const th = RPT_STANDARDS.belts[belt] || RPT_STANDARDS.belts.White;
+
+  // Conditions per the severity framework (no auto SUPERVISED PRACTICE:
+  // dangerous-answer classification is an assessor judgment we do not infer).
+  const conditions = [];
+  simLevels.filter(s=>!s.pass && s.pct!==null).forEach(s=>{
+    conditions.push({ sev:'BLOCKING', title:`Simulation Level ${s.level} below floor`,
+      finding:`Simulation level ${s.level} scored ${s.pct}% against the ${s.floor}% floor.`,
+      action:`Scenario practice in the level ${s.level} topic areas with supervisor review, then re-assessment of this simulation level.` });
+  });
+  (pr.responses||[]).filter(r=>r.type!=='knowledge' && (r.aiScore||0) < RPT_STANDARDS.simResponseMin).forEach(r=>{
+    conditions.push({ sev:'BLOCKING', title:`Individual response below the ${RPT_STANDARDS.simResponseMin}-point minimum`,
+      finding:`"${(r.question||'').slice(0,90)}" scored ${r.aiScore}.`,
+      action:`Tabletop walk-through of this scenario with a supervisor; correct handling must be demonstrated and signed off.` });
+  });
+  kLevels.filter(k=>!k.pass && k.pct!==null).forEach(k=>{
+    conditions.push({ sev:'REQUIRED', title:`Knowledge Level ${k.level} below the ${k.floor}% floor`,
+      finding:`Level ${k.level} knowledge scored ${k.pct}% (${k.correct}/${k.of} correct).`,
+      action:`Re-study the level ${k.level} material and re-test; ${k.floor}% or above required.` });
+  });
+  [...kLevels.filter(k=>k.pass && k.pct!==null && k.pct < k.floor+RPT_STANDARDS.advisoryBand),
+   ...simLevels.filter(s=>s.pass && s.pct!==null && s.pct < s.floor+RPT_STANDARDS.advisoryBand)].forEach(b=>{
+    conditions.push({ sev:'ADVISORY', title:`Level ${b.level} ${b.scores?'simulation':'knowledge'} is borderline`,
+      finding:`Passed at ${b.pct}%, within ${RPT_STANDARDS.advisoryBand} points of the ${b.floor}% floor.`,
+      action:`Acknowledge and fold into the development plan. Does not block advancement.` });
+  });
+  const nBlock = conditions.filter(c=>c.sev==='BLOCKING').length;
+  const nReq   = conditions.filter(c=>c.sev==='REQUIRED').length;
+  const nAdv   = conditions.filter(c=>c.sev==='ADVISORY').length;
+  const clean = nBlock===0 && nReq===0 && blended>=th.blended && kOverall>=th.k && simOverall>=th.sim;
+  const determination = clean ? `${belt.toUpperCase()} BELT -- Clean`
+    : `${belt.toUpperCase()} BELT -- Conditional (${nBlock} blocking, ${nReq} required, ${nAdv} advisory)`;
+
+  const order = ['White','Yellow','Green','Blue','Brown','Black'];
+  const nb = order[order.indexOf(belt)+1] || null;
+  const nextTh = nb ? RPT_STANDARDS.belts[nb] : null;
+  const gap = (cur, need)=> cur>=need ? 'Already meets' : `+${r1(need-cur)} pts needed`;
+  return { belt, th, blended, kOverall, simOverall, kLevels, simLevels, conditions, nBlock, nReq, nAdv, clean, determination,
+    nextBelt: nb, nextRows: nextTh ? [
+      ['Blended Score', blended, nextTh.blended, gap(blended,nextTh.blended)],
+      ['Knowledge Overall', kOverall, nextTh.k, gap(kOverall,nextTh.k)],
+      ['Simulation Overall', simOverall, nextTh.sim, gap(simOverall,nextTh.sim)]
+    ] : [] };
+}
+
+function downloadAssessmentReport(prId){
+  const pr = (DB.placementReviews||[]).find(r=>r.id===prId);
+  if(!pr){ toast('Review not found.','err'); return; }
+  if(!pr.responses || !pr.responses.length){ toast('No question-level data stored for this review.','err'); return; }
+  const m = rptComputeModel(pr);
+  const s = getStaff(pr.staffId);
+  const fac = s ? (getFac(s.fid)?.name||'--') : '--';
+  const draft = pr.status === 'pending';
+  const dt = pr.submittedAt ? new Date(pr.submittedAt).toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}) : '--';
+  const pf = (b)=> b ? '<span style="color:#16a34a;font-weight:700">PASS</span>' : '<span style="color:#b91c1c;font-weight:700">FAIL</span>';
+  const hdr = (n)=>`<div style="display:flex;justify-content:space-between;border-bottom:2px solid #0d1b35;padding-bottom:6px;margin-bottom:14px">
+      <div style="font-weight:800;font-size:10pt;color:#0d1b35">SBD OS &nbsp;|&nbsp; Belt Assessment Report &nbsp;|&nbsp; CONFIDENTIAL${draft?' &nbsp;|&nbsp; <span style="color:#b91c1c">DRAFT -- PENDING ASSESSOR CONFIRMATION</span>':''}</div>
+      <div style="font-size:8pt;color:#64748b">Page ${n} &nbsp;|&nbsp; SIPS Healthcare Solutions</div></div>`;
+  const sect = (t)=>`<div style="background:#0d1b35;color:#fff;font-weight:700;font-size:9.5pt;padding:5px 10px;margin:14px 0 8px">${t}</div>`;
+  const sevClr = { 'BLOCKING':'#b92b2b', 'REQUIRED':'#b45309', 'ADVISORY':'#2563eb', 'SUPERVISED PRACTICE REQUIRED':'#7f1d1d' };
+  const wrongRows = (pr.responses||[]).filter(r=>r.type==='knowledge' && !r.correct).map(r=>{
+    const q = (typeof PLACEMENT_QUESTIONS!=='undefined') ? PLACEMENT_QUESTIONS.find(x=>x.id===r.qId) : null;
+    const corr = q && q.options ? q.options[q.correct] : null;
+    return `<tr><td style="padding:5px;border:1px solid #e2e8f0;font-weight:700">L${r.level}</td>
+      <td style="padding:5px;border:1px solid #e2e8f0;color:#b91c1c;font-weight:700">WRONG</td>
+      <td style="padding:5px;border:1px solid #e2e8f0">${r.question||''}</td>
+      <td style="padding:5px;border:1px solid #e2e8f0">${r.answer||'(blank)'}</td>
+      <td style="padding:5px;border:1px solid #e2e8f0;color:#16a34a">${corr||'--'}</td></tr>`;
+  }).join('');
+  const simRows = (pr.responses||[]).filter(r=>r.type!=='knowledge').map(r=>`<tr>
+      <td style="padding:5px;border:1px solid #e2e8f0;font-weight:700">L${r.level}</td>
+      <td style="padding:5px;border:1px solid #e2e8f0;font-weight:700;color:${(r.aiScore||0)>=65?'#16a34a':'#b91c1c'}">${r.aiScore??'--'}</td>
+      <td style="padding:5px;border:1px solid #e2e8f0">${r.question||''}</td>
+      <td style="padding:5px;border:1px solid #e2e8f0;color:#475569">${r.aiFeedback||''}</td></tr>`).join('');
+  const tbl = 'width:100%;border-collapse:collapse;font-size:8pt';
+  const basis = m.clean
+    ? `The candidate met the blended threshold of ${m.th.blended}% with ${m.blended}%, passed every knowledge level against the ${RPT_STANDARDS.kLevelFloor}% floor and every simulation level against its floor. ${m.belt} Belt is awarded clean, with no conditions attached.`
+    : `The candidate demonstrated ${m.kOverall>=m.th.k?'a knowledge foundation that meets the '+m.belt+' Belt standard':'partial knowledge coverage'} (knowledge overall ${m.kOverall}%) alongside a simulation overall of ${m.simOverall}%. The blended score of ${m.blended}% was measured against the ${m.belt} Belt threshold of ${m.th.blended}% (${m.blended>=m.th.blended?'met':'not met'}). ${m.nBlock+m.nReq>0?`${m.nBlock} blocking and ${m.nReq} required condition(s) are attached and form the development path below.`:''} The conditions represent the specific gaps between this performance and an unconditional award, and clearing them is the direct route forward.`;
+  const body = `
+  <div style="font-family:Arial,Helvetica,sans-serif;color:#1f2430;font-size:9pt;line-height:1.45">
+    <div>${hdr(1)}
+      <div style="font-size:16pt;font-weight:800;color:#0d1b35">BELT ASSESSMENT REPORT</div>
+      <div style="font-size:8.5pt;color:#64748b;margin-bottom:12px">Sterile By Design Operating System | SIPS Healthcare Solutions &nbsp;&bull;&nbsp; Assessment date: ${dt}</div>
+      ${sect('CANDIDATE INFORMATION')}
+      <table style="${tbl}">
+        <tr><td style="padding:6px;border:1px solid #e2e8f0;width:30%;font-weight:700">Candidate Name</td><td style="padding:6px;border:1px solid #e2e8f0">${pr.staffName||(s?fullName(s):'--')}</td></tr>
+        <tr><td style="padding:6px;border:1px solid #e2e8f0;font-weight:700">Current Title</td><td style="padding:6px;border:1px solid #e2e8f0">${pr.staffTitle||s?.role||'--'}</td></tr>
+        <tr><td style="padding:6px;border:1px solid #e2e8f0;font-weight:700">Facility</td><td style="padding:6px;border:1px solid #e2e8f0">${fac}</td></tr>
+        <tr><td style="padding:6px;border:1px solid #e2e8f0;font-weight:700">Report Status</td><td style="padding:6px;border:1px solid #e2e8f0">${draft?'DRAFT -- pending assessor confirmation':'FINAL -- '+m.determination}</td></tr>
+      </table>
+      ${sect('ASSESSMENT RESULT SUMMARY')}
+      <table style="${tbl}"><tr>
+        <td style="padding:10px;border:1px solid #e2e8f0;text-align:center;width:33%"><div style="font-size:7.5pt;color:#64748b;font-weight:700">BELT ${draft?'RECOMMENDED':'AWARDED'}</div><div style="font-size:15pt;font-weight:800;color:#0d1b35">${m.belt.toUpperCase()}</div><div style="font-size:7.5pt;color:${m.clean?'#16a34a':'#b45309'};font-weight:700">${m.clean?'CLEAN':'CONDITIONAL'}</div></td>
+        <td style="padding:10px;border:1px solid #e2e8f0;text-align:center;width:34%"><div style="font-size:7.5pt;color:#64748b;font-weight:700">FINAL DETERMINATION</div><div style="font-size:9.5pt;font-weight:700;margin-top:4px">${m.determination}</div></td>
+        <td style="padding:10px;border:1px solid #e2e8f0;text-align:center"><div style="font-size:7.5pt;color:#64748b;font-weight:700">BLENDED SCORE</div><div style="font-size:15pt;font-weight:800;color:#0d1b35">${m.blended}%</div><div style="font-size:7.5pt;color:#64748b">K ${m.kOverall}% | Sim ${m.simOverall}%</div></td>
+      </tr></table>
+      ${sect('CERTIFICATION BASIS AND CONDITIONS')}
+      <div style="font-size:8.5pt">${basis}</div>
+      <div style="page-break-after:always"></div></div>
+    <div>${hdr(2)}
+      ${sect('KNOWLEDGE COMPONENT')}
+      <table style="${tbl}"><tr style="background:#f7f4ef"><th style="padding:5px;border:1px solid #e2e8f0">Level</th><th style="padding:5px;border:1px solid #e2e8f0">Score</th><th style="padding:5px;border:1px solid #e2e8f0">Floor</th><th style="padding:5px;border:1px solid #e2e8f0">Result</th><th style="padding:5px;border:1px solid #e2e8f0">Correct</th></tr>
+        ${m.kLevels.map(k=>`<tr><td style="padding:5px;border:1px solid #e2e8f0;font-weight:700">L${k.level}</td><td style="padding:5px;border:1px solid #e2e8f0">${k.pct??'--'}%</td><td style="padding:5px;border:1px solid #e2e8f0">${k.floor}%</td><td style="padding:5px;border:1px solid #e2e8f0">${pf(k.pass)}</td><td style="padding:5px;border:1px solid #e2e8f0">${k.correct}/${k.of}</td></tr>`).join('')}
+      </table>
+      <div style="margin:8px 0;font-size:9pt"><b>KNOWLEDGE OVERALL: ${m.kOverall}%</b> &nbsp; ${m.belt} Belt floor: ${m.th.k}% | ${m.kOverall>=m.th.k?'PASS':'FAIL by '+(Math.round((m.th.k-m.kOverall)*10)/10)+' pts'}</div>
+      ${sect('INCORRECT AND BLANK RESPONSES')}
+      ${wrongRows ? `<table style="${tbl}"><tr style="background:#f7f4ef"><th style="padding:5px;border:1px solid #e2e8f0">Lvl</th><th style="padding:5px;border:1px solid #e2e8f0">Status</th><th style="padding:5px;border:1px solid #e2e8f0">Question</th><th style="padding:5px;border:1px solid #e2e8f0">Their Answer</th><th style="padding:5px;border:1px solid #e2e8f0">Correct Answer</th></tr>${wrongRows}</table>` : '<div style="font-size:8.5pt;color:#16a34a;font-weight:700">No incorrect knowledge responses.</div>'}
+      <div style="page-break-after:always"></div></div>
+    <div>${hdr(3)}
+      ${sect('SIMULATION COMPONENT')}
+      <table style="${tbl}"><tr style="background:#f7f4ef"><th style="padding:5px;border:1px solid #e2e8f0">Level</th><th style="padding:5px;border:1px solid #e2e8f0">Score</th><th style="padding:5px;border:1px solid #e2e8f0">Floor</th><th style="padding:5px;border:1px solid #e2e8f0">Result</th><th style="padding:5px;border:1px solid #e2e8f0">Responses</th></tr>
+        ${m.simLevels.map(sv=>`<tr><td style="padding:5px;border:1px solid #e2e8f0;font-weight:700">L${sv.level}</td><td style="padding:5px;border:1px solid #e2e8f0">${sv.pct??'--'}%</td><td style="padding:5px;border:1px solid #e2e8f0">${sv.floor}%</td><td style="padding:5px;border:1px solid #e2e8f0">${pf(sv.pass)}</td><td style="padding:5px;border:1px solid #e2e8f0">${sv.scores.join(' ')}</td></tr>`).join('')}
+      </table>
+      <div style="margin:8px 0;font-size:9pt"><b>SIMULATION OVERALL: ${m.simOverall}%</b> &nbsp; ${m.belt} Belt floor: ${m.th.sim}% | ${m.simOverall>=m.th.sim?'PASS':'FAIL by '+(Math.round((m.th.sim-m.simOverall)*10)/10)+' pts'}</div>
+      ${sect('SIMULATION RESPONSE DETAIL')}
+      <table style="${tbl}"><tr style="background:#f7f4ef"><th style="padding:5px;border:1px solid #e2e8f0">Lvl</th><th style="padding:5px;border:1px solid #e2e8f0">Score</th><th style="padding:5px;border:1px solid #e2e8f0">Scenario</th><th style="padding:5px;border:1px solid #e2e8f0">AI Evaluator Notes</th></tr>${simRows}</table>
+      <div style="page-break-after:always"></div></div>
+    <div>${hdr(4)}
+      ${sect('DEVELOPMENT CONDITIONS -- NEXT BELT REQUIREMENTS')}
+      <div style="font-size:8.5pt;margin-bottom:10px">${m.conditions.length ? (draft?'Draft conditions derived from the scoring algorithm; subject to assessor confirmation.':`${m.belt} Belt is active. The conditions below are the path to the next level.`) : 'No conditions attached. The award is clean.'}</div>
+      ${m.conditions.map(c=>`<div style="border:1px solid #e2e8f0;border-left:4px solid ${sevClr[c.sev]||'#64748b'};margin-bottom:8px;padding:7px 10px">
+        <div style="font-weight:800;color:${sevClr[c.sev]||'#0d1b35'};font-size:8pt">${c.sev}</div>
+        <div style="font-weight:700;font-size:9pt;margin:2px 0">${c.title}</div>
+        <div style="font-size:8.5pt"><b>Finding:</b> ${c.finding}</div>
+        <div style="font-size:8.5pt"><b>Required Action:</b> ${c.action}</div></div>`).join('')}
+      <div style="page-break-after:always"></div></div>
+    <div>${hdr(5)}
+      ${sect(m.nextBelt ? 'NEXT BELT TARGET -- '+m.nextBelt.toUpperCase()+' BELT' : 'NEXT BELT TARGET')}
+      ${m.nextBelt ? `<div style="font-size:8.5pt;margin-bottom:8px">To advance to ${m.nextBelt} Belt, the following scores are required:</div>
+      <table style="${tbl}"><tr style="background:#f7f4ef"><th style="padding:6px;border:1px solid #e2e8f0">Metric</th><th style="padding:6px;border:1px solid #e2e8f0">Current Score</th><th style="padding:6px;border:1px solid #e2e8f0">${m.nextBelt} Belt Requires</th><th style="padding:6px;border:1px solid #e2e8f0">Gap to Close</th></tr>
+        ${m.nextRows.map(r=>`<tr><td style="padding:6px;border:1px solid #e2e8f0;font-weight:700">${r[0]}</td><td style="padding:6px;border:1px solid #e2e8f0">${r[1]}%</td><td style="padding:6px;border:1px solid #e2e8f0">${r[2]}%</td><td style="padding:6px;border:1px solid #e2e8f0;font-weight:700;color:${r[3]==='Already meets'?'#16a34a':'#b45309'}">${r[3]}</td></tr>`).join('')}
+      </table>` : '<div style="font-size:8.5pt">Black Belt is the highest certification level. No further belt target applies.</div>'}
+      ${sect('NEXT BELT ASSESSMENT ELIGIBILITY')}
+      <div style="font-size:8.5pt">${m.nBlock>0?`All ${m.nBlock} blocking condition(s) must be cleared and signed off before the next belt assessment can be scheduled.`:m.nReq>0?`The ${m.nReq} required condition(s) must be resolved through re-study and re-test before the next assessment.`:`No conditions block eligibility. The candidate may be scheduled for the next belt assessment when their development plan supports it.`}</div>
+      <div style="page-break-after:always"></div></div>
+    <div>${hdr(6)}
+      ${sect('SIGNATURES')}
+      ${['Assessor','Candidate Acknowledgment','Manager / Supervisor'].map(role=>`
+        <table style="${tbl};margin-bottom:18px"><tr>
+          <td style="padding:18px 8px 4px;border-bottom:1px solid #0d1b35;width:40%;vertical-align:bottom"><span style="font-size:7.5pt;color:#64748b">${role}</span></td>
+          <td style="padding:18px 8px 4px;border-bottom:1px solid #0d1b35;width:35%;vertical-align:bottom"><span style="font-size:7.5pt;color:#64748b">Signature</span></td>
+          <td style="padding:18px 8px 4px;border-bottom:1px solid #0d1b35;vertical-align:bottom"><span style="font-size:7.5pt;color:#64748b">Date</span></td>
+        </tr></table>`).join('')}
+      <div style="font-size:7.5pt;color:#64748b;margin-top:24px;border-top:1px solid #e2e8f0;padding-top:8px">This report is a formal SBD OS certification record. Retain in the candidate's personnel file. | SBD OS Assessment Engine | SIPS Healthcare Solutions</div>
+    </div>
+  </div>`;
+  openPrintWindow(`Belt Assessment Report -- ${pr.staffName||'Candidate'}`, body);
+  if(typeof SB!=='undefined' && SB.logReportDownload) SB.logReportDownload('assessment_report', pr.id).catch?.(()=>{});
 }
 
 function confirmPlacement(prId){
