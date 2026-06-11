@@ -1285,6 +1285,49 @@ function getPAQuestions(){
   return PA.shuffledQuestions;
 }
 
+// ── Dynamic-simulation bridge (Option 2 hybrid) — OFF by default ──
+// Flag, flipped on per-environment once verified. Keeps the 40 fixed knowledge
+// MCQ instant; sources the simulation half as unique AIP scenarios per candidate.
+function ffDynamicSim(){
+  try { return (window.SBD_FF_DYNSIM === true) || localStorage.getItem('sbd_ff_dynsim') === 'on'; }
+  catch(e){ return false; }
+}
+// Our 5 placement sim-levels map to the first 5 AIP belt scenario banks.
+const _AIP_BELT_LEVELS = {
+  1:'a0000001-0000-0000-0000-000000000001', 2:'a0000001-0000-0000-0000-000000000002',
+  3:'a0000001-0000-0000-0000-000000000003', 4:'a0000001-0000-0000-0000-000000000004',
+  5:'a0000001-0000-0000-0000-000000000005'
+};
+// Build the hybrid set: fixed knowledge MCQ + unique AIP scenarios (with their
+// answer key + fail indicator carried for grading). Returns the FIXED set on
+// ANY failure, so a bad AIP read can never break the test.
+async function buildHybridQuestions(){
+  try {
+    const knowledge = PLACEMENT_QUESTIONS.filter(q => q.type === 'knowledge');
+    const fixedSims = PLACEMENT_QUESTIONS.filter(q => q.type !== 'knowledge');
+    const perLevel = {}; fixedSims.forEach(q => { perLevel[q.level] = (perLevel[q.level]||0)+1; });
+    const sims = [];
+    for(const lvl of [1,2,3,4,5]){
+      const need = perLevel[lvl] || 0; if(!need) continue;
+      const levelId = _AIP_BELT_LEVELS[lvl];
+      const rows = await sbFetch(`/rest/v1/aip_questions?level_id=eq.${levelId}&question_type=eq.scenario_multi&is_active=eq.true&is_approved=eq.true&select=id,question_text,aip_answers(answer_text,answer_component)`).catch(()=>null);
+      const usable = (rows||[]).filter(r => r.question_text);
+      if(usable.length < need){ fixedSims.filter(q => q.level===lvl).forEach(q => sims.push(q)); continue; }
+      shuffleArray(usable.slice()).slice(0, need).forEach(r => {
+        const a = r.aip_answers || [];
+        const key  = (a.find(x => x.answer_component==='expected_response' || x.answer_component==='full_answer')||{}).answer_text || '';
+        const fail = (a.find(x => x.answer_component==='fail_indicator')||{}).answer_text || '';
+        sims.push({ id:'aip-'+r.id, level:lvl, type:'simulation', q:r.question_text, keywords:[], answerKey:key, failIndicator:fail, _aip:true });
+      });
+    }
+    if(!sims.length) return shuffleArray(PLACEMENT_QUESTIONS);
+    return shuffleArray([...knowledge, ...sims]);
+  } catch(e){
+    console.warn('[DynSim] hybrid build failed, using fixed set:', e.message || e);
+    return shuffleArray(PLACEMENT_QUESTIONS);
+  }
+}
+
 function savePAState(){
   try{localStorage.setItem('sbd_pa_state',JSON.stringify(PA));}catch(e){}
   // Auto-save progress to server every 5th question
@@ -1607,6 +1650,23 @@ function showPlacementAssessment(s){
 }
 
 function _enterPlacementAssessment(s){
+  // Hybrid sourcing (flag, OFF by default): for a FRESH test, build the AIP
+  // scenario set before entering. Always proceeds (fallback to fixed) so entry
+  // can never break. Resumes are untouched — they keep their saved questions.
+  const rp = window._restoredProgress;
+  const isFresh = !(rp && rp.answers && Object.keys(rp.answers).length > 0) && (PA.staffId !== s.id || PA.submitted);
+  if(ffDynamicSim() && isFresh && !PA._hybridPending){
+    PA._hybridPending = true;
+    buildHybridQuestions()
+      .then(qs => { PA._hybridSet = qs; })
+      .catch(() => { PA._hybridSet = null; })
+      .finally(() => { PA._hybridPending = false; _enterPlacementAssessmentInner(s); });
+    return;
+  }
+  _enterPlacementAssessmentInner(s);
+}
+
+function _enterPlacementAssessmentInner(s){
   const restore = window._restoredProgress;
   window._restoredProgress = null;
   if (restore && restore.answers && Object.keys(restore.answers).length > 0) {
@@ -1627,7 +1687,8 @@ function _enterPlacementAssessment(s){
     PA.answers = {};
     PA.currentQ = 0;
     PA.submitted = false;
-    PA.shuffledQuestions = shuffleArray(PLACEMENT_QUESTIONS);
+    PA.shuffledQuestions = (PA._hybridSet && PA._hybridSet.length) ? PA._hybridSet : shuffleArray(PLACEMENT_QUESTIONS);
+    PA._hybridSet = null;
   } else {
     PA.active = true; // resume from local state
   }
@@ -1903,7 +1964,7 @@ async function submitPlacementAssessment(){
 
   // Separate knowledge (instant) from simulation (needs AI)
   const simQuestions = [];
-  for(const q of PLACEMENT_QUESTIONS){
+  for(const q of getPAQuestions()){
     const ans = PA.answers[q.id];
     if(q.type === 'knowledge'){
       const correct = ans === q.correct;
@@ -1920,7 +1981,7 @@ async function submitPlacementAssessment(){
 
   // Fire ALL simulation AI scores in parallel (~3s instead of ~40s sequential)
   const aiPromises = simQuestions.map(({q, ans}) =>
-    scoreSimulationWithAI(q.q, ans||'').catch(() => null)
+    scoreSimulationWithAI(q.q, ans||'', q.answerKey, q.failIndicator).catch(() => null)
   );
   const aiResults = await Promise.allSettled(aiPromises);
 
@@ -2140,12 +2201,18 @@ function generateFallbackFeedback(answer, keywords, score){
   return 'Response would benefit from more specific detail about safety protocols, documentation, and escalation procedures.';
 }
 
-async function scoreSimulationWithAI(question, answer){
-  // Route through server-side Edge Function (uses OpenRouter key stored in Supabase secrets)
+async function scoreSimulationWithAI(question, answer, answerKey, failIndicator){
+  // Route through server-side Edge Function (uses OpenRouter key stored in Supabase secrets).
+  // answerKey/failIndicator are sent when present (AIP scenarios) so the grader can
+  // score against the answer key; the current function ignores them and scores
+  // generically until the grader upgrade ships (graceful degradation).
   try {
+    const body = { question, answer };
+    if(answerKey) body.answer_key = answerKey;
+    if(failIndicator) body.fail_indicator = failIndicator;
     const result = await sbFetch('/functions/v1/sbd-score-assessment', {
       method: 'POST',
-      body: { question, answer }
+      body
     });
     if (result && result.score !== undefined) return result;
     throw new Error('Invalid AI response');
