@@ -2181,14 +2181,90 @@ function updatePlacementBadge(){
 // ASSESSOR PLACEMENT REVIEWS PANEL
 // ═══════════════════════════════════════════════════════════════
 
+// Reusable review filter state + bar. Placement reviews use it now; the
+// Observation Review tab will reuse the same bar (Iiggie wanted parity).
+const reviewFilter = {
+  q:'', fid:'all', status:'pending', belt:'All', sort:'newest',
+  reset(){ this.q=''; this.fid='all'; this.belt='All'; this.sort='newest'; }
+};
+function reviewSearchInput(el, fnName){
+  reviewFilter.q = el.value;
+  const caret = el.selectionStart;
+  if(typeof window[fnName]==='function') window[fnName]();
+  const fresh = document.getElementById('reviewSearch_'+fnName);
+  if(fresh){ fresh.focus(); try{ fresh.setSelectionRange(caret,caret); }catch(e){} }
+}
+function reviewFilterBar(onChangeFn){
+  const u = ST.user;
+  let facs = (DB.facilities||[]).filter(f=>f.active!==false);
+  if(u && u.role==='staff_admin' && u.assignedFids && u.assignedFids.length) facs = facs.filter(f=>u.assignedFids.includes(f.id));
+  facs = facs.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  const belts = ['All', ...BELT_ORDER];
+  const active = reviewFilter.q || reviewFilter.fid!=='all' || reviewFilter.belt!=='All' || reviewFilter.sort!=='newest';
+  const sel = "background:#0e1328;border:1px solid rgba(255,255,255,.1);border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:12.5px;font-family:'Poppins',sans-serif;cursor:pointer";
+  return `
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px">
+      <div class="search-wrap" style="min-width:170px;flex:1;max-width:240px">
+        <div class="search-ico"><svg viewBox="0 0 18 18" fill="none" width="14" height="14"><circle cx="7.5" cy="7.5" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M12 12l3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+        <input id="reviewSearch_${onChangeFn}" class="search-inp" placeholder="Search candidate..." value="${reviewFilter.q}" oninput="reviewSearchInput(this,'${onChangeFn}')">
+      </div>
+      <select style="${sel}" onchange="reviewFilter.fid=this.value;${onChangeFn}()">
+        <option value="all">All Facilities</option>
+        ${facs.map(f=>`<option value="${f.id}" ${reviewFilter.fid===f.id?'selected':''}>${f.name}</option>`).join('')}
+      </select>
+      <select style="${sel}" onchange="reviewFilter.sort=this.value;${onChangeFn}()">
+        ${[['newest','Newest first'],['name','Name A-Z'],['facility','By facility'],['score','Score high-low']].map(([v,l])=>`<option value="${v}" ${reviewFilter.sort===v?'selected':''}>${l}</option>`).join('')}
+      </select>
+      <div class="filter-bar" style="margin:0;flex-wrap:nowrap;overflow-x:auto;padding-bottom:0">
+        ${belts.map(b=>`<div class="fchip ${reviewFilter.belt===b?'on':''}" style="${reviewFilter.belt===b&&b!=='All'?'border-color:'+(BELT_CLR[b]||'#888')+'!important;':''}" onclick="reviewFilter.belt='${b}';${onChangeFn}()">${b}</div>`).join('')}
+      </div>
+      ${active?`<button class="btn btn-ghost btn-xs" onclick="reviewFilter.reset();${onChangeFn}()" style="white-space:nowrap">Clear</button>`:''}
+    </div>`;
+}
+// Tab strip shared by review-style pages (Pending / Reviewed / All with counts)
+function reviewTabs(counts, onChangeFn){
+  const tabs=[['pending','Pending',counts.pending],['reviewed','Reviewed',counts.reviewed],['all','All',counts.all]];
+  return `<div style="display:flex;gap:2px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:16px">
+    ${tabs.map(([v,l,n])=>`<div onclick="reviewFilter.status='${v}';${onChangeFn}()" style="padding:9px 18px;font-size:13px;font-weight:${reviewFilter.status===v?'700':'500'};color:${reviewFilter.status===v?'#f1f5f9':'#64748b'};border-bottom:2px solid ${reviewFilter.status===v?'#8b5cf6':'transparent'};cursor:pointer;margin-bottom:-1px">${l} <span style="font-size:10.5px;color:${reviewFilter.status===v?'#a78bfa':'#475569'};font-weight:700">${n}</span></div>`).join('')}
+  </div>`;
+}
+function applyReviewFilter(pool){
+  const term = reviewFilter.q.trim().toLowerCase();
+  let out = pool.filter(r=>{
+    if(reviewFilter.fid!=='all' && r.fid!==reviewFilter.fid) return false;
+    if(reviewFilter.status==='pending' && r.status!=='pending') return false;
+    if(reviewFilter.status==='reviewed' && r.status==='pending') return false;
+    if(reviewFilter.belt!=='All' && (r.confirmedBelt||r.tentativeBelt)!==reviewFilter.belt) return false;
+    if(term){
+      const s=getStaff(r.staffId);
+      const nm=((cleanName(r.staffName)||(s?fullName(s):'')||'')).toLowerCase();
+      if(!nm.includes(term)) return false;
+    }
+    return true;
+  });
+  const nameOf = r => (cleanName(r.staffName)||'').toLowerCase();
+  out.sort((a,b)=>{
+    if(reviewFilter.sort==='name') return nameOf(a).localeCompare(nameOf(b));
+    if(reviewFilter.sort==='facility') return (getFac(a.fid)?.name||'').localeCompare(getFac(b.fid)?.name||'');
+    if(reviewFilter.sort==='score') return (b._blended??-1)-(a._blended??-1);
+    // newest: pending first (only visible on the All tab), then most recent
+    const pa=a.status==='pending'?0:1, pb=b.status==='pending'?0:1;
+    if(pa!==pb) return pa-pb;
+    return new Date(b.submittedAt||0) - new Date(a.submittedAt||0);
+  });
+  return out;
+}
+
 function renderAPlacementReviews(){
   const u = ST.user;
   let pool = (DB.placementReviews||[]);
   if(u && u.role==='staff_admin' && u.assignedFids && u.assignedFids.length){
     pool = pool.filter(r => u.assignedFids.includes(r.fid));
   }
-  const pending = pool.filter(r=>r.status==='pending');
-  const reviewed = pool.filter(r=>r.status!=='pending');
+  const total = pool.length;
+  // Cache the blended score on each review for the row chip + score sort
+  pool.forEach(r=>{ if(r._blended===undefined) r._blended = (r.responses&&r.responses.length) ? rptComputeModel(r).blended : null; });
+  const list = applyReviewFilter(pool);
 
   const renderResponse = (r, i) => {
     const isKnowledge = r.type === 'knowledge';
@@ -2213,33 +2289,41 @@ function renderAPlacementReviews(){
       </div>`;
   };
 
-  const renderCard = (pr) => {
-    const statusClr = pr.status==='pending' ? '#a78bfa' : '#22c55e';
-    const statusLabel = pr.status==='pending' ? 'Pending Review' : pr.status==='adjusted' ? 'Adjusted' : 'Confirmed';
+  const renderRow = (pr) => {
+    const isPending = pr.status==='pending';
+    const statusClr = isPending ? '#a78bfa' : '#22c55e';
+    const statusLabel = isPending ? 'Pending' : pr.status==='adjusted' ? 'Adjusted' : 'Confirmed';
     const fac = getFac(pr.fid);
-    // Resolve staff name: prefer stored name, fallback to DB.staff lookup
     const staffRec = getStaff(pr.staffId);
     const displayName = cleanName(pr.staffName) || (staffRec ? fullName(staffRec) : (pr.staffId || 'Unknown'));
     const displayTitle = pr.staffTitle || (staffRec ? (staffRec.role||'') : '');
-    const displayDate = pr.submittedAt ? (pr.submittedAt.length > 10 ? new Date(pr.submittedAt).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}) : pr.submittedAt) : '';
+    const belt = pr.confirmedBelt || pr.tentativeBelt;
+    const displayDate = pr.submittedAt ? (pr.submittedAt.length > 10 ? new Date(pr.submittedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : pr.submittedAt) : '';
     return `
-      <div class="card" style="margin-bottom:16px" id="pr-card-${pr.id}">
-        <div class="card-hd" style="cursor:pointer" onclick="togglePRCard('${pr.id}')">
-          <div style="flex:1">
-            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-              <div style="font-size:15px;font-weight:700;color:#f1f5f9">${displayName}</div>
-              <div style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:12px;background:rgba(139,92,246,.15);color:${statusClr}">${statusLabel.toUpperCase()}</div>
-              ${pr.tentativeBelt ? `<div style="font-size:10px;color:#64748b">System suggestion: <span style="color:${pr.confirmedBelt?'#22c55e':'#f59e0b'}">${pr.confirmedBelt||pr.tentativeBelt} Belt</span></div>` : ''}
+      <div class="card" style="margin-bottom:10px" id="pr-card-${pr.id}">
+        <div style="display:flex;align-items:center;gap:10px;padding:11px 14px">
+          <div onclick="togglePRCard('${pr.id}')" style="display:flex;align-items:center;gap:11px;flex:1;min-width:0;cursor:pointer">
+            <svg viewBox="0 0 18 18" fill="none" width="15" height="15" id="pr-chev-${pr.id}" style="transition:.2s;flex-shrink:0"><path d="M6 3l6 6-6 6" stroke="#64748b" stroke-width="1.5" stroke-linecap="round"/></svg>
+            <div style="min-width:0;flex:1">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <span style="font-size:14px;font-weight:700;color:#f1f5f9">${displayName}</span>
+                ${belt?beltBadge(belt):''}
+                ${pr._blended!=null?`<span style="font-size:11px;font-weight:800;color:${pr._blended>=75?'#22c55e':pr._blended>=65?'#f59e0b':'#ef4444'}" title="Blended score (60% knowledge / 40% simulation)">${pr._blended}%</span>`:''}
+                <span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:${isPending?'rgba(167,139,250,.15)':'rgba(34,197,94,.12)'};color:${statusClr}">${statusLabel.toUpperCase()}</span>
+              </div>
+              <div style="font-size:11px;color:#64748b;margin-top:2px">${[displayTitle, fac?.name, displayDate ? `Submitted ${displayDate}` : null].filter(Boolean).join(' · ')}</div>
             </div>
-            <div style="font-size:11.5px;color:#64748b;margin-top:4px">${[displayTitle, fac?.name, displayDate ? `Submitted ${displayDate}` : null].filter(Boolean).join(' · ')}</div>
           </div>
-          <svg viewBox="0 0 18 18" fill="none" width="16" height="16" id="pr-chev-${pr.id}" style="transition:.2s;flex-shrink:0"><path d="M6 3l6 6-6 6" stroke="#64748b" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <div style="display:flex;gap:7px;flex-shrink:0;align-items:center">
+            <button onclick="event.stopPropagation();downloadAssessmentReport('${pr.id}')" style="background:rgba(196,154,32,.12);border:1px solid rgba(196,154,32,.4);border-radius:7px;padding:7px 13px;font-size:12px;font-weight:700;color:#eab308;cursor:pointer;font-family:'Poppins',sans-serif;white-space:nowrap">${isPending?'Draft Report':'Report'}</button>
+            ${isPending?`<button onclick="event.stopPropagation();togglePRCard('${pr.id}')" style="background:#22c55e;border:none;border-radius:7px;padding:7px 15px;font-size:12px;font-weight:700;color:#052e16;cursor:pointer;font-family:'Poppins',sans-serif;white-space:nowrap">Review</button>`:''}
+          </div>
         </div>
-        <div id="pr-body-${pr.id}" style="display:none;padding:0 0 4px">
-          <div style="height:1px;background:rgba(255,255,255,.06);margin:0 0 16px"></div>
+        <div id="pr-body-${pr.id}" style="display:none;padding:0 14px 14px">
+          <div style="height:1px;background:rgba(255,255,255,.06);margin:0 0 14px"></div>
           <div style="font-size:11px;font-weight:700;color:#64748b;letter-spacing:.06em;margin-bottom:12px">ASSESSMENT RESPONSES</div>
           ${(pr.responses && pr.responses.length) ? pr.responses.map(renderResponse).join('') : `<div style="font-size:12px;color:#64748b;font-style:italic;padding:6px 0 12px">No question-level data captured for this review.</div>`}
-          ${pr.status==='pending' ? `
+          ${isPending ? `
           <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,.06)">
             <div style="font-size:11px;font-weight:700;color:#64748b;letter-spacing:.05em;margin-bottom:10px">ASSESSOR DECISION</div>
             <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
@@ -2267,24 +2351,24 @@ function renderAPlacementReviews(){
       </div>`;
   };
 
+  const pendCount = pool.filter(r=>r.status==='pending').length;
   document.getElementById('a-placementreviews').innerHTML = `
     <div class="card-ttl" style="font-size:18px;font-weight:800;color:#f1f5f9;margin-bottom:6px">Placement Reviews</div>
-    <div style="font-size:12.5px;color:#64748b;margin-bottom:24px">Review new hire assessment responses and confirm starting belt placement.</div>
-
-    ${pending.length === 0 && reviewed.length === 0 ? `
+    <div style="font-size:12.5px;color:#64748b;margin-bottom:16px">Review new hire assessment responses and confirm starting belt placement.</div>
+    ${total === 0 ? '' : reviewTabs({pending:pendCount, reviewed:total-pendCount, all:total}, 'renderAPlacementReviews')}
+    ${total === 0 ? '' : reviewFilterBar('renderAPlacementReviews')}
+    ${total === 0 ? `
     <div class="empty-state">
       <div style="font-size:40px;margin-bottom:12px">&#128203;</div>
       <div class="empty-ttl">No placement reviews yet</div>
       <div class="empty-desc">New hire assessments will appear here once submitted.</div>
-    </div>` : ''}
-
-    ${pending.length > 0 ? `
-    <div style="font-size:11px;font-weight:700;color:#a78bfa;letter-spacing:.07em;margin-bottom:12px">PENDING (${pending.length})</div>
-    ${pending.map(renderCard).join('')}` : ''}
-
-    ${reviewed.length > 0 ? `
-    <div style="font-size:11px;font-weight:700;color:#64748b;letter-spacing:.07em;margin:20px 0 12px">REVIEWED (${reviewed.length})</div>
-    ${reviewed.map(renderCard).join('')}` : ''}
+    </div>`
+    : list.length === 0 ? `
+    <div style="text-align:center;padding:40px 0;color:#64748b">
+      <div style="font-size:13px;font-weight:600;margin-bottom:4px">No reviews match your filters</div>
+      <div style="font-size:12px"><span onclick="reviewFilter.reset();renderAPlacementReviews()" style="color:#a78bfa;cursor:pointer">Clear filters</span></div>
+    </div>`
+    : `<div style="font-size:11px;color:#64748b;margin-bottom:10px">Showing ${list.length} of ${total}</div>${list.map(renderRow).join('')}`}
   `;
 }
 
@@ -2295,6 +2379,212 @@ function togglePRCard(prId){
   const open = body.style.display !== 'none';
   body.style.display = open ? 'none' : 'block';
   if(chev) chev.style.transform = open ? '' : 'rotate(90deg)';
+}
+
+// ============================================================
+// FORMAL BELT ASSESSMENT REPORT (6-page, governing standards)
+// Generated from a placement_reviews record. Source documents:
+// "SBD OS Assessment Report Governing Standards" (May 2026) and the
+// "CANDIDATE NAME Assessment Report" template (both from SIPS).
+// ============================================================
+
+// Thresholds per the governing standards + template.
+// DOCUMENTED: White (blended 75 / K 80 / Sim 72), Yellow (K 83 / Sim 75),
+// Green (blended 81 / K 86 / Sim 78). Blue/Brown/Black follow the same +3
+// progression PENDING the "SBD OS Assessment Scoring Logic Specification"
+// -- confirm those three rows against that document before relying on them.
+const RPT_STANDARDS = {
+  weights: { k: 0.6, sim: 0.4 },                  // blended = 60% knowledge + 40% simulation (template math)
+  kLevelFloor: 80,                                 // knowledge floor, every level
+  simLevelFloors: { 1: 75, 2: 70, 3: 65, 4: 65, 5: 65 },
+  simResponseMin: 50,                              // individual response minimum
+  advisoryBand: 3,                                 // passing within this of a floor -> advisory
+  belts: {
+    White:  { blended: 75, k: 80, sim: 72 },
+    Yellow: { blended: 78, k: 83, sim: 75 },
+    Green:  { blended: 81, k: 86, sim: 78 },
+    Blue:   { blended: 84, k: 89, sim: 81 },
+    Brown:  { blended: 87, k: 92, sim: 84 },
+    Black:  { blended: 90, k: 95, sim: 87 }
+  }
+};
+
+// Derive the full report model from a placement review's stored responses.
+function rptComputeModel(pr){
+  const r1 = (n)=>Math.round(n*10)/10;
+  const levels = {};
+  for(let l=1; l<=5; l++) levels[l] = { k: [], sim: [] };
+  (pr.responses||[]).forEach(r => {
+    if(!levels[r.level]) return;
+    if(r.type === 'knowledge') levels[r.level].k.push(r);
+    else levels[r.level].sim.push(r);
+  });
+  const kLevels = [], simLevels = [];
+  let kCorrect = 0, kTotal = 0, simSum = 0, simN = 0;
+  for(let l=1; l<=5; l++){
+    const ks = levels[l].k, ss = levels[l].sim;
+    const correct = ks.filter(q=>q.correct).length;
+    kCorrect += correct; kTotal += ks.length;
+    const kPct = ks.length ? r1(correct/ks.length*100) : null;
+    const scores = ss.map(q=>q.aiScore||0);
+    scores.forEach(s=>{ simSum+=s; simN++; });
+    const simPct = scores.length ? r1(scores.reduce((a,b)=>a+b,0)/scores.length) : null;
+    const sFloor = RPT_STANDARDS.simLevelFloors[l];
+    kLevels.push({ level:l, pct:kPct, correct, of:ks.length, floor:RPT_STANDARDS.kLevelFloor, pass: kPct!==null && kPct>=RPT_STANDARDS.kLevelFloor });
+    simLevels.push({ level:l, pct:simPct, scores, floor:sFloor, pass: simPct!==null && simPct>=sFloor });
+  }
+  const kOverall = kTotal ? r1(kCorrect/kTotal*100) : 0;
+  const simOverall = simN ? r1(simSum/simN) : 0;
+  const blended = r1(RPT_STANDARDS.weights.k*kOverall + RPT_STANDARDS.weights.sim*simOverall);
+  const belt = pr.confirmedBelt || pr.tentativeBelt || 'White';
+  const th = RPT_STANDARDS.belts[belt] || RPT_STANDARDS.belts.White;
+
+  // Conditions per the severity framework (no auto SUPERVISED PRACTICE:
+  // dangerous-answer classification is an assessor judgment we do not infer).
+  const conditions = [];
+  simLevels.filter(s=>!s.pass && s.pct!==null).forEach(s=>{
+    conditions.push({ sev:'BLOCKING', title:`Simulation Level ${s.level} below floor`,
+      finding:`Simulation level ${s.level} scored ${s.pct}% against the ${s.floor}% floor.`,
+      action:`Scenario practice in the level ${s.level} topic areas with supervisor review, then re-assessment of this simulation level.` });
+  });
+  (pr.responses||[]).filter(r=>r.type!=='knowledge' && (r.aiScore||0) < RPT_STANDARDS.simResponseMin).forEach(r=>{
+    conditions.push({ sev:'BLOCKING', title:`Individual response below the ${RPT_STANDARDS.simResponseMin}-point minimum`,
+      finding:`"${(r.question||'').slice(0,90)}" scored ${r.aiScore}.`,
+      action:`Tabletop walk-through of this scenario with a supervisor; correct handling must be demonstrated and signed off.` });
+  });
+  kLevels.filter(k=>!k.pass && k.pct!==null).forEach(k=>{
+    conditions.push({ sev:'REQUIRED', title:`Knowledge Level ${k.level} below the ${k.floor}% floor`,
+      finding:`Level ${k.level} knowledge scored ${k.pct}% (${k.correct}/${k.of} correct).`,
+      action:`Re-study the level ${k.level} material and re-test; ${k.floor}% or above required.` });
+  });
+  [...kLevels.filter(k=>k.pass && k.pct!==null && k.pct < k.floor+RPT_STANDARDS.advisoryBand),
+   ...simLevels.filter(s=>s.pass && s.pct!==null && s.pct < s.floor+RPT_STANDARDS.advisoryBand)].forEach(b=>{
+    conditions.push({ sev:'ADVISORY', title:`Level ${b.level} ${b.scores?'simulation':'knowledge'} is borderline`,
+      finding:`Passed at ${b.pct}%, within ${RPT_STANDARDS.advisoryBand} points of the ${b.floor}% floor.`,
+      action:`Acknowledge and fold into the development plan. Does not block advancement.` });
+  });
+  const nBlock = conditions.filter(c=>c.sev==='BLOCKING').length;
+  const nReq   = conditions.filter(c=>c.sev==='REQUIRED').length;
+  const nAdv   = conditions.filter(c=>c.sev==='ADVISORY').length;
+  const clean = nBlock===0 && nReq===0 && blended>=th.blended && kOverall>=th.k && simOverall>=th.sim;
+  const determination = clean ? `${belt.toUpperCase()} BELT -- Clean`
+    : `${belt.toUpperCase()} BELT -- Conditional (${nBlock} blocking, ${nReq} required, ${nAdv} advisory)`;
+
+  const order = ['White','Yellow','Green','Blue','Brown','Black'];
+  const nb = order[order.indexOf(belt)+1] || null;
+  const nextTh = nb ? RPT_STANDARDS.belts[nb] : null;
+  const gap = (cur, need)=> cur>=need ? 'Already meets' : `+${r1(need-cur)} pts needed`;
+  return { belt, th, blended, kOverall, simOverall, kLevels, simLevels, conditions, nBlock, nReq, nAdv, clean, determination,
+    nextBelt: nb, nextRows: nextTh ? [
+      ['Blended Score', blended, nextTh.blended, gap(blended,nextTh.blended)],
+      ['Knowledge Overall', kOverall, nextTh.k, gap(kOverall,nextTh.k)],
+      ['Simulation Overall', simOverall, nextTh.sim, gap(simOverall,nextTh.sim)]
+    ] : [] };
+}
+
+function downloadAssessmentReport(prId){
+  const pr = (DB.placementReviews||[]).find(r=>r.id===prId);
+  if(!pr){ toast('Review not found.','err'); return; }
+  if(!pr.responses || !pr.responses.length){ toast('No question-level data stored for this review.','err'); return; }
+  const m = rptComputeModel(pr);
+  const s = getStaff(pr.staffId);
+  const fac = s ? (getFac(s.fid)?.name||'--') : '--';
+  const draft = pr.status === 'pending';
+  const dt = pr.submittedAt ? new Date(pr.submittedAt).toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}) : '--';
+  const pf = (b)=> b ? '<span style="color:#16a34a;font-weight:700">PASS</span>' : '<span style="color:#b91c1c;font-weight:700">FAIL</span>';
+  const hdr = (n)=>`<div style="display:flex;justify-content:space-between;border-bottom:2px solid #0d1b35;padding-bottom:6px;margin-bottom:14px">
+      <div style="font-weight:800;font-size:10pt;color:#0d1b35">SBD OS &nbsp;|&nbsp; Belt Assessment Report &nbsp;|&nbsp; CONFIDENTIAL${draft?' &nbsp;|&nbsp; <span style="color:#b91c1c">DRAFT -- PENDING ASSESSOR CONFIRMATION</span>':''}</div>
+      <div style="font-size:8pt;color:#64748b">Page ${n} &nbsp;|&nbsp; SIPS Healthcare Solutions</div></div>`;
+  const sect = (t)=>`<div style="background:#0d1b35;color:#fff;font-weight:700;font-size:9.5pt;padding:5px 10px;margin:14px 0 8px">${t}</div>`;
+  const sevClr = { 'BLOCKING':'#b92b2b', 'REQUIRED':'#b45309', 'ADVISORY':'#2563eb', 'SUPERVISED PRACTICE REQUIRED':'#7f1d1d' };
+  const wrongRows = (pr.responses||[]).filter(r=>r.type==='knowledge' && !r.correct).map(r=>{
+    const q = (typeof PLACEMENT_QUESTIONS!=='undefined') ? PLACEMENT_QUESTIONS.find(x=>x.id===r.qId) : null;
+    const corr = q && q.options ? q.options[q.correct] : null;
+    return `<tr><td style="padding:5px;border:1px solid #e2e8f0;font-weight:700">L${r.level}</td>
+      <td style="padding:5px;border:1px solid #e2e8f0;color:#b91c1c;font-weight:700">WRONG</td>
+      <td style="padding:5px;border:1px solid #e2e8f0">${r.question||''}</td>
+      <td style="padding:5px;border:1px solid #e2e8f0">${r.answer||'(blank)'}</td>
+      <td style="padding:5px;border:1px solid #e2e8f0;color:#16a34a">${corr||'--'}</td></tr>`;
+  }).join('');
+  const simRows = (pr.responses||[]).filter(r=>r.type!=='knowledge').map(r=>`<tr>
+      <td style="padding:5px;border:1px solid #e2e8f0;font-weight:700">L${r.level}</td>
+      <td style="padding:5px;border:1px solid #e2e8f0;font-weight:700;color:${(r.aiScore||0)>=65?'#16a34a':'#b91c1c'}">${r.aiScore??'--'}</td>
+      <td style="padding:5px;border:1px solid #e2e8f0">${r.question||''}</td>
+      <td style="padding:5px;border:1px solid #e2e8f0;color:#475569">${r.aiFeedback||''}</td></tr>`).join('');
+  const tbl = 'width:100%;border-collapse:collapse;font-size:8pt';
+  const basis = m.clean
+    ? `The candidate met the blended threshold of ${m.th.blended}% with ${m.blended}%, passed every knowledge level against the ${RPT_STANDARDS.kLevelFloor}% floor and every simulation level against its floor. ${m.belt} Belt is awarded clean, with no conditions attached.`
+    : `The candidate demonstrated ${m.kOverall>=m.th.k?'a knowledge foundation that meets the '+m.belt+' Belt standard':'partial knowledge coverage'} (knowledge overall ${m.kOverall}%) alongside a simulation overall of ${m.simOverall}%. The blended score of ${m.blended}% was measured against the ${m.belt} Belt threshold of ${m.th.blended}% (${m.blended>=m.th.blended?'met':'not met'}). ${m.nBlock+m.nReq>0?`${m.nBlock} blocking and ${m.nReq} required condition(s) are attached and form the development path below.`:''} The conditions represent the specific gaps between this performance and an unconditional award, and clearing them is the direct route forward.`;
+  const body = `
+  <div style="font-family:Arial,Helvetica,sans-serif;color:#1f2430;font-size:9pt;line-height:1.45">
+    <div>${hdr(1)}
+      <div style="font-size:16pt;font-weight:800;color:#0d1b35">BELT ASSESSMENT REPORT</div>
+      <div style="font-size:8.5pt;color:#64748b;margin-bottom:12px">Sterile By Design Operating System | SIPS Healthcare Solutions &nbsp;&bull;&nbsp; Assessment date: ${dt}</div>
+      ${sect('CANDIDATE INFORMATION')}
+      <table style="${tbl}">
+        <tr><td style="padding:6px;border:1px solid #e2e8f0;width:30%;font-weight:700">Candidate Name</td><td style="padding:6px;border:1px solid #e2e8f0">${pr.staffName||(s?fullName(s):'--')}</td></tr>
+        <tr><td style="padding:6px;border:1px solid #e2e8f0;font-weight:700">Current Title</td><td style="padding:6px;border:1px solid #e2e8f0">${pr.staffTitle||s?.role||'--'}</td></tr>
+        <tr><td style="padding:6px;border:1px solid #e2e8f0;font-weight:700">Facility</td><td style="padding:6px;border:1px solid #e2e8f0">${fac}</td></tr>
+        <tr><td style="padding:6px;border:1px solid #e2e8f0;font-weight:700">Report Status</td><td style="padding:6px;border:1px solid #e2e8f0">${draft?'DRAFT -- pending assessor confirmation':'FINAL -- '+m.determination}</td></tr>
+      </table>
+      ${sect('ASSESSMENT RESULT SUMMARY')}
+      <table style="${tbl}"><tr>
+        <td style="padding:10px;border:1px solid #e2e8f0;text-align:center;width:33%"><div style="font-size:7.5pt;color:#64748b;font-weight:700">BELT ${draft?'RECOMMENDED':'AWARDED'}</div><div style="font-size:15pt;font-weight:800;color:#0d1b35">${m.belt.toUpperCase()}</div><div style="font-size:7.5pt;color:${m.clean?'#16a34a':'#b45309'};font-weight:700">${m.clean?'CLEAN':'CONDITIONAL'}</div></td>
+        <td style="padding:10px;border:1px solid #e2e8f0;text-align:center;width:34%"><div style="font-size:7.5pt;color:#64748b;font-weight:700">FINAL DETERMINATION</div><div style="font-size:9.5pt;font-weight:700;margin-top:4px">${m.determination}</div></td>
+        <td style="padding:10px;border:1px solid #e2e8f0;text-align:center"><div style="font-size:7.5pt;color:#64748b;font-weight:700">BLENDED SCORE</div><div style="font-size:15pt;font-weight:800;color:#0d1b35">${m.blended}%</div><div style="font-size:7.5pt;color:#64748b">K ${m.kOverall}% | Sim ${m.simOverall}%</div></td>
+      </tr></table>
+      ${sect('CERTIFICATION BASIS AND CONDITIONS')}
+      <div style="font-size:8.5pt">${basis}</div>
+      <div style="page-break-after:always"></div></div>
+    <div>${hdr(2)}
+      ${sect('KNOWLEDGE COMPONENT')}
+      <table style="${tbl}"><tr style="background:#f7f4ef"><th style="padding:5px;border:1px solid #e2e8f0">Level</th><th style="padding:5px;border:1px solid #e2e8f0">Score</th><th style="padding:5px;border:1px solid #e2e8f0">Floor</th><th style="padding:5px;border:1px solid #e2e8f0">Result</th><th style="padding:5px;border:1px solid #e2e8f0">Correct</th></tr>
+        ${m.kLevels.map(k=>`<tr><td style="padding:5px;border:1px solid #e2e8f0;font-weight:700">L${k.level}</td><td style="padding:5px;border:1px solid #e2e8f0">${k.pct??'--'}%</td><td style="padding:5px;border:1px solid #e2e8f0">${k.floor}%</td><td style="padding:5px;border:1px solid #e2e8f0">${pf(k.pass)}</td><td style="padding:5px;border:1px solid #e2e8f0">${k.correct}/${k.of}</td></tr>`).join('')}
+      </table>
+      <div style="margin:8px 0;font-size:9pt"><b>KNOWLEDGE OVERALL: ${m.kOverall}%</b> &nbsp; ${m.belt} Belt floor: ${m.th.k}% | ${m.kOverall>=m.th.k?'PASS':'FAIL by '+(Math.round((m.th.k-m.kOverall)*10)/10)+' pts'}</div>
+      ${sect('INCORRECT AND BLANK RESPONSES')}
+      ${wrongRows ? `<table style="${tbl}"><tr style="background:#f7f4ef"><th style="padding:5px;border:1px solid #e2e8f0">Lvl</th><th style="padding:5px;border:1px solid #e2e8f0">Status</th><th style="padding:5px;border:1px solid #e2e8f0">Question</th><th style="padding:5px;border:1px solid #e2e8f0">Their Answer</th><th style="padding:5px;border:1px solid #e2e8f0">Correct Answer</th></tr>${wrongRows}</table>` : '<div style="font-size:8.5pt;color:#16a34a;font-weight:700">No incorrect knowledge responses.</div>'}
+      <div style="page-break-after:always"></div></div>
+    <div>${hdr(3)}
+      ${sect('SIMULATION COMPONENT')}
+      <table style="${tbl}"><tr style="background:#f7f4ef"><th style="padding:5px;border:1px solid #e2e8f0">Level</th><th style="padding:5px;border:1px solid #e2e8f0">Score</th><th style="padding:5px;border:1px solid #e2e8f0">Floor</th><th style="padding:5px;border:1px solid #e2e8f0">Result</th><th style="padding:5px;border:1px solid #e2e8f0">Responses</th></tr>
+        ${m.simLevels.map(sv=>`<tr><td style="padding:5px;border:1px solid #e2e8f0;font-weight:700">L${sv.level}</td><td style="padding:5px;border:1px solid #e2e8f0">${sv.pct??'--'}%</td><td style="padding:5px;border:1px solid #e2e8f0">${sv.floor}%</td><td style="padding:5px;border:1px solid #e2e8f0">${pf(sv.pass)}</td><td style="padding:5px;border:1px solid #e2e8f0">${sv.scores.join(' ')}</td></tr>`).join('')}
+      </table>
+      <div style="margin:8px 0;font-size:9pt"><b>SIMULATION OVERALL: ${m.simOverall}%</b> &nbsp; ${m.belt} Belt floor: ${m.th.sim}% | ${m.simOverall>=m.th.sim?'PASS':'FAIL by '+(Math.round((m.th.sim-m.simOverall)*10)/10)+' pts'}</div>
+      ${sect('SIMULATION RESPONSE DETAIL')}
+      <table style="${tbl}"><tr style="background:#f7f4ef"><th style="padding:5px;border:1px solid #e2e8f0">Lvl</th><th style="padding:5px;border:1px solid #e2e8f0">Score</th><th style="padding:5px;border:1px solid #e2e8f0">Scenario</th><th style="padding:5px;border:1px solid #e2e8f0">AI Evaluator Notes</th></tr>${simRows}</table>
+      <div style="page-break-after:always"></div></div>
+    <div>${hdr(4)}
+      ${sect('DEVELOPMENT CONDITIONS -- NEXT BELT REQUIREMENTS')}
+      <div style="font-size:8.5pt;margin-bottom:10px">${m.conditions.length ? (draft?'Draft conditions derived from the scoring algorithm; subject to assessor confirmation.':`${m.belt} Belt is active. The conditions below are the path to the next level.`) : 'No conditions attached. The award is clean.'}</div>
+      ${m.conditions.map(c=>`<div style="border:1px solid #e2e8f0;border-left:4px solid ${sevClr[c.sev]||'#64748b'};margin-bottom:8px;padding:7px 10px">
+        <div style="font-weight:800;color:${sevClr[c.sev]||'#0d1b35'};font-size:8pt">${c.sev}</div>
+        <div style="font-weight:700;font-size:9pt;margin:2px 0">${c.title}</div>
+        <div style="font-size:8.5pt"><b>Finding:</b> ${c.finding}</div>
+        <div style="font-size:8.5pt"><b>Required Action:</b> ${c.action}</div></div>`).join('')}
+      <div style="page-break-after:always"></div></div>
+    <div>${hdr(5)}
+      ${sect(m.nextBelt ? 'NEXT BELT TARGET -- '+m.nextBelt.toUpperCase()+' BELT' : 'NEXT BELT TARGET')}
+      ${m.nextBelt ? `<div style="font-size:8.5pt;margin-bottom:8px">To advance to ${m.nextBelt} Belt, the following scores are required:</div>
+      <table style="${tbl}"><tr style="background:#f7f4ef"><th style="padding:6px;border:1px solid #e2e8f0">Metric</th><th style="padding:6px;border:1px solid #e2e8f0">Current Score</th><th style="padding:6px;border:1px solid #e2e8f0">${m.nextBelt} Belt Requires</th><th style="padding:6px;border:1px solid #e2e8f0">Gap to Close</th></tr>
+        ${m.nextRows.map(r=>`<tr><td style="padding:6px;border:1px solid #e2e8f0;font-weight:700">${r[0]}</td><td style="padding:6px;border:1px solid #e2e8f0">${r[1]}%</td><td style="padding:6px;border:1px solid #e2e8f0">${r[2]}%</td><td style="padding:6px;border:1px solid #e2e8f0;font-weight:700;color:${r[3]==='Already meets'?'#16a34a':'#b45309'}">${r[3]}</td></tr>`).join('')}
+      </table>` : '<div style="font-size:8.5pt">Black Belt is the highest certification level. No further belt target applies.</div>'}
+      ${sect('NEXT BELT ASSESSMENT ELIGIBILITY')}
+      <div style="font-size:8.5pt">${m.nBlock>0?`All ${m.nBlock} blocking condition(s) must be cleared and signed off before the next belt assessment can be scheduled.`:m.nReq>0?`The ${m.nReq} required condition(s) must be resolved through re-study and re-test before the next assessment.`:`No conditions block eligibility. The candidate may be scheduled for the next belt assessment when their development plan supports it.`}</div>
+      <div style="page-break-after:always"></div></div>
+    <div>${hdr(6)}
+      ${sect('SIGNATURES')}
+      ${['Assessor','Candidate Acknowledgment','Manager / Supervisor'].map(role=>`
+        <table style="${tbl};margin-bottom:18px"><tr>
+          <td style="padding:18px 8px 4px;border-bottom:1px solid #0d1b35;width:40%;vertical-align:bottom"><span style="font-size:7.5pt;color:#64748b">${role}</span></td>
+          <td style="padding:18px 8px 4px;border-bottom:1px solid #0d1b35;width:35%;vertical-align:bottom"><span style="font-size:7.5pt;color:#64748b">Signature</span></td>
+          <td style="padding:18px 8px 4px;border-bottom:1px solid #0d1b35;vertical-align:bottom"><span style="font-size:7.5pt;color:#64748b">Date</span></td>
+        </tr></table>`).join('')}
+      <div style="font-size:7.5pt;color:#64748b;margin-top:24px;border-top:1px solid #e2e8f0;padding-top:8px">This report is a formal SBD OS certification record. Retain in the candidate's personnel file. | SBD OS Assessment Engine | SIPS Healthcare Solutions</div>
+    </div>
+  </div>`;
+  openPrintWindow(`Belt Assessment Report -- ${pr.staffName||'Candidate'}`, body);
+  if(typeof SB!=='undefined' && SB.logReportDownload) SB.logReportDownload('assessment_report', pr.id).catch?.(()=>{});
 }
 
 function confirmPlacement(prId){
@@ -10688,6 +10978,14 @@ function renderAssessmentAuthBlock(staffList){
 // ============================================================
 // renderAAssessments  --  ENHANCED with practice scores + requests
 // ============================================================
+let asmQ = '';
+function asmSearchInput(el){
+  asmQ = el.value;
+  const caret = el.selectionStart;
+  renderAAssessments();
+  const fresh = document.getElementById('asmSearch');
+  if(fresh){ fresh.focus(); try{ fresh.setSelectionRange(caret,caret); }catch(e){} }
+}
 function renderAAssessments() {
   const el = document.getElementById('a-assessments');
   // Scope facilities to assignedFids for staff_admin -- master_admin sees all
@@ -10695,18 +10993,22 @@ function renderAAssessments() {
   const assignedFids = (!isMaster && ST.user?.assignedFids?.length) ? ST.user.assignedFids : null;
   const allFacs = DB.facilities.filter(f =>
     f.active !== false && (!assignedFids || assignedFids.includes(f.id))
-  );
+  ).slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+
+  // Search by staff name across every block on this page
+  const term = asmQ.trim().toLowerCase();
+  const nameMatch = (sid)=>{ if(!term) return true; const s=getStaff(sid); return s && fullName(s).toLowerCase().includes(term); };
 
   // Separate staff-requested (pending approval) from admin-managed queue
   const staffRequests = DB.queue.filter(item =>
     item.status === 'pending' && item.requestedAt &&
     (!assignedFids || assignedFids.includes(item.fid)) &&
-    (asmFilter === 'all' || item.fid === asmFilter)
+    (asmFilter === 'all' || item.fid === asmFilter) && nameMatch(item.sid)
   );
   const adminQueue = DB.queue.filter(item =>
     (!item.requestedAt || item.status === 'approved') &&
     (!assignedFids || assignedFids.includes(item.fid)) &&
-    (asmFilter === 'all' || item.fid === asmFilter)
+    (asmFilter === 'all' || item.fid === asmFilter) && nameMatch(item.sid)
   );
 
   function practiceBadge(pct) {
@@ -10720,11 +11022,19 @@ function renderAAssessments() {
       Staff who score 80%+ on both SIPS Intelligence practice tests may request their gate assessments here. Review their practice scores before approving or denying the request.
     </div>
     <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
-      ${['all', ...allFacs.map(f => f.id)].map(v => `<div class="fchip ${asmFilter === v ? 'on' : ''}" onclick="asmFilter='${v}';renderAAssessments()">${v === 'all' ? 'All Facilities' : getFac(v)?.name || v}</div>`).join('')}
+      <div class="search-wrap" style="min-width:170px;flex:1;max-width:240px">
+        <div class="search-ico"><svg viewBox="0 0 18 18" fill="none" width="14" height="14"><circle cx="7.5" cy="7.5" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M12 12l3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+        <input id="asmSearch" class="search-inp" placeholder="Search staff..." value="${asmQ}" oninput="asmSearchInput(this)">
+      </div>
+      <select style="background:#0e1328;border:1px solid rgba(255,255,255,.1);border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:12.5px;font-family:'Poppins',sans-serif;cursor:pointer" onchange="asmFilter=this.value;renderAAssessments()">
+        <option value="all">All Facilities</option>
+        ${allFacs.map(f=>`<option value="${f.id}" ${asmFilter===f.id?'selected':''}>${f.name}</option>`).join('')}
+      </select>
+      ${(asmQ||asmFilter!=='all')?`<button class="btn btn-ghost btn-xs" onclick="asmQ='';asmFilter='all';renderAAssessments()" style="white-space:nowrap">Clear</button>`:''}
       <button class="btn btn-gold btn-sm" style="margin-left:auto;flex-shrink:0" onclick="openRecordModal(null)">${ICO.record} Record Assessment</button>
     </div>
 
-    ${renderAssessmentAuthBlock(DB.staff.filter(st => st.placementNeeded && (!assignedFids || assignedFids.includes(st.fid)) && (asmFilter === 'all' || st.fid === asmFilter)))}
+    ${renderAssessmentAuthBlock(DB.staff.filter(st => st.placementNeeded && (!assignedFids || assignedFids.includes(st.fid)) && (asmFilter === 'all' || st.fid === asmFilter) && (!term || fullName(st).toLowerCase().includes(term))))}
 
     ${staffRequests.length > 0 ? `
     <div style="margin-bottom:20px">
