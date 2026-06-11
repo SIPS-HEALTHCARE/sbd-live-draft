@@ -2221,6 +2221,20 @@ function reviewFilterBar(onChangeFn){
       ${active?`<button class="btn btn-ghost btn-xs" onclick="reviewFilter.reset();${onChangeFn}()" style="white-space:nowrap">Clear</button>`:''}
     </div>`;
 }
+// Lightweight page search: shared state + caret-preserving input + box markup
+const PAGE_Q = { reg:'', fa:'', users:'' };
+function pageSearchInput(el, key, renderFn){
+  PAGE_Q[key]=el.value; const c=el.selectionStart;
+  if(typeof window[renderFn]==='function') window[renderFn]();
+  const f=document.getElementById('pageSearch_'+key);
+  if(f){ f.focus(); try{ f.setSelectionRange(c,c); }catch(e){} }
+}
+function pageSearchBox(key, renderFn, ph){
+  return `<div class="search-wrap" style="min-width:170px;flex:1;max-width:240px">
+    <div class="search-ico"><svg viewBox="0 0 18 18" fill="none" width="14" height="14"><circle cx="7.5" cy="7.5" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M12 12l3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+    <input id="pageSearch_${key}" class="search-inp" placeholder="${ph}" value="${PAGE_Q[key]}" oninput="pageSearchInput(this,'${key}','${renderFn}')">
+  </div>`;
+}
 // Tab strip shared by review-style pages (Pending / Reviewed / All with counts)
 function reviewTabs(counts, onChangeFn){
   const tabs=[['pending','Pending',counts.pending],['reviewed','Reviewed',counts.reviewed],['all','All',counts.all]];
@@ -12052,9 +12066,16 @@ function downloadFacilityReport(fid){
 
 // ============================================================ A REGISTRATIONS
 function renderARegistrations(){
-  const pending=DB.pendingRegs.filter(r=>r.status==='pending');
-  const reviewed=DB.pendingRegs.filter(r=>r.status!=='pending');
+  const term=PAGE_Q.reg.trim().toLowerCase();
+  const hit=r=>!term||[r.facility,r.name,r.email,r.location].some(v=>(v||'').toLowerCase().includes(term));
+  const byNewest=(a,b)=>String(b.requested_at||b.requestedAt||'').localeCompare(String(a.requested_at||a.requestedAt||''));
+  const pending=DB.pendingRegs.filter(r=>r.status==='pending'&&hit(r)).sort(byNewest);
+  const reviewed=DB.pendingRegs.filter(r=>r.status!=='pending'&&hit(r)).sort(byNewest);
   document.getElementById('a-registrations').innerHTML=`
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+      ${pageSearchBox('reg','renderARegistrations','Search facility, contact, email...')}
+      ${term?`<button class="btn btn-ghost btn-xs" onclick="PAGE_Q.reg='';renderARegistrations()">Clear</button>`:''}
+    </div>
     <div class="stat-grid" style="grid-template-columns:repeat(3,1fr)">
       <div class="stat-card"><div class="stat-accent" style="background:var(--warn)"></div><div class="stat-lbl">Pending Review</div><div class="stat-val" style="color:var(--warn)">${pending.length}</div><div class="stat-sub">Awaiting activation</div></div>
       <div class="stat-card"><div class="stat-accent" style="background:var(--ok)"></div><div class="stat-lbl">Approved</div><div class="stat-val" style="color:var(--ok)">${DB.pendingRegs.filter(r=>r.status==='approved').length}</div><div class="stat-sub">Accounts activated</div></div>
@@ -12898,10 +12919,13 @@ function renderAFreeAgents(){
   if(!window._faTab) window._faTab='agents';
 
   const tab=window._faTab;
-  const fas=DB.freeAgents;
-  const pending=DB.pendingTransfers.filter(t=>t.status==='pending');
-  const allTransfers=DB.pendingTransfers.slice().sort((a,b)=>b.id.localeCompare(a.id));
-  const placed=DB.placementLog;
+  const faTerm=PAGE_Q.fa.trim().toLowerCase();
+  // Name search across all three tabs; shape-agnostic match on the record text
+  const faHit=o=>!faTerm||JSON.stringify(o||{}).toLowerCase().includes(faTerm);
+  const fas=DB.freeAgents.filter(faHit);
+  const pending=DB.pendingTransfers.filter(t=>t.status==='pending'&&faHit(t));
+  const allTransfers=DB.pendingTransfers.filter(faHit).slice().sort((a,b)=>b.id.localeCompare(a.id));
+  const placed=DB.placementLog.filter(faHit);
   const myUserId=ST.user?.id||'admin';
 
   function faTabBtn(id,label,badge){
@@ -12935,10 +12959,14 @@ function renderAFreeAgents(){
       </div>
     </div>
     <!-- Tabs -->
-    <div style="display:flex;gap:4px;overflow-x:auto;margin-bottom:16px;padding-bottom:2px">
+    <div style="display:flex;gap:4px;overflow-x:auto;margin-bottom:10px;padding-bottom:2px">
       ${faTabBtn('agents','Active Free Agents')}
       ${faTabBtn('queue','Transfer Verification', pending.length||'')}
       ${faTabBtn('history','Placement History')}
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+      ${pageSearchBox('fa','renderAFreeAgents','Search by name...')}
+      ${PAGE_Q.fa?`<button class="btn btn-ghost btn-xs" onclick="PAGE_Q.fa='';renderAFreeAgents()">Clear</button>`:''}
     </div>`;
 
   // ── TAB: ACTIVE FREE AGENTS ────────────────────────────────────
@@ -13303,11 +13331,13 @@ function renderAAdminUsers(){
     { name: 'I. Zambrano', email: 'izambrano@sipsconsults.com', initials: 'IZ', title: 'SIPS Master Admin' },
     { name: 'D. Payne', email: 'dpayne@sipsconsults.com', initials: 'DP', title: 'SIPS Master Admin' }
   ];
-  const sipsAdmins    = DB.users.filter(u=>(u.role==='master_admin'||u.role==='staff_admin')&&!u.email.match(/jjacobs|izambrano|dpayne/i));
-  const sysUsers      = DB.users.filter(u=>u.role==='system_admin');
-  const facAdminUsers = DB.users.filter(u=>u.role==='facility_admin');
-  const hospUsers     = DB.users.filter(u=>u.role==='hospital');
-  const staffUsers    = DB.users.filter(u=>u.role==='staff_member');
+  const uTerm = PAGE_Q.users.trim().toLowerCase();
+  const uHit = u => !uTerm || (u.name||'').toLowerCase().includes(uTerm) || (u.email||'').toLowerCase().includes(uTerm);
+  const sipsAdmins    = DB.users.filter(u=>(u.role==='master_admin'||u.role==='staff_admin')&&!u.email.match(/jjacobs|izambrano|dpayne/i)&&uHit(u));
+  const sysUsers      = DB.users.filter(u=>u.role==='system_admin'&&uHit(u));
+  const facAdminUsers = DB.users.filter(u=>u.role==='facility_admin'&&uHit(u));
+  const hospUsers     = DB.users.filter(u=>u.role==='hospital'&&uHit(u));
+  const staffUsers    = DB.users.filter(u=>u.role==='staff_member'&&uHit(u));
 
   const tabs = [
     {id:'sips_protected', label:'SIPS Master Admins', count:sipsProtected.length, pill:'p-gold'},
@@ -13549,6 +13579,10 @@ function renderAAdminUsers(){
       </div>
       <div style="padding:12px 16px 0;overflow-x:auto;-webkit-overflow-scrolling:touch">
         <div class="tab-bar" style="white-space:nowrap;min-width:max-content">${tabBar}</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin:12px 0;flex-wrap:wrap">
+        ${pageSearchBox('users','renderAAdminUsers','Search name or email...')}
+        ${PAGE_Q.users?`<button class="btn btn-ghost btn-xs" onclick="PAGE_Q.users='';renderAAdminUsers()">Clear</button>`:''}
       </div>
       ${tableHTML}
     </div>`;
