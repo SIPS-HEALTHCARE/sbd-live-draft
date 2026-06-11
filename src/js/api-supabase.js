@@ -480,6 +480,7 @@ function mapStaffFromBackend(row){
     },
     oip: row.oip || null,
     history: row.history || [],
+    practiceScores: row.practice_scores || {},
     created_at: row.created_at,
     updated_at: row.updated_at,
     placementNeeded: row.placement_needed,
@@ -505,7 +506,8 @@ function mapStaffToBackend(staff){
     ps_mod: staff.ps?.mod || null,
     ps_tracks: staff.ps?.tracks || null,
     oip: staff.oip || null,
-    history: staff.history || null
+    history: staff.history || null,
+    practice_scores: staff.practiceScores || null
   };
   if(staff.cur){
     obj.cur_comp = staff.cur.c || null;
