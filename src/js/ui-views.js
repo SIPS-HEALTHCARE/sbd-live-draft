@@ -11838,7 +11838,7 @@ async function addStaff(lockedFid){
   const sim=document.getElementById('ns-sim').value;
   const obs=document.getElementById('ns-obs').value;
   if(!first||!last){toast('Please enter first and last name.','err');return;}
-  const newStaff={id:++DB.nextId,fid,first,last,role,belt,since:since||new Date().toISOString().slice(0,10),stars:0,
+  const newStaff={fid,first,last,role,belt,since:since||new Date().toISOString().slice(0,10),stars:0,
     cur:{c:comp||null,s:sim||null,o:obs||null},nxt:{c:null,s:null,o:null},
     ps:{enrolled:!!psTrack,done:false,track:psTrack,mod:psTrack?'0 of 6':'',tracks:{}},
     oip:{completed:false,completedAt:null,primaryType:null,secondaryType:null,scores:{S:0,St:0,Su:0,A:0},answers:[]},
@@ -11846,13 +11846,25 @@ async function addStaff(lockedFid){
   if(beltIdx(belt)>=2) newStaff.ps.tracks['01']={status:'eligible',promptedAt:since||new Date().toISOString().slice(0,10),startedAt:null,completedAt:null};
   if(beltIdx(belt)>=3) newStaff.ps.tracks['03']={status:'eligible',promptedAt:since||new Date().toISOString().slice(0,10),startedAt:null,completedAt:null};
   
-  try {
-    if(IS_LIVE) {
-      toast('Creating record...', 'info');
-      const sRes = await SB.createStaff(mapStaffToBackend(newStaff));
-      if (sRes && sRes[0] && sRes[0].id) newStaff.id = sRes[0].id;
+  if(IS_LIVE) {
+    toast('Creating record...', 'info');
+    let sRes;
+    try {
+      const payload = mapStaffToBackend(newStaff);
+      delete payload.id; // Postgres assigns the uuid; an explicit null id overrides the column default and 400s
+      sRes = await SB.createStaff(payload);
+    } catch(e) {
+      handleSyncError(e, 'Staff sync');
+      return; // fail closed: no local push, no success toast; modal stays open for retry
     }
-  } catch(e) { handleSyncError(e, 'Staff sync'); }
+    if(!sRes || !sRes[0] || !sRes[0].id) {
+      toast('Staff record was not saved (no id returned). Please try again.','err');
+      return;
+    }
+    newStaff.id = sRes[0].id;
+  } else {
+    newStaff.id = 'local-' + Date.now();
+  }
 
   DB.staff.push(newStaff);
   closeModal();
@@ -12752,7 +12764,35 @@ function downloadFreeAgentReport(faId) {
 
 
 // ============================================================ TRANSFER VERIFICATION ENGINE
+// Persist an approve/deny decision to the transfer_requests table (STAFF-F6).
+// Non-fatal: the release/assignment itself is already executed (or aborted) by the
+// caller; a failed PATCH only means the queue shows stale status until re-hydration.
+async function _persistTransferDecision(tr){
+  if(!IS_LIVE || !tr || !tr.id || String(tr.id).startsWith('tr-')) return;
+  try {
+    await SB.updateTransferRequest(tr.id, {
+      status: tr.status,
+      decided_by: tr.approvedBy || tr.deniedBy || null,
+      decided_by_name: tr.approvedByName || tr.deniedByName || null,
+      decided_at: new Date().toISOString(),
+      deny_reason: tr.denyReason || null
+    });
+  } catch(e) {
+    console.warn('Transfer decision sync failed:', e.message);
+    toast('Warning: the verification queue status could not be saved — ' + e.message, 'warn');
+  }
+}
+
+// Re-entrancy guard: the Approve button stays live in the DOM while the inner
+// function awaits the backend — a double-click must not execute the release twice.
 async function approveTransfer(trId) {
+  const tr = DB.pendingTransfers && DB.pendingTransfers.find(t => t.id === trId);
+  if(!tr || tr._busy) return;
+  tr._busy = true;
+  try { await _approveTransferInner(trId); } finally { tr._busy = false; }
+}
+
+async function _approveTransferInner(trId) {
   if(!DB.pendingTransfers) return;
   const tr = DB.pendingTransfers.find(t => t.id === trId);
   if(!tr || tr.status !== 'pending') return;
@@ -12776,6 +12816,22 @@ async function approveTransfer(trId) {
     const date = tr.effectDate;
     if(!DB.freeAgents) DB.freeAgents = [];
 
+    // STAFF-F6: the backend release executes HERE, on second-admin approval — never at
+    // request time. Fail closed: if it doesn't persist, undo the optimistic approval and
+    // keep the request pending so the staff member is NOT moved.
+    if(IS_LIVE){
+      try {
+        await SB.releaseToFreeAgentRemote({ staffId: tr.staffId, fromFacId: tr.fromFacId, fromFacName: tr.fromFacName, reason: tr.reason, notes: tr.notes });
+      } catch(e) {
+        tr.status = 'pending';
+        delete tr.approvedBy; delete tr.approvedByName; delete tr.approvedAt;
+        toast('Release failed to save: ' + e.message + ' — the staff member was NOT moved.','err');
+        renderAFreeAgents();
+        return;
+      }
+      await _persistTransferDecision(tr);
+    }
+
     const faRecord = {
       ...s,
       id: 'fa-'+Date.now(),
@@ -12791,8 +12847,6 @@ async function approveTransfer(trId) {
       ]
     };
     faRecord.history = [...(s.history||[]), {dt:date, type:'Release', belt:s.belt, res:'released', note:`Released from ${fac?.name||'--'}. Reason: ${tr.reason}${tr.notes?' \u2014 '+tr.notes:''}. Approved by ${adminName}.`}];
-    // Backend release already executed at request time via releaseToFreeAgentRemote().
-    // (The old SB.releaseToFreeAgent() call here hit a non-existent endpoint — 404 — and is removed.)
     DB.freeAgents.push(faRecord);
     DB.staff = DB.staff.filter(x => x.id !== tr.staffId);
     DB.users = DB.users.filter(u => !(u.sid === tr.staffId && u.role === 'staff_member'));
@@ -12806,6 +12860,10 @@ async function approveTransfer(trId) {
     });
 
     toast(`Release approved. ${cleanName(tr.staffName)} is now in the Free Agent Registry.`,'ok');
+
+    // Pull the canonical free_agents row so the registry shows the real record
+    // (not the locally fabricated fa-<timestamp> one).
+    if(IS_LIVE && typeof initAppData === 'function'){ try { await initAppData(); } catch(_){} }
 
   } else if(tr.type === 'assignment') {
     // Execute the assignment
@@ -12830,6 +12888,7 @@ async function approveTransfer(trId) {
         renderAFreeAgents();
         return;
       }
+      await _persistTransferDecision(tr);
     }
 
     // Persisted OK \u2192 mirror locally (fallback if the re-hydration below fails).
@@ -12878,17 +12937,19 @@ function denyTransfer(trId) {
   </div>`, 'modal-sm');
 }
 
-function executeDenyTransfer(trId) {
+async function executeDenyTransfer(trId) {
   const reason = document.getElementById('deny-reason-inp')?.value.trim();
   if(!reason) { toast('Please provide a reason for denial.','err'); return; }
   const tr = DB.pendingTransfers&&DB.pendingTransfers.find(t => t.id === trId);
   if(!tr) return;
+  if(tr.status !== 'pending') { closeModal(); return; }
   const adminName = (ST.user&&(ST.user.name||ST.user.email))||'Admin';
   tr.status = 'denied';
   tr.deniedBy = ST.user?.id||'admin';
   tr.deniedByName = adminName;
   tr.deniedAt = new Date().toISOString().slice(0,10);
   tr.denyReason = reason;
+  await _persistTransferDecision(tr);
   closeModal();
   toast(`Transfer denied. ${cleanName(tr.staffName)} was not moved.`,'err');
   updateFANB();
@@ -12924,7 +12985,7 @@ function renderAFreeAgents(){
   const faHit=o=>!faTerm||JSON.stringify(o||{}).toLowerCase().includes(faTerm);
   const fas=DB.freeAgents.filter(faHit);
   const pending=DB.pendingTransfers.filter(t=>t.status==='pending'&&faHit(t));
-  const allTransfers=DB.pendingTransfers.filter(faHit).slice().sort((a,b)=>b.id.localeCompare(a.id));
+  const allTransfers=DB.pendingTransfers.filter(faHit).slice().sort((a,b)=>String(b.requestedAt||'').localeCompare(String(a.requestedAt||''))||String(b.id).localeCompare(String(a.id)));
   const placed=DB.placementLog.filter(faHit);
   const myUserId=ST.user?.id||'admin';
 
@@ -13159,7 +13220,7 @@ function openAssignFreeAgentModal(faId){
     </div>`,'modal-md');
 }
 
-function executeFreeAgentAssign(faId){
+async function executeFreeAgentAssign(faId){
   const fa=DB.freeAgents.find(f=>f.id===faId);
   if(!fa){toast('Record not found.','err');return;}
   const fid=document.getElementById('fa-assign-fid')?.value;
@@ -13171,8 +13232,21 @@ function executeFreeAgentAssign(faId){
 
   if(!DB.pendingTransfers) DB.pendingTransfers=[];
 
-  const transfer={
-    id:'tr-'+Date.now(),
+  // STAFF-F5: block duplicate assignment requests for the same free agent.
+  if(DB.pendingTransfers.some(t=>t.status==='pending'&&t.type==='assignment'&&t.faId===faId)){
+    toast(`An assignment request for <strong>${fullName(fa)}</strong> is already awaiting second-admin verification.`,'warn');
+    return;
+  }
+  if(IS_LIVE && !isUuidId(faId)){
+    toast('This free agent record is still syncing. Please refresh the page and try again.','warn');
+    return;
+  }
+  if(IS_LIVE && !(ST.user&&ST.user.id)){
+    toast('Your session is not fully loaded. Please refresh and try again.','err');
+    return;
+  }
+
+  let transfer={
     type:'assignment',
     faId,
     staffName: fullName(fa),
@@ -13188,14 +13262,29 @@ function executeFreeAgentAssign(faId){
     reason: 'Facility assignment',
     notes,
     effectDate: date,
-    status:'pending',
-    faSnapshot: {...fa}
+    status:'pending'
   };
 
-  DB.pendingTransfers.push(transfer);
   // Execution is deferred to approval (approveTransfer) so a second admin must verify
-  // before the staff record is moved. (Previously this fired assignFreeAgentRemote with a
-  // raw transfer object whose field names the edge function rejected.)
+  // before the staff record is moved. The request itself is persisted (STAFF-F6) so the
+  // queue survives reloads and is visible to other admin sessions.
+  if(IS_LIVE){
+    if(window._transferReqBusy){ return; } // double-click while the POST is in flight
+    window._transferReqBusy = true;
+    let saved;
+    try {
+      saved = await SB.createTransferRequest(mapTransferToBackend(transfer));
+    } catch(e) {
+      handleSyncError(e, 'Assignment request sync');
+      return; // fail closed
+    } finally {
+      window._transferReqBusy = false;
+    }
+    if(saved && saved[0]) transfer = mapTransferFromBackend(saved[0]);
+  } else {
+    transfer.id='tr-'+Date.now();
+  }
+  DB.pendingTransfers.push(transfer);
   closeModal();
   toast(`Assignment request submitted for <strong>${fullName(fa)}</strong> to <strong>${fac?.name||fid}</strong>. Awaiting second-admin verification.`,'ok');
   updateFANB();
@@ -13274,7 +13363,7 @@ function releaseToFreeAgent(staffId){
     </div>`,'modal-md');
 }
 
-function executeReleaseToFA(staffId){
+async function executeReleaseToFA(staffId){
   const s=getStaff(staffId);
   if(!s){toast('Staff record not found.','err');return;}
   const fac=getFac(s.fid);
@@ -13285,8 +13374,21 @@ function executeReleaseToFA(staffId){
 
   if(!DB.pendingTransfers) DB.pendingTransfers=[];
 
-  const transfer={
-    id:'tr-'+Date.now(),
+  // STAFF-F5: block duplicate release requests for the same staff member.
+  if(DB.pendingTransfers.some(t=>t.status==='pending'&&t.type==='release'&&t.staffId===s.id)){
+    toast(`A release request for <strong>${fullName(s)}</strong> is already awaiting second-admin verification.`,'warn');
+    return;
+  }
+  if(IS_LIVE && !isUuidId(s.id)){
+    toast('This staff record is still syncing. Please refresh the page and try again.','warn');
+    return;
+  }
+  if(IS_LIVE && !(ST.user&&ST.user.id)){
+    toast('Your session is not fully loaded. Please refresh and try again.','err');
+    return;
+  }
+
+  let transfer={
     type:'release',
     staffId: s.id,
     staffName: fullName(s),
@@ -13300,16 +13402,28 @@ function executeReleaseToFA(staffId){
     requestedAt: new Date().toISOString().slice(0,10),
     reason, notes,
     effectDate: date,
-    status:'pending',
-    staffSnapshot: {...s}
+    status:'pending'
   };
 
-  DB.pendingTransfers.push(transfer);
+  // STAFF-F6: persist the request only. The backend release (sbd-release-to-free-agent)
+  // fires in approveTransfer() once a SECOND admin verifies — never at request time.
   if(IS_LIVE){
-    SB.releaseToFreeAgentRemote(transfer).catch(e => handleSyncError(e, 'Release sync'));
+    if(window._transferReqBusy){ return; } // double-click while the POST is in flight
+    window._transferReqBusy = true;
+    let saved;
+    try {
+      saved = await SB.createTransferRequest(mapTransferToBackend(transfer));
+    } catch(e) {
+      handleSyncError(e, 'Release request sync');
+      return; // fail closed: nothing queued locally that the backend doesn't know about
+    } finally {
+      window._transferReqBusy = false;
+    }
+    if(saved && saved[0]) transfer = mapTransferFromBackend(saved[0]);
   } else {
-    /* saveDemoData() removed */
+    transfer.id='tr-'+Date.now();
   }
+  DB.pendingTransfers.push(transfer);
   closeModal();
   toast(`Release request submitted for <strong>${fullName(s)}</strong>. Awaiting second-admin verification before execution.`,'ok');
   updateFANB();
