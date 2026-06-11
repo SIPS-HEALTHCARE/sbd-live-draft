@@ -6387,6 +6387,10 @@ function savePracticeScore(belt, mode, score, total) {
       toast('Assessment request unlocked for ' + belt + ' Belt! You may now request your gate assessment.', 'ok');
     }
   }
+  // Persist — practice scores were memory-only and vanished on reload (ASS-F1 compounding bug).
+  // Narrow single-column PATCH (same pattern as mapStaffPSToBackend): cannot clobber
+  // oip/history/ps_tracks. The whole object is sent because PostgREST replaces jsonb wholesale.
+  if (IS_LIVE) SB.updateStaff(s.id, { practice_scores: s.practiceScores }).catch(e => handleSyncError(e, 'Practice score sync'));
 }
 
 function canRequestAssessment(staffId, belt) {
@@ -6405,11 +6409,14 @@ function getPracticeScores(staffId, belt) {
 function requestGateAssessment(belt, type) {
   const s = getStaff(ST.staffId);
   if (!s) { toast('Profile not found.', 'err'); return; }
-  if (!canRequestAssessment(s.id, belt)) {
+  // Qualification is earned on the CURRENT belt's practice tests; `belt` is the
+  // target (next) belt being requested. Validating against `belt` here is what
+  // made every request bounce (ASS-F1) — the unlock banner reads current-belt scores.
+  if (!canRequestAssessment(s.id, s.belt)) {
     toast('Complete both practice tests at 80% or above before requesting.', 'err');
     return;
   }
-  const scores = getPracticeScores(s.id, belt);
+  const scores = getPracticeScores(s.id, s.belt) || {};
   const existing = DB.queue.find(q => q.sid === s.id && q.targetBelt === belt && q.type === type && q.status === 'pending');
   if (existing) {
     toast('You already have a pending request for this assessment.', 'err');
@@ -6580,7 +6587,9 @@ function renderSStudy() {
               <div style="font-size:10px;color:var(--txt3)">${otherScore>=80?'Threshold met':otherScore>0?'Below 80%':'Not taken'}</div>
             </div>
           </div>
-          ${(bothPassed||canRequestAssessment(s.id,ps.belt)) ? _studyGateBtns(s,nxtBelt,kScore,sScore) : _studyNotPassedMsg(ps.mode,pct)}
+          ${ps.belt===s.belt
+            ? ((bothPassed||canRequestAssessment(s.id,s.belt)) ? _studyGateBtns(s,nxtBelt,kScore,sScore) : _studyNotPassedMsg(ps.mode,pct))
+            : `<div style="background:var(--s2);border:1px solid var(--bdr);border-radius:var(--rs);padding:11px 14px;margin-bottom:14px;font-size:12px;color:var(--txt2)">Preview practice — gate assessment requests unlock from your <strong>${s.belt} Belt</strong> practice tests.</div>`}
 
 
 
@@ -11883,7 +11892,18 @@ async function addStaff(lockedFid){
 function openRecordModal(sid){
   // Use hFid as the active facility when called from the hospital portal (facility admin)
   const activeFid = (ST.portal==='hospital' && ST.hFid) ? ST.hFid : ST.curFid;
-  const facOpts=DB.facilities.filter(f=>f.active!==false||f.id===activeFid).map(f=>`<option value="${f.id}" ${f.id===activeFid?'selected':''}>${f.name}${f.loc?` — ${f.loc}`:''}</option>`).join('');
+  // Facility admins record only within their own facility (ASS-F2): the dropdown is
+  // replaced by a locked field. The dropdown remains for admin-portal contexts, deduped
+  // by name+location label (QA saw the same facility listed twice).
+  const facLocked = ST.portal==='hospital' && !!ST.hFid;
+  const _facSeen=new Set();
+  const facOpts=DB.facilities.filter(f=>{
+    if(f.active===false&&f.id!==activeFid) return false;
+    const k=f.name+'|'+(f.loc||'');
+    if(f.id!==activeFid&&_facSeen.has(k)) return false;
+    _facSeen.add(k); return true;
+  }).map(f=>`<option value="${f.id}" ${f.id===activeFid?'selected':''}>${f.name}${f.loc?` — ${f.loc}`:''}</option>`).join('');
+  const actFac=getFac(activeFid);
   const curS=sid?getStaff(sid):null;
   const staffSel=curS?`<div class="form-group"><label class="form-label">Staff Member</label><div style="padding:8px 11px;background:var(--s2);border:1px solid var(--bdr2);border-radius:var(--rs);font-size:12.5px;font-weight:600">${fullName(curS)}</div></div>`:
     `<div class="form-group"><label class="form-label">Staff Member *</label><select class="form-select" id="ra-staff">${staffOf(activeFid).map(s=>`<option value="${s.id}">${fullName(s)}${s.belt?` — ${s.belt} Belt`:''}</option>`).join('')}</select></div>`;
@@ -11893,7 +11913,9 @@ function openRecordModal(sid){
   </div>`:'';
   openModal('Record Assessment',`
     <div class="modal-body">
-      ${!sid?`<div class="form-group"><label class="form-label">Facility</label><select class="form-select" id="ra-fac" onchange="updateRaStaff(this.value)">${facOpts}</select></div>`:''}
+      ${!sid?(facLocked
+        ?`<div class="form-group"><label class="form-label">Facility</label><div style="padding:8px 11px;background:var(--s2);border:1px solid var(--bdr2);border-radius:var(--rs);font-size:12.5px;font-weight:600">${actFac?.name||'My Facility'}${actFac?.loc?` — ${actFac.loc}`:''}</div></div>`
+        :`<div class="form-group"><label class="form-label">Facility</label><select class="form-select" id="ra-fac" onchange="updateRaStaff(this.value)">${facOpts}</select></div>`):''}
       ${staffSel}
       ${gateInfo}
       <div class="form-row"><div class="form-group"><label class="form-label">Assessment Type *</label><select class="form-select" id="ra-type"><option>Competency</option><option>Simulation</option><option>Observation</option></select></div><div class="form-group"><label class="form-label">Target Belt *</label><select class="form-select" id="ra-belt">${BELT_ORDER.map(b=>`<option ${nb&&b===nb?'selected':''}>${b}</option>`).join('')}</select></div></div>
@@ -11926,16 +11948,20 @@ function submitAssessment(sid){
   const staffId=sid||document.getElementById('ra-staff')?.value||null;
   const s=getStaff(staffId);
   if(!s){toast('Please select a staff member.','err');return;}
+  // Facility-portal callers (facility admins) may only record within their own facility.
+  // The modal already locks the facility, but guard here against console/DOM bypass too.
+  if(ST.portal==='hospital'&&ST.hFid&&s.fid!==ST.hFid){toast('You can only record assessments for staff in your own facility.','err');return;}
   const type=document.getElementById('ra-type').value;
   const targetBelt=document.getElementById('ra-belt').value;
+  const note=document.getElementById('ra-notes')?.value.trim()||'';
   const gateKey=type==='Competency'?'c':type==='Simulation'?'s':'o';
   const targetIdx=beltIdx(targetBelt);
   const curIdx=beltIdx(s.belt);
   if(targetIdx===curIdx){ s.cur[gateKey]=raResult; }
   else if(targetIdx===curIdx+1){ s.nxt[gateKey]=raResult; }
-  s.history.push({dt:new Date().toISOString().slice(0,10),type,belt:targetBelt,res:raResult});
+  s.history.push({dt:new Date().toISOString().slice(0,10),type,belt:targetBelt,res:raResult,...(note?{note}:{})});
   if(IS_LIVE){
-    SB.recordAssessment(mapStaffToBackend(s),type,targetBelt,raResult,'',ST.user?.id,new Date().toISOString()).catch(e => handleSyncError(e, 'Backend sync'));
+    SB.recordAssessment(mapStaffToBackend(s),type,targetBelt,raResult,note,ST.user?.id,new Date().toISOString()).catch(e => handleSyncError(e, 'Backend sync'));
     const _q = DB.queue.find(q=>q.sid===staffId&&q.type===type&&q.targetBelt===targetBelt);
     if(_q) SB.resolveAssessmentQueue(_q.id,'resolved').catch(e => { if (e instanceof ReferenceError || e instanceof TypeError || e instanceof SyntaxError) throw e; });
   }
@@ -11948,8 +11974,9 @@ function submitAssessment(sid){
   const nxtS=nextBelt(s.belt)?gatesStatus(s.nxt):null;
   const progressMsg=nxtS?`Gate ${nxtS.p}/3 for ${nextBelt(s.belt)} Belt. ${nxtS.rem} remaining.`:'';
   closeModal();
+  const result=raResult; // capture before reset — the toast below must read the real outcome (ASS-F3)
   raResult=null;
-  toast(`${fullName(s)} | ${type}: <strong>${raResult||'recorded'}</strong>. ${progressMsg}`,raResult==='pass'?'ok':'err');
+  toast(`${fullName(s)} | ${type}: <strong>${result==='pass'?'PASS':'FAIL'}</strong>. ${progressMsg}`,result==='pass'?'ok':'err');
   if(ST.aView==='a-facility') renderFacTab();
   if(ST.aView==='a-assessments') renderAAssessments();
   if(ST.hView==='h-assessments') renderHAssessments();
@@ -12527,7 +12554,7 @@ function openFreeAgentFullReport(faId) {
       <td>${beltBadge(h.belt)}</td>
       <td style="font-size:11.5px">${h.type}</td>
       <td><span class="pill ${h.res==='pass'?'p-ok':'p-err'}" style="font-size:10px">${h.res==='pass'?'Pass':'Fail'}</span></td>
-      <td style="font-size:11px;color:var(--txt3)">${h.note||'--'}</td>
+      <td style="font-size:11px;color:var(--txt3)">${h.note?Security.sanitize(h.note):'--'}</td>
     </tr>`).join('');
 
   const html = `<div class="modal-body" style="max-height:80vh;overflow-y:auto">
@@ -12605,7 +12632,7 @@ function openFreeAgentFullReport(faId) {
       <div class="card-hd"><div class="card-ttl">Assessment History</div><span class="pill p-muted">${allHistory.length} events</span></div>
       ${allHistory.length ? `<div style="overflow-x:auto"><table class="tbl tbl-static" style="min-width:460px">
         <thead><tr><th>Date</th><th>Belt</th><th>Type</th><th>Result</th><th>Notes</th></tr></thead>
-        <tbody>${gateRows||allHistory.map(h=>`<tr><td style="font-size:11px">${h.dt||'--'}</td><td>${beltBadge(h.belt)}</td><td style="font-size:11.5px">${h.type}</td><td><span class="pill ${h.res==='pass'?'p-ok':'p-err'}" style="font-size:10px">${h.res==='pass'?'Pass':'Fail'}</span></td><td style="font-size:11px;color:var(--txt3)">${h.note||'--'}</td></tr>`).join('')}</tbody>
+        <tbody>${gateRows||allHistory.map(h=>`<tr><td style="font-size:11px">${h.dt||'--'}</td><td>${beltBadge(h.belt)}</td><td style="font-size:11.5px">${h.type}</td><td><span class="pill ${h.res==='pass'?'p-ok':'p-err'}" style="font-size:10px">${h.res==='pass'?'Pass':'Fail'}</span></td><td style="font-size:11px;color:var(--txt3)">${h.note?Security.sanitize(h.note):'--'}</td></tr>`).join('')}</tbody>
       </table></div>` : '<div style="font-size:12px;color:var(--txt3);padding:12px 14px">No assessment history on record.</div>'}
     </div>
 
@@ -12755,7 +12782,7 @@ function downloadFreeAgentReport(faId) {
       <td>${pBelt(h.belt)}</td>
       <td>${h.type}</td>
       <td><span class="badge ${h.res==='pass'?'badge-green':'badge-err'}">${h.res==='pass'?'Pass':'Fail'}</span></td>
-      <td style="color:#64748b;font-size:7.5pt">${h.note||'–'}</td>
+      <td style="color:#64748b;font-size:7.5pt">${h.note?Security.sanitize(h.note):'–'}</td>
     </tr>`).join('')}</tbody></table>`}
   `;
 
@@ -13183,7 +13210,7 @@ function openFreeAgentProfile(faId){
       ${hist.length?`<div class="tl">${hist.map(h=>`<div class="tl-item"><div class="tl-dot" style="background:rgba(96,165,250,.15);color:#60a5fa;font-size:9px">&#9679;</div><div><div class="tl-date">${h.from} \u2013 ${h.to}</div><div class="tl-txt">${h.facName}<span style="font-size:11px;color:#64748b;margin-left:6px">${h.loc||''}</span></div></div></div>`).join('')}</div>`:
       '<div style="font-size:12px;color:#64748b">No facility history recorded.</div>'}
       <div class="section-lbl" style="margin-bottom:6px;margin-top:12px">Full Assessment History</div>
-      <div class="tl">${(fa.history||[]).length?(fa.history||[]).slice().reverse().map(h=>`<div class="tl-item"><div class="tl-dot" style="background:${h.res==='pass'?'rgba(34,197,94,.15)':'rgba(239,68,68,.15)'};color:${h.res==='pass'?'#22c55e':'#ef4444'}">${h.res==='pass'?ICO.check:ICO.x}</div><div><div class="tl-date">${h.dt} &bull; ${beltBadge(h.belt)}</div><div class="tl-txt">${h.type} \u2014 <strong style="color:${h.res==='pass'?'#22c55e':'#ef4444'}">${h.res==='pass'?'Pass':'Fail'}</strong>${h.note?' \u2014 '+h.note:''}</div></div></div>`).join(''):'<div style="font-size:12px;color:#64748b">No assessment history.</div>'}</div>
+      <div class="tl">${(fa.history||[]).length?(fa.history||[]).slice().reverse().map(h=>`<div class="tl-item"><div class="tl-dot" style="background:${h.res==='pass'?'rgba(34,197,94,.15)':'rgba(239,68,68,.15)'};color:${h.res==='pass'?'#22c55e':'#ef4444'}">${h.res==='pass'?ICO.check:ICO.x}</div><div><div class="tl-date">${h.dt} &bull; ${beltBadge(h.belt)}</div><div class="tl-txt">${h.type} \u2014 <strong style="color:${h.res==='pass'?'#22c55e':'#ef4444'}">${h.res==='pass'?'Pass':'Fail'}</strong>${h.note?' \u2014 '+Security.sanitize(h.note):''}</div></div></div>`).join(''):'<div style="font-size:12px;color:#64748b">No assessment history.</div>'}</div>
       <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--bdr)">
         <div style="font-size:11px;color:var(--txt3);margin-bottom:10px">View this free agent's complete staff report as it would appear on an active site assignment.</div>
         <button class="btn btn-gold" style="width:100%;justify-content:center" onclick="openFreeAgentFullReport('${fa.id}')">View Full Staff Report</button>

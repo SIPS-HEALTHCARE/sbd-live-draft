@@ -33,13 +33,43 @@ serve(async (req) => {
         if (authError || !user) throw new Error('Unauthorized: Invalid or expired session');
 
         // Check if the user is a valid assessor
-        const { data: profile } = await supabaseAdmin.from('sbd_portal_users').select('role').eq('auth_uid', user.id).single();
-        const allowedRoles = ['master_admin', 'staff_admin', 'system_admin', 'admin', 'master', 'educator', 'preceptor'];
+        const { data: profile } = await supabaseAdmin.from('sbd_portal_users').select('role, facility_id, assigned_facility_ids').eq('auth_uid', user.id).single();
+        const allowedRoles = ['master_admin', 'staff_admin', 'system_admin', 'admin', 'master', 'educator', 'preceptor', 'facility_admin'];
         if (!profile || !allowedRoles.includes(profile.role)) {
             throw new Error(`Unauthorized role (${profile?.role || 'none'}). Cannot record assessments.`);
         }
 
-        const facility_id = staff.facility_id || staff.fid || null;
+        // Resolve the staff member's facility from the DATABASE, never from the client
+        // payload — a forged staff.fid would otherwise defeat the scope check (ASS-F2).
+        const { data: staffRow, error: staffFetchError } = await supabaseAdmin.from('staff').select('id, fid').eq('id', staff.id).single();
+        if (staffFetchError || !staffRow) throw new Error('Staff record not found.');
+        const facility_id = staffRow.fid || null;
+
+        // Enforce facility scope (ASS-F2). master/system admins are network-wide;
+        // staff_admin (assessor) is limited to assigned_facility_ids when set (same rule
+        // as sbd-assessor-pin); facility-bound roles must match the staff's facility.
+        const unscopedRoles = ['master_admin', 'system_admin', 'admin', 'master'];
+        if (!unscopedRoles.includes(profile.role)) {
+            if (profile.role === 'staff_admin') {
+                const assessorFids = profile.assigned_facility_ids || [];
+                if (assessorFids.length > 0 && !assessorFids.includes(facility_id)) {
+                    const err: any = new Error('Facility scope violation: you are not assigned to this staff member\'s facility.');
+                    err.status = 403;
+                    throw err;
+                }
+            } else {
+                // facility_admin, educator, preceptor — locked to their own facility.
+                // Accept assigned_facility_ids membership as a fallback: some existing
+                // rows are provisioned with only that field (it's what sbd-assessor-pin trusts).
+                const ownFacility = profile.facility_id === facility_id;
+                const assignedFacility = (profile.assigned_facility_ids || []).includes(facility_id);
+                if (!ownFacility && !assignedFacility) {
+                    const err: any = new Error('Facility scope violation: you can only record assessments for your own facility.');
+                    err.status = 403;
+                    throw err;
+                }
+            }
+        }
 
         // 1. Insert into sbd_assessment_queue
         const { error: aqError } = await supabaseAdmin.from('sbd_assessment_queue').insert({
@@ -100,7 +130,7 @@ serve(async (req) => {
     } catch (err: any) {
         console.error('Assessment Error:', err.message);
         return new Response(JSON.stringify({ error: err.message }), {
-            status: 400,
+            status: err.status || 400,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
     }
