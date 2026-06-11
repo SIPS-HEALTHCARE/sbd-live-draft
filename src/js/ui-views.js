@@ -2184,8 +2184,8 @@ function updatePlacementBadge(){
 // Reusable review filter state + bar. Placement reviews use it now; the
 // Observation Review tab will reuse the same bar (Iiggie wanted parity).
 const reviewFilter = {
-  q:'', fid:'all', status:'all', belt:'All',
-  reset(){ this.q=''; this.fid='all'; this.status='all'; this.belt='All'; }
+  q:'', fid:'all', status:'pending', belt:'All', sort:'newest',
+  reset(){ this.q=''; this.fid='all'; this.belt='All'; this.sort='newest'; }
 };
 function reviewSearchInput(el, fnName){
   reviewFilter.q = el.value;
@@ -2199,9 +2199,8 @@ function reviewFilterBar(onChangeFn){
   let facs = (DB.facilities||[]).filter(f=>f.active!==false);
   if(u && u.role==='staff_admin' && u.assignedFids && u.assignedFids.length) facs = facs.filter(f=>u.assignedFids.includes(f.id));
   facs = facs.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''));
-  const statuses = [['all','All'],['pending','Pending'],['confirmed','Confirmed'],['adjusted','Adjusted']];
   const belts = ['All', ...BELT_ORDER];
-  const active = reviewFilter.q || reviewFilter.fid!=='all' || reviewFilter.status!=='all' || reviewFilter.belt!=='All';
+  const active = reviewFilter.q || reviewFilter.fid!=='all' || reviewFilter.belt!=='All' || reviewFilter.sort!=='newest';
   const sel = "background:#0e1328;border:1px solid rgba(255,255,255,.1);border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:12.5px;font-family:'Poppins',sans-serif;cursor:pointer";
   return `
     <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px">
@@ -2213,21 +2212,28 @@ function reviewFilterBar(onChangeFn){
         <option value="all">All Facilities</option>
         ${facs.map(f=>`<option value="${f.id}" ${reviewFilter.fid===f.id?'selected':''}>${f.name}</option>`).join('')}
       </select>
-      <div class="filter-bar" style="margin:0;flex-wrap:nowrap;overflow-x:auto;padding-bottom:0">
-        ${statuses.map(([v,l])=>`<div class="fchip ${reviewFilter.status===v?'on':''}" onclick="reviewFilter.status='${v}';${onChangeFn}()">${l}</div>`).join('')}
-      </div>
+      <select style="${sel}" onchange="reviewFilter.sort=this.value;${onChangeFn}()">
+        ${[['newest','Newest first'],['name','Name A-Z'],['facility','By facility'],['score','Score high-low']].map(([v,l])=>`<option value="${v}" ${reviewFilter.sort===v?'selected':''}>${l}</option>`).join('')}
+      </select>
       <div class="filter-bar" style="margin:0;flex-wrap:nowrap;overflow-x:auto;padding-bottom:0">
         ${belts.map(b=>`<div class="fchip ${reviewFilter.belt===b?'on':''}" style="${reviewFilter.belt===b&&b!=='All'?'border-color:'+(BELT_CLR[b]||'#888')+'!important;':''}" onclick="reviewFilter.belt='${b}';${onChangeFn}()">${b}</div>`).join('')}
       </div>
       ${active?`<button class="btn btn-ghost btn-xs" onclick="reviewFilter.reset();${onChangeFn}()" style="white-space:nowrap">Clear</button>`:''}
     </div>`;
 }
+// Tab strip shared by review-style pages (Pending / Reviewed / All with counts)
+function reviewTabs(counts, onChangeFn){
+  const tabs=[['pending','Pending',counts.pending],['reviewed','Reviewed',counts.reviewed],['all','All',counts.all]];
+  return `<div style="display:flex;gap:2px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:16px">
+    ${tabs.map(([v,l,n])=>`<div onclick="reviewFilter.status='${v}';${onChangeFn}()" style="padding:9px 18px;font-size:13px;font-weight:${reviewFilter.status===v?'700':'500'};color:${reviewFilter.status===v?'#f1f5f9':'#64748b'};border-bottom:2px solid ${reviewFilter.status===v?'#8b5cf6':'transparent'};cursor:pointer;margin-bottom:-1px">${l} <span style="font-size:10.5px;color:${reviewFilter.status===v?'#a78bfa':'#475569'};font-weight:700">${n}</span></div>`).join('')}
+  </div>`;
+}
 function applyReviewFilter(pool){
   const term = reviewFilter.q.trim().toLowerCase();
-  const norm = (r)=> r.status==='pending'?'pending': r.status==='adjusted'?'adjusted':'confirmed';
   let out = pool.filter(r=>{
     if(reviewFilter.fid!=='all' && r.fid!==reviewFilter.fid) return false;
-    if(reviewFilter.status!=='all' && norm(r)!==reviewFilter.status) return false;
+    if(reviewFilter.status==='pending' && r.status!=='pending') return false;
+    if(reviewFilter.status==='reviewed' && r.status==='pending') return false;
     if(reviewFilter.belt!=='All' && (r.confirmedBelt||r.tentativeBelt)!==reviewFilter.belt) return false;
     if(term){
       const s=getStaff(r.staffId);
@@ -2236,7 +2242,12 @@ function applyReviewFilter(pool){
     }
     return true;
   });
-  out.sort((a,b)=>{          // pending first, then newest submitted
+  const nameOf = r => (cleanName(r.staffName)||'').toLowerCase();
+  out.sort((a,b)=>{
+    if(reviewFilter.sort==='name') return nameOf(a).localeCompare(nameOf(b));
+    if(reviewFilter.sort==='facility') return (getFac(a.fid)?.name||'').localeCompare(getFac(b.fid)?.name||'');
+    if(reviewFilter.sort==='score') return (b._blended??-1)-(a._blended??-1);
+    // newest: pending first (only visible on the All tab), then most recent
     const pa=a.status==='pending'?0:1, pb=b.status==='pending'?0:1;
     if(pa!==pb) return pa-pb;
     return new Date(b.submittedAt||0) - new Date(a.submittedAt||0);
@@ -2251,6 +2262,8 @@ function renderAPlacementReviews(){
     pool = pool.filter(r => u.assignedFids.includes(r.fid));
   }
   const total = pool.length;
+  // Cache the blended score on each review for the row chip + score sort
+  pool.forEach(r=>{ if(r._blended===undefined) r._blended = (r.responses&&r.responses.length) ? rptComputeModel(r).blended : null; });
   const list = applyReviewFilter(pool);
 
   const renderResponse = (r, i) => {
@@ -2295,6 +2308,7 @@ function renderAPlacementReviews(){
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                 <span style="font-size:14px;font-weight:700;color:#f1f5f9">${displayName}</span>
                 ${belt?beltBadge(belt):''}
+                ${pr._blended!=null?`<span style="font-size:11px;font-weight:800;color:${pr._blended>=75?'#22c55e':pr._blended>=65?'#f59e0b':'#ef4444'}" title="Blended score (60% knowledge / 40% simulation)">${pr._blended}%</span>`:''}
                 <span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:${isPending?'rgba(167,139,250,.15)':'rgba(34,197,94,.12)'};color:${statusClr}">${statusLabel.toUpperCase()}</span>
               </div>
               <div style="font-size:11px;color:#64748b;margin-top:2px">${[displayTitle, fac?.name, displayDate ? `Submitted ${displayDate}` : null].filter(Boolean).join(' · ')}</div>
@@ -2339,8 +2353,9 @@ function renderAPlacementReviews(){
 
   const pendCount = pool.filter(r=>r.status==='pending').length;
   document.getElementById('a-placementreviews').innerHTML = `
-    <div class="card-ttl" style="font-size:18px;font-weight:800;color:#f1f5f9;margin-bottom:6px">Placement Reviews ${pendCount?`<span style="font-size:11px;font-weight:700;color:#a78bfa;background:rgba(167,139,250,.15);padding:2px 9px;border-radius:10px;vertical-align:middle;margin-left:6px">${pendCount} pending</span>`:''}</div>
+    <div class="card-ttl" style="font-size:18px;font-weight:800;color:#f1f5f9;margin-bottom:6px">Placement Reviews</div>
     <div style="font-size:12.5px;color:#64748b;margin-bottom:16px">Review new hire assessment responses and confirm starting belt placement.</div>
+    ${total === 0 ? '' : reviewTabs({pending:pendCount, reviewed:total-pendCount, all:total}, 'renderAPlacementReviews')}
     ${total === 0 ? '' : reviewFilterBar('renderAPlacementReviews')}
     ${total === 0 ? `
     <div class="empty-state">
@@ -10963,6 +10978,14 @@ function renderAssessmentAuthBlock(staffList){
 // ============================================================
 // renderAAssessments  --  ENHANCED with practice scores + requests
 // ============================================================
+let asmQ = '';
+function asmSearchInput(el){
+  asmQ = el.value;
+  const caret = el.selectionStart;
+  renderAAssessments();
+  const fresh = document.getElementById('asmSearch');
+  if(fresh){ fresh.focus(); try{ fresh.setSelectionRange(caret,caret); }catch(e){} }
+}
 function renderAAssessments() {
   const el = document.getElementById('a-assessments');
   // Scope facilities to assignedFids for staff_admin -- master_admin sees all
@@ -10970,18 +10993,22 @@ function renderAAssessments() {
   const assignedFids = (!isMaster && ST.user?.assignedFids?.length) ? ST.user.assignedFids : null;
   const allFacs = DB.facilities.filter(f =>
     f.active !== false && (!assignedFids || assignedFids.includes(f.id))
-  );
+  ).slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+
+  // Search by staff name across every block on this page
+  const term = asmQ.trim().toLowerCase();
+  const nameMatch = (sid)=>{ if(!term) return true; const s=getStaff(sid); return s && fullName(s).toLowerCase().includes(term); };
 
   // Separate staff-requested (pending approval) from admin-managed queue
   const staffRequests = DB.queue.filter(item =>
     item.status === 'pending' && item.requestedAt &&
     (!assignedFids || assignedFids.includes(item.fid)) &&
-    (asmFilter === 'all' || item.fid === asmFilter)
+    (asmFilter === 'all' || item.fid === asmFilter) && nameMatch(item.sid)
   );
   const adminQueue = DB.queue.filter(item =>
     (!item.requestedAt || item.status === 'approved') &&
     (!assignedFids || assignedFids.includes(item.fid)) &&
-    (asmFilter === 'all' || item.fid === asmFilter)
+    (asmFilter === 'all' || item.fid === asmFilter) && nameMatch(item.sid)
   );
 
   function practiceBadge(pct) {
@@ -10995,11 +11022,19 @@ function renderAAssessments() {
       Staff who score 80%+ on both SIPS Intelligence practice tests may request their gate assessments here. Review their practice scores before approving or denying the request.
     </div>
     <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
-      ${['all', ...allFacs.map(f => f.id)].map(v => `<div class="fchip ${asmFilter === v ? 'on' : ''}" onclick="asmFilter='${v}';renderAAssessments()">${v === 'all' ? 'All Facilities' : getFac(v)?.name || v}</div>`).join('')}
+      <div class="search-wrap" style="min-width:170px;flex:1;max-width:240px">
+        <div class="search-ico"><svg viewBox="0 0 18 18" fill="none" width="14" height="14"><circle cx="7.5" cy="7.5" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M12 12l3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+        <input id="asmSearch" class="search-inp" placeholder="Search staff..." value="${asmQ}" oninput="asmSearchInput(this)">
+      </div>
+      <select style="background:#0e1328;border:1px solid rgba(255,255,255,.1);border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:12.5px;font-family:'Poppins',sans-serif;cursor:pointer" onchange="asmFilter=this.value;renderAAssessments()">
+        <option value="all">All Facilities</option>
+        ${allFacs.map(f=>`<option value="${f.id}" ${asmFilter===f.id?'selected':''}>${f.name}</option>`).join('')}
+      </select>
+      ${(asmQ||asmFilter!=='all')?`<button class="btn btn-ghost btn-xs" onclick="asmQ='';asmFilter='all';renderAAssessments()" style="white-space:nowrap">Clear</button>`:''}
       <button class="btn btn-gold btn-sm" style="margin-left:auto;flex-shrink:0" onclick="openRecordModal(null)">${ICO.record} Record Assessment</button>
     </div>
 
-    ${renderAssessmentAuthBlock(DB.staff.filter(st => st.placementNeeded && (!assignedFids || assignedFids.includes(st.fid)) && (asmFilter === 'all' || st.fid === asmFilter)))}
+    ${renderAssessmentAuthBlock(DB.staff.filter(st => st.placementNeeded && (!assignedFids || assignedFids.includes(st.fid)) && (asmFilter === 'all' || st.fid === asmFilter) && (!term || fullName(st).toLowerCase().includes(term))))}
 
     ${staffRequests.length > 0 ? `
     <div style="margin-bottom:20px">
