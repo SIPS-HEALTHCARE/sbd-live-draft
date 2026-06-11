@@ -102,6 +102,19 @@ serve(async (req) => {
             throw new Error('Staff record not found for release: ' + (readErr?.message || 'no row'));
         }
 
+        // Idempotent re-approval: if this staff member is already detached AND has a
+        // free_agents row, a prior approval succeeded but the client's queue-status
+        // update was lost. Succeed without duplicating the registry record.
+        if (!staffRow.fid) {
+            const { data: existingFA } = await supabaseAdmin
+                .from('free_agents').select('id').eq('staff_id', staffId).limit(1);
+            if (existingFA && existingFA.length) {
+                return new Response(JSON.stringify({ success: true, message: 'Already released' }), {
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                });
+            }
+        }
+
         // Detach from facility (fid is the only facility key on staff).
         const { error: staffError } = await supabaseAdmin
             .from('staff')
