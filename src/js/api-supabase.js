@@ -270,6 +270,10 @@ const SB = {
   // ── Free Agent remote helpers (named to match IS_LIVE call sites) ──
   releaseToFreeAgentRemote(data){ return sbFetch('/functions/v1/sbd-release-to-free-agent', { method:'POST', body:data }); },
   assignFreeAgentRemote(data){ return sbFetch('/functions/v1/sbd-assign-free-agent', { method:'POST', body:data }); },
+  // ── Transfer Requests (dual-admin verification queue, transfer_requests table) ──
+  getTransferRequests(){ return sbFetch('/rest/v1/transfer_requests?select=*&order=requested_at.desc'); },
+  createTransferRequest(data){ return sbFetch('/rest/v1/transfer_requests', { method:'POST', body:data }); },
+  updateTransferRequest(id, data){ return sbFetch(`/rest/v1/transfer_requests?id=eq.${id}`, { method:'PATCH', body:data }); },
   // ── Schedule ──
   getSchedule(fid, startDate, endDate){ return sbFetch(`/rest/v1/sbd_schedule?facility_id=eq.${encodeURIComponent(fid)}&date=gte.${startDate}&date=lte.${endDate}&select=*&order=date.asc`); },
   getStaffScheduleRange(fid, startDate, endDate){ return sbFetch(`/rest/v1/sbd_schedule?facility_id=eq.${encodeURIComponent(fid)}&date=gte.${startDate}&date=lte.${endDate}&select=*&order=date.asc`); },
@@ -305,6 +309,7 @@ function resetDB(){
   DB.queue = [];
   DB.promotionApprovals = [];
   DB.freeAgents = [];
+  DB.pendingTransfers = [];
   DB.pendingRegs = [];
   DB.placementReviews = [];
   DB.schedule = [];
@@ -344,6 +349,71 @@ function mapFreeAgentFromBackend(row){
     releaseNotes:   row.release_notes || '',
     releasedAt:     row.released_at   || null,
     facilityHistory:[]
+  };
+}
+
+// ── Transfer Requests (transfer_requests table) ───────────────────────────────
+// The dual-admin verification queue (DB.pendingTransfers). Persisted so a second
+// admin in another session can see and approve requests; execution of the actual
+// release/assignment is deferred to approveTransfer().
+
+// Optimistic local ids ('fa-…', 'local-…', 'fac-…') must never reach a uuid
+// column — Postgres 400s the whole insert on invalid uuid syntax.
+function isUuidId(v){ return typeof v==='string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v); }
+
+function mapTransferFromBackend(row){
+  if(!row) return null;
+  const tr = {
+    id:              row.id,
+    type:            row.type,
+    staffId:         row.staff_id || null,
+    faId:            row.fa_id    || null,
+    staffName:       row.staff_name || '',
+    belt:            row.belt || 'White',
+    fromFacId:       row.from_fac_id   || null,
+    fromFacName:     row.from_fac_name || (row.type==='assignment' ? 'Free Agent Pool' : '--'),
+    toFacId:         row.to_fac_id     || null,
+    toFacName:       row.to_fac_name   || (row.type==='release' ? 'Free Agent Pool' : '--'),
+    toFacLoc:        row.to_fac_loc    || '',
+    reason:          row.reason || '',
+    notes:           row.notes  || '',
+    effectDate:      row.effect_date || null,
+    status:          row.status || 'pending',
+    requestedBy:     row.requested_by,
+    requestedByName: row.requested_by_name || 'Admin',
+    requestedAt:     (row.requested_at || '').slice(0,10)
+  };
+  if(row.status === 'approved'){
+    tr.approvedBy     = row.decided_by;
+    tr.approvedByName = row.decided_by_name || 'Admin';
+    tr.approvedAt     = (row.decided_at || '').slice(0,10);
+  } else if(row.status === 'denied'){
+    tr.deniedBy       = row.decided_by;
+    tr.deniedByName   = row.decided_by_name || 'Admin';
+    tr.deniedAt       = (row.decided_at || '').slice(0,10);
+    tr.denyReason     = row.deny_reason || '';
+  }
+  return tr;
+}
+function mapTransferToBackend(tr){
+  if(!tr) return null;
+  return {
+    type:              tr.type,
+    staff_id:          isUuidId(tr.staffId)   ? tr.staffId   : null,
+    fa_id:             isUuidId(tr.faId)      ? tr.faId      : null,
+    staff_name:        tr.staffName || null,
+    belt:              tr.belt || null,
+    from_fac_id:       isUuidId(tr.fromFacId) ? tr.fromFacId : null,
+    from_fac_name:     tr.fromFacName || null,
+    to_fac_id:         isUuidId(tr.toFacId)   ? tr.toFacId   : null,
+    to_fac_name:       tr.toFacName   || null,
+    to_fac_loc:        tr.toFacLoc    || null,
+    reason:            tr.reason || null,
+    notes:             tr.notes  || null,
+    effect_date:       tr.effectDate || null,
+    status:            tr.status || 'pending',
+    requested_by:      tr.requestedBy,
+    requested_by_name: tr.requestedByName || null
   };
 }
 
@@ -410,6 +480,7 @@ function mapStaffFromBackend(row){
     },
     oip: row.oip || null,
     history: row.history || [],
+    practiceScores: row.practice_scores || {},
     created_at: row.created_at,
     updated_at: row.updated_at,
     placementNeeded: row.placement_needed,
@@ -435,7 +506,8 @@ function mapStaffToBackend(staff){
     ps_mod: staff.ps?.mod || null,
     ps_tracks: staff.ps?.tracks || null,
     oip: staff.oip || null,
-    history: staff.history || null
+    history: staff.history || null,
+    practice_scores: staff.practiceScores || null
   };
   if(staff.cur){
     obj.cur_comp = staff.cur.c || null;

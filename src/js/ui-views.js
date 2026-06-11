@@ -6454,6 +6454,10 @@ function savePracticeScore(belt, mode, score, total) {
       toast('Assessment request unlocked for ' + belt + ' Belt! You may now request your gate assessment.', 'ok');
     }
   }
+  // Persist — practice scores were memory-only and vanished on reload (ASS-F1 compounding bug).
+  // Narrow single-column PATCH (same pattern as mapStaffPSToBackend): cannot clobber
+  // oip/history/ps_tracks. The whole object is sent because PostgREST replaces jsonb wholesale.
+  if (IS_LIVE) SB.updateStaff(s.id, { practice_scores: s.practiceScores }).catch(e => handleSyncError(e, 'Practice score sync'));
 }
 
 function canRequestAssessment(staffId, belt) {
@@ -6472,11 +6476,14 @@ function getPracticeScores(staffId, belt) {
 function requestGateAssessment(belt, type) {
   const s = getStaff(ST.staffId);
   if (!s) { toast('Profile not found.', 'err'); return; }
-  if (!canRequestAssessment(s.id, belt)) {
+  // Qualification is earned on the CURRENT belt's practice tests; `belt` is the
+  // target (next) belt being requested. Validating against `belt` here is what
+  // made every request bounce (ASS-F1) — the unlock banner reads current-belt scores.
+  if (!canRequestAssessment(s.id, s.belt)) {
     toast('Complete both practice tests at 80% or above before requesting.', 'err');
     return;
   }
-  const scores = getPracticeScores(s.id, belt);
+  const scores = getPracticeScores(s.id, s.belt) || {};
   const existing = DB.queue.find(q => q.sid === s.id && q.targetBelt === belt && q.type === type && q.status === 'pending');
   if (existing) {
     toast('You already have a pending request for this assessment.', 'err');
@@ -6647,7 +6654,9 @@ function renderSStudy() {
               <div style="font-size:10px;color:var(--txt3)">${otherScore>=80?'Threshold met':otherScore>0?'Below 80%':'Not taken'}</div>
             </div>
           </div>
-          ${(bothPassed||canRequestAssessment(s.id,ps.belt)) ? _studyGateBtns(s,nxtBelt,kScore,sScore) : _studyNotPassedMsg(ps.mode,pct)}
+          ${ps.belt===s.belt
+            ? ((bothPassed||canRequestAssessment(s.id,s.belt)) ? _studyGateBtns(s,nxtBelt,kScore,sScore) : _studyNotPassedMsg(ps.mode,pct))
+            : `<div style="background:var(--s2);border:1px solid var(--bdr);border-radius:var(--rs);padding:11px 14px;margin-bottom:14px;font-size:12px;color:var(--txt2)">Preview practice — gate assessment requests unlock from your <strong>${s.belt} Belt</strong> practice tests.</div>`}
 
 
 
@@ -11905,7 +11914,7 @@ async function addStaff(lockedFid){
   const sim=document.getElementById('ns-sim').value;
   const obs=document.getElementById('ns-obs').value;
   if(!first||!last){toast('Please enter first and last name.','err');return;}
-  const newStaff={id:++DB.nextId,fid,first,last,role,belt,since:since||new Date().toISOString().slice(0,10),stars:0,
+  const newStaff={fid,first,last,role,belt,since:since||new Date().toISOString().slice(0,10),stars:0,
     cur:{c:comp||null,s:sim||null,o:obs||null},nxt:{c:null,s:null,o:null},
     ps:{enrolled:!!psTrack,done:false,track:psTrack,mod:psTrack?'0 of 6':'',tracks:{}},
     oip:{completed:false,completedAt:null,primaryType:null,secondaryType:null,scores:{S:0,St:0,Su:0,A:0},answers:[]},
@@ -11913,13 +11922,25 @@ async function addStaff(lockedFid){
   if(beltIdx(belt)>=2) newStaff.ps.tracks['01']={status:'eligible',promptedAt:since||new Date().toISOString().slice(0,10),startedAt:null,completedAt:null};
   if(beltIdx(belt)>=3) newStaff.ps.tracks['03']={status:'eligible',promptedAt:since||new Date().toISOString().slice(0,10),startedAt:null,completedAt:null};
   
-  try {
-    if(IS_LIVE) {
-      toast('Creating record...', 'info');
-      const sRes = await SB.createStaff(mapStaffToBackend(newStaff));
-      if (sRes && sRes[0] && sRes[0].id) newStaff.id = sRes[0].id;
+  if(IS_LIVE) {
+    toast('Creating record...', 'info');
+    let sRes;
+    try {
+      const payload = mapStaffToBackend(newStaff);
+      delete payload.id; // Postgres assigns the uuid; an explicit null id overrides the column default and 400s
+      sRes = await SB.createStaff(payload);
+    } catch(e) {
+      handleSyncError(e, 'Staff sync');
+      return; // fail closed: no local push, no success toast; modal stays open for retry
     }
-  } catch(e) { handleSyncError(e, 'Staff sync'); }
+    if(!sRes || !sRes[0] || !sRes[0].id) {
+      toast('Staff record was not saved (no id returned). Please try again.','err');
+      return;
+    }
+    newStaff.id = sRes[0].id;
+  } else {
+    newStaff.id = 'local-' + Date.now();
+  }
 
   DB.staff.push(newStaff);
   closeModal();
@@ -11938,7 +11959,18 @@ async function addStaff(lockedFid){
 function openRecordModal(sid){
   // Use hFid as the active facility when called from the hospital portal (facility admin)
   const activeFid = (ST.portal==='hospital' && ST.hFid) ? ST.hFid : ST.curFid;
-  const facOpts=DB.facilities.filter(f=>f.active!==false||f.id===activeFid).map(f=>`<option value="${f.id}" ${f.id===activeFid?'selected':''}>${f.name}${f.loc?` — ${f.loc}`:''}</option>`).join('');
+  // Facility admins record only within their own facility (ASS-F2): the dropdown is
+  // replaced by a locked field. The dropdown remains for admin-portal contexts, deduped
+  // by name+location label (QA saw the same facility listed twice).
+  const facLocked = ST.portal==='hospital' && !!ST.hFid;
+  const _facSeen=new Set();
+  const facOpts=DB.facilities.filter(f=>{
+    if(f.active===false&&f.id!==activeFid) return false;
+    const k=f.name+'|'+(f.loc||'');
+    if(f.id!==activeFid&&_facSeen.has(k)) return false;
+    _facSeen.add(k); return true;
+  }).map(f=>`<option value="${f.id}" ${f.id===activeFid?'selected':''}>${f.name}${f.loc?` — ${f.loc}`:''}</option>`).join('');
+  const actFac=getFac(activeFid);
   const curS=sid?getStaff(sid):null;
   const staffSel=curS?`<div class="form-group"><label class="form-label">Staff Member</label><div style="padding:8px 11px;background:var(--s2);border:1px solid var(--bdr2);border-radius:var(--rs);font-size:12.5px;font-weight:600">${fullName(curS)}</div></div>`:
     `<div class="form-group"><label class="form-label">Staff Member *</label><select class="form-select" id="ra-staff">${staffOf(activeFid).map(s=>`<option value="${s.id}">${fullName(s)}${s.belt?` — ${s.belt} Belt`:''}</option>`).join('')}</select></div>`;
@@ -11948,7 +11980,9 @@ function openRecordModal(sid){
   </div>`:'';
   openModal('Record Assessment',`
     <div class="modal-body">
-      ${!sid?`<div class="form-group"><label class="form-label">Facility</label><select class="form-select" id="ra-fac" onchange="updateRaStaff(this.value)">${facOpts}</select></div>`:''}
+      ${!sid?(facLocked
+        ?`<div class="form-group"><label class="form-label">Facility</label><div style="padding:8px 11px;background:var(--s2);border:1px solid var(--bdr2);border-radius:var(--rs);font-size:12.5px;font-weight:600">${actFac?.name||'My Facility'}${actFac?.loc?` — ${actFac.loc}`:''}</div></div>`
+        :`<div class="form-group"><label class="form-label">Facility</label><select class="form-select" id="ra-fac" onchange="updateRaStaff(this.value)">${facOpts}</select></div>`):''}
       ${staffSel}
       ${gateInfo}
       <div class="form-row"><div class="form-group"><label class="form-label">Assessment Type *</label><select class="form-select" id="ra-type"><option>Competency</option><option>Simulation</option><option>Observation</option></select></div><div class="form-group"><label class="form-label">Target Belt *</label><select class="form-select" id="ra-belt">${BELT_ORDER.map(b=>`<option ${nb&&b===nb?'selected':''}>${b}</option>`).join('')}</select></div></div>
@@ -11981,16 +12015,20 @@ function submitAssessment(sid){
   const staffId=sid||document.getElementById('ra-staff')?.value||null;
   const s=getStaff(staffId);
   if(!s){toast('Please select a staff member.','err');return;}
+  // Facility-portal callers (facility admins) may only record within their own facility.
+  // The modal already locks the facility, but guard here against console/DOM bypass too.
+  if(ST.portal==='hospital'&&ST.hFid&&s.fid!==ST.hFid){toast('You can only record assessments for staff in your own facility.','err');return;}
   const type=document.getElementById('ra-type').value;
   const targetBelt=document.getElementById('ra-belt').value;
+  const note=document.getElementById('ra-notes')?.value.trim()||'';
   const gateKey=type==='Competency'?'c':type==='Simulation'?'s':'o';
   const targetIdx=beltIdx(targetBelt);
   const curIdx=beltIdx(s.belt);
   if(targetIdx===curIdx){ s.cur[gateKey]=raResult; }
   else if(targetIdx===curIdx+1){ s.nxt[gateKey]=raResult; }
-  s.history.push({dt:new Date().toISOString().slice(0,10),type,belt:targetBelt,res:raResult});
+  s.history.push({dt:new Date().toISOString().slice(0,10),type,belt:targetBelt,res:raResult,...(note?{note}:{})});
   if(IS_LIVE){
-    SB.recordAssessment(mapStaffToBackend(s),type,targetBelt,raResult,'',ST.user?.id,new Date().toISOString()).catch(e => handleSyncError(e, 'Backend sync'));
+    SB.recordAssessment(mapStaffToBackend(s),type,targetBelt,raResult,note,ST.user?.id,new Date().toISOString()).catch(e => handleSyncError(e, 'Backend sync'));
     const _q = DB.queue.find(q=>q.sid===staffId&&q.type===type&&q.targetBelt===targetBelt);
     if(_q) SB.resolveAssessmentQueue(_q.id,'resolved').catch(e => { if (e instanceof ReferenceError || e instanceof TypeError || e instanceof SyntaxError) throw e; });
   }
@@ -12003,8 +12041,9 @@ function submitAssessment(sid){
   const nxtS=nextBelt(s.belt)?gatesStatus(s.nxt):null;
   const progressMsg=nxtS?`Gate ${nxtS.p}/3 for ${nextBelt(s.belt)} Belt. ${nxtS.rem} remaining.`:'';
   closeModal();
+  const result=raResult; // capture before reset — the toast below must read the real outcome (ASS-F3)
   raResult=null;
-  toast(`${fullName(s)} | ${type}: <strong>${raResult||'recorded'}</strong>. ${progressMsg}`,raResult==='pass'?'ok':'err');
+  toast(`${fullName(s)} | ${type}: <strong>${result==='pass'?'PASS':'FAIL'}</strong>. ${progressMsg}`,result==='pass'?'ok':'err');
   if(ST.aView==='a-facility') renderFacTab();
   if(ST.aView==='a-assessments') renderAAssessments();
   if(ST.hView==='h-assessments') renderHAssessments();
@@ -12582,7 +12621,7 @@ function openFreeAgentFullReport(faId) {
       <td>${beltBadge(h.belt)}</td>
       <td style="font-size:11.5px">${h.type}</td>
       <td><span class="pill ${h.res==='pass'?'p-ok':'p-err'}" style="font-size:10px">${h.res==='pass'?'Pass':'Fail'}</span></td>
-      <td style="font-size:11px;color:var(--txt3)">${h.note||'--'}</td>
+      <td style="font-size:11px;color:var(--txt3)">${h.note?Security.sanitize(h.note):'--'}</td>
     </tr>`).join('');
 
   const html = `<div class="modal-body" style="max-height:80vh;overflow-y:auto">
@@ -12660,7 +12699,7 @@ function openFreeAgentFullReport(faId) {
       <div class="card-hd"><div class="card-ttl">Assessment History</div><span class="pill p-muted">${allHistory.length} events</span></div>
       ${allHistory.length ? `<div style="overflow-x:auto"><table class="tbl tbl-static" style="min-width:460px">
         <thead><tr><th>Date</th><th>Belt</th><th>Type</th><th>Result</th><th>Notes</th></tr></thead>
-        <tbody>${gateRows||allHistory.map(h=>`<tr><td style="font-size:11px">${h.dt||'--'}</td><td>${beltBadge(h.belt)}</td><td style="font-size:11.5px">${h.type}</td><td><span class="pill ${h.res==='pass'?'p-ok':'p-err'}" style="font-size:10px">${h.res==='pass'?'Pass':'Fail'}</span></td><td style="font-size:11px;color:var(--txt3)">${h.note||'--'}</td></tr>`).join('')}</tbody>
+        <tbody>${gateRows||allHistory.map(h=>`<tr><td style="font-size:11px">${h.dt||'--'}</td><td>${beltBadge(h.belt)}</td><td style="font-size:11.5px">${h.type}</td><td><span class="pill ${h.res==='pass'?'p-ok':'p-err'}" style="font-size:10px">${h.res==='pass'?'Pass':'Fail'}</span></td><td style="font-size:11px;color:var(--txt3)">${h.note?Security.sanitize(h.note):'--'}</td></tr>`).join('')}</tbody>
       </table></div>` : '<div style="font-size:12px;color:var(--txt3);padding:12px 14px">No assessment history on record.</div>'}
     </div>
 
@@ -12810,7 +12849,7 @@ function downloadFreeAgentReport(faId) {
       <td>${pBelt(h.belt)}</td>
       <td>${h.type}</td>
       <td><span class="badge ${h.res==='pass'?'badge-green':'badge-err'}">${h.res==='pass'?'Pass':'Fail'}</span></td>
-      <td style="color:#64748b;font-size:7.5pt">${h.note||'–'}</td>
+      <td style="color:#64748b;font-size:7.5pt">${h.note?Security.sanitize(h.note):'–'}</td>
     </tr>`).join('')}</tbody></table>`}
   `;
 
@@ -12819,7 +12858,35 @@ function downloadFreeAgentReport(faId) {
 
 
 // ============================================================ TRANSFER VERIFICATION ENGINE
+// Persist an approve/deny decision to the transfer_requests table (STAFF-F6).
+// Non-fatal: the release/assignment itself is already executed (or aborted) by the
+// caller; a failed PATCH only means the queue shows stale status until re-hydration.
+async function _persistTransferDecision(tr){
+  if(!IS_LIVE || !tr || !tr.id || String(tr.id).startsWith('tr-')) return;
+  try {
+    await SB.updateTransferRequest(tr.id, {
+      status: tr.status,
+      decided_by: tr.approvedBy || tr.deniedBy || null,
+      decided_by_name: tr.approvedByName || tr.deniedByName || null,
+      decided_at: new Date().toISOString(),
+      deny_reason: tr.denyReason || null
+    });
+  } catch(e) {
+    console.warn('Transfer decision sync failed:', e.message);
+    toast('Warning: the verification queue status could not be saved — ' + e.message, 'warn');
+  }
+}
+
+// Re-entrancy guard: the Approve button stays live in the DOM while the inner
+// function awaits the backend — a double-click must not execute the release twice.
 async function approveTransfer(trId) {
+  const tr = DB.pendingTransfers && DB.pendingTransfers.find(t => t.id === trId);
+  if(!tr || tr._busy) return;
+  tr._busy = true;
+  try { await _approveTransferInner(trId); } finally { tr._busy = false; }
+}
+
+async function _approveTransferInner(trId) {
   if(!DB.pendingTransfers) return;
   const tr = DB.pendingTransfers.find(t => t.id === trId);
   if(!tr || tr.status !== 'pending') return;
@@ -12843,6 +12910,22 @@ async function approveTransfer(trId) {
     const date = tr.effectDate;
     if(!DB.freeAgents) DB.freeAgents = [];
 
+    // STAFF-F6: the backend release executes HERE, on second-admin approval — never at
+    // request time. Fail closed: if it doesn't persist, undo the optimistic approval and
+    // keep the request pending so the staff member is NOT moved.
+    if(IS_LIVE){
+      try {
+        await SB.releaseToFreeAgentRemote({ staffId: tr.staffId, fromFacId: tr.fromFacId, fromFacName: tr.fromFacName, reason: tr.reason, notes: tr.notes });
+      } catch(e) {
+        tr.status = 'pending';
+        delete tr.approvedBy; delete tr.approvedByName; delete tr.approvedAt;
+        toast('Release failed to save: ' + e.message + ' — the staff member was NOT moved.','err');
+        renderAFreeAgents();
+        return;
+      }
+      await _persistTransferDecision(tr);
+    }
+
     const faRecord = {
       ...s,
       id: 'fa-'+Date.now(),
@@ -12858,8 +12941,6 @@ async function approveTransfer(trId) {
       ]
     };
     faRecord.history = [...(s.history||[]), {dt:date, type:'Release', belt:s.belt, res:'released', note:`Released from ${fac?.name||'--'}. Reason: ${tr.reason}${tr.notes?' \u2014 '+tr.notes:''}. Approved by ${adminName}.`}];
-    // Backend release already executed at request time via releaseToFreeAgentRemote().
-    // (The old SB.releaseToFreeAgent() call here hit a non-existent endpoint — 404 — and is removed.)
     DB.freeAgents.push(faRecord);
     DB.staff = DB.staff.filter(x => x.id !== tr.staffId);
     DB.users = DB.users.filter(u => !(u.sid === tr.staffId && u.role === 'staff_member'));
@@ -12873,6 +12954,10 @@ async function approveTransfer(trId) {
     });
 
     toast(`Release approved. ${cleanName(tr.staffName)} is now in the Free Agent Registry.`,'ok');
+
+    // Pull the canonical free_agents row so the registry shows the real record
+    // (not the locally fabricated fa-<timestamp> one).
+    if(IS_LIVE && typeof initAppData === 'function'){ try { await initAppData(); } catch(_){} }
 
   } else if(tr.type === 'assignment') {
     // Execute the assignment
@@ -12897,6 +12982,7 @@ async function approveTransfer(trId) {
         renderAFreeAgents();
         return;
       }
+      await _persistTransferDecision(tr);
     }
 
     // Persisted OK \u2192 mirror locally (fallback if the re-hydration below fails).
@@ -12945,17 +13031,19 @@ function denyTransfer(trId) {
   </div>`, 'modal-sm');
 }
 
-function executeDenyTransfer(trId) {
+async function executeDenyTransfer(trId) {
   const reason = document.getElementById('deny-reason-inp')?.value.trim();
   if(!reason) { toast('Please provide a reason for denial.','err'); return; }
   const tr = DB.pendingTransfers&&DB.pendingTransfers.find(t => t.id === trId);
   if(!tr) return;
+  if(tr.status !== 'pending') { closeModal(); return; }
   const adminName = (ST.user&&(ST.user.name||ST.user.email))||'Admin';
   tr.status = 'denied';
   tr.deniedBy = ST.user?.id||'admin';
   tr.deniedByName = adminName;
   tr.deniedAt = new Date().toISOString().slice(0,10);
   tr.denyReason = reason;
+  await _persistTransferDecision(tr);
   closeModal();
   toast(`Transfer denied. ${cleanName(tr.staffName)} was not moved.`,'err');
   updateFANB();
@@ -12991,7 +13079,7 @@ function renderAFreeAgents(){
   const faHit=o=>!faTerm||JSON.stringify(o||{}).toLowerCase().includes(faTerm);
   const fas=DB.freeAgents.filter(faHit);
   const pending=DB.pendingTransfers.filter(t=>t.status==='pending'&&faHit(t));
-  const allTransfers=DB.pendingTransfers.filter(faHit).slice().sort((a,b)=>b.id.localeCompare(a.id));
+  const allTransfers=DB.pendingTransfers.filter(faHit).slice().sort((a,b)=>String(b.requestedAt||'').localeCompare(String(a.requestedAt||''))||String(b.id).localeCompare(String(a.id)));
   const placed=DB.placementLog.filter(faHit);
   const myUserId=ST.user?.id||'admin';
 
@@ -13189,7 +13277,7 @@ function openFreeAgentProfile(faId){
       ${hist.length?`<div class="tl">${hist.map(h=>`<div class="tl-item"><div class="tl-dot" style="background:rgba(96,165,250,.15);color:#60a5fa;font-size:9px">&#9679;</div><div><div class="tl-date">${h.from} \u2013 ${h.to}</div><div class="tl-txt">${h.facName}<span style="font-size:11px;color:#64748b;margin-left:6px">${h.loc||''}</span></div></div></div>`).join('')}</div>`:
       '<div style="font-size:12px;color:#64748b">No facility history recorded.</div>'}
       <div class="section-lbl" style="margin-bottom:6px;margin-top:12px">Full Assessment History</div>
-      <div class="tl">${(fa.history||[]).length?(fa.history||[]).slice().reverse().map(h=>`<div class="tl-item"><div class="tl-dot" style="background:${h.res==='pass'?'rgba(34,197,94,.15)':'rgba(239,68,68,.15)'};color:${h.res==='pass'?'#22c55e':'#ef4444'}">${h.res==='pass'?ICO.check:ICO.x}</div><div><div class="tl-date">${h.dt} &bull; ${beltBadge(h.belt)}</div><div class="tl-txt">${h.type} \u2014 <strong style="color:${h.res==='pass'?'#22c55e':'#ef4444'}">${h.res==='pass'?'Pass':'Fail'}</strong>${h.note?' \u2014 '+h.note:''}</div></div></div>`).join(''):'<div style="font-size:12px;color:#64748b">No assessment history.</div>'}</div>
+      <div class="tl">${(fa.history||[]).length?(fa.history||[]).slice().reverse().map(h=>`<div class="tl-item"><div class="tl-dot" style="background:${h.res==='pass'?'rgba(34,197,94,.15)':'rgba(239,68,68,.15)'};color:${h.res==='pass'?'#22c55e':'#ef4444'}">${h.res==='pass'?ICO.check:ICO.x}</div><div><div class="tl-date">${h.dt} &bull; ${beltBadge(h.belt)}</div><div class="tl-txt">${h.type} \u2014 <strong style="color:${h.res==='pass'?'#22c55e':'#ef4444'}">${h.res==='pass'?'Pass':'Fail'}</strong>${h.note?' \u2014 '+Security.sanitize(h.note):''}</div></div></div>`).join(''):'<div style="font-size:12px;color:#64748b">No assessment history.</div>'}</div>
       <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--bdr)">
         <div style="font-size:11px;color:var(--txt3);margin-bottom:10px">View this free agent's complete staff report as it would appear on an active site assignment.</div>
         <button class="btn btn-gold" style="width:100%;justify-content:center" onclick="openFreeAgentFullReport('${fa.id}')">View Full Staff Report</button>
@@ -13226,7 +13314,7 @@ function openAssignFreeAgentModal(faId){
     </div>`,'modal-md');
 }
 
-function executeFreeAgentAssign(faId){
+async function executeFreeAgentAssign(faId){
   const fa=DB.freeAgents.find(f=>f.id===faId);
   if(!fa){toast('Record not found.','err');return;}
   const fid=document.getElementById('fa-assign-fid')?.value;
@@ -13238,8 +13326,21 @@ function executeFreeAgentAssign(faId){
 
   if(!DB.pendingTransfers) DB.pendingTransfers=[];
 
-  const transfer={
-    id:'tr-'+Date.now(),
+  // STAFF-F5: block duplicate assignment requests for the same free agent.
+  if(DB.pendingTransfers.some(t=>t.status==='pending'&&t.type==='assignment'&&t.faId===faId)){
+    toast(`An assignment request for <strong>${fullName(fa)}</strong> is already awaiting second-admin verification.`,'warn');
+    return;
+  }
+  if(IS_LIVE && !isUuidId(faId)){
+    toast('This free agent record is still syncing. Please refresh the page and try again.','warn');
+    return;
+  }
+  if(IS_LIVE && !(ST.user&&ST.user.id)){
+    toast('Your session is not fully loaded. Please refresh and try again.','err');
+    return;
+  }
+
+  let transfer={
     type:'assignment',
     faId,
     staffName: fullName(fa),
@@ -13255,14 +13356,29 @@ function executeFreeAgentAssign(faId){
     reason: 'Facility assignment',
     notes,
     effectDate: date,
-    status:'pending',
-    faSnapshot: {...fa}
+    status:'pending'
   };
 
-  DB.pendingTransfers.push(transfer);
   // Execution is deferred to approval (approveTransfer) so a second admin must verify
-  // before the staff record is moved. (Previously this fired assignFreeAgentRemote with a
-  // raw transfer object whose field names the edge function rejected.)
+  // before the staff record is moved. The request itself is persisted (STAFF-F6) so the
+  // queue survives reloads and is visible to other admin sessions.
+  if(IS_LIVE){
+    if(window._transferReqBusy){ return; } // double-click while the POST is in flight
+    window._transferReqBusy = true;
+    let saved;
+    try {
+      saved = await SB.createTransferRequest(mapTransferToBackend(transfer));
+    } catch(e) {
+      handleSyncError(e, 'Assignment request sync');
+      return; // fail closed
+    } finally {
+      window._transferReqBusy = false;
+    }
+    if(saved && saved[0]) transfer = mapTransferFromBackend(saved[0]);
+  } else {
+    transfer.id='tr-'+Date.now();
+  }
+  DB.pendingTransfers.push(transfer);
   closeModal();
   toast(`Assignment request submitted for <strong>${fullName(fa)}</strong> to <strong>${fac?.name||fid}</strong>. Awaiting second-admin verification.`,'ok');
   updateFANB();
@@ -13341,7 +13457,7 @@ function releaseToFreeAgent(staffId){
     </div>`,'modal-md');
 }
 
-function executeReleaseToFA(staffId){
+async function executeReleaseToFA(staffId){
   const s=getStaff(staffId);
   if(!s){toast('Staff record not found.','err');return;}
   const fac=getFac(s.fid);
@@ -13352,8 +13468,21 @@ function executeReleaseToFA(staffId){
 
   if(!DB.pendingTransfers) DB.pendingTransfers=[];
 
-  const transfer={
-    id:'tr-'+Date.now(),
+  // STAFF-F5: block duplicate release requests for the same staff member.
+  if(DB.pendingTransfers.some(t=>t.status==='pending'&&t.type==='release'&&t.staffId===s.id)){
+    toast(`A release request for <strong>${fullName(s)}</strong> is already awaiting second-admin verification.`,'warn');
+    return;
+  }
+  if(IS_LIVE && !isUuidId(s.id)){
+    toast('This staff record is still syncing. Please refresh the page and try again.','warn');
+    return;
+  }
+  if(IS_LIVE && !(ST.user&&ST.user.id)){
+    toast('Your session is not fully loaded. Please refresh and try again.','err');
+    return;
+  }
+
+  let transfer={
     type:'release',
     staffId: s.id,
     staffName: fullName(s),
@@ -13367,16 +13496,28 @@ function executeReleaseToFA(staffId){
     requestedAt: new Date().toISOString().slice(0,10),
     reason, notes,
     effectDate: date,
-    status:'pending',
-    staffSnapshot: {...s}
+    status:'pending'
   };
 
-  DB.pendingTransfers.push(transfer);
+  // STAFF-F6: persist the request only. The backend release (sbd-release-to-free-agent)
+  // fires in approveTransfer() once a SECOND admin verifies — never at request time.
   if(IS_LIVE){
-    SB.releaseToFreeAgentRemote(transfer).catch(e => handleSyncError(e, 'Release sync'));
+    if(window._transferReqBusy){ return; } // double-click while the POST is in flight
+    window._transferReqBusy = true;
+    let saved;
+    try {
+      saved = await SB.createTransferRequest(mapTransferToBackend(transfer));
+    } catch(e) {
+      handleSyncError(e, 'Release request sync');
+      return; // fail closed: nothing queued locally that the backend doesn't know about
+    } finally {
+      window._transferReqBusy = false;
+    }
+    if(saved && saved[0]) transfer = mapTransferFromBackend(saved[0]);
   } else {
-    /* saveDemoData() removed */
+    transfer.id='tr-'+Date.now();
   }
+  DB.pendingTransfers.push(transfer);
   closeModal();
   toast(`Release request submitted for <strong>${fullName(s)}</strong>. Awaiting second-admin verification before execution.`,'ok');
   updateFANB();
