@@ -2181,14 +2181,77 @@ function updatePlacementBadge(){
 // ASSESSOR PLACEMENT REVIEWS PANEL
 // ═══════════════════════════════════════════════════════════════
 
+// Reusable review filter state + bar. Placement reviews use it now; the
+// Observation Review tab will reuse the same bar (Iiggie wanted parity).
+const reviewFilter = {
+  q:'', fid:'all', status:'all', belt:'All',
+  reset(){ this.q=''; this.fid='all'; this.status='all'; this.belt='All'; }
+};
+function reviewSearchInput(el, fnName){
+  reviewFilter.q = el.value;
+  const caret = el.selectionStart;
+  if(typeof window[fnName]==='function') window[fnName]();
+  const fresh = document.getElementById('reviewSearch_'+fnName);
+  if(fresh){ fresh.focus(); try{ fresh.setSelectionRange(caret,caret); }catch(e){} }
+}
+function reviewFilterBar(onChangeFn){
+  const u = ST.user;
+  let facs = (DB.facilities||[]).filter(f=>f.active!==false);
+  if(u && u.role==='staff_admin' && u.assignedFids && u.assignedFids.length) facs = facs.filter(f=>u.assignedFids.includes(f.id));
+  facs = facs.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  const statuses = [['all','All'],['pending','Pending'],['confirmed','Confirmed'],['adjusted','Adjusted']];
+  const belts = ['All', ...BELT_ORDER];
+  const active = reviewFilter.q || reviewFilter.fid!=='all' || reviewFilter.status!=='all' || reviewFilter.belt!=='All';
+  const sel = "background:#0e1328;border:1px solid rgba(255,255,255,.1);border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:12.5px;font-family:'Poppins',sans-serif;cursor:pointer";
+  return `
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px">
+      <div class="search-wrap" style="min-width:170px;flex:1;max-width:240px">
+        <div class="search-ico"><svg viewBox="0 0 18 18" fill="none" width="14" height="14"><circle cx="7.5" cy="7.5" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M12 12l3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+        <input id="reviewSearch_${onChangeFn}" class="search-inp" placeholder="Search candidate..." value="${reviewFilter.q}" oninput="reviewSearchInput(this,'${onChangeFn}')">
+      </div>
+      <select style="${sel}" onchange="reviewFilter.fid=this.value;${onChangeFn}()">
+        <option value="all">All Facilities</option>
+        ${facs.map(f=>`<option value="${f.id}" ${reviewFilter.fid===f.id?'selected':''}>${f.name}</option>`).join('')}
+      </select>
+      <div class="filter-bar" style="margin:0;flex-wrap:nowrap;overflow-x:auto;padding-bottom:0">
+        ${statuses.map(([v,l])=>`<div class="fchip ${reviewFilter.status===v?'on':''}" onclick="reviewFilter.status='${v}';${onChangeFn}()">${l}</div>`).join('')}
+      </div>
+      <div class="filter-bar" style="margin:0;flex-wrap:nowrap;overflow-x:auto;padding-bottom:0">
+        ${belts.map(b=>`<div class="fchip ${reviewFilter.belt===b?'on':''}" style="${reviewFilter.belt===b&&b!=='All'?'border-color:'+(BELT_CLR[b]||'#888')+'!important;':''}" onclick="reviewFilter.belt='${b}';${onChangeFn}()">${b}</div>`).join('')}
+      </div>
+      ${active?`<button class="btn btn-ghost btn-xs" onclick="reviewFilter.reset();${onChangeFn}()" style="white-space:nowrap">Clear</button>`:''}
+    </div>`;
+}
+function applyReviewFilter(pool){
+  const term = reviewFilter.q.trim().toLowerCase();
+  const norm = (r)=> r.status==='pending'?'pending': r.status==='adjusted'?'adjusted':'confirmed';
+  let out = pool.filter(r=>{
+    if(reviewFilter.fid!=='all' && r.fid!==reviewFilter.fid) return false;
+    if(reviewFilter.status!=='all' && norm(r)!==reviewFilter.status) return false;
+    if(reviewFilter.belt!=='All' && (r.confirmedBelt||r.tentativeBelt)!==reviewFilter.belt) return false;
+    if(term){
+      const s=getStaff(r.staffId);
+      const nm=((cleanName(r.staffName)||(s?fullName(s):'')||'')).toLowerCase();
+      if(!nm.includes(term)) return false;
+    }
+    return true;
+  });
+  out.sort((a,b)=>{          // pending first, then newest submitted
+    const pa=a.status==='pending'?0:1, pb=b.status==='pending'?0:1;
+    if(pa!==pb) return pa-pb;
+    return new Date(b.submittedAt||0) - new Date(a.submittedAt||0);
+  });
+  return out;
+}
+
 function renderAPlacementReviews(){
   const u = ST.user;
   let pool = (DB.placementReviews||[]);
   if(u && u.role==='staff_admin' && u.assignedFids && u.assignedFids.length){
     pool = pool.filter(r => u.assignedFids.includes(r.fid));
   }
-  const pending = pool.filter(r=>r.status==='pending');
-  const reviewed = pool.filter(r=>r.status!=='pending');
+  const total = pool.length;
+  const list = applyReviewFilter(pool);
 
   const renderResponse = (r, i) => {
     const isKnowledge = r.type === 'knowledge';
@@ -2213,33 +2276,40 @@ function renderAPlacementReviews(){
       </div>`;
   };
 
-  const renderCard = (pr) => {
-    const statusClr = pr.status==='pending' ? '#a78bfa' : '#22c55e';
-    const statusLabel = pr.status==='pending' ? 'Pending Review' : pr.status==='adjusted' ? 'Adjusted' : 'Confirmed';
+  const renderRow = (pr) => {
+    const isPending = pr.status==='pending';
+    const statusClr = isPending ? '#a78bfa' : '#22c55e';
+    const statusLabel = isPending ? 'Pending' : pr.status==='adjusted' ? 'Adjusted' : 'Confirmed';
     const fac = getFac(pr.fid);
-    // Resolve staff name: prefer stored name, fallback to DB.staff lookup
     const staffRec = getStaff(pr.staffId);
     const displayName = cleanName(pr.staffName) || (staffRec ? fullName(staffRec) : (pr.staffId || 'Unknown'));
     const displayTitle = pr.staffTitle || (staffRec ? (staffRec.role||'') : '');
-    const displayDate = pr.submittedAt ? (pr.submittedAt.length > 10 ? new Date(pr.submittedAt).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}) : pr.submittedAt) : '';
+    const belt = pr.confirmedBelt || pr.tentativeBelt;
+    const displayDate = pr.submittedAt ? (pr.submittedAt.length > 10 ? new Date(pr.submittedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : pr.submittedAt) : '';
     return `
-      <div class="card" style="margin-bottom:16px" id="pr-card-${pr.id}">
-        <div class="card-hd" style="cursor:pointer" onclick="togglePRCard('${pr.id}')">
-          <div style="flex:1">
-            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-              <div style="font-size:15px;font-weight:700;color:#f1f5f9">${displayName}</div>
-              <div style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:12px;background:rgba(139,92,246,.15);color:${statusClr}">${statusLabel.toUpperCase()}</div>
-              ${pr.tentativeBelt ? `<div style="font-size:10px;color:#64748b">System suggestion: <span style="color:${pr.confirmedBelt?'#22c55e':'#f59e0b'}">${pr.confirmedBelt||pr.tentativeBelt} Belt</span></div>` : ''}
+      <div class="card" style="margin-bottom:10px" id="pr-card-${pr.id}">
+        <div style="display:flex;align-items:center;gap:10px;padding:11px 14px">
+          <div onclick="togglePRCard('${pr.id}')" style="display:flex;align-items:center;gap:11px;flex:1;min-width:0;cursor:pointer">
+            <svg viewBox="0 0 18 18" fill="none" width="15" height="15" id="pr-chev-${pr.id}" style="transition:.2s;flex-shrink:0"><path d="M6 3l6 6-6 6" stroke="#64748b" stroke-width="1.5" stroke-linecap="round"/></svg>
+            <div style="min-width:0;flex:1">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <span style="font-size:14px;font-weight:700;color:#f1f5f9">${displayName}</span>
+                ${belt?beltBadge(belt):''}
+                <span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:${isPending?'rgba(167,139,250,.15)':'rgba(34,197,94,.12)'};color:${statusClr}">${statusLabel.toUpperCase()}</span>
+              </div>
+              <div style="font-size:11px;color:#64748b;margin-top:2px">${[displayTitle, fac?.name, displayDate ? `Submitted ${displayDate}` : null].filter(Boolean).join(' · ')}</div>
             </div>
-            <div style="font-size:11.5px;color:#64748b;margin-top:4px">${[displayTitle, fac?.name, displayDate ? `Submitted ${displayDate}` : null].filter(Boolean).join(' · ')}</div>
           </div>
-          <svg viewBox="0 0 18 18" fill="none" width="16" height="16" id="pr-chev-${pr.id}" style="transition:.2s;flex-shrink:0"><path d="M6 3l6 6-6 6" stroke="#64748b" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <div style="display:flex;gap:7px;flex-shrink:0;align-items:center">
+            <button onclick="event.stopPropagation();downloadAssessmentReport('${pr.id}')" style="background:rgba(196,154,32,.12);border:1px solid rgba(196,154,32,.4);border-radius:7px;padding:7px 13px;font-size:12px;font-weight:700;color:#eab308;cursor:pointer;font-family:'Poppins',sans-serif;white-space:nowrap">${isPending?'Draft Report':'Report'}</button>
+            ${isPending?`<button onclick="event.stopPropagation();togglePRCard('${pr.id}')" style="background:#22c55e;border:none;border-radius:7px;padding:7px 15px;font-size:12px;font-weight:700;color:#052e16;cursor:pointer;font-family:'Poppins',sans-serif;white-space:nowrap">Review</button>`:''}
+          </div>
         </div>
-        <div id="pr-body-${pr.id}" style="display:none;padding:0 0 4px">
-          <div style="height:1px;background:rgba(255,255,255,.06);margin:0 0 16px"></div>
+        <div id="pr-body-${pr.id}" style="display:none;padding:0 14px 14px">
+          <div style="height:1px;background:rgba(255,255,255,.06);margin:0 0 14px"></div>
           <div style="font-size:11px;font-weight:700;color:#64748b;letter-spacing:.06em;margin-bottom:12px">ASSESSMENT RESPONSES</div>
           ${(pr.responses && pr.responses.length) ? pr.responses.map(renderResponse).join('') : `<div style="font-size:12px;color:#64748b;font-style:italic;padding:6px 0 12px">No question-level data captured for this review.</div>`}
-          ${pr.status==='pending' ? `
+          ${isPending ? `
           <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,.06)">
             <div style="font-size:11px;font-weight:700;color:#64748b;letter-spacing:.05em;margin-bottom:10px">ASSESSOR DECISION</div>
             <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
@@ -2254,7 +2324,6 @@ function renderAPlacementReviews(){
                 <input type="text" id="pr-note-${pr.id}" placeholder="Add a note..." style="width:100%;background:#0e1328;border:1px solid rgba(255,255,255,.1);border-radius:6px;padding:9px 12px;color:#e2e8f0;font-size:13px;font-family:'Poppins',sans-serif;box-sizing:border-box">
               </div>
               <button onclick="confirmPlacement('${pr.id}')" style="background:#22c55e;border:none;border-radius:8px;padding:10px 22px;font-size:13px;font-weight:700;color:#052e16;cursor:pointer;font-family:'Poppins',sans-serif;white-space:nowrap">Confirm Placement</button>
-              <button onclick="downloadAssessmentReport('${pr.id}')" style="background:transparent;border:1px solid rgba(255,255,255,.18);border-radius:8px;padding:10px 16px;font-size:12.5px;font-weight:600;color:#94a3b8;cursor:pointer;font-family:'Poppins',sans-serif;white-space:nowrap">Draft Report</button>
             </div>
           </div>` : `
           <div style="margin-top:16px;padding:12px 14px;background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.2);border-radius:8px;display:flex;align-items:center;gap:10px">
@@ -2263,30 +2332,28 @@ function renderAPlacementReviews(){
               <div style="font-size:12px;font-weight:700;color:#22c55e">Placement Confirmed -- ${pr.confirmedBelt} Belt</div>
               ${pr.assessorNote ? `<div style="font-size:11.5px;color:#86efac;margin-top:3px">Note: ${pr.assessorNote}</div>` : ''}
             </div>
-            <button onclick="downloadAssessmentReport('${pr.id}')" style="margin-left:auto;background:rgba(196,154,32,.12);border:1px solid rgba(196,154,32,.4);border-radius:8px;padding:8px 16px;font-size:12.5px;font-weight:700;color:#eab308;cursor:pointer;font-family:'Poppins',sans-serif;white-space:nowrap">Assessment Report</button>
           </div>`}
         </div>
       </div>`;
   };
 
+  const pendCount = pool.filter(r=>r.status==='pending').length;
   document.getElementById('a-placementreviews').innerHTML = `
-    <div class="card-ttl" style="font-size:18px;font-weight:800;color:#f1f5f9;margin-bottom:6px">Placement Reviews</div>
-    <div style="font-size:12.5px;color:#64748b;margin-bottom:24px">Review new hire assessment responses and confirm starting belt placement.</div>
-
-    ${pending.length === 0 && reviewed.length === 0 ? `
+    <div class="card-ttl" style="font-size:18px;font-weight:800;color:#f1f5f9;margin-bottom:6px">Placement Reviews ${pendCount?`<span style="font-size:11px;font-weight:700;color:#a78bfa;background:rgba(167,139,250,.15);padding:2px 9px;border-radius:10px;vertical-align:middle;margin-left:6px">${pendCount} pending</span>`:''}</div>
+    <div style="font-size:12.5px;color:#64748b;margin-bottom:16px">Review new hire assessment responses and confirm starting belt placement.</div>
+    ${total === 0 ? '' : reviewFilterBar('renderAPlacementReviews')}
+    ${total === 0 ? `
     <div class="empty-state">
       <div style="font-size:40px;margin-bottom:12px">&#128203;</div>
       <div class="empty-ttl">No placement reviews yet</div>
       <div class="empty-desc">New hire assessments will appear here once submitted.</div>
-    </div>` : ''}
-
-    ${pending.length > 0 ? `
-    <div style="font-size:11px;font-weight:700;color:#a78bfa;letter-spacing:.07em;margin-bottom:12px">PENDING (${pending.length})</div>
-    ${pending.map(renderCard).join('')}` : ''}
-
-    ${reviewed.length > 0 ? `
-    <div style="font-size:11px;font-weight:700;color:#64748b;letter-spacing:.07em;margin:20px 0 12px">REVIEWED (${reviewed.length})</div>
-    ${reviewed.map(renderCard).join('')}` : ''}
+    </div>`
+    : list.length === 0 ? `
+    <div style="text-align:center;padding:40px 0;color:#64748b">
+      <div style="font-size:13px;font-weight:600;margin-bottom:4px">No reviews match your filters</div>
+      <div style="font-size:12px"><span onclick="reviewFilter.reset();renderAPlacementReviews()" style="color:#a78bfa;cursor:pointer">Clear filters</span></div>
+    </div>`
+    : `<div style="font-size:11px;color:#64748b;margin-bottom:10px">Showing ${list.length} of ${total}</div>${list.map(renderRow).join('')}`}
   `;
 }
 
