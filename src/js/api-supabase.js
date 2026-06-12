@@ -423,7 +423,7 @@ function mapPromotionApprovalFromBackend(row){
   return {
     id:              row.id,
     staffId:         row.staff_id,
-    fid:             row.fid,
+    fid:             row.facility_id,
     status:          row.status          || 'pending',
     currentRole:     row.current_role    || '',
     proposedRole:    row.proposed_role   || '',
@@ -443,16 +443,16 @@ function mapPromotionApprovalToBackend(ap){
   if(!ap) return null;
   return {
     staff_id:      ap.staffId,
-    fid:           ap.fid,
+    facility_id:   ap.fid,
     current_role:  ap.currentRole,
     proposed_role: ap.proposedRole,
     from_belt:     ap.belt,
-    to_belt:       ap.proposedBelt,
+    to_belt:       ap.proposedBelt || null,
     status:        ap.status    || 'pending',
     submitted_by:  ap.submittedBy,
     reviewed_by:   ap.decidedBy  || null,
     reviewed_at:   ap.decidedAt  || null,
-    review_notes:  ap.reviewNotes || ''
+    review_notes:  ap.reviewNotes || ap.notes || ''
   };
 }
 
