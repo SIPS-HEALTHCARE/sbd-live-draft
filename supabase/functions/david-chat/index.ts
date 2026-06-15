@@ -404,9 +404,18 @@ Example: <chips>["Compare to last month", "Audit underperforming groups", "Escal
                 // If the model finished with no visible answer (only a <thinking>
                 // block, only tool calls, or empty content), force one final
                 // plain-text completion so David always responds.
+                // Mirror the FRONTEND's stripping exactly, so the guard fires in the
+                // same cases the UI would render empty (thinking, chips, citation,
+                // chart, sql/json, tool-status lines all get hidden client-side).
                 const visibleAnswer = fullContent
                     .replace(/(<|&lt;)thinking(>|&gt;)[\s\S]*?(<\/|&lt;\/)thinking(>|&gt;|$)/gi, '')
-                    .replace(/>\s*\*[^\n]*\*/g, '') // strip the inline tool "status" lines
+                    .replace(/<chips>[\s\S]*?(?:<\/chips>|$)/gi, '')
+                    .replace(/<citation[\s\S]*?<\/citation>/gi, '')
+                    .replace(/<chart[\s\S]*?<\/chart>/gi, '')
+                    .replace(/```sql[\s\S]*?```/gi, '')
+                    .replace(/```json[\s\S]*?```/gi, '')
+                    .replace(/Result preview:\s*\{[\s\S]*?\}/gi, '')
+                    .replace(/>\s*[*_][^\n]*[*_]/g, '') // inline tool "status" lines
                     .trim();
                 console.log(`[DAVID] fullContent length=${fullContent.length}, visible length=${visibleAnswer.length}. Head: ${fullContent.slice(0, 300).replace(/\n/g, ' ')}`);
 
@@ -414,7 +423,7 @@ Example: <chips>["Compare to last month", "Audit underperforming groups", "Escal
                     console.log('[DAVID] No visible answer produced — forcing a final plain-text completion.');
                     messages.push({
                         role: 'system',
-                        content: 'Your previous turn produced no visible answer for the user. Respond NOW with your full answer in plain text only. Do NOT use a <thinking> block, and do NOT call any tools. If you already searched the knowledge base, coach the user directly from what it returned.'
+                        content: 'Your previous turn produced no visible answer for the user. Respond NOW with your full answer in plain, conversational text only. Do NOT use a <thinking> block. Do NOT output <chips>, <chart>, or <citation> tags. Do NOT call any tools. If you already searched the knowledge base, coach the user directly from what it returned.'
                     });
                     const forced = await fetch('https://openrouter.ai/api/v1/chat/completions', {
                         method: 'POST',
