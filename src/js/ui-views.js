@@ -12612,18 +12612,19 @@ function approvePromotion(apId, approved){
   ap.status=approved?'approved':'denied';
   ap.decidedBy=ST.user?.name||'Admin';
   ap.decidedAt=new Date().toISOString().slice(0,10);
+  // Apply the role promotion locally (updates on-screen role + pushes Promotion history) for both modes.
+  if(approved) promoteStaffPosition(ap.staffId, ap.proposedRole, ST.user?.name||'SIPS Admin');
   if(IS_LIVE){
-    SB.updatePromotionApproval(ap.id,{status:ap.status,decided_by:ap.decidedBy,decided_at:ap.decidedAt}).catch(e => handleSyncError(e, 'Promo approval sync'));
-    if(approved && ap.proposedBelt){
-      // Invoke the promote_staff_position edge function in live mode
-      sbFetch('/functions/v1/record-assessment',{method:'POST',body:{action:'promote',staffId:ap.staffId,newRole:ap.proposedRole,newBelt:ap.proposedBelt,approvedBy:ST.user?.id,notes:ap.notes}}).catch(e => handleSyncError(e, 'Promo staff sync'));
+    // Persist the decision with the REAL columns (sbd_promotions has reviewed_by/reviewed_at, not decided_*).
+    SB.updatePromotionApproval(ap.id,{status:ap.status,reviewed_by:ap.decidedBy,reviewed_at:new Date().toISOString()}).catch(e => handleSyncError(e, 'Promo approval sync'));
+    // Persist the role change on the staff record. Targeted single-column PATCH -- PostgREST only
+    // updates `role`, so oip/history/ps_tracks are never touched. (Replaces a broken call to a
+    // non-existent `record-assessment` function with mismatched params.)
+    if(approved && ap.proposedRole){
+      SB.updateStaff(ap.staffId,{role:ap.proposedRole}).catch(e => handleSyncError(e, 'Promo staff role sync'));
     }
-  } else {
-    if(approved) promoteStaffPosition(ap.staffId, ap.proposedRole, ST.user?.name||'SIPS Admin');
-    /* saveDemoData() removed */
   }
   if(approved){
-    if(!IS_LIVE) promoteStaffPosition(ap.staffId, ap.proposedRole, ST.user?.name||'SIPS Admin');
     const s=getStaff(ap.staffId);
     toast(`${s?fullName(s):'Staff'} promoted to <strong>${ap.proposedRole}</strong> -- approved.`,'ok');
   } else {
