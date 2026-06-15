@@ -399,7 +399,68 @@ Example: <chips>["Compare to last month", "Audit underperforming groups", "Escal
         (async () => {
             try {
                 await runAutonomousLoop(messages);
-                
+
+                // SAFETY GUARD: never leave the user with an empty reply.
+                // If the model finished with no visible answer (only a <thinking>
+                // block, only tool calls, or empty content), force one final
+                // plain-text completion so David always responds.
+                const visibleAnswer = fullContent
+                    .replace(/(<|&lt;)thinking(>|&gt;)[\s\S]*?(<\/|&lt;\/)thinking(>|&gt;|$)/gi, '')
+                    .replace(/>\s*\*[^\n]*\*/g, '') // strip the inline tool "status" lines
+                    .trim();
+                console.log(`[DAVID] fullContent length=${fullContent.length}, visible length=${visibleAnswer.length}. Head: ${fullContent.slice(0, 300).replace(/\n/g, ' ')}`);
+
+                if (!visibleAnswer) {
+                    console.log('[DAVID] No visible answer produced — forcing a final plain-text completion.');
+                    messages.push({
+                        role: 'system',
+                        content: 'Your previous turn produced no visible answer for the user. Respond NOW with your full answer in plain text only. Do NOT use a <thinking> block, and do NOT call any tools. If you already searched the knowledge base, coach the user directly from what it returned.'
+                    });
+                    const forced = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${openRouterKey}`,
+                            'Content-Type': 'application/json',
+                            'HTTP-Referer': 'https://belt.sterilebydesign.ai',
+                            'X-Title': 'DAVID Intelligence - SBD Belt Platform',
+                        },
+                        body: JSON.stringify({
+                            model: 'anthropic/claude-sonnet-4.5',
+                            messages,
+                            max_tokens: 4000,
+                            temperature: 0.7,
+                            stream: true,
+                        }),
+                    });
+                    if (forced.ok && forced.body) {
+                        const fReader = forced.body.getReader();
+                        const fDecoder = new TextDecoder('utf-8');
+                        let fBuffer = '';
+                        while (true) {
+                            const { done, value } = await fReader.read();
+                            if (done) break;
+                            fBuffer += fDecoder.decode(value, { stream: true });
+                            const fLines = fBuffer.split('\n');
+                            fBuffer = fLines.pop() || '';
+                            for (const fLine of fLines) {
+                                if (!fLine.startsWith('data: ')) continue;
+                                const fData = fLine.slice(6).trim();
+                                if (fData === '[DONE]') continue;
+                                try {
+                                    const fJson = JSON.parse(fData);
+                                    const fText = fJson.choices?.[0]?.delta?.content;
+                                    if (fText && typeof fText === 'string') {
+                                        fullContent += fText;
+                                        await writer.write(encoder.encode(`data: ${JSON.stringify({ text: fText })}\n\n`));
+                                    }
+                                } catch (_e) { /* ignore partial json */ }
+                            }
+                        }
+                    } else {
+                        console.error('[DAVID] Forced completion failed:', forced.status, await forced.text());
+                    }
+                }
+
                 // End the stream cleanly
                 await writer.write(encoder.encode('data: [DONE]\n\n'));
 
