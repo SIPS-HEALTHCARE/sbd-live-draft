@@ -2484,6 +2484,11 @@ function renderAPlacementReviews(){
   document.getElementById('a-placementreviews').innerHTML = `
     <div class="card-ttl" style="font-size:18px;font-weight:800;color:#f1f5f9;margin-bottom:6px">Placement Reviews</div>
     <div style="font-size:12.5px;color:#64748b;margin-bottom:16px">Review new hire assessment responses and confirm starting belt placement.</div>
+    ${total === 0 ? '' : `<div class="stat-grid" style="margin-bottom:16px">
+      <div class="stat-card"><div class="stat-accent" style="background:#a78bfa"></div><div class="stat-lbl">Awaiting Review</div><div class="stat-val" style="color:#a78bfa">${pendCount}</div><div class="stat-sub">pending placement</div></div>
+      <div class="stat-card"><div class="stat-accent" style="background:var(--ok)"></div><div class="stat-lbl">Reviewed</div><div class="stat-val" style="color:var(--ok)">${total-pendCount}</div><div class="stat-sub">confirmed</div></div>
+      <div class="stat-card"><div class="stat-accent" style="background:var(--gold)"></div><div class="stat-lbl">Avg Blended Score</div><div class="stat-val" style="color:var(--gold)">${(()=>{const bs=pool.map(r=>r._blended).filter(x=>x!=null);return bs.length?Math.round(bs.reduce((a,b)=>a+b,0)/bs.length)+'%':'--';})()}</div><div class="stat-sub">across ${total}</div></div>
+    </div>`}
     ${total === 0 ? '' : reviewTabs({pending:pendCount, reviewed:total-pendCount, all:total}, 'renderAPlacementReviews')}
     ${total === 0 ? '' : reviewFilterBar('renderAPlacementReviews')}
     ${total === 0 ? `
@@ -9766,8 +9771,8 @@ function renderAOverview(){
       </div>
     </div>
     <div class="card"><div class="card-hd"><div class="card-ttl">Facility Scoreboard</div><button class="btn btn-ghost btn-sm" onclick="aNav(document.querySelector('[data-view=a-leaderboard]'),'a-leaderboard','Facility Leaderboard')">Full Leaderboard</button></div>
-      <table class="tbl"><thead><tr><th>Rank</th><th>Facility</th><th>Staff</th><th>Green Belt %</th><th>Avg Belt</th><th>Trend</th><th>Action</th></tr></thead>
-      <tbody>${DB.facilities.filter(f=>f.active!==false).map((f,i)=>{const st=facStats(f.id);const ranks=['r1','r2','r3','rn','rn'];return`<tr onclick="goFacility('${f.id}')"><td><div class="rank ${ranks[i]}">${i+1}</div></td><td class="fw7">${f.name}</td><td style="font-size:12px;color:var(--txt3)">${st.n}</td><td><div style="display:flex;align-items:center;gap:8px"><div style="width:60px;height:5px;background:var(--s3);border-radius:2px"><div style="height:100%;width:${st.greenPct}%;background:${st.greenPct>=75?'var(--ok)':st.greenPct>=50?'var(--gold)':'var(--warn)'};border-radius:2px"></div></div><span class="fw7 ${st.greenPct>=75?'tc-ok':st.greenPct>=50?'tc-gold':'tc-warn'}">${st.greenPct}%</span></div></td><td class="tc-gold fw7">${st.avgBelt}</td><td><span style="color:var(--ok);font-size:11px;font-weight:600">+</span></td><td><button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();goFacility('${f.id}')">${ICO.view} View</button></td></tr>`}).join('')}
+      <table class="tbl"><thead><tr><th>Rank</th><th>Facility</th><th>Staff</th><th>Green Belt %</th><th>Avg Belt</th><th>Action</th></tr></thead>
+      <tbody>${DB.facilities.filter(f=>f.active!==false).map((f,i)=>{const st=facStats(f.id);const ranks=['r1','r2','r3','rn','rn'];return`<tr onclick="goFacility('${f.id}')"><td><div class="rank ${ranks[i]}">${i+1}</div></td><td class="fw7">${f.name}</td><td style="font-size:12px;color:var(--txt3)">${st.n}</td><td><div style="display:flex;align-items:center;gap:8px"><div style="width:60px;height:5px;background:var(--s3);border-radius:2px"><div style="height:100%;width:${st.greenPct}%;background:${st.greenPct>=75?'var(--ok)':st.greenPct>=50?'var(--gold)':'var(--warn)'};border-radius:2px"></div></div><span class="fw7 ${st.greenPct>=75?'tc-ok':st.greenPct>=50?'tc-gold':'tc-warn'}">${st.greenPct}%</span></div></td><td class="tc-gold fw7">${st.avgBelt}</td><td><button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();goFacility('${f.id}')">${ICO.view} View</button></td></tr>`}).join('')}
       </tbody>
     </table></div>`;
 }
@@ -11173,6 +11178,11 @@ function renderAAssessments() {
   }
 
   el.innerHTML = `
+    ${(staffRequests.length+adminQueue.length) === 0 ? '' : `<div class="stat-grid" style="margin-bottom:16px">
+      <div class="stat-card"><div class="stat-accent" style="background:var(--warn)"></div><div class="stat-lbl">Staff Requests</div><div class="stat-val" style="color:var(--warn)">${staffRequests.length}</div><div class="stat-sub">awaiting approval</div></div>
+      <div class="stat-card"><div class="stat-accent" style="background:var(--blue)"></div><div class="stat-lbl">In Admin Queue</div><div class="stat-val" style="color:var(--blue)">${adminQueue.length}</div><div class="stat-sub">to record</div></div>
+      <div class="stat-card"><div class="stat-accent" style="background:var(--gold)"></div><div class="stat-lbl">Total Items</div><div class="stat-val" style="color:var(--gold)">${staffRequests.length+adminQueue.length}</div><div class="stat-sub">on this page</div></div>
+    </div>`}
     <div style="background:rgba(196,154,32,.07);border:1px solid var(--gold-bd);border-radius:var(--rs);padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--txt2);line-height:1.5">
       Staff who score 80%+ on both SIPS Intelligence practice tests may request their gate assessments here. Review their practice scores before approving or denying the request.
     </div>
