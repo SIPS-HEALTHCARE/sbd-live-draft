@@ -471,6 +471,8 @@ function mapStaffFromBackend(row){
     promo: row.promo || row.promo_recommended || false,
     cur: { c: row.cur_comp || null, s: row.cur_sim || null, o: row.cur_obs || null },
     nxt: { c: row.nxt_comp || null, s: row.nxt_sim || null, o: row.nxt_obs || null },
+    observer: row.observer || false,
+    observationPin: row.observation_pin || null,
     ps: {
       enrolled: row.ps_enrolled || false,
       done: row.ps_done || false,
@@ -519,6 +521,7 @@ function mapStaffToBackend(staff){
     obj.nxt_sim  = staff.nxt.s || null;
     obj.nxt_obs  = staff.nxt.o || null;
   }
+  if(staff.observer !== undefined) obj.observer = !!staff.observer;
   return obj;
 }
 

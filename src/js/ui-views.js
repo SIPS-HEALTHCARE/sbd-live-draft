@@ -7748,7 +7748,7 @@ function renderHProfile(sid,context){
     <div class="prof-banner">
       <div class="prof-av">${userInitials(s)}</div>
       <div style="flex:1">
-        <div class="prof-name">${fullName(s)}</div>
+        <div class="prof-name">${fullName(s)}${s.observer?` <span style="font-size:10px;font-weight:600;color:#0ea5e9;background:#0ea5e91a;border:1px solid #0ea5e955;padding:2px 7px;border-radius:8px;vertical-align:middle;margin-left:6px">&#128065; Observer</span>`:''}</div>
         <div class="prof-role">
           ${s.role} &bull; 
           ${(()=>{
@@ -7767,6 +7767,7 @@ function renderHProfile(sid,context){
         ${context==='admin'||context==='h'?`<button class="btn btn-blue btn-sm" onclick="openPromoteModal('${s.id}','${context}')">&#x2B06; Promote</button>`:''}
         <button class="btn btn-ghost btn-sm" onclick="downloadStaffReport('${s.id}')">${ICO.dl} Report</button>
         ${(ST.user&&ST.user.role==='master_admin')?`<button class="btn btn-ghost btn-sm" onclick="openBeltOverrideModal('${s.id}','${context}')" style="border-color:var(--gold-bd);color:var(--gold)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Override Belt</button>`:''}
+        ${(ST.user&&ST.user.role==='master_admin')?`<button class="btn btn-ghost btn-sm" onclick="toggleObserver('${s.id}','${context}')" style="border-color:${s.observer?'#0ea5e9':'var(--bdr)'};color:${s.observer?'#0ea5e9':'var(--txt2)'}" title="${s.observer?'Revoke observer access':'Grant observer access'}"><svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 10s3-5.5 8-5.5S18 10 18 10s-3 5.5-8 5.5S2 10 2 10z"/><circle cx="10" cy="10" r="2.3"/></svg> ${s.observer?'Observer: On':'Make Observer'}</button>`:''}
         ${context==='admin'&&(ST.user&&ST.user.role==='master_admin')?`<button class="btn btn-err btn-sm" onclick="releaseToFreeAgent('${s.id}')" title="Release staff member to Free Agent Registry" style="margin-left:auto"><svg width="13" height="13" viewBox="0 0 18 18" fill="none"><path d="M12 14H15a1 1 0 001-1V5a1 1 0 00-1-1H12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M9 12l3-3-3-3M12 9H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Release</button>`:''}
       </div>
     </div>
@@ -9702,6 +9703,8 @@ function renderAOverview(){
       <div class="stat-card"><div class="stat-accent" style="background:var(--blue)"></div><div class="stat-lbl">Total Staff Enrolled</div><div class="stat-val" style="color:var(--blue)">${n}</div><div class="stat-sub">Across all departments</div></div>
       <div class="stat-card"><div class="stat-accent" style="background:var(--ok)"></div><div class="stat-lbl">Network Green Belt %</div><div class="stat-val" style="color:var(--ok)">${n?Math.round(aboveG/n*100):0}%</div><div class="stat-sub">${aboveG} of ${n} at Green+</div></div>
       <div class="stat-card"><div class="stat-accent" style="background:var(--warn)"></div><div class="stat-lbl">Pending Assessments</div><div class="stat-val" style="color:var(--warn)">${DB.queue.filter(q=>!assignedFids||assignedFids.includes(q.fid)).length}</div><div class="stat-sub">Awaiting SBD decision</div></div>
+      <div class="stat-card"><div class="stat-accent" style="background:#0ea5e9"></div><div class="stat-lbl">Authorized Observers</div><div class="stat-val" style="color:#0ea5e9">${allSt.filter(s=>s.observer).length}</div><div class="stat-sub">Can conduct observations</div></div>
+      <div class="stat-card"><div class="stat-accent" style="background:#8b5cf6"></div><div class="stat-lbl">Observation Gate Passed</div><div class="stat-val" style="color:#8b5cf6">${allSt.filter(s=>s.cur&&s.cur.o==='pass').length}</div><div class="stat-sub">${n?Math.round(allSt.filter(s=>s.cur&&s.cur.o==='pass').length/n*100):0}% of ${n} staff</div></div>
     </div>
     ${(()=>{
       const eligible=DB.staff.filter(s=>beltIdx(s.belt)>=2);
@@ -10990,6 +10993,20 @@ function openAdminProfile(sid){
   renderAView('a-facility');
   // Now fac-tab-content exists, render the profile into it
   setTimeout(()=>renderHProfile(sid,'admin'),50);
+}
+
+// Grant / revoke Observer access (master-admin only). Flips the staff.observer
+// flag via a targeted single-column write -- never touches other staff fields.
+function toggleObserver(sid, context){
+  const s=getStaff(sid); if(!s) return;
+  if(!(ST.user&&ST.user.role==='master_admin')){toast('Only master admins can grant observer access.','err');return;}
+  const next=!s.observer;
+  s.observer=next;
+  if(IS_LIVE && typeof SB!=='undefined' && SB.updateStaff){
+    SB.updateStaff(sid,{observer:next}).catch(e=>{ s.observer=!next; handleSyncError(e,'Observer toggle'); if(typeof renderHProfile==='function') renderHProfile(sid,context); });
+  }
+  toast(`${fullName(s)} ${next?'is now an authorized observer.':'is no longer an observer.'}`, next?'ok':'err');
+  if(typeof renderHProfile==='function') renderHProfile(sid,context);
 }
 
 // ============================================================ A ASSESSMENTS (global)
