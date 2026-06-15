@@ -1152,7 +1152,7 @@ class DavidChat {
             .replace(/```[A-Za-z]*\s*(<|&lt;)thinking(>|&gt;)[\s\S]*?(<\/|&lt;\/)thinking(>|&gt;|$)\s*```/gi, '')
             .replace(/(<|&lt;)thinking(>|&gt;)[\s\S]*?(<\/|&lt;\/)thinking(>|&gt;|$)/gi, '')
             .trim();
-        return noThinking || "_(No visible answer was produced — David OG's content knowledge for this isn't wired up yet.)_";
+        return noThinking || "I started working through that but didn't land on a clear answer for you — I may still be loading the material for it. Mind rephrasing, or asking me something else?";
     }
 
     addParsedMessage(text, role, isLatest = false) {
