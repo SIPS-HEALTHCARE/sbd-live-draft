@@ -184,12 +184,15 @@ function buildRecords(src) {
 // 6. Upsert to Pinecone (only with --commit).
 // ---------------------------------------------------------------------------
 async function upsertBatch(apiKey, records) {
-  // Send only the proven { _id, text } shape (matches david-chat upsert_wiki_page).
-  const clean = records.map(({ _id, text }) => ({ _id, text }));
+  // Pinecone integrated-embedding "upsert records" endpoint expects NDJSON:
+  // one JSON record per line, Content-Type application/x-ndjson. The index
+  // embeds the mapped `text` field server-side (mirrors the search call's
+  // { inputs: { text } } shape in david-chat).
+  const ndjson = records.map(({ _id, text }) => JSON.stringify({ _id, text })).join('\n');
   const res = await fetch(UPSERT_URL, {
     method: 'POST',
-    headers: { 'Api-Key': apiKey, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ records: clean }),
+    headers: { 'Api-Key': apiKey, 'Content-Type': 'application/x-ndjson' },
+    body: ndjson,
   });
   if (!res.ok) throw new Error(`Pinecone upsert ${res.status}: ${await res.text()}`);
   return res.json().catch(() => ({}));
