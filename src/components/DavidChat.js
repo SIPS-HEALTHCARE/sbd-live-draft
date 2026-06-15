@@ -52,6 +52,23 @@ class DavidChat {
                 position: relative;
             }
 
+            /* The mount must fill the admin view area, otherwise David grows to
+               content height and the input gets pushed below the fold (you had to
+               scroll the page to reach it). With a real height, the messages area
+               scrolls internally and the input + New Chat stay in place. */
+            #a-david { height: 100%; min-height: 0; }
+
+            /* Per-message timestamp */
+            .david-msg-time {
+                font-size: 10px;
+                color: var(--txt3);
+                opacity: .6;
+                margin-top: 6px;
+                text-align: right;
+                font-family: var(--font);
+            }
+            .david-msg-user .david-msg-time { text-align: left; }
+
             .david-layout {
                 display: flex;
                 height: 100%;
@@ -1222,6 +1239,10 @@ class DavidChat {
             };
             div.appendChild(editBtn);
         }
+        const ts = document.createElement('div');
+        ts.className = 'david-msg-time';
+        ts.textContent = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        div.appendChild(ts);
         this.msgArea.appendChild(div);
         this.msgArea.scrollTop = this.msgArea.scrollHeight;
     }
@@ -1567,6 +1588,10 @@ class DavidChat {
                 } else {
                     msgDiv.innerHTML = displayContent.replace(/\\n/g, '<br>');
                 }
+                const _ts = document.createElement('div');
+                _ts.className = 'david-msg-time';
+                _ts.textContent = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+                msgDiv.appendChild(_ts);
 
                 // Ensure scroll stays at bottom naturally
                 this.msgArea.scrollTop = this.msgArea.scrollHeight;
