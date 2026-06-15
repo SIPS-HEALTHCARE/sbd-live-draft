@@ -219,7 +219,7 @@ Example: <chips>["Compare to last month", "Audit underperforming groups", "Escal
                     'X-Title': 'DAVID Intelligence - SBD Belt Platform',
                 },
                 body: JSON.stringify({
-                    model: 'anthropic/claude-sonnet-4.5',
+                    model: 'anthropic/claude-3.5-haiku',
                     messages: messageChain,
                     tools: tools,
                     max_tokens: 8000,
@@ -434,7 +434,7 @@ Example: <chips>["Compare to last month", "Audit underperforming groups", "Escal
                             'X-Title': 'DAVID Intelligence - SBD Belt Platform',
                         },
                         body: JSON.stringify({
-                            model: 'anthropic/claude-sonnet-4.5',
+                            model: 'anthropic/claude-3.5-haiku',
                             messages,
                             max_tokens: 4000,
                             temperature: 0.7,
