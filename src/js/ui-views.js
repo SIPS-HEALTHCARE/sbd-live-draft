@@ -384,6 +384,12 @@ function enterPortal(type){
   const _navPlacement=document.getElementById('nav-placementreviews');
   if(_navPlacement) _navPlacement.style.display='flex';
   if(typeof updatePlacementBadge === 'function') updatePlacementBadge();
+  // Observer module (shell) — visible to SIPS admins. Per-observer role gating
+  // and the candidate request/PIN flow land in later Observer milestones.
+  const _navObs=document.getElementById('nav-observations');
+  if(_navObs) _navObs.style.display='flex';
+  const _navObsRev=document.getElementById('nav-observationreviews');
+  if(_navObsRev) _navObsRev.style.display='flex';
   // Promo queue visible to all SIPS admins (master + assessors)
   const _navPromo=document.getElementById('nav-promoqueue');
   if(_navPromo) _navPromo.style.display='flex';
@@ -601,7 +607,7 @@ function renderAView(view){
     toast('RBAC Guard: Unauthorized access to Network Portal', 'err');
     return;
   }
-  ['a-overview','a-leaderboard','a-allstaff','a-scoreboard','a-facilities','a-facility','a-registrations','a-assessments','a-progression','a-upload','a-reports','a-david','a-daviddashboard','a-adminusers','a-promoqueue','a-freeagents','a-placementreviews','a-guide','a-settings','a-systems','a-systems-dashboard'].forEach(v=>{
+  ['a-overview','a-leaderboard','a-allstaff','a-scoreboard','a-facilities','a-facility','a-registrations','a-assessments','a-progression','a-upload','a-reports','a-david','a-daviddashboard','a-adminusers','a-promoqueue','a-freeagents','a-placementreviews','a-observations','a-observationreviews','a-guide','a-settings','a-systems','a-systems-dashboard'].forEach(v=>{
     const el=document.getElementById(v);
     if(el){ el.classList.add('hidden'); el.classList.remove('fade-in'); }
   });
@@ -620,6 +626,8 @@ function renderAView(view){
     'a-promoqueue':renderAPromoQueue,
     'a-freeagents':renderAFreeAgents,
     'a-placementreviews':renderAPlacementReviews,
+    'a-observations':renderAObservations,
+    'a-observationreviews':renderAObservationReviews,
     'a-systems':renderASystems,
     'a-systems-dashboard':()=>renderASystemsDashboard(ST.curSystemId),
     'a-guide':()=>renderGuideView('a'),
@@ -2334,6 +2342,46 @@ function applyReviewFilter(pool){
     return new Date(b.submittedAt||0) - new Date(a.submittedAt||0);
   });
   return out;
+}
+
+function renderAObservations(){
+  // Day-1 shell: the Observations tab exists and is navigable. The on-the-floor
+  // capture flow (PIN entry + scored checklist + danger stop) lands in a later
+  // Observer milestone. Honest empty state -- no demo data (per repo rules).
+  const el = document.getElementById('a-observations');
+  if(!el) return;
+  el.innerHTML = `
+    <div style="max-width:760px">
+      <h2 style="margin:0 0 6px">Observations</h2>
+      <p style="color:var(--txt2);font-size:13px;margin:0 0 20px">On-the-floor performance checks &mdash; the third assessment gate, alongside Competency and Simulation.</p>
+      <div style="border:1px dashed var(--bdr);border-radius:12px;padding:32px;text-align:center;background:var(--s1)">
+        <div style="font-size:28px;margin-bottom:10px">&#128065;</div>
+        <div style="font-weight:700;margin-bottom:6px">No observations in progress</div>
+        <div style="color:var(--txt3);font-size:12.5px;line-height:1.6;max-width:460px;margin:0 auto">
+          Once a candidate passes their placement assessment, they can request an observation. An authorized observer then records their performance against the belt checklist here.<br><br>
+          <span style="color:var(--txt2)">Coming in this module: observer role &amp; PINs, the scored checklist, and the &ldquo;do not advance&rdquo; safety stop.</span>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderAObservationReviews(){
+  // Day-1 shell: mirrors Placement Reviews (the parity Iiggie asked for). Real
+  // list + filter bar + gate confirmation slot in once submissions exist.
+  const el = document.getElementById('a-observationreviews');
+  if(!el) return;
+  el.innerHTML = `
+    <div>
+      <h2 style="margin:0 0 6px">Observation Reviews</h2>
+      <p style="color:var(--txt2);font-size:13px;margin:0 0 20px">Review completed observations, confirm pass/fail, and clear the Observation gate &mdash; same flow as Placement Reviews.</p>
+      <div style="border:1px dashed var(--bdr);border-radius:12px;padding:32px;text-align:center;background:var(--s1)">
+        <div style="font-size:28px;margin-bottom:10px">&#128203;</div>
+        <div style="font-weight:700;margin-bottom:6px">No completed observations to review yet</div>
+        <div style="color:var(--txt3);font-size:12.5px;line-height:1.6;max-width:460px;margin:0 auto">
+          Submitted observations will appear here with filter &amp; search by facility, just like Placement Reviews. Confirming one updates that staff member&rsquo;s Observation gate.
+        </div>
+      </div>
+    </div>`;
 }
 
 function renderAPlacementReviews(){
