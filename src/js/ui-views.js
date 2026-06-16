@@ -3815,7 +3815,7 @@ function openPromoteModal(staffId, context){
   });
 }
 
-function submitPromotion(staffId, context){
+async function submitPromotion(staffId, context){
   const posEl    = document.getElementById('pm-position');
   const customEl = document.getElementById('pm-custom');
   const notesEl  = document.getElementById('pm-notes');
@@ -3833,7 +3833,11 @@ function submitPromotion(staffId, context){
 
   // SIPS-level admins can approve immediately. Hospital / system admins submit for approval.
   if(isSIPSAdmin){
-    // Direct approval  --  execute immediately
+    // Direct approval  --  persist first, then execute locally
+    if(IS_LIVE){
+      try{ await SB.updateStaff(staffId, { role: newPos }); }
+      catch(e){ handleSyncError(e, 'Promotion sync'); return; }
+    }
     promoteStaffPosition(staffId, newPos, submittedBy);
     closeModal();
     toast(`${fullName(s)} promoted to <strong>${newPos}</strong>.`,'ok');
@@ -3857,7 +3861,12 @@ function submitPromotion(staffId, context){
       requestedAt:  new Date().toISOString().slice(0,10),
       status:       'pending'
     };
-    if(IS_LIVE){ SB.submitPromotionApproval(mapPromotionApprovalToBackend(newPromo)).catch(e => handleSyncError(e, 'Promo sync')); }
+    if(IS_LIVE){
+      try{
+        const rows = await SB.submitPromotionApproval(mapPromotionApprovalToBackend(newPromo));
+        if(rows && rows[0] && rows[0].id) newPromo.id = rows[0].id;
+      }catch(e){ handleSyncError(e, 'Promo sync'); return; }
+    }
     DB.promotionApprovals.push(newPromo);
     closeModal();
     toast('Promotion request submitted for SIPS review.','info');
@@ -13150,25 +13159,28 @@ function renderAPromoQueue(){
     </div>`:''}`;
 }
 
-function approvePromotion(apId, approved){
+async function approvePromotion(apId, approved){
   const ap=DB.promotionApprovals.find(a=>a.id===apId);
   if(!ap){toast('Approval record not found.','err');return;}
+  const prev={status:ap.status,decidedBy:ap.decidedBy,decidedAt:ap.decidedAt};
   ap.status=approved?'approved':'denied';
   ap.decidedBy=ST.user?.name||'Admin';
   ap.decidedAt=new Date().toISOString().slice(0,10);
-  // Apply the role promotion locally (updates on-screen role + pushes Promotion history) for both modes.
-  if(approved) promoteStaffPosition(ap.staffId, ap.proposedRole, ST.user?.name||'SIPS Admin');
   if(IS_LIVE){
-    // Persist the decision with the REAL columns (sbd_promotions has reviewed_by/reviewed_at, not decided_*).
-    SB.updatePromotionApproval(ap.id,{status:ap.status,reviewed_by:ap.decidedBy,reviewed_at:new Date().toISOString()}).catch(e => handleSyncError(e, 'Promo approval sync'));
-    // Persist the role change on the staff record. Targeted single-column PATCH -- PostgREST only
-    // updates `role`, so oip/history/ps_tracks are never touched. (Replaces a broken call to a
-    // non-existent `record-assessment` function with mismatched params.)
-    if(approved && ap.proposedRole){
-      SB.updateStaff(ap.staffId,{role:ap.proposedRole}).catch(e => handleSyncError(e, 'Promo staff role sync'));
+    try{
+      // Column names per mapPromotionApprovalFromBackend (reviewed_*, not decided_*).
+      await SB.updatePromotionApproval(ap.id,{status:ap.status,reviewed_by:ap.decidedBy,reviewed_at:ap.decidedAt});
+      // Persist the role change: targeted single-column PATCH -- never touches oip/history/ps_tracks.
+      if(approved) await SB.updateStaff(ap.staffId,{ role: ap.proposedRole });
+    }catch(e){
+      ap.status=prev.status; ap.decidedBy=prev.decidedBy; ap.decidedAt=prev.decidedAt;
+      handleSyncError(e, 'Promo approval sync');
+      return;
     }
   }
   if(approved){
+    // Apply the role promotion locally (updates on-screen role + pushes Promotion history).
+    promoteStaffPosition(ap.staffId, ap.proposedRole, ST.user?.name||'SIPS Admin');
     const s=getStaff(ap.staffId);
     toast(`${s?fullName(s):'Staff'} promoted to <strong>${ap.proposedRole}</strong> -- approved.`,'ok');
   } else {
@@ -14245,7 +14257,7 @@ function renderAAdminUsers(){
             <td class="hide-sm" style="font-size:11.5px;color:#64748b">${u.email}</td>
             <td>${u.role==='master_admin'?'<span class="pill p-gold">Master Admin</span>':'<span class="pill p-blue">Assessor</span>'}</td>
             <td style="font-size:11.5px">${u.role==='master_admin'?'<span style="color:#64748b">All facilities</span>':
-              (u.assignedFids&&u.assignedFids.length?u.assignedFids.map(fid=>getFac(fid)?.name||fid).join(', '):'<span style="color:#f59e0b">None assigned</span>')}</td>
+              (u.assignedFids&&u.assignedFids.length?u.assignedFids.map(fid=>getFac(fid)?.name||`<span style="color:var(--txt3);font-style:italic" title="${fid}">Unknown facility</span>`).join(', '):'<span style="color:#f59e0b">None assigned</span>')}</td>
             <td style="white-space:nowrap">${u.id!==ST.user.id?`
               <button class="btn btn-ghost btn-xs" style="margin-right:4px" onclick="openAssignFacilitiesModal('${u.id}')">${ICO.edit} Assign</button>
               <button class="btn btn-ghost btn-xs" style="margin-right:4px" onclick="openEditUserModal('${u.id}')">${ICO.edit} Edit</button>
@@ -14466,13 +14478,27 @@ function openAssignFacilitiesModal(uid){
     <div class="modal-ft"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-gold" onclick="saveAssignedFacilities('${uid}')">${ICO.check} Save</button></div>`,'modal-md');
 }
 
-function saveAssignedFacilities(uid){
+async function saveAssignedFacilities(uid){
   const u=DB.users.find(x=>x.id===uid);
   if(!u)return;
-  u.assignedFids=DB.facilities.filter(f=>document.getElementById('af-'+f.id)?.checked).map(f=>f.id);
-  closeModal();
-  toast(`Facility access updated for ${u.name}.`,'ok');
-  renderAAdminUsers();
+  if(u.protected){toast('Protected accounts cannot be edited.','err');return;}
+  const newFids=DB.facilities.filter(f=>document.getElementById('af-'+f.id)?.checked).map(f=>f.id);
+  try{
+    if(IS_LIVE){
+      toast('Updating facility access...','info');
+      // sbd-sync-user-claims upserts the whole portal row — send the full field set so
+      // facility_id / system_id / name etc. are not nulled out (same payload as saveEditUser).
+      const payload={action:'update',userId:uid,email:u.email,name:u.name,title:u.title||'',role:u.role,assignedFids:newFids,facilityId:u.fid||null,systemId:u.systemId||null};
+      const res=await SB.syncUserClaims(payload);
+      if(res && res.error) throw new Error(res.error.message || res.detail || 'Update sync failed');
+    }
+    u.assignedFids=newFids;
+    closeModal();
+    toast(`Facility access updated for ${u.name}.`,'ok');
+    renderAAdminUsers();
+  }catch(e){
+    toast('Facility access update failed: '+e.message,'err');
+  }
 }
 
 
