@@ -202,10 +202,6 @@ Example: <chips>["Compare to last month", "Audit underperforming groups", "Escal
         let fullContent = '';
         let promptTokens = 0;
         let completionTokens = 0;
-        // --- TEMP DIAGNOSTICS: capture exactly what OpenRouter returns ---
-        let diagStatus = -1;
-        let diagErr = '';
-        let diagRaw = '';
 
         // Internal recursive async loop
         async function runAutonomousLoop(messageChain: any[], depth: number = 0) {
@@ -223,7 +219,7 @@ Example: <chips>["Compare to last month", "Audit underperforming groups", "Escal
                     'X-Title': 'DAVID Intelligence - SBD Belt Platform',
                 },
                 body: JSON.stringify({
-                    model: 'anthropic/claude-3.5-haiku',
+                    model: 'anthropic/claude-sonnet-4.5',
                     messages: messageChain,
                     tools: tools,
                     max_tokens: 8000,
@@ -232,10 +228,8 @@ Example: <chips>["Compare to last month", "Audit underperforming groups", "Escal
                 }),
             });
 
-            diagStatus = orRes.status;
             if (!orRes.ok) {
                 const errBody = await orRes.text();
-                diagErr = errBody.slice(0, 600);
                 console.error('[DAVID] OpenRouter error:', errBody);
                 await writer.write(encoder.encode(`data: ${JSON.stringify({ error: `AI service error: ${errBody}` })}\n\n`));
                 return;
@@ -266,7 +260,6 @@ Example: <chips>["Compare to last month", "Audit underperforming groups", "Escal
                     if (line.startsWith('data: ')) {
                         const data = line.slice(6).trim();
                         if (data === '[DONE]') continue;
-                        if (diagRaw.length < 800) diagRaw += data.slice(0, 280) + ' || ';
 
                         try {
                             const json = JSON.parse(data);
@@ -442,7 +435,7 @@ Example: <chips>["Compare to last month", "Audit underperforming groups", "Escal
                             'X-Title': 'DAVID Intelligence - SBD Belt Platform',
                         },
                         body: JSON.stringify({
-                            model: 'anthropic/claude-3.5-haiku',
+                            model: 'anthropic/claude-sonnet-4.5',
                             messages,
                             max_tokens: 4000,
                             temperature: 0.7,
@@ -485,7 +478,7 @@ Example: <chips>["Compare to last month", "Audit underperforming groups", "Escal
                     user_id: profile.auth_uid,
                     interaction_type: 'chat',
                     context_summary: `Facility: ${profile.facility_id || 'Global'} [SUPREME MODE]`,
-                    raw_interaction: { query: message, response: fullContent, diag: `status=${diagStatus}; err=${diagErr}; raw=${diagRaw}` }
+                    raw_interaction: { query: message, response: fullContent }
                 }).then(({ error }: { error: any }) => {
                     if (error) console.warn('[DAVID] Memory store skipped:', error.message);
                 });
