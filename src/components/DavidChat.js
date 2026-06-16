@@ -1156,7 +1156,7 @@ class DavidChat {
         }
 
         this.history.forEach((msg, idx) => {
-            this.addParsedMessage(msg.content, msg.role, idx === this.history.length - 1);
+            this.addParsedMessage(msg.content, msg.role, idx === this.history.length - 1, idx);
         });
         this.msgArea.scrollTop = this.msgArea.scrollHeight;
     }
@@ -1172,7 +1172,7 @@ class DavidChat {
         `;
     }
 
-    addParsedMessage(text, role, isLatest = false) {
+    addParsedMessage(text, role, isLatest = false, messageIndex = null) {
         // OpenRouter uses 'assistant', map it back to CSS/logic 'ai'
         const formatRole = (role === 'assistant') ? 'ai' : role;
         
@@ -1220,18 +1220,8 @@ class DavidChat {
         }
 
         if (formatRole === 'ai') {
-            const actions = document.createElement('div');
-            actions.className = 'david-msg-actions';
-            actions.innerHTML = `
-                <button class="david-action-btn" title="Copy response" onclick="DAVID.copyMessage(this)">
-                    <svg width="13" height="13" viewBox="0 0 18 18" fill="none"><rect x="6" y="6" width="10" height="10" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M4 12H3a1 1 0 01-1-1V3a1 1 0 011-1h8a1 1 0 011 1v1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-                    Copy
-                </button>
-                <button class="david-action-btn" title="Edit your message" onclick="DAVID.editLastUserMessage()">
-                    <svg width="13" height="13" viewBox="0 0 18 18" fill="none"><path d="M11 2l5 5L6 17H1v-5L11 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
-                    Edit
-                </button>`;
-            div.appendChild(actions);
+            const pairedUser = this.findPairedUserMessage(messageIndex);
+            this.appendMessageActions(div, pairedUser ? pairedUser.content : '');
         }
 
         this.msgArea.appendChild(div);
@@ -1252,12 +1242,49 @@ class DavidChat {
         }).catch(() => {});
     }
 
-    editLastUserMessage() {
-        const lastUser = [...this.history].reverse().find(m => m.role === 'user');
-        if (!lastUser || !this.input) return;
-        this.input.value = lastUser.content;
+    appendMessageActions(msgDiv, promptText = '') {
+        const actions = document.createElement('div');
+        actions.className = 'david-msg-actions';
+        actions.dataset.editPrompt = promptText || '';
+        actions.innerHTML = `
+            <button class="david-action-btn" title="Copy response" onclick="DAVID.copyMessage(this)">
+                <svg width="13" height="13" viewBox="0 0 18 18" fill="none"><rect x="6" y="6" width="10" height="10" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M4 12H3a1 1 0 01-1-1V3a1 1 0 011-1h8a1 1 0 011 1v1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+                Copy
+            </button>
+            <button class="david-action-btn" title="Edit your message" onclick="DAVID.editUserMessageForResponse(this)">
+                <svg width="13" height="13" viewBox="0 0 18 18" fill="none"><path d="M11 2l5 5L6 17H1v-5L11 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+                Edit
+            </button>`;
+        msgDiv.appendChild(actions);
+    }
+
+    findPairedUserMessage(messageIndex = null) {
+        if (typeof messageIndex === 'number') {
+            for (let i = messageIndex - 1; i >= 0; i--) {
+                if (this.history[i] && this.history[i].role === 'user') return this.history[i];
+            }
+        }
+        return [...this.history].reverse().find(m => m.role === 'user') || null;
+    }
+
+    setInputFromMessage(text) {
+        if (!text || !this.input) return;
+        this.input.value = text;
         this.input.focus();
         this.input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    editUserMessageForResponse(btn) {
+        const actions = btn.closest('.david-msg-actions');
+        const prompt = actions ? actions.dataset.editPrompt : '';
+        if (prompt) this.setInputFromMessage(prompt);
+        else this.editLastUserMessage();
+    }
+
+    editLastUserMessage() {
+        const lastUser = [...this.history].reverse().find(m => m.role === 'user');
+        if (!lastUser) return;
+        this.setInputFromMessage(lastUser.content);
     }
 
     handleQA(text) {
@@ -1597,6 +1624,7 @@ class DavidChat {
                 } else {
                     msgDiv.innerHTML = displayContent.replace(/\\n/g, '<br>');
                 }
+                this.appendMessageActions(msgDiv, text);
 
                 // Ensure scroll stays at bottom naturally
                 this.msgArea.scrollTop = this.msgArea.scrollHeight;

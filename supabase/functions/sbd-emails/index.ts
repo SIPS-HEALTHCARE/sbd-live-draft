@@ -1,8 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.6';
 
-// SIPS Master Admins
-const ADMIN_EMAILS = [
+// Safety fallback; live placement notifications also query sbd_portal_users for
+// every current master_admin profile.
+const FALLBACK_ADMIN_EMAILS = [
   "jjacobs@sipsconsults.com",
   "izambrano@sipsconsults.com",
   "dpayne@sipsconsults.com",
@@ -12,6 +13,21 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, prefer",
 };
+
+async function getMasterAdminEmails(supabaseAdmin: any): Promise<string[]> {
+  const emails = new Set(FALLBACK_ADMIN_EMAILS);
+  const { data, error } = await supabaseAdmin
+    .from('sbd_portal_users')
+    .select('email')
+    .eq('role', 'master_admin');
+  if (error) {
+    console.error('Failed to load master admin emails; using fallback list:', error.message);
+  }
+  (data || []).forEach((row: { email?: string }) => {
+    if (row.email && row.email.includes('@')) emails.add(row.email);
+  });
+  return Array.from(emails);
+}
 
 // ----------------------------------------------------------------------------
 // WEBHOOK HANDLER — Enqueues emails via sbd_email_queue
@@ -58,10 +74,12 @@ serve(async (req) => {
         staff_role:  d.staff_role  || '—',
         facility:    d.facility    || '—',
         belt:        d.belt        || '—',
+        result:      d.result      || d.assessment_result || '',
         timestamp:   d.timestamp   || new Date().toISOString(),
       };
 
-      for (const adminEmail of ADMIN_EMAILS) {
+      const adminEmails = await getMasterAdminEmails(supabaseAdmin);
+      for (const adminEmail of adminEmails) {
         await supabaseAdmin.from('sbd_email_queue').insert({
           recipient_email: adminEmail,
           template,
@@ -110,7 +128,8 @@ serve(async (req) => {
       }
 
       // Queue: Admin alerts (one per admin)
-      for (const adminEmail of ADMIN_EMAILS) {
+      const adminEmails = await getMasterAdminEmails(supabaseAdmin);
+      for (const adminEmail of adminEmails) {
         await supabaseAdmin.from('sbd_email_queue').insert({
           recipient_email: adminEmail,
           template: 'admin_new_registration',

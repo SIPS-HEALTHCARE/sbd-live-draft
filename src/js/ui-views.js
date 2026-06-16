@@ -1351,7 +1351,13 @@ function startAssessmentTimer(){
       el.style.background = 'rgba(239,68,68,.2)';
       el.style.borderColor = 'rgba(239,68,68,.6)';
       el.style.color = '#fca5a5';
-      if(!PA.submitting && !PA.submitted){
+      // Branch on session type so the belt test does not auto-submit through the
+      // placement pipeline (and vice-versa).
+      if(ASSESSMENT_SESSION.type === 'belt'){
+        if(typeof BT !== 'undefined' && typeof submitBeltTest === 'function' && !BT.submitting && !BT.submitted){
+          submitBeltTest();
+        }
+      } else if(!PA.submitting && !PA.submitted){
         submitPlacementAssessment();
       }
       return;
@@ -1486,7 +1492,7 @@ async function submitPinGate(staffId, assessmentType){
         <div style="width:72px;height:72px;background:rgba(34,197,94,.12);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:32px">&#10003;</div>
         <div style="font-size:18px;font-weight:800;color:#22c55e;margin-bottom:8px">Authorized</div>
         <div style="font-size:13px;color:#94a3b8;margin-bottom:4px">Assessor: <strong style="color:#e2e8f0">${res.assessor_name}</strong></div>
-        <div style="font-size:13px;color:#94a3b8;margin-bottom:4px">Session: <strong style="color:#e2e8f0">90 minutes</strong></div>
+        <div style="font-size:13px;color:#94a3b8;margin-bottom:4px">Session: <strong style="color:#e2e8f0">${assessmentType === 'belt' ? '120' : '90'} minutes</strong></div>
         <div style="font-size:11px;color:#64748b;margin-top:8px">Starting assessment...</div>
       </div>`;
     // Transition to assessment after 1.5s
@@ -1940,6 +1946,7 @@ async function submitPlacementAssessment(){
     SB.notifyPlacementEvent('placement_completed',{
       staff_name: pr.staffName, staff_role: pr.staffTitle||'',
       facility: getFac(pr.fid)?.name||'', belt: pr.tentativeBelt||'',
+      result: `System recommendation: ${pr.tentativeBelt || '—'} Belt; pending master admin review`,
       timestamp: new Date().toISOString()
     }).catch(()=>{});
   }
@@ -2605,6 +2612,12 @@ function detectDangerousAnswers(responses) {
 }
 
 function deriveOutcome(pr) {
+  // A4 belt-test path: the dynamic belt test is scored by BeltTestEngine (spec
+  // v2.0, 60/40 blend + per-level floors), NOT the legacy placement 50/50 math
+  // below. adaptBeltResultToReview() attaches _precomputed; honor it verbatim so
+  // buildAssessmentReportHTML renders the spec-correct numbers. Placement path
+  // (no _precomputed) is untouched.
+  if (pr._precomputed) return pr._precomputed;
   const responses = pr.responses || [];
   const knowledge = responses.filter(r => r.type === 'knowledge');
   const simulation = responses.filter(r => r.type === 'simulation');
@@ -2806,7 +2819,6 @@ function buildAssessmentReportHTML(pr, staff, fac) {
 
   const reportStatus = displayBelt ? `FINAL — ${displayBelt.toUpperCase()} BELT, ${outcome === 'CONDITIONAL' ? 'Conditional' : outcome === 'CLEAN' ? 'Clean' : outcome}` : `FINAL — ${outcome}`;
 
-  const strongLevels = Object.entries(kByLevel).filter(([,v]) => v.pct != null && v.pct >= 75).map(([k]) => 'Level ' + k);
   const certBasis = _certBasis(outcome, classification, candidateName, blended, thresh, targetBelt, knowledgeOverall, simOverall, nextB || '—', conditions);
 
   const pageHdr = n => `<div class="ar-running"><span><span style="color:#c49a20;font-weight:700">SBD OS</span>&nbsp;|&nbsp;Belt Assessment Report&nbsp;|&nbsp;CONFIDENTIAL</span><span>Page ${n}&nbsp;|&nbsp;SIPS Healthcare Solutions</span></div>`;
@@ -2865,7 +2877,6 @@ function buildAssessmentReportHTML(pr, staff, fac) {
   const condCards = conditions.map(c => `<div class="ar-cond-card"><div class="ar-cond-badge" style="background:${sevBg(c.severity)}"><span style="font-size:6.5pt;font-weight:800;color:#fff;letter-spacing:.04em;line-height:1.4">${safe(c.severity).replace(/ /g,'<br>')}</span></div><div class="ar-cond-body" style="border-left-color:${sevClr(c.severity)}"><div style="font-weight:700;color:${sevClr(c.severity)};font-size:9.5pt;margin-bottom:5px">${safe(c.title)}</div><div style="font-size:8.5pt;color:#374151;margin-bottom:4px"><strong>Finding:</strong> ${safe(c.finding)}</div><div style="font-size:8.5pt;color:#475569;font-style:italic"><strong>Required Action:</strong> ${safe(c.requiredAction)}</div></div></div>`).join('');
 
   // Next belt target table
-  const nextThresh = (nextB && BELT_THRESHOLDS[nextB]) ? BELT_THRESHOLDS[nextB] : thresh;
   const gapRow = (label, current, required) => { const g = required - current; const gLabel = g > 0 ? `<span style="color:#dc2626;font-weight:700">+${fmt1(g)} pts needed</span>` : `<span style="color:#16a34a;font-weight:700">Already meets</span>`; return `<tr><td style="padding:7px 12px;font-size:9pt;border-bottom:1px solid #e2e8f0;font-weight:600">${label}</td><td style="padding:7px 12px;font-size:9pt;border-bottom:1px solid #e2e8f0;text-align:center;font-weight:700">${fmt1(current)}%</td><td style="padding:7px 12px;font-size:9pt;border-bottom:1px solid #e2e8f0;text-align:center">${required}%</td><td style="padding:7px 12px;font-size:9pt;border-bottom:1px solid #e2e8f0;text-align:center">${gLabel}</td></tr>`; };
 
   // Sign-off and eligibility
@@ -2891,12 +2902,11 @@ function buildAssessmentReportHTML(pr, staff, fac) {
     ? `Knowledge Foundation is acknowledged. The following conditions identify the simulation development required before the full ${safe(targetBelt)} Belt assessment.`
     : '';
 
-  // Role amplification per §6 — based on candidate title, not belt value
-  const titleLower = (pr.staffTitle || staff.role || '').toLowerCase();
+  // Role amplification per §6 — based on candidate title, not belt value.
+  // (titleLower / hasDangerous already declared above in this function.)
   const isManager = /manager|director|vp|chief/i.test(titleLower);
   const isSupervisor = /supervisor/i.test(titleLower);
   const isLeadTech = /lead.{0,5}tech/i.test(titleLower);
-  const hasDangerous = dangerousIds.length > 0;
   let roleAmplification, signOffRoles;
   if (isManager) {
     roleAmplification = 'This candidate holds a managerial title. A manager with certification gaps cannot credibly hold staff to standards they have not demonstrated. Director-level or above sign-off is required — this assessment cannot be self-directed.';
@@ -2916,6 +2926,7 @@ function buildAssessmentReportHTML(pr, staff, fac) {
   const levelEntries = Object.entries(pr.levelScores || {});
   const strongLevels = levelEntries.filter(([, v]) => Number(v) >= 75).map(([k]) => 'Level ' + k);
   const strongSims = simulation.filter(r => (r.aiScore || 0) >= 80);
+  const kPass = knowledge.filter(r => r.correct).length;
   let strengthText;
   if (knowledgeOverall >= 80) {
     strengthText = `The candidate demonstrated strong knowledge competency overall, scoring ${knowledgeOverall}% across the knowledge assessment.${strongLevels.length ? ' ' + strongLevels.join(', ') + ' showed particularly solid performance.' : ''}`;
@@ -2938,7 +2949,7 @@ function buildAssessmentReportHTML(pr, staff, fac) {
   }).join('');
 
   // Next Belt Target table per §8.3 — 3 rows with gap column
-  const nextTargetBelt = (outcome === 'CLEAN' || outcome === 'CONDITIONAL') ? (nextB !== '—' ? nextB : targetBelt) : targetBelt;
+  const nextTargetBelt = (outcome === 'CLEAN' || outcome === 'CONDITIONAL') ? (nextB || targetBelt) : targetBelt;
   const nextThresh = BELT_THRESHOLDS[nextTargetBelt] || thresh;
   const gapStr = (current, required) => { const g = required - current; return g > 0 ? `+${Math.round(g * 10) / 10} pts needed` : 'Already meets'; };
   const gapClr = (current, required) => current >= required ? '#16a34a' : '#d97706';
@@ -2952,7 +2963,7 @@ function buildAssessmentReportHTML(pr, staff, fac) {
   </table>`;
 
   // Knowledge rows — WRONG -- DANGEROUS marking per §5.2
-  const kDangerousIds = dangerousKnowledge.map(r => r.qId || r.id);
+  // (kDangerousIds already computed above in this function.)
   const knowledgeRows = knowledge.map((r, i) => {
     const isDang = kDangerousIds.includes(r.qId || r.id);
     const rowBg = isDang ? '#450a0a' : (i % 2 === 0 ? '#f8fafc' : '#fff');
@@ -2966,17 +2977,19 @@ function buildAssessmentReportHTML(pr, staff, fac) {
   const knowledgeFootnote = kDangerousIds.length ? `<div style="margin-top:8px;padding:12px 14px;background:#450a0a;border-radius:6px;color:#fca5a5;font-size:8pt;line-height:1.6"><div style="font-weight:800;font-size:8.5pt;margin-bottom:6px">PATIENT SAFETY FINDINGS</div>${dangerousKnowledge.map(r => `<div style="margin-bottom:8px"><span style="font-weight:700">Response to: "${safe(String(r.question || '').slice(0, 70))}${(r.question || '').length > 70 ? '…' : ''}"</span><br>Answer given: "${safe(r.answer)}"<br>Risk: ${safe(_dangerousRiskDesc(r.answer))}</div>`).join('')}</div>` : '';
 
   // Simulation rows
-  const sDangerousIds = dangerousSim.map(r => r.qId || r.id);
+  // (sDangerousIds already computed above in this function.)
   const simRows = simulation.map((r, i) => {
     const isDang = sDangerousIds.includes(r.qId || r.id);
     const scoreClr = (r.aiScore || 0) >= 70 ? '#16a34a' : (r.aiScore || 0) >= 50 ? '#d97706' : '#dc2626';
     return `<tr style="background:${isDang ? '#fef2f2' : i % 2 === 0 ? '#f8fafc' : '#fff'}"><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;vertical-align:top;width:30px">${i + 1}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;vertical-align:top">${safe(r.question)}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;vertical-align:top;white-space:pre-wrap">${safe(r.answer)}${isDang ? `<div style="margin-top:4px;padding:4px 6px;background:#fef2f2;border-left:3px solid #dc2626;font-size:7.5pt;font-weight:700;color:#dc2626">⚠ PATIENT SAFETY CONCERN — ${safe(_dangerousRiskDesc(r.answer))}</div>` : ''}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;vertical-align:top;font-style:italic;color:#475569">${safe(r.aiFeedback || '—')}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;text-align:center;font-weight:700;color:${scoreClr}">${r.aiScore != null ? r.aiScore + '%' : '—'}</td></tr>`;
   }).join('');
 
-  const conditionRows = conditions.map(c => `<tr><td style="padding:7px 10px;font-size:9pt;border-bottom:1px solid #e2e8f0;font-weight:700;color:${sevClr(c.severity)};white-space:nowrap;vertical-align:top">${safe(c.severity)}</td><td style="padding:7px 10px;font-size:9pt;border-bottom:1px solid #e2e8f0;color:#374151">${safe(c.text)}</td></tr>`).join('');
+  const conditionRows = conditions.length
+    ? conditions.map(c => `<tr><td style="padding:7px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;font-weight:700;color:${sevClr(c.severity)};white-space:nowrap;vertical-align:top">${safe(c.severity)}</td><td style="padding:7px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;color:#374151"><strong>${safe(c.title || 'Condition')}</strong><br>${safe(c.finding || '')}<br><span style="color:#64748b;font-style:italic">${safe(c.requiredAction || '')}</span></td></tr>`).join('')
+    : `<tr><td style="padding:7px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;font-weight:700;color:#16a34a;white-space:nowrap">CLEAR</td><td style="padding:7px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;color:#374151">No required development conditions were identified for this assessment.</td></tr>`;
 
-  const signOffAuth = isManager ? 'Director-level or above' : isSupervisor ? 'Manager or Director' : (isLeadTech && hasDangerous) ? 'Supervisor and Manager (co-sign)' : 'Supervisor';
-  const reAssessLevel = (outcome === 'NO BELT') ? 'White Belt assessment (regardless of level assessed)' : `${safe(nextB)} Belt assessment`;
+  // (signOffAuth already computed above in this function.)
+  const reAssessLevel = (outcome === 'NO BELT') ? 'White Belt assessment (regardless of level assessed)' : `${safe(nextB || targetBelt)} Belt assessment`;
 
   return `
   <!-- PAGE 1 -->
@@ -3068,6 +3081,39 @@ function buildAssessmentReportHTML(pr, staff, fac) {
     </div>
     <div style="font-size:9.5pt;font-weight:700;color:#0f172a;margin-bottom:7px">Simulation Response Detail</div>
     ${simulation.length ? `<table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden"><thead><tr style="background:#0f2340"><th style="padding:7px 10px;font-size:8pt;color:#fff;text-align:center;width:35px">Lvl</th><th style="padding:7px 10px;font-size:8pt;color:#fff;text-align:center;width:50px">Score</th><th style="padding:7px 10px;font-size:8pt;color:#fff;text-align:left">Scenario</th><th style="padding:7px 10px;font-size:8pt;color:#fff;text-align:left">AI Evaluator Notes</th></tr></thead><tbody>${simDetailRows}</tbody></table>` : '<div style="font-size:9pt;color:#94a3b8;font-style:italic">No simulation responses recorded.</div>'}
+    ${pageFooter()}
+  </div>
+
+  <!-- PAGE 4: Interpretation -->
+  <div class="ar-page page-break">
+    ${pageHdr(4)}
+    <div class="ar-section"><div class="ar-section-hdr">ASSESSMENT INTERPRETATION</div>
+      <div class="ar-section-body" style="padding:14px 16px">
+        <div style="font-size:8.5pt;color:#374151;line-height:1.7;margin-bottom:12px">${safe(strengthText)}</div>
+        <div style="padding:12px 14px;background:#fffdf5;border-left:4px solid #c49a20;margin-bottom:12px">
+          <div style="font-size:7.5pt;font-weight:700;color:#c49a20;letter-spacing:.08em;margin-bottom:5px">ROLE AMPLIFICATION AND SIGN-OFF</div>
+          <div style="font-size:8.5pt;color:#374151;line-height:1.65">${safe(roleAmplification)}</div>
+          <div style="font-size:8pt;color:#64748b;margin-top:6px">Required sign-off: ${safe(signOffRoles.join(' / '))}</div>
+        </div>
+        <div style="font-size:9pt;font-weight:700;color:#0f172a;margin-bottom:7px">Level Score Snapshot</div>
+        <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden;margin-bottom:14px">
+          <thead><tr style="background:#0f2340"><th style="padding:7px 10px;font-size:8pt;color:#fff;text-align:left">Level</th><th style="padding:7px 10px;font-size:8pt;color:#fff;text-align:left">Score</th><th style="padding:7px 10px;font-size:8pt;color:#fff;text-align:left">Status</th></tr></thead>
+          <tbody>${levelTable || '<tr><td colspan="3" style="padding:7px 10px;font-size:8.5pt;color:#64748b">No per-level score data recorded.</td></tr>'}</tbody>
+        </table>
+      </div>
+    </div>
+    <div class="ar-section"><div class="ar-section-hdr">CONDITION SUMMARY</div>
+      <div class="ar-section-body" style="padding:0">
+        <table style="width:100%;border-collapse:collapse;margin:0">
+          <thead><tr style="background:#f8fafc"><th style="padding:7px 10px;font-size:8pt;text-align:left;width:160px">Severity</th><th style="padding:7px 10px;font-size:8pt;text-align:left">Finding and Required Action</th></tr></thead>
+          <tbody>${conditionRows}</tbody>
+        </table>
+      </div>
+    </div>
+    <div style="margin-top:14px;padding:12px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px">
+      <div style="font-size:7.5pt;font-weight:700;color:#1d4ed8;letter-spacing:.08em;margin-bottom:5px">RE-ASSESSMENT PATHWAY</div>
+      <div style="font-size:8.5pt;color:#374151;line-height:1.65">${safe(reAssessLevel)}${timeframe ? ' after ' + safe(timeframe) : ''}. ${safe(eligibilityText)}</div>
+    </div>
     ${pageFooter()}
   </div>
 
@@ -6996,6 +7042,7 @@ function renderSStudy() {
         <div class="stat-sub">Best score</div>
       </div>
     </div>
+    ${typeof beltTestEntryCard==='function' ? beltTestEntryCard(s, nxt) : ''}
     <div style="display:flex;gap:4px;overflow-x:auto;padding-bottom:4px;margin-bottom:16px;-webkit-overflow-scrolling:touch">
       ${tabBtn('curriculum','Full Curriculum')}
       ${tabBtn('scripts','Scripts to Master')}
@@ -11063,6 +11110,11 @@ function approveGateRequest(qid) {
   item.status = 'approved';
   item.approvedBy = ST.name || 'Admin';
   item.approvedAt = new Date().toISOString().slice(0, 10);
+  // Persist approval to Supabase. Use updateAssessmentQueue (NOT resolveAssessmentQueue —
+  // approval is not resolution and must not stamp resolved_at, or the row drops out of
+  // the in.(pending,approved) hydration). Previously this was in-memory only and the
+  // approval vanished on reload.
+  if (IS_LIVE) { SB.updateAssessmentQueue(item.id, { status: 'approved' }).catch(e => handleSyncError(e, 'Gate approval sync')); }
   toast(`${fullName(s)}: ${item.type} assessment for ${item.targetBelt} Belt approved.`, 'ok');
   updateProgBadge();
   if (ST.aView === 'a-progression') renderAProgression();
@@ -11096,6 +11148,194 @@ function updateProgBadge() {
     assessNb.textContent = qLen;
     assessNb.style.display = qLen > 0 ? 'inline-flex' : 'none';
   }
+}
+
+// ============================================================
+// DYNAMIC BELT TEST — ADMIN REVIEW (A4)
+// Results land in DB.beltTestResults as PENDING_REVIEW. Assessor reviews the
+// system suggestion, downloads the report, and Accepts (records gates) or sends
+// to remediation. Observation stays a separate manual gate — accepting records
+// only Competency + Simulation (spec §11 assessor authority).
+// ============================================================
+
+// Map one engine condition to the placement-report condition shape.
+function _beltConditionToReport(c){
+  const lvl = c.level ? ` — Level ${c.level} (${LEVEL_LABELS[c.level] || ''})` : '';
+  let title = c.type || 'Condition', finding = '';
+  switch (c.type) {
+    case 'KNOWLEDGE_LEVEL_FAIL': title = `Knowledge Floor${lvl}`; finding = `Knowledge Level ${c.level} score of ${c.scored}% is below the ${c.required}% floor required for this belt.`; break;
+    case 'SIM_LEVEL_FAIL': title = `Simulation Floor${lvl}`; finding = `Simulation Level ${c.level} average of ${c.scored}% is below the ${c.required}% floor.`; break;
+    case 'SIM_INDIVIDUAL_FAIL': title = `Individual Simulation Response${lvl}`; finding = `${(c.responses || []).length} response(s) at Level ${c.level} scored below the ${c.required} individual-response floor${c.severity === 'BLOCKING' ? ' on a critical-tagged scenario' : ''}.`; break;
+    case 'KNOWLEDGE_OVERALL_FAIL': title = 'Knowledge Overall Floor'; finding = `Knowledge overall of ${c.scored}% is below the ${c.required}% component minimum.`; break;
+    case 'SIM_OVERALL_FAIL': title = 'Simulation Overall Floor'; finding = `Simulation overall of ${c.scored}% is below the ${c.required}% component minimum.`; break;
+    case 'CRITICAL_QUESTION_MISS': title = 'Critical Question Miss'; finding = `A critical-tagged ${c.kind || ''} item (Level ${c.level}${c.category ? ', ' + c.category : ''}) was answered incorrectly. Patient-safety category.`; break;
+  }
+  const requiredAction = c.severity === 'BLOCKING'
+    ? 'BLOCKING — documented remediation (re-study/re-test or supervised practice) must be completed and recorded before the next belt assessment.'
+    : c.severity === 'REQUIRED'
+    ? 'Documented re-study and a re-test on this area is required before advancement.'
+    : 'Advisory — incorporate into the development plan. Does not block advancement.';
+  return { severity: c.severity, title, finding, requiredAction };
+}
+
+// Build a placement-review-shaped object + _precomputed so buildAssessmentReportHTML
+// renders the spec-correct 60/40 belt math (deriveOutcome honors _precomputed).
+function adaptBeltResultToReview(r){
+  const cfg = ((window.BELT_TEST_CONFIG || {}).belts) || {};
+  const awardBelt = (r.systemSuggestion && r.systemSuggestion !== 'REMEDIATION') ? r.systemSuggestion : r.targetBelt;
+  const tcfg = cfg[awardBelt] || cfg.White || {};
+  const thresh = { blended: tcfg.blendedMin, knowledge: tcfg.kOverallMin, sim: tcfg.simOverallMin };
+  let outcome, tone, classification;
+  if (r.outcome === 'PASS') { outcome = 'CLEAN'; tone = '#16a34a'; classification = 'A'; }
+  else if (r.outcome === 'CONDITIONAL_PASS') { outcome = 'CONDITIONAL'; tone = '#60a5fa'; classification = 'B'; }
+  else { // REMEDIATION — split per Governing Standards
+    const wf = cfg.White || {};
+    if (r.kOverall >= (wf.kOverallMin || 80) && r.simOverall < (wf.simOverallMin || 72)) { outcome = 'KNOWLEDGE FOUNDATION'; tone = '#f59e0b'; classification = 'B'; }
+    else { outcome = 'NO BELT'; tone = '#ef4444'; classification = 'C'; }
+  }
+  const conditions = (r.conditions || []).map(_beltConditionToReport);
+  const hasBlocking = conditions.some(c => c.severity === 'BLOCKING');
+  const hasRequired = conditions.some(c => c.severity === 'REQUIRED');
+  let timeframe = null;
+  if (outcome === 'NO BELT') timeframe = hasBlocking ? '45 days minimum' : '30 days';
+  else if (outcome === 'CONDITIONAL') timeframe = hasBlocking ? '45 days minimum' : hasRequired ? '30 days recommended' : null;
+  else if (outcome === 'KNOWLEDGE FOUNDATION') timeframe = '30 days recommended';
+  const levelScores = {};
+  Object.keys(r.kLevelScores || {}).forEach(k => { const n = k.replace('L', ''); if (r.kLevelScores[k] != null) levelScores[n] = Math.round(r.kLevelScores[k]); });
+  const responses = (r.simResponses || []).map(sr => ({ qId: sr.question_id, level: sr.level, type: 'simulation', question: '', answer: '', aiScore: sr.score }));
+  const _precomputed = {
+    outcome, classification, tone, conditions, timeframe,
+    blended: r.blendedScore, knowledgeOverall: r.kOverall, simOverall: r.simOverall,
+    thresh, targetBelt: awardBelt, dangerousIds: [], dangerousKnowledge: [], dangerousSim: []
+  };
+  const s = getStaff(r.staffId);
+  return {
+    id: r.id, staffId: r.staffId, fid: r.fid,
+    staffName: s ? fullName(s) : 'Candidate', staffTitle: s ? (s.role || s.title || '') : '',
+    submittedAt: r.submittedAt, tentativeBelt: awardBelt,
+    confirmedBelt: r.finalBelt || ((outcome === 'CLEAN' || outcome === 'CONDITIONAL') ? awardBelt : null),
+    status: r.status, levelScores, responses, _precomputed
+  };
+}
+
+function downloadBeltTestReport(id){
+  const r = (DB.beltTestResults || []).find(x => x.id === id);
+  if (!r) { toast('Result not found', 'err'); return; }
+  const pr = adaptBeltResultToReview(r);
+  const staff = getStaff(r.staffId) || { first: pr.staffName, last: '', role: pr.staffTitle };
+  const fac = getFac(r.fid) || { name: 'Facility' };
+  openPrintWindow('SBD Belt Assessment Report', buildAssessmentReportHTML(pr, staff, fac));
+}
+
+async function acceptBeltTestResult(id){
+  const r = (DB.beltTestResults || []).find(x => x.id === id);
+  if (!r) return;
+  const s = getStaff(r.staffId);
+  if (!s) { toast('Staff member not found.', 'err'); return; }
+  const targetBelt = (r.systemSuggestion && r.systemSuggestion !== 'REMEDIATION') ? r.systemSuggestion : r.targetBelt;
+  const remediation = r.outcome === 'REMEDIATION';
+  const kPass = !remediation && r.kOverallPassed;
+  const sPass = !remediation && r.simOverallPassed;
+  if (!confirm(`Accept the system result for ${fullName(s)}?\n\nSuggestion: ${r.systemSuggestion} (${r.outcome})\nThis records Competency = ${kPass ? 'PASS' : 'FAIL'} and Simulation = ${sPass ? 'PASS' : 'FAIL'} for ${targetBelt} Belt via the atomic assessment path. Observation remains a separate manual gate.`)) return;
+  try {
+    // Update in-memory gate state (mirrors markQueue), then record atomically.
+    const curIdx = beltIdx(s.belt), tgtIdx = beltIdx(targetBelt);
+    const setGate = (key, res) => { if (tgtIdx === curIdx) s.cur[key] = res; else if (tgtIdx === curIdx + 1) s.nxt[key] = res; };
+    setGate('c', kPass ? 'pass' : 'fail');
+    setGate('s', sPass ? 'pass' : 'fail');
+    s.history = s.history || [];
+    s.history.push({ dt: new Date().toISOString().slice(0, 10), type: 'Competency', belt: targetBelt, res: kPass ? 'pass' : 'fail' });
+    s.history.push({ dt: new Date().toISOString().slice(0, 10), type: 'Simulation', belt: targetBelt, res: sPass ? 'pass' : 'fail' });
+    if (IS_LIVE) {
+      await SB.recordAssessment(mapStaffToBackend(s), 'Competency', targetBelt, kPass ? 'pass' : 'fail', 'Dynamic Belt Test — assessor accepted', ST.user?.id, new Date().toISOString());
+      await SB.recordAssessment(mapStaffToBackend(s), 'Simulation', targetBelt, sPass ? 'pass' : 'fail', 'Dynamic Belt Test — assessor accepted', ST.user?.id, new Date().toISOString());
+      // Resolve the approved C+S queue items this test satisfied.
+      DB.queue.filter(q => q.sid === s.id && q.targetBelt === targetBelt && (q.type === 'Competency' || q.type === 'Simulation') && q.status === 'approved').forEach(q => {
+        SB.resolveAssessmentQueue(q.id, 'resolved').catch(() => {});
+        q.status = (kPass && sPass) ? 'pass' : 'fail';
+      });
+      await SB.updateBeltTestResult(r.id, { status: 'ACCEPTED', final_belt: targetBelt, override_at: new Date().toISOString(), override_by: ST.user?.id || null });
+    }
+    r.status = 'ACCEPTED'; r.finalBelt = targetBelt;
+    DB.queue = DB.queue.filter(q => !(q.sid === s.id && q.targetBelt === targetBelt && (q.type === 'Competency' || q.type === 'Simulation') && (q.status === 'pass' || q.status === 'fail')));
+    toast(`${fullName(s)}: belt test accepted. Competency + Simulation recorded for ${targetBelt} Belt.`, 'ok');
+    if (ST.aView === 'a-assessments') renderAAssessments();
+  } catch (e) {
+    if (typeof handleSyncError === 'function') handleSyncError(e, 'Belt test accept'); else toast('Accept failed: ' + (e.message || e), 'err');
+  }
+}
+
+async function remediateBeltTestResult(id){
+  const r = (DB.beltTestResults || []).find(x => x.id === id);
+  if (!r) return;
+  const s = getStaff(r.staffId);
+  if (!confirm(`Send ${s ? fullName(s) : 'this candidate'} to remediation? No belt is recorded; the result is marked REMEDIATION_REQUIRED.`)) return;
+  try {
+    if (IS_LIVE) await SB.updateBeltTestResult(r.id, { status: 'REMEDIATION_REQUIRED' });
+    r.status = 'REMEDIATION_REQUIRED';
+    toast(`${s ? fullName(s) : 'Candidate'}: marked for remediation.`, 'warn');
+    if (ST.aView === 'a-assessments') renderAAssessments();
+  } catch (e) { if (typeof handleSyncError === 'function') handleSyncError(e, 'Belt remediation'); }
+}
+
+// Section injected into renderAAssessments. Scoped by assignedFids for staff_admin.
+function renderBeltTestReviewSection(assignedFids){
+  const pending = (DB.beltTestResults || []).filter(r =>
+    r.status === 'PENDING_REVIEW' &&
+    (!assignedFids || assignedFids.includes(r.fid)) &&
+    (asmFilter === 'all' || r.fid === asmFilter)
+  );
+  if (!pending.length) return '';
+  const sugBadge = (r) => {
+    const o = r.outcome;
+    const c = o === 'PASS' ? 'p-ok' : o === 'CONDITIONAL_PASS' ? 'p-blue' : 'p-err';
+    const label = o === 'REMEDIATION' ? 'Remediation' : `${r.systemSuggestion} · ${o === 'PASS' ? 'Pass' : 'Conditional'}`;
+    return `<span class="pill ${c}">${label}</span>`;
+  };
+  const num = (v) => v == null ? '--' : (Math.round(v * 10) / 10) + '%';
+  const floorFailCount = (r) => (r.conditions || []).length;
+  return `
+    <div style="margin-bottom:20px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <div style="font-size:12px;font-weight:700;color:var(--txt1);letter-spacing:.05em">&#127894; DYNAMIC BELT TEST RESULTS</div>
+        <span class="pill p-purple">${pending.length} awaiting review</span>
+      </div>
+      <div class="card">
+        <div style="padding:10px 14px;background:rgba(139,92,246,.06);border-bottom:1px solid var(--bdr2);font-size:11.5px;color:var(--txt3);line-height:1.5">
+          System suggestion is advisory. Review the report, then Accept (records Competency + Simulation gates) or send to remediation. Observation remains a separate manual gate.
+        </div>
+        <div style="overflow-x:auto">
+          <table class="tbl tbl-static" style="min-width:760px">
+            <thead><tr>
+              <th>Candidate</th><th>Facility</th><th>Target</th><th>Suggestion</th>
+              <th>Knowledge</th><th>Simulation</th><th>Blended</th><th>Conditions</th><th>Submitted</th><th>Action</th>
+            </tr></thead>
+            <tbody>
+              ${pending.map(r => {
+                const s = getStaff(r.staffId);
+                const fac = getFac(r.fid);
+                return `<tr>
+                  <td class="fw7">${s ? fullName(s) : 'Candidate'}</td>
+                  <td style="font-size:11.5px;color:var(--txt3)">${fac ? fac.name : (r.fid || '--')}</td>
+                  <td>${beltBadge(r.targetBelt)}</td>
+                  <td>${sugBadge(r)}</td>
+                  <td style="text-align:center;font-weight:700;color:${r.kOverallPassed ? 'var(--ok)' : 'var(--err)'}">${num(r.kOverall)}</td>
+                  <td style="text-align:center;font-weight:700;color:${r.simOverallPassed ? 'var(--ok)' : 'var(--err)'}">${num(r.simOverall)}</td>
+                  <td style="text-align:center;font-weight:700;color:${r.blendedPassed ? 'var(--ok)' : 'var(--err)'}">${num(r.blendedScore)}</td>
+                  <td style="text-align:center">${floorFailCount(r) ? `<span class="pill p-warn">${floorFailCount(r)}</span>` : '<span style="color:var(--txt3)">0</span>'}</td>
+                  <td style="font-size:11px;color:var(--txt3)">${r.submittedAt ? new Date(r.submittedAt).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '--'}</td>
+                  <td><div style="display:flex;gap:5px;flex-wrap:wrap">
+                    <button class="btn btn-ghost btn-xs" onclick="downloadBeltTestReport('${r.id}')">Report</button>
+                    <button class="btn btn-ok btn-xs" onclick="acceptBeltTestResult('${r.id}')">Accept</button>
+                    <button class="btn btn-err btn-xs" onclick="remediateBeltTestResult('${r.id}')">Remediate</button>
+                  </div></td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
 }
 
 // ============================================================
@@ -11173,6 +11413,8 @@ function renderAAssessments() {
     </div>
 
     ${renderAssessmentAuthBlock(DB.staff.filter(st => st.placementNeeded && (!assignedFids || assignedFids.includes(st.fid)) && (asmFilter === 'all' || st.fid === asmFilter)))}
+
+    ${renderBeltTestReviewSection(assignedFids)}
 
     ${staffRequests.length > 0 ? `
     <div style="margin-bottom:20px">

@@ -1995,7 +1995,7 @@ async function initAppData(){
   window.SBD_INITIALIZING = true;
   console.log('SBD Platform: Multi-table data hydration started...');
   try {
-    const [facs, staff, systems, users, reviews, queue, registrations, freeAgents, promotions, onboarding] = await Promise.race([
+    const [facs, staff, systems, users, reviews, queue, registrations, freeAgents, promotions, onboarding, beltTestResults] = await Promise.race([
       Promise.all([
         SB.getFacilities().catch(e=>{ console.error('facs load err', e); return []; }),
         SB.getAllStaff().catch(e=>{ console.error('staff load err', e); return []; }),
@@ -2006,7 +2006,8 @@ async function initAppData(){
         SB.getPendingRegistrations().catch(e=>{ console.error('regs load err', e); return []; }),
         SB.getFreeAgents().catch(e=>{ console.error('fa load err', e); return []; }),
         SB.getPromotionApprovals().catch(e=>{ console.error('promos load err', e); return []; }),
-        (ST.user ? SB.getUserOnboarding(ST.user.authUid || ST.user.id) : Promise.resolve([])).catch(e=>{ console.error('onboarding load err', e); return []; })
+        (ST.user ? SB.getUserOnboarding(ST.user.authUid || ST.user.id) : Promise.resolve([])).catch(e=>{ console.error('onboarding load err', e); return []; }),
+        (SB.getBeltTestResults ? SB.getBeltTestResults() : Promise.resolve([])).catch(e=>{ console.error('belt results load err', e); return []; })
       ]),
       new Promise((_,rej)=>setTimeout(()=>rej(new Error('Initial data load timeout')), 20000))
     ]);
@@ -2086,6 +2087,7 @@ async function initAppData(){
     if(typeof mapFreeAgentFromBackend === 'function') window.DB.freeAgents = (freeAgents||[]).map(mapFreeAgentFromBackend); else window.DB.freeAgents = freeAgents||[];
     if(typeof mapPromotionApprovalFromBackend === 'function') window.DB.promotionApprovals = (promotions||[]).map(mapPromotionApprovalFromBackend); else window.DB.promotionApprovals = promotions||[];
     if(typeof mapOnboardingFromBackend === 'function') window.DB.onboarding = (onboarding||[]).map(mapOnboardingFromBackend); else window.DB.onboarding = onboarding||[];
+    if(typeof mapBeltTestResultFromBackend === 'function') window.DB.beltTestResults = (beltTestResults||[]).map(mapBeltTestResultFromBackend); else window.DB.beltTestResults = beltTestResults||[];
 
     console.log(`SBD Platform: Hydrated ${window.DB.facilities.length} facs, ${window.DB.staff.length} staff, ${window.DB.hospitalSystems.length} systems, ${window.DB.users.length} users.`);
     if(window.DB.staff.length === 0) console.warn('SBD DIAG: staff array is EMPTY after hydration. Raw staff value:', staff);
