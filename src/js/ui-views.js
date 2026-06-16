@@ -3036,9 +3036,9 @@ const RPT_STANDARDS = {
     White:  { blended: 75, k: 80, sim: 72 },
     Yellow: { blended: 78, k: 83, sim: 75 },
     Green:  { blended: 81, k: 86, sim: 78 },
-    Blue:   { blended: 84, k: 89, sim: 81 },
-    Brown:  { blended: 87, k: 92, sim: 84 },
-    Black:  { blended: 90, k: 95, sim: 87 }
+    Blue:   { blended: 85, k: 89, sim: 82 },
+    Brown:  { blended: 87, k: 91, sim: 84 },
+    Black:  { blended: 90, k: 92, sim: 87 }
   }
 };
 
