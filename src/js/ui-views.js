@@ -1141,7 +1141,7 @@ const PLACEMENT_QUESTIONS = [
   {id:'p5',level:1,type:'knowledge',q:'Why must instruments be pre-rinsed or kept moist before decontamination?',
    options:['To improve instrument grip during the manual scrubbing phase','To prevent bioburden from drying and hardening on the surface','To significantly reduce the total time required for sterilization','To minimize the required concentration of enzymatic detergents'],correct:1},
   {id:'p6',level:1,type:'knowledge',q:'Which of the following is the correct workflow direction in SPD?',
-   options:['Clean to dirty','Dirty to clean, one direction only','Back and forth as needed','Either direction is acceptable'],correct:1},
+   options:['Clean to dirty','Dirty to clean, one direction only','Back and forth as needed','Either direction is acceptable'],correct:1,dangerousAnswers:[0]},
   {id:'p7',level:1,type:'knowledge',q:'What is bioburden?',
    options:['The accumulated total weight of a heavily loaded surgical tray','The number of viable microorganisms on an item before sterilization','The residual chemical film left by industrial cleaning detergents','The protective packaging layer used for heat-sensitive instruments'],correct:1},
   {id:'p8',level:1,type:'knowledge',q:'Which action is correct when you receive a tray with a missing instrument?',
@@ -1171,7 +1171,7 @@ const PLACEMENT_QUESTIONS = [
   {id:'p19',level:2,type:'knowledge',q:'What does a broken seal on packaging indicate?',
    options:['The item is still sterile if it looks clean','Sterility cannot be guaranteed and the item must be reprocessed','Only the outer layer matters','The item can be used if surgery is same-day'],correct:1},
   {id:'p20',level:2,type:'knowledge',q:'What is the correct action when you find an instrument with active rust?',
-   options:['Polish it and return it to service','Remove it from service and report it to the Lead','Use it if surgery is scheduled','Soak it in saline to neutralize the rust'],correct:1},
+   options:['Polish it and return it to service','Remove it from service and report it to the Lead','Use it if surgery is scheduled','Soak it in saline to neutralize the rust'],correct:1,dangerousAnswers:[3]},
   {id:'p21',level:2,type:'simulation',q:'An instrument tray returns from the OR with visible debris after a completed sterilization cycle. Describe exactly what you do, step by step.',
    keywords:['quarantine','pull','remove','reprocess','decontaminate','report','document','supervisor','log','notify']},
   {id:'p22',level:2,type:'simulation',q:'While packaging instruments you notice a previously wrapped tray has a broken seal from a prior cycle. What action do you take and what do you communicate to the team?',
@@ -1193,11 +1193,11 @@ const PLACEMENT_QUESTIONS = [
   {id:'p29',level:3,type:'knowledge',q:'What does event-related sterility mean?',
    options:['Items automatically expire on a fixed calendar date and year','Sterility is maintained until an event compromises package integrity','Sterility timeframe begins the hour an item leaves the department','It applies specifically to implants used in orthopedic surgeries'],correct:1},
   {id:'p30',level:3,type:'knowledge',q:'What is the correct process if a sterilizer load fails to complete its cycle?',
-   options:['Re-run the same load immediately using an identical program shift','Quarantine items and document the failure before reprocessing','Release items that were physically near the end of the process','Manually verify items are clean before releasing them to the unit'],correct:1},
+   options:['Re-run the same load immediately using an identical program shift','Quarantine items and document the failure before reprocessing','Release items that were physically near the end of the process','Manually verify items are clean before releasing them to the unit'],correct:1,dangerousAnswers:[0]},
   {id:'p31',level:3,type:'knowledge',q:'What must be checked on a laparoscopic instrument before packaging?',
    options:['Only the outer visible surface for soil and residual debris','Insulation integrity, lumen patency, jaw function, and all seals','Just the tip alignment and the overall handle comfort levels','The total weight of the set compared to the original count sheet'],correct:1},
   {id:'p32',level:3,type:'knowledge',q:'What is the correct response when the OR calls urgently for a set currently in the sterilizer?',
-   options:['Directly open the sterilizer chamber and hand over the requested set','Route the call to the Lead and document it — never interrupt a cycle','Tell the OR staff the requested set will be ready in five minutes','Remove only those specific items that the clinical team needs now'],correct:1},
+   options:['Directly open the sterilizer chamber and hand over the requested set','Route the call to the Lead and document it — never interrupt a cycle','Tell the OR staff the requested set will be ready in five minutes','Remove only those specific items that the clinical team needs now'],correct:1,dangerousAnswers:[0,2]},
   {id:'p33',level:3,type:'simulation',
    q:"A biological indicator from this morning's sterilization run comes back positive. Walk through your full response, including documentation and impact on any items already distributed.",
    keywords:['recall','quarantine','notify','document','supervisor','infection control','report','log','pull','remove','affected','incident']},
@@ -1210,7 +1210,7 @@ const PLACEMENT_QUESTIONS = [
 
   // ── LEVEL 4: Advanced Practice ────────────────────────────────────────────
   {id:'p37',level:4,type:'knowledge',q:'What does IUSS stand for and when is it acceptable to use it?',
-   options:['Immediate Use Steam Sterilization - used only for large orthopedic implants','Intermediate Urgent Sterilization - a routine protocol for processing under 15 minutes','Immediate Use Steam Sterilization - only when no other option exists and fully documented','Internal Urgent Sterilization - a specialized process for all same-day procedures'],correct:2},
+   options:['Immediate Use Steam Sterilization - used only for large orthopedic implants','Intermediate Urgent Sterilization - a routine protocol for processing under 15 minutes','Immediate Use Steam Sterilization - only when no other option exists and fully documented','Internal Urgent Sterilization - a specialized process for all same-day procedures'],correct:2,dangerousAnswers:[1,3]},
   {id:'p38',level:4,type:'knowledge',q:'Which organization publishes the primary U.S. standards for sterile processing practice?',
    options:['CDC only','AAMI/ANSI and AORN','OSHA exclusively','The Joint Commission only'],correct:1},
   {id:'p39',level:4,type:'knowledge',q:'What is the primary risk with loaner instrument sets that are not managed properly?',
@@ -2021,7 +2021,7 @@ async function submitPlacementAssessment(){
     if(q.type === 'knowledge'){
       const correct = ans === q.correct;
       const score = correct ? 100 : 0;
-      responses.push({qId:q.id, level:q.level, type:'knowledge', question:q.q, answer:q.options[ans]||'No answer', correct, score, isDangerous: !!q.isDangerous});
+      responses.push({qId:q.id, level:q.level, type:'knowledge', question:q.q, answer:q.options[ans]||'No answer', correct, score, isDangerous: (Array.isArray(q.dangerousAnswers) && q.dangerousAnswers.includes(ans))});
       levelScores[q.level].push({weight:1, score});
     } else {
       // Prepare keyword fallback immediately, queue AI call
