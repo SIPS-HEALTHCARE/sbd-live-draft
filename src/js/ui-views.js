@@ -7773,6 +7773,7 @@ function renderHProfile(sid,context){
         <button class="btn btn-ghost btn-sm" onclick="downloadStaffReport('${s.id}')">${ICO.dl} Report</button>
         ${(ST.user&&ST.user.role==='master_admin')?`<button class="btn btn-ghost btn-sm" onclick="openBeltOverrideModal('${s.id}','${context}')" style="border-color:var(--gold-bd);color:var(--gold)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Override Belt</button>`:''}
         ${(ST.user&&ST.user.role==='master_admin')?`<button class="btn btn-ghost btn-sm" onclick="toggleObserver('${s.id}','${context}')" style="border-color:${s.observer?'#0ea5e9':'var(--bdr)'};color:${s.observer?'#0ea5e9':'var(--txt2)'}" title="${s.observer?'Revoke observer access':'Grant observer access'}"><svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 10s3-5.5 8-5.5S18 10 18 10s-3 5.5-8 5.5S2 10 2 10z"/><circle cx="10" cy="10" r="2.3"/></svg> ${s.observer?'Observer: On':'Make Observer'}</button>`:''}
+        ${(ST.user&&ST.user.role==='master_admin'&&s.observer)?(s.observationPin?`<span class="pill" style="background:#0ea5e91a;color:#0ea5e9;border:1px solid #0ea5e955;font-size:11px;padding:5px 9px;border-radius:8px;font-weight:700;align-self:center">Observer PIN: ${s.observationPin}</span>`:`<button class="btn btn-ghost btn-sm" onclick="generateObserverPin('${s.id}','${context}')" style="border-color:#0ea5e9;color:#0ea5e9">&#128273; Generate PIN</button>`):''}
         ${context==='admin'&&(ST.user&&ST.user.role==='master_admin')?`<button class="btn btn-err btn-sm" onclick="releaseToFreeAgent('${s.id}')" title="Release staff member to Free Agent Registry" style="margin-left:auto"><svg width="13" height="13" viewBox="0 0 18 18" fill="none"><path d="M12 14H15a1 1 0 001-1V5a1 1 0 00-1-1H12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M9 12l3-3-3-3M12 9H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Release</button>`:''}
       </div>
     </div>
@@ -11011,6 +11012,23 @@ function toggleObserver(sid, context){
     SB.updateStaff(sid,{observer:next}).catch(e=>{ s.observer=!next; handleSyncError(e,'Observer toggle'); if(typeof renderHProfile==='function') renderHProfile(sid,context); });
   }
   toast(`${fullName(s)} ${next?'is now an authorized observer.':'is no longer an observer.'}`, next?'ok':'err');
+  if(typeof renderHProfile==='function') renderHProfile(sid,context);
+}
+
+// Generate a reusable observation PIN for an authorized observer (master-admin only).
+// One-time generation; the same PIN is reused for every observation thereafter.
+// Stored via a targeted single-column write to staff.observation_pin.
+function generateObserverPin(sid, context){
+  const s=getStaff(sid); if(!s) return;
+  if(!(ST.user&&ST.user.role==='master_admin')){toast('Only master admins can manage observer PINs.','err');return;}
+  if(!s.observer){toast('Grant observer access first, then generate a PIN.','err');return;}
+  if(s.observationPin){toast(`Observer PIN is ${s.observationPin} (PINs are reused, not regenerated).`,'ok');return;}
+  const pin=String(Math.floor(1000+Math.random()*9000)); // 4-digit, reused thereafter
+  s.observationPin=pin;
+  if(IS_LIVE && typeof SB!=='undefined' && SB.updateStaff){
+    SB.updateStaff(sid,{observation_pin:pin}).catch(e=>{ s.observationPin=null; handleSyncError(e,'Observer PIN'); if(typeof renderHProfile==='function') renderHProfile(sid,context); });
+  }
+  toast(`${fullName(s)}'s observer PIN: ${pin}`,'ok');
   if(typeof renderHProfile==='function') renderHProfile(sid,context);
 }
 
