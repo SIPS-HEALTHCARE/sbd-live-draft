@@ -3159,13 +3159,25 @@ function rptComputeModel(pr){
     ? `This candidate holds a ${pr.staffTitle} role, so these gaps carry operational weight beyond personal certification: a leader cannot credibly hold staff to standards they have not demonstrated. Dangerous-answer or blocking conditions here require elevated sign-off (supervisor/manager).`
     : '';
 
+  // Classification (Governing Standards section 3) drives tone; topStrength is the area to
+  // acknowledge first (strength before gaps is required in every non-clean report).
+  const distBelow = r1(th.blended - blended);
+  const classification = outcome==='CLEAN' ? null
+    : outcome==='CONDITIONAL' ? 'B'
+    : (anyDangerous || kOverall < WHITE.k) ? 'D'
+    : (distBelow <= 3 ? 'A' : 'C');
+  const _best = [...kLevels.filter(k=>k.pct!=null).map(k=>({lbl:`Knowledge Level ${k.level}`, pct:k.pct})),
+                 ...simLevels.filter(s=>s.pct!=null).map(s=>({lbl:`Simulation Level ${s.level}`, pct:s.pct}))]
+                 .sort((a,b)=>b.pct-a.pct)[0];
+  const topStrength = _best ? `${_best.lbl} (${_best.pct}%)` : null;
+
   // Next-belt target. When a belt was awarded, point to the next belt; when none was
   // issued, the path is White Belt (re-assess at White first per the standard).
   const order = ['White','Yellow','Green','Blue','Brown','Black'];
   const nb = beltAwarded ? (order[order.indexOf(beltAwarded)+1] || null) : 'White';
   const nextTh = nb ? RPT_STANDARDS.belts[nb] : null;
   const gap = (cur, need)=> cur>=need ? 'Already meets' : `+${r1(need-cur)} pts needed`;
-  return { belt, beltAwarded, outcome, th, blended, kOverall, simOverall, kLevels, simLevels, conditions, dangerous, anyDangerous, roleAmp, nSup, nBlock, nReq, nAdv, clean, determination,
+  return { belt, beltAwarded, outcome, classification, topStrength, th, blended, kOverall, simOverall, kLevels, simLevels, conditions, dangerous, anyDangerous, roleAmp, nSup, nBlock, nReq, nAdv, clean, determination,
     nextBelt: nb, nextRows: nextTh ? [
       ['Blended Score', blended, nextTh.blended, gap(blended,nextTh.blended)],
       ['Knowledge Overall', kOverall, nextTh.k, gap(kOverall,nextTh.k)],
@@ -3208,12 +3220,14 @@ function downloadAssessmentReport(prId){
   const OUT = { CLEAN:['CLEAN','#16a34a'], CONDITIONAL:['CONDITIONAL','#b45309'], KNOWLEDGE_FOUNDATION:['KNOWLEDGE FOUNDATION','#2563eb'], NO_BELT:['NO BELT','#b91c1c'] };
   const [outLabel, outClr] = OUT[m.outcome] || OUT.NO_BELT;
   const condText = [m.nSup&&`${m.nSup} supervised-practice`, m.nBlock&&`${m.nBlock} blocking`, m.nReq&&`${m.nReq} required`, m.nAdv&&`${m.nAdv} advisory`].filter(Boolean).join(', ') || 'no conditions';
-  const basis = (
+  const strengthLead = (m.outcome!=='CLEAN' && m.topStrength) ? `The candidate's strongest area was ${m.topStrength}. ` : '';
+  const closeNote = m.classification==='A' ? ' This is a close miss; a focused, targeted remediation should produce a passing result.' : '';
+  const basis = strengthLead + (
       m.outcome==='CLEAN' ? `The candidate met the ${m.belt} Belt blended threshold of ${m.th.blended}% with ${m.blended}%, and passed every knowledge and simulation level floor. ${m.belt} Belt is awarded clean, with no conditions attached.`
     : m.outcome==='CONDITIONAL' ? `The candidate met the ${m.belt} Belt blended threshold (${m.blended}% against ${m.th.blended}%), with knowledge overall ${m.kOverall}% and simulation overall ${m.simOverall}%. ${m.belt} Belt is awarded with conditions: ${condText}. The conditions below are the path to the next level, not penalties.`
     : m.outcome==='KNOWLEDGE_FOUNDATION' ? `The candidate demonstrated a genuine knowledge foundation (knowledge overall ${m.kOverall}%, meeting the 80% standard), but simulation overall of ${m.simOverall}% is not yet at the threshold to issue a belt. This is a real achievement; the belt is the next concrete target once the simulation gaps below are developed.`
     : `The blended score of ${m.blended}% is below the White Belt threshold of 75%${m.kOverall<80?`, and knowledge overall (${m.kOverall}%) is below the 80% foundation`:''}. No belt is issued at this assessment. The path forward below is structured and achievable; re-assessment is at White Belt.`
-  ) + (m.roleAmp ? ` ${m.roleAmp}` : '');
+  ) + closeNote + (m.roleAmp ? ` ${m.roleAmp}` : '');
   const body = `
   <div style="font-family:Arial,Helvetica,sans-serif;color:#1f2430;font-size:9pt;line-height:1.45">
     <div>${hdr(1)}
