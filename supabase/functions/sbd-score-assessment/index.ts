@@ -6,6 +6,36 @@ const corsHeaders = {
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// SBD OS Simulation Response Evaluator — System Prompt v2.1 (SIPS, June 2026).
+// Replaces the prior "explicit patient-safety language" rubric that systematically
+// underscored real procedural answers (0-8% on valid responses). Credits IMPLICIT
+// patient safety and never zeros a non-blank, non-dangerous answer.
+const EVALUATOR_SYSTEM_PROMPT_V2 = `You are the SBD OS simulation response evaluator. You score candidate simulation responses on a 0-100 scale and provide brief, specific evaluator notes that name what was present and what was missing.
+
+PART 1 — SCORING RUBRIC
+80-100 (COMPREHENSIVE): Names the correct action AND explicitly states the patient safety consequence AND describes the documentation step or escalation chain. Standards citation (AAMI ST:79, AORN, etc.) contributes positively.
+65-79 (ADEQUATE — PASSES ALL BELT FLOORS): Names the correct action with patient safety connection present (explicit OR implicit — see Part 2). Documentation or escalation addressed but may lack specificity. Demonstrates protocol awareness.
+45-64 (PARTIAL): Identifies the correct first action but stops before completing the protocol. May be missing patient safety rationale and documentation. Directionally correct but incomplete.
+25-44 (MINIMAL): One to two sentences identifying a general correct direction. Correct instinct with no follow-through.
+10-24 (NEAR BLANK): Some text present but insufficient content to evaluate protocol knowledge.
+0 (ZERO — TWO CASES ONLY): (1) No text submitted / blank response. (2) Response contains a dangerous answer that would directly harm a patient if acted on. NOTHING ELSE IS A ZERO. A brief but directionally correct response is never a zero.
+
+PART 2 — IMPLICIT PATIENT SAFETY RATIONALE (the most important calibration rule)
+When a candidate's action itself demonstrates patient safety understanding, the patient safety element is PRESENT even without an explicit patient-safety sentence. The four cases: (1) REFUSAL of a dangerous shortcut (refusing to skip decontamination, release a non-sterile item, or interrupt a cycle); (2) REMOVAL FROM SERVICE of a nicked/rusted/damaged instrument with a repair tag; (3) QUARANTINE of compromised packaging or a suspected sterility breach; (4) RECALL of instruments from a BI-positive load, incomplete cycle, or compromised run. In each, the action IS the patient safety response — score in Adequate range or above if action plus some escalation is present. Implicit credit does NOT apply when the question explicitly asks to explain why each step matters for patient safety, when the action is not self-evidently patient-safety-driven, or when the response contains a dangerous answer.
+
+PART 3 — ANTI-BIAS RULES (non-negotiable)
+1. Institutional vocabulary (AAMI ST:79, three-sink, OneSource, boxlocks, cycle types, Bowie Dick, biological indicator loads) NEVER reduces a score; it is evidence of field experience. Score on content quality.
+2. Format NEVER reduces a score (narrative, numbered steps, brief statements, process description).
+3. Zero is reserved for blank or dangerous responses only. A one-sentence response with the correct first action scores 25-44 minimum.
+4. "Response lacks relevant content" may ONLY be used when the response genuinely does not address the scenario. A response describing decontamination, escalation, standards, a recall, or any protocol element CONTAINS relevant content.
+5. Length is not a criterion. A three-sentence response can score 80+; a long vague one scores 25-35.
+
+PART 4 — CONSISTENCY CHECK (ask internally before returning a score)
+Would a similar-quality response from a different candidate score the same? Is this action one that implicitly demonstrates patient safety (Part 2)? Is the score below 25 for a response that is not blank or dangerous (if so, revise upward)? Is "lacks relevant content" accurate? Are you penalizing institutional vocabulary rather than content?
+
+PART 5 — EVALUATOR NOTE
+Name specifically what was present and what was missing. NEVER use generic phrases like "lacks relevant content" or "does not contain a meaningful answer" when the response has substantive content.`;
+
 serve(async (req) => {
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders });
@@ -42,30 +72,28 @@ serve(async (req) => {
         // expected_response (and optionally a fail indicator) -- the AIP
         // scenario bank. Falls back to the original generic rubric when not
         // provided, so existing {question, answer} callers are unchanged.
+        // The scoring rubric now lives in EVALUATOR_SYSTEM_PROMPT_V2 (the system message).
+        // The user message carries only the task: the scenario, the candidate response, and
+        // (for AIP scenarios) the answer key + fail indicator.
         const keyAware = typeof answer_key === 'string' && answer_key.trim().length > 0;
-        const promptContent = keyAware
-            ? `You are grading a sterile processing (SPD) candidate's response to a situational scenario against the official SBD answer key.
+        const userTask = keyAware
+            ? `Score this candidate's simulation response using the rubric in your instructions, weighed together with the official SBD answer key below.
 
 Scenario: ${question}
 
-Official answer key (the elements a correct response must contain): ${answer_key}
-${fail_indicator ? `\nDANGER / FAIL INDICATOR -- if the candidate's response does or recommends this, it is a patient-safety failure:\n${fail_indicator}\n` : ''}
+Official answer key (elements a correct response should cover): ${answer_key}
+${fail_indicator ? `\nFAIL INDICATOR -- if the response does or recommends this, it is a dangerous patient-safety failure (a Part 1 zero case): ${fail_indicator}\n` : ''}
 Candidate response: ${answer}
 
-Score 0-100 by how completely the response covers the answer key's required elements with sound patient-safety judgment. Reward correct escalation and contamination control; penalize missing key steps.${fail_indicator ? ' If the response triggers the fail indicator, cap the score at 30 and set "dangerous": true.' : ''}
-
-Respond with ONLY a JSON object like: {"score":75,"feedback":"One sentence naming the key elements present or missing.","dangerous":false}
+${fail_indicator ? 'If the response triggers the fail indicator, treat it as dangerous: cap the score at 30 and set "dangerous": true. ' : ''}Respond with ONLY a JSON object like: {"score":75,"feedback":"One or two sentences naming what was present and what was missing.","dangerous":false}
 No markdown, no preamble.`
-            : `You are evaluating a sterile processing department (SPD) technician candidate's response to a situational question. Score the response 0-100 based on:
-- Understanding of patient safety principles (40%)
-- Knowledge of correct SPD procedures (30%)
-- Professional judgment and escalation awareness (30%)
+            : `Score this candidate's simulation response using the rubric in your instructions.
 
-Question: ${question}
+Scenario: ${question}
 
 Candidate response: ${answer}
 
-Respond with ONLY a JSON object like: {"score":75,"feedback":"One sentence of specific constructive feedback."}
+Respond with ONLY a JSON object like: {"score":75,"feedback":"One or two sentences naming what was present and what was missing."}
 No markdown, no preamble.`;
 
         const orRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -78,8 +106,11 @@ No markdown, no preamble.`;
             },
             body: JSON.stringify({
                 model: 'anthropic/claude-3.5-haiku',
-                messages: [{ role: 'user', content: promptContent }],
-                max_tokens: keyAware ? 220 : 150,
+                messages: [
+                    { role: 'system', content: EVALUATOR_SYSTEM_PROMPT_V2 },
+                    { role: 'user', content: userTask }
+                ],
+                max_tokens: keyAware ? 240 : 180,
                 temperature: 0.3,
             }),
         });

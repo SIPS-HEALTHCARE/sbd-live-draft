@@ -52,6 +52,23 @@ class DavidChat {
                 position: relative;
             }
 
+            /* The mount must fill the admin view area, otherwise David grows to
+               content height and the input gets pushed below the fold (you had to
+               scroll the page to reach it). With a real height, the messages area
+               scrolls internally and the input + New Chat stay in place. */
+            #a-david { height: 100%; min-height: 0; }
+
+            /* Per-message timestamp */
+            .david-msg-time {
+                font-size: 10px;
+                color: var(--txt3);
+                opacity: .6;
+                margin-top: 6px;
+                text-align: right;
+                font-family: var(--font);
+            }
+            .david-msg-user .david-msg-time { text-align: left; }
+
             .david-layout {
                 display: flex;
                 height: 100%;
@@ -1152,7 +1169,7 @@ class DavidChat {
             .replace(/```[A-Za-z]*\s*(<|&lt;)thinking(>|&gt;)[\s\S]*?(<\/|&lt;\/)thinking(>|&gt;|$)\s*```/gi, '')
             .replace(/(<|&lt;)thinking(>|&gt;)[\s\S]*?(<\/|&lt;\/)thinking(>|&gt;|$)/gi, '')
             .trim();
-        return noThinking || "_(No visible answer was produced — David OG's content knowledge for this isn't wired up yet.)_";
+        return noThinking || "I started working through that but didn't land on a clear answer for you — I may still be loading the material for it. Mind rephrasing, or asking me something else?";
     }
 
     addParsedMessage(text, role, isLatest = false) {
@@ -1222,6 +1239,10 @@ class DavidChat {
             };
             div.appendChild(editBtn);
         }
+        const ts = document.createElement('div');
+        ts.className = 'david-msg-time';
+        ts.textContent = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        div.appendChild(ts);
         this.msgArea.appendChild(div);
         this.msgArea.scrollTop = this.msgArea.scrollHeight;
     }
@@ -1409,7 +1430,7 @@ class DavidChat {
                 You are David OG, the highly intelligent and highly conversational operational partner for SIPS Healthcare Solutions.
                 
                 SHADOW DIRECTIVES (O1-LEVEL PROTOCOL):
-                1. EXTENDED THINKING: You MUST enclose all your internal analysis, reasoning, and pattern recognition strictly inside a <thinking> ... </thinking> block BEFORE you answer. NEVER output internal thoughts outside this block.
+                1. THINKING IS OPTIONAL — YOUR ANSWER IS NOT: You may use a brief <thinking> ... </thinking> block for private reasoning, but you MUST ALWAYS follow it with your actual answer to the user as plain text OUTSIDE the thinking block. The user ONLY sees text that is outside <thinking>. NEVER respond with only a thinking block, and never end your turn inside one. If you called a tool, you MUST then write the user a clear, plain-text answer that uses what the tool returned. When in doubt, answer directly without any thinking block.
                 2. WARM, HUMAN EXCELLENCE: Never behave like a rigid, robotic AI. Do not use phrases like "I have indexed the data" or "Need operational insights?". Speak to the CEO with warmth, high emotional intelligence, and sharp operational awareness. Act like a trusted, top-tier human Director of Operations who happens to have instantaneous database access. 
                 3. AGGRESSIVE INTELLIGENCE: Challenge flawed premises quietly when you see bad data, but keep it friendly.
                 4. PRE-COGNITION: When pulling data, anticipate the *real* "why" behind the prompt. Don't just list data—synthesize what it means for the organization.
@@ -1567,6 +1588,10 @@ class DavidChat {
                 } else {
                     msgDiv.innerHTML = displayContent.replace(/\\n/g, '<br>');
                 }
+                const _ts = document.createElement('div');
+                _ts.className = 'david-msg-time';
+                _ts.textContent = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+                msgDiv.appendChild(_ts);
 
                 // Ensure scroll stays at bottom naturally
                 this.msgArea.scrollTop = this.msgArea.scrollHeight;
