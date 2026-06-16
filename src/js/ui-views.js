@@ -1950,6 +1950,50 @@ async function flushPendingPlacements(){
 }
 if(typeof window !== 'undefined'){ window.addEventListener('online', function(){ flushPendingPlacements(); }); }
 
+// SBD OS Belt Suggestion Engine v2.1 (SIPS Developer Update Brief, Fix 1, June 2026).
+// Applies all three gates -- blended, knowledge (K) floor, and simulation floor -- plus the
+// dangerous-answer block and the K-based White Belt rule. Replaces the prior logic that
+// suggested a belt from level/knowledge scores alone, which could label a candidate above
+// what they actually earned (or ignore a dangerous answer).
+const SBD_BELT_THRESHOLDS = [
+  { belt: 'Black',  blended: 90, k: 92, sim: 87 },
+  { belt: 'Brown',  blended: 87, k: 91, sim: 84 },
+  { belt: 'Blue',   blended: 85, k: 89, sim: 82 },
+  { belt: 'Green',  blended: 81, k: 86, sim: 78 },
+  { belt: 'Yellow', blended: 78, k: 83, sim: 75 },
+  { belt: 'White',  blended: 75, k: 80, sim: 72 },
+];
+function sbdSuggestBelt(kOverall, kL1, simOverall, blended, hasDangerousKAnswer){
+  // Step 1 -- dangerous knowledge answers block all belt issuance
+  if(hasDangerousKAnswer) return 'No Belt';
+  // Step 2 -- highest belt where blended AND K both pass; sim decides Clean vs Conditional
+  for(const t of SBD_BELT_THRESHOLDS){
+    if(blended >= t.blended && kOverall >= t.k){
+      return simOverall >= t.sim ? t.belt + ' Belt' : t.belt + ' Belt Conditional';
+    }
+  }
+  // Step 3 -- K-based White Belt
+  if(kOverall >= 80 && kL1 >= 80) return 'White Belt Conditional';
+  // Step 4 -- no belt
+  return 'No Belt';
+}
+
+// Re-derive the belt-engine suggestion ("Green Belt", "Brown Belt Conditional", "No Belt")
+// from a placement review's stored responses, so the assessor sees the same determination
+// on reload (not just at submit time). Returns null if there's no question-level data.
+function prSuggestion(pr){
+  const kR = (pr && pr.responses || []).filter(r => r.type === 'knowledge');
+  const simR = (pr && pr.responses || []).filter(r => r.type === 'simulation');
+  if(!kR.length && !simR.length) return null;
+  const avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
+  const kOverall = Math.round(avg(kR.map(r => r.score)));
+  const kL1 = Math.round(avg(kR.filter(r => r.level === 1).map(r => r.score)));
+  const simOverall = Math.round(avg(simR.map(r => r.aiScore)));
+  const blended = Math.round(kOverall * 0.6 + simOverall * 0.4);
+  const dangerous = kR.some(r => r.isDangerous && !r.correct);
+  return sbdSuggestBelt(kOverall, kL1, simOverall, blended, dangerous);
+}
+
 async function submitPlacementAssessment(){
   // [CRITICAL GUARDRAIL - DO NOT REMOVE OR BREAK]
   // This function relies on a globally defined `sbFetch` to persist data to Supabase.
@@ -1977,7 +2021,7 @@ async function submitPlacementAssessment(){
     if(q.type === 'knowledge'){
       const correct = ans === q.correct;
       const score = correct ? 100 : 0;
-      responses.push({qId:q.id, level:q.level, type:'knowledge', question:q.q, answer:q.options[ans]||'No answer', correct, score});
+      responses.push({qId:q.id, level:q.level, type:'knowledge', question:q.q, answer:q.options[ans]||'No answer', correct, score, isDangerous: !!q.isDangerous});
       levelScores[q.level].push({weight:1, score});
     } else {
       // Prepare keyword fallback immediately, queue AI call
@@ -2007,24 +2051,24 @@ async function submitPlacementAssessment(){
     levelScores[q.level].push({weight:1, score:aiScore});
   }
 
-  // Recommend the highest belt the candidate has earned IN SEQUENCE: every
-  // level from 1 up to and including the recommended one must clear the bar.
-  // Stop at the first level that is missing or below it, so a strong score on
-  // an advanced level alone can never skip the fundamentals beneath it.
-  // (Previously this took the highest level above the bar regardless of the
-  // lower ones, which is why a lucky advanced answer could suggest Black Belt.)
-  const PLACEMENT_PASS = 65; // per-level bar; policy value -- tune with SIPS if needed
-  let suggestedBelt = 'White';
-  const BELTS = ['White','Yellow','Green','Blue','Brown','Black'];
-  for(let lvl=1; lvl<=5; lvl++){
-    const items = levelScores[lvl];
-    if(!items.length) break;            // no questions at this level -> cannot certify beyond
-    const total = items.reduce((acc,x)=>acc+(x.weight*x.score),0);
-    const maxTotal = items.reduce((acc,x)=>acc+x.weight*100,0);
-    const pct = maxTotal > 0 ? (total/maxTotal)*100 : 0;
-    if(pct < PLACEMENT_PASS) break;     // failed this level -> belt is the last one passed
-    suggestedBelt = BELTS[lvl];         // cleared every level so far, including this one
-  }
+  // Belt suggestion (SBD Developer Update Brief, Fix 1): score on the blended,
+  // knowledge, and simulation floors plus the dangerous-answer block -- not on
+  // knowledge/level scores alone. See sbdSuggestBelt() above.
+  const _kResp = responses.filter(r => r.type === 'knowledge');
+  const _simResp = responses.filter(r => r.type === 'simulation');
+  const _avg = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+  const kOverall = Math.round(_avg(_kResp.map(r => r.score)));
+  const kL1 = Math.round(_avg(_kResp.filter(r => r.level === 1).map(r => r.score)));
+  const simOverall = Math.round(_avg(_simResp.map(r => r.aiScore)));
+  const blended = Math.round(kOverall * 0.6 + simOverall * 0.4);
+  // Dangerous-answer block is wired but stays inert until SIPS supplies the per-question
+  // dangerous-answer list (Governing Standards) and questions carry q.isDangerous.
+  const hasDangerousKAnswer = _kResp.some(r => r.isDangerous && !r.correct);
+  // Full engine determination (e.g. "Brown Belt Conditional", "No Belt") is shown to the
+  // assessor as a suggestion chip; tentativeBelt stores the clean belt word the plumbing
+  // (badge, confirm dropdown) expects. "No Belt" falls back to White as a safe placeholder.
+  const _suggestion = sbdSuggestBelt(kOverall, kL1, simOverall, blended, hasDangerousKAnswer);
+  const suggestedBelt = (_suggestion.match(/White|Yellow|Green|Blue|Brown|Black/) || ['White'])[0];
 
   // Create placement review record
   const s = getStaff(PA.staffId);
@@ -2891,6 +2935,7 @@ function renderAPlacementReviews(){
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                 <span style="font-size:14px;font-weight:700;color:#f1f5f9">${displayName}</span>
                 ${belt?beltBadge(belt):''}
+                ${(()=>{ if(!isPending) return ''; const sug=prSuggestion(pr); return sug?`<span title="Belt engine suggestion (blended + K + simulation floors, dangerous-answer block)" style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:rgba(196,154,32,.12);color:#eab308">SUGGESTED: ${sug.toUpperCase()}</span>`:''; })()}
                 ${pr._blended!=null?`<span style="font-size:11px;font-weight:800;color:${pr._blended>=75?'#22c55e':pr._blended>=65?'#f59e0b':'#ef4444'}" title="Blended score (60% knowledge / 40% simulation)">${pr._blended}%</span>`:''}
                 <span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:${isPending?'rgba(167,139,250,.15)':'rgba(34,197,94,.12)'};color:${statusClr}">${statusLabel.toUpperCase()}</span>
               </div>
