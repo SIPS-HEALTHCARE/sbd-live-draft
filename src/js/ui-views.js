@@ -2779,6 +2779,14 @@ function ovsSubmit(){
 }
 
 // ── Step 5: admin review + gate write ────────────────────────────────────────
+let ovsReviewFac = 'All', ovsReviewQ = '';
+function ovsReviewSetFac(v){ ovsReviewFac = v; renderAObservationReviews(); }
+function ovsReviewSearch(v){
+  ovsReviewQ = v;
+  renderAObservationReviews();
+  const inp = document.getElementById('ovs-rev-search');
+  if(inp){ inp.focus(); try{ inp.setSelectionRange(v.length, v.length); }catch(_){} }
+}
 function renderAObservationReviews(){
   const el = document.getElementById('a-observationreviews');
   if(!el) return;
@@ -2786,12 +2794,18 @@ function renderAObservationReviews(){
   let pool = (DB.observations || []).filter(o => o.status === 'submitted' || o.status === 'reviewed');
   if(u && u.role === 'staff_admin' && u.assignedFids && u.assignedFids.length)
     pool = pool.filter(o => u.assignedFids.includes(o.fid));
+  // Facility filter + candidate search (mirrors Placement Reviews).
+  const facIds = [...new Set(pool.map(o => o.fid).filter(Boolean))];
+  const view = pool.filter(o =>
+    (ovsReviewFac === 'All' || o.fid === ovsReviewFac) &&
+    (!ovsReviewQ || ((getStaff(o.staffId) && fullName(getStaff(o.staffId)) || '').toLowerCase().includes(ovsReviewQ.toLowerCase())))
+  );
 
   const pending  = pool.filter(o => o.status === 'submitted').length;
   const reviewed = pool.filter(o => o.status === 'reviewed').length;
   const advanced = pool.filter(o => o.status === 'reviewed' && (o.outcome === 'advance' || o.outcome === 'conditional')).length;
 
-  const rows = pool.map(o => {
+  const rows = view.map(o => {
     const s = getStaff(o.staffId); const fac = getFac(o.fid);
     const armedC = ovsArmed && ovsArmed.action==='confirm' && ovsArmed.id===o.id;
     const armedR = ovsArmed && ovsArmed.action==='return'  && ovsArmed.id===o.id;
@@ -2818,14 +2832,21 @@ function renderAObservationReviews(){
         <div class="stat-card"><div class="stat-accent" style="background:var(--gold)"></div><div class="stat-lbl">Advanced</div><div class="stat-val">${advanced}</div><div class="stat-sub">passed the gate</div></div>
       </div>
       ${pool.length ? `
-      <div class="card"><div class="card-body" style="padding:4px 8px">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+        <select onchange="ovsReviewSetFac(this.value)" class="form-input" style="max-width:240px">
+          <option value="All"${ovsReviewFac==='All'?' selected':''}>All facilities</option>
+          ${facIds.map(fid=>{const f=getFac(fid);return `<option value="${fid}"${ovsReviewFac===fid?' selected':''}>${f?f.name:fid}</option>`;}).join('')}
+        </select>
+        <input id="ovs-rev-search" class="form-input" style="max-width:260px;box-sizing:border-box" placeholder="Search candidate..." value="${(ovsReviewQ||'').replace(/"/g,'&quot;')}" oninput="ovsReviewSearch(this.value)">
+      </div>
+      ${view.length ? `<div class="card"><div class="card-body" style="padding:4px 8px">
         <table style="width:100%;border-collapse:collapse;font-size:13px">
           <thead><tr style="text-align:left;color:var(--txt3);font-size:11px;text-transform:uppercase;letter-spacing:.4px">
             <th style="padding:8px">Candidate</th><th style="padding:8px">Belt</th><th style="padding:8px">Outcome</th><th style="padding:8px">Observer / Basis</th><th style="padding:8px;text-align:right">Action</th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>
-      </div></div>` : `
+      </div></div>` : `<div style="border:1px dashed var(--bdr);border-radius:12px;padding:24px;text-align:center;background:var(--s1);color:var(--txt3);font-size:12.5px">No reviews match the current filter.</div>`}` : `
       <div style="border:1px dashed var(--bdr);border-radius:12px;padding:32px;text-align:center;background:var(--s1)">
         <div style="font-size:28px;margin-bottom:10px">&#128203;</div>
         <div style="font-weight:700;margin-bottom:6px">No completed observations to review yet</div>
@@ -5830,6 +5851,7 @@ function renderSDashboard(){
           </div>
           <div class="irow"><div class="ilbl">Current Belt Gates</div><div class="ival">${gateDots(s.cur)}</div></div>
           ${nb?`<div class="irow"><div class="ilbl">Next Belt Gates (${nb})</div><div class="ival">${gateDots(s.nxt)} <span style="font-size:11px;color:var(--txt3)">${nxtSt.p}/3</span></div></div>`:''}
+          ${(()=>{ const ob=(DB.observations||[]).find(o=>o.staffId===s.id && ['requested','in_progress'].includes(o.status)); const pin=ob&&ob.handshake&&ob.handshake.candidate_pin; return pin?`<div class="irow"><div class="ilbl">Observation PIN</div><div class="ival"><span class="pill" style="background:#0ea5e91a;color:#0ea5e9;border:1px solid #0ea5e955;font-weight:800;letter-spacing:3px;font-size:13px">${pin}</span> <span style="font-size:10px;color:var(--txt3)">give this to your observer</span></div></div>`:''; })()}
           <div class="irow"><div class="ilbl">Stars Earned</div><div class="ival tc-gold">${calcTotalPSStars(s)>0?Array(calcTotalPSStars(s)).fill('★').join(' '):'None yet'}&nbsp;<span style="font-size:10px;color:var(--txt3);font-style:italic">${calcTotalPSStars(s)>0?'('+calcTotalPSStars(s)+' PS track'+(calcTotalPSStars(s)>1?'s':'')+' completed)':''}</span></div></div>
           <div class="irow"><div class="ilbl">Position School</div><div class="ival">${(()=>{const et=getEligibleTracks(s);const ct=calcTotalPSStars(s);if(ct>0&&et.length===0)return'<span class="pill p-ok">'+ct+' star'+(ct>1?'s':'')+' earned</span>';if(et.length>0)return'<span class="pill p-warn">'+et.length+' track'+(et.length>1?'s':'')+' available</span>';return'<span class="pill p-muted">Unlocks at Green Belt</span>';})()} <button class="btn btn-ghost btn-xs" style="margin-left:6px" onclick="sNav(document.querySelector('#s-portal .nav-item[data-view=s-posschool]'),'s-posschool','Position School')">View</button></div></div>
           <div class="irow" style="border:none"><div class="ilbl">Promotion Eligible</div><div class="ival">${s.promo?'<span class="pill p-gold">Yes – Eligible</span>':'<span style="color:var(--txt3);font-size:12px">Not yet</span>'}</div></div>
