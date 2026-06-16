@@ -1172,6 +1172,18 @@ class DavidChat {
         `;
     }
 
+    // If aggressive content-stripping (thinking / sql / json / chips) removed everything,
+    // never show a blank bubble: fall back to the reply with only <thinking> removed,
+    // or a clear placeholder if the model truly produced no visible answer.
+    revealIfEmpty(stripped, raw) {
+        if (stripped && stripped.trim()) return stripped;
+        const noThinking = (raw || '')
+            .replace(/```[A-Za-z]*\s*(<|&lt;)thinking(>|&gt;)[\s\S]*?(<\/|&lt;\/)thinking(>|&gt;|$)\s*```/gi, '')
+            .replace(/(<|&lt;)thinking(>|&gt;)[\s\S]*?(<\/|&lt;\/)thinking(>|&gt;|$)/gi, '')
+            .trim();
+        return noThinking || "_(No visible answer was produced — David OG's content knowledge for this isn't wired up yet.)_";
+    }
+
     addParsedMessage(text, role, isLatest = false, messageIndex = null) {
         // OpenRouter uses 'assistant', map it back to CSS/logic 'ai'
         const formatRole = (role === 'assistant') ? 'ai' : role;
@@ -1211,12 +1223,33 @@ class DavidChat {
                 .trim();
         }
 
+        if (formatRole === 'ai') displayContent = this.revealIfEmpty(displayContent, text);
+
         if (formatRole === 'ai' && window.marked) {
             div.innerHTML = marked.parse(displayContent);
         } else if (formatRole === 'ai') {
             div.innerHTML = displayContent.replace(/\\n/g, '<br>');
         } else {
-            div.innerText = displayContent;
+            // User message: render text safely, plus an Edit button that pulls it
+            // back into the input so it can be edited and resent (works in every portal).
+            const span = document.createElement('span');
+            span.innerText = displayContent;
+            div.appendChild(span);
+            const editBtn = document.createElement('button');
+            editBtn.type = 'button';
+            editBtn.className = 'david-edit-btn';
+            editBtn.title = 'Edit & resend';
+            editBtn.textContent = '✎ Edit';
+            editBtn.style.cssText = 'margin-left:8px;font-size:10px;line-height:1;padding:3px 7px;border-radius:5px;border:1px solid rgba(255,255,255,.2);background:transparent;color:inherit;cursor:pointer;opacity:.6;vertical-align:middle';
+            editBtn.onmouseenter = () => { editBtn.style.opacity = '1'; };
+            editBtn.onmouseleave = () => { editBtn.style.opacity = '.6'; };
+            editBtn.onclick = () => {
+                this.input.value = displayContent;
+                this.input.style.height = 'auto';
+                this.input.focus();
+                this.input.scrollIntoView({ block: 'nearest' });
+            };
+            div.appendChild(editBtn);
         }
 
         if (formatRole === 'ai') {
@@ -1477,6 +1510,8 @@ class DavidChat {
                 5. STRICT BRAND EXCLUSIVITY: SIPS Healthcare Solutions uses SBD OS (Sterile By Design OS) and OTIS exclusively. You MUST NEVER recommend, mention, or train users on competitor technologies. If a template or user requests tracking software examples, ONLY use OTIS and SBD OS as your examples. Absolutely DO NOT mention CensiTrac, Censis, SPM, T-DOC, Impress, or any other third-party tracking system under any circumstances.
                 6. NO RAW TRACES OR CODE: Unless explicitly requested by the user, NEVER output raw SQL queries, JSON result previews, or technical logs in your output. You are speaking to business executives. Synthesize the data and present the final figures conversationally.
                 7. MASTER ADMIN PRECISION: You are reporting to the Master Admin (CEO / COO) of a massive healthcare enterprise. Never assume the organization is 'small' or in an 'early growth phase' just because a specific test query returns sparse data. Provide ruthless, executive-level operational insights. Focus on cross-facility benchmarking, risk exposure, and precise resource allocation. Do not explain basic concepts. Give the data, the risk, and the action.
+                8. CURRICULUM COACHING (KNOWLEDGE BASE): For ANY question about the SBD belt or position-school curriculum — belt requirements, study material, practice questions, situational scenarios, sterile-processing procedures, assessment prep, or how a candidate advances or should be coached — you MUST first search your knowledge base to pull the exact SBD curriculum for the relevant belt/level, then coach strictly from what it returns (Learner Guide content, the question/answer keys, fail indicators, and observation-gate criteria). Name the belt/level you are drawing from. Do NOT invent or approximate curriculum from general knowledge; if the search returns nothing for that topic, say the content for that belt/area is not loaded yet rather than guessing.
+                9. STANDARDS SAFE-USE (COPYRIGHT COMPLIANCE — overrides Directive 8 for external standards): SBD curriculum and Sterile by Design materials are OUR intellectual property and may be quoted exactly. External standards are NOT: NEVER reproduce verbatim text, tables, figures, diagrams, or appendices from AAMI, HSPA, Joint Commission, NFPA, ANSI, or any other copyrighted standard. Teach the principle — the purpose, the risk, the best practice, the operational application — in original Sterile by Design language, and CITE the standard you drew from (e.g. "per ANSI/AAMI ST79") while directing the user to consult the current edition of the official publication for authoritative requirements. If a user asks what a standard SAYS or requests its official wording, do not quote it — explain the requirement in your own words and refer them to the publisher's official publication. Prefer public regulatory sources (CDC, CMS, OSHA, FDA) where public guidance fits. You are never a digital copy of any standard: you are the Sterile by Design Operations Coach, built on SBD OS methodologies, SOPs, competencies, and quality systems.
 
                 Execute your tasks perfectly while maintaining casual, highly intelligent human conversation.
             `;
@@ -1618,6 +1653,8 @@ class DavidChat {
                         return ''; // Strip from the actual message bubble
                     })
                     .trim();
+
+                displayContent = this.revealIfEmpty(displayContent, fullContent);
 
                 if (window.marked) {
                     msgDiv.innerHTML = marked.parse(displayContent);

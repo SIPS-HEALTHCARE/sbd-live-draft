@@ -120,7 +120,9 @@ function doRegister(){
   const pass2=(document.getElementById('reg-pass2').value||'').trim();
   const errEl=document.getElementById('reg-error');
   if(!fname||!loc||!dept||!contact||!email){errEl.textContent='Please fill in all required fields.';errEl.style.display='block';return;}
-  if(!pass||pass.length<6){errEl.textContent='Password must be at least 6 characters.';errEl.style.display='block';return;}
+  if(!pass||pass.length<8){errEl.textContent='Password must be at least 8 characters.';errEl.style.display='block';return;}
+  if(!/[A-Z]/.test(pass)){errEl.textContent='Password must include at least one uppercase letter.';errEl.style.display='block';return;}
+  if(!/[0-9]/.test(pass)){errEl.textContent='Password must include at least one number.';errEl.style.display='block';return;}
   if(pass!==pass2){errEl.textContent='Passwords do not match.';errEl.style.display='block';return;}
   if(DB.users.find(u=>u.email.toLowerCase()===email.toLowerCase())||DB.pendingRegs.find(r=>r.email.toLowerCase()===email.toLowerCase())){errEl.textContent='An account with this email already exists or is pending review.';errEl.style.display='block';return;}
   
@@ -253,8 +255,12 @@ function logout(){
   // CLEANUP UI MODALS/OVERLAYS
   if(typeof closeModal === 'function') closeModal();
   document.getElementById('welcome-overlay')?.classList.remove('open');
-  document.getElementById('tour-overlay')?.classList.remove('open');
+  const _tourOv = document.getElementById('tour-overlay');
+  if(_tourOv){ _tourOv.classList.remove('active'); _tourOv.classList.remove('open'); }
+  const _spot = document.getElementById('tour-spotlight'); if(_spot) _spot.style.display = 'none';
   document.getElementById('skip-reminder')?.classList.remove('show');
+  // Reset tour engine state so a stale tour can't suppress walkthroughs / reposition a spotlight
+  if(typeof OB !== 'undefined'){ OB.tourRunning = false; OB.step = 0; if(OB.skipReminderTimer){ clearTimeout(OB.skipReminderTimer); } }
 }
 
 function enterPortal(type){
@@ -362,8 +368,17 @@ function enterPortal(type){
   document.getElementById('nav-systems').style.display=isMaster?'flex':'none';
   const _navDavid = document.getElementById('nav-david');
   if (_navDavid) {
-    const isIzzy = u && u.email && u.email.toLowerCase() === 'izambrano@sipsconsults.com';
-    _navDavid.style.display = isIzzy ? 'flex' : 'none';
+    // David OG visibility mirrors the backend (david-chat/auth.ts): master_admin
+    // always; otherwise the facility + per-user access toggles must both be on.
+    // Backend still enforces access on every call, so this is UX only.
+    _navDavid.style.display = 'none';
+    if (u && u.role === 'master_admin') {
+      _navDavid.style.display = 'flex';
+    } else if (u && typeof IS_LIVE !== 'undefined' && IS_LIVE && typeof SB !== 'undefined' && SB.getDavidAccess) {
+      SB.getDavidAccess(u)
+        .then(acc => { if (acc && acc.authorized) _navDavid.style.display = 'flex'; })
+        .catch(() => {});
+    }
   }
   // Placement reviews visible to all SIPS admins (master + staff_admin)
   const _navPlacement=document.getElementById('nav-placementreviews');
@@ -744,7 +759,7 @@ function adminFilterBar(showFacility, facList, onChangeFn){
     <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px">
       <div class="search-wrap" style="min-width:180px;flex:1;max-width:280px">
         <div class="search-ico"><svg viewBox="0 0 18 18" fill="none" width="14" height="14"><circle cx="7.5" cy="7.5" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M12 12l3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
-        <input id="adminStaffSearch" class="search-inp" placeholder="Search by name or role..." value="${adminStaffFilter.q}"
+        <input id="adminStaffSearch_${onChangeFn}" class="search-inp" placeholder="Search by name or role..." value="${adminStaffFilter.q}"
           oninput="adminStaffSearchInput(this,'${onChangeFn}')">
       </div>
       ${facSelect}
@@ -763,7 +778,7 @@ function adminStaffSearchInput(el, fnName){
   adminStaffFilter.q = el.value;
   const caret = el.selectionStart;
   if(typeof window[fnName] === 'function') window[fnName]();
-  const fresh = document.getElementById('adminStaffSearch');
+  const fresh = document.getElementById('adminStaffSearch_' + fnName);
   if(fresh){
     fresh.focus();
     try { fresh.setSelectionRange(caret, caret); } catch(e){}
@@ -984,7 +999,7 @@ function beginPSTrack(staffId, tid){
   s.ps.enrolled = true;
   toast('Position School track started. Complete all 5 criteria to earn your star.');
   if (IS_LIVE && typeof SB !== 'undefined' && SB.updateStaff) {
-    SB.updateStaff(staffId, { ps: s.ps }).catch(e=>console.warn('Sync failed:', e));
+    SB.updateStaff(staffId, mapStaffPSToBackend(s)).catch(e=>{ console.warn('PS sync failed:', e); toast('Saved on screen, but syncing to the server failed — please refresh to confirm.','err'); });
   }
   if(typeof renderSPosSchool === 'function') renderSPosSchool();
 }
@@ -998,7 +1013,7 @@ function readyToTestPS(staffId, tid){
   s.ps.tracks[tid].status = 'testing';
   toast('Marked as ready to test. Your assessor has been notified.');
   if (IS_LIVE && typeof SB !== 'undefined' && SB.updateStaff) {
-    SB.updateStaff(staffId, { ps: s.ps }).catch(e=>console.warn('Sync failed:', e));
+    SB.updateStaff(staffId, mapStaffPSToBackend(s)).catch(e=>{ console.warn('PS sync failed:', e); toast('Saved on screen, but syncing to the server failed — please refresh to confirm.','err'); });
   }
   if(typeof renderSPosSchool === 'function') renderSPosSchool();
 }
@@ -1023,7 +1038,7 @@ function completePSTrack(staffId, tid){
   toast('Position School track complete! Star awarded.');
   
   if (IS_LIVE && typeof SB !== 'undefined' && SB.updateStaff) {
-    SB.updateStaff(staffId, { ps: s.ps, stars: s.stars }).catch(e=>console.warn('Sync failed:', e));
+    SB.updateStaff(staffId, mapStaffPSToBackend(s)).catch(e=>{ console.warn('PS sync failed:', e); toast('Star awarded on screen, but syncing to the server failed — please refresh to confirm.','err'); });
   }
 
   // Refresh whichever view is active (includes drawer redrawing or scoreboard re-rendering)
@@ -1270,6 +1285,49 @@ function getPAQuestions(){
   return PA.shuffledQuestions;
 }
 
+// ── Dynamic-simulation bridge (Option 2 hybrid) — OFF by default ──
+// Flag, flipped on per-environment once verified. Keeps the 40 fixed knowledge
+// MCQ instant; sources the simulation half as unique AIP scenarios per candidate.
+function ffDynamicSim(){
+  try { return (window.SBD_FF_DYNSIM === true) || localStorage.getItem('sbd_ff_dynsim') === 'on'; }
+  catch(e){ return false; }
+}
+// Our 5 placement sim-levels map to the first 5 AIP belt scenario banks.
+const _AIP_BELT_LEVELS = {
+  1:'a0000001-0000-0000-0000-000000000001', 2:'a0000001-0000-0000-0000-000000000002',
+  3:'a0000001-0000-0000-0000-000000000003', 4:'a0000001-0000-0000-0000-000000000004',
+  5:'a0000001-0000-0000-0000-000000000005'
+};
+// Build the hybrid set: fixed knowledge MCQ + unique AIP scenarios (with their
+// answer key + fail indicator carried for grading). Returns the FIXED set on
+// ANY failure, so a bad AIP read can never break the test.
+async function buildHybridQuestions(){
+  try {
+    const knowledge = PLACEMENT_QUESTIONS.filter(q => q.type === 'knowledge');
+    const fixedSims = PLACEMENT_QUESTIONS.filter(q => q.type !== 'knowledge');
+    const perLevel = {}; fixedSims.forEach(q => { perLevel[q.level] = (perLevel[q.level]||0)+1; });
+    const sims = [];
+    for(const lvl of [1,2,3,4,5]){
+      const need = perLevel[lvl] || 0; if(!need) continue;
+      const levelId = _AIP_BELT_LEVELS[lvl];
+      const rows = await sbFetch(`/rest/v1/aip_questions?level_id=eq.${levelId}&question_type=eq.scenario_multi&is_active=eq.true&is_approved=eq.true&select=id,question_text,aip_answers(answer_text,answer_component)`).catch(()=>null);
+      const usable = (rows||[]).filter(r => r.question_text);
+      if(usable.length < need){ fixedSims.filter(q => q.level===lvl).forEach(q => sims.push(q)); continue; }
+      shuffleArray(usable.slice()).slice(0, need).forEach(r => {
+        const a = r.aip_answers || [];
+        const key  = (a.find(x => x.answer_component==='expected_response' || x.answer_component==='full_answer')||{}).answer_text || '';
+        const fail = (a.find(x => x.answer_component==='fail_indicator')||{}).answer_text || '';
+        sims.push({ id:'aip-'+r.id, level:lvl, type:'simulation', q:r.question_text, keywords:[], answerKey:key, failIndicator:fail, _aip:true });
+      });
+    }
+    if(!sims.length) return shuffleArray(PLACEMENT_QUESTIONS);
+    return shuffleArray([...knowledge, ...sims]);
+  } catch(e){
+    console.warn('[DynSim] hybrid build failed, using fixed set:', e.message || e);
+    return shuffleArray(PLACEMENT_QUESTIONS);
+  }
+}
+
 function savePAState(){
   try{localStorage.setItem('sbd_pa_state',JSON.stringify(PA));}catch(e){}
   // Auto-save progress to server every 5th question
@@ -1486,6 +1544,10 @@ async function submitPinGate(staffId, assessmentType){
       expiresAt: res.expires_at,
       type: assessmentType
     };
+    // Resume support: if the server carried over saved progress for this re-PIN
+    // (wifi drop / expiry / new device), stash it so the assessment restores the
+    // candidate's answers instead of starting blank.
+    window._restoredProgress = (res.progress && res.progress.answers && Object.keys(res.progress.answers).length > 0) ? res.progress : null;
     // Show brief confirmation
     document.getElementById('placement-content').innerHTML = `
       <div style="text-align:center;padding:40px 0">
@@ -1594,15 +1656,47 @@ function showPlacementAssessment(s){
 }
 
 function _enterPlacementAssessment(s){
-  if (PA.staffId !== s.id || PA.submitted) {
+  // Hybrid sourcing (flag, OFF by default): for a FRESH test, build the AIP
+  // scenario set before entering. Always proceeds (fallback to fixed) so entry
+  // can never break. Resumes are untouched — they keep their saved questions.
+  const rp = window._restoredProgress;
+  const isFresh = !(rp && rp.answers && Object.keys(rp.answers).length > 0) && (PA.staffId !== s.id || PA.submitted);
+  if(ffDynamicSim() && isFresh && !PA._hybridPending){
+    PA._hybridPending = true;
+    buildHybridQuestions()
+      .then(qs => { PA._hybridSet = qs; })
+      .catch(() => { PA._hybridSet = null; })
+      .finally(() => { PA._hybridPending = false; _enterPlacementAssessmentInner(s); });
+    return;
+  }
+  _enterPlacementAssessmentInner(s);
+}
+
+function _enterPlacementAssessmentInner(s){
+  const restore = window._restoredProgress;
+  window._restoredProgress = null;
+  if (restore && restore.answers && Object.keys(restore.answers).length > 0) {
+    // Resume from SERVER-saved progress — survives a re-PIN, expiry, or a new
+    // device (local state gone). This is what was missing: a new PIN used to
+    // reset to a blank test even though the answers were saved server-side.
+    PA.active = true;
+    PA.staffId = s.id;
+    PA.answers = restore.answers || {};
+    PA.shuffledQuestions = (Array.isArray(restore.shuffledQuestions) && restore.shuffledQuestions.length)
+      ? restore.shuffledQuestions
+      : ((PA.shuffledQuestions && PA.shuffledQuestions.length) ? PA.shuffledQuestions : shuffleArray(PLACEMENT_QUESTIONS));
+    PA.currentQ = restore.currentQ || 1;
+    PA.submitted = false;
+  } else if (PA.staffId !== s.id || PA.submitted) {
     PA.active = true;
     PA.staffId = s.id;
     PA.answers = {};
     PA.currentQ = 0;
     PA.submitted = false;
-    PA.shuffledQuestions = shuffleArray(PLACEMENT_QUESTIONS);
+    PA.shuffledQuestions = (PA._hybridSet && PA._hybridSet.length) ? PA._hybridSet : shuffleArray(PLACEMENT_QUESTIONS);
+    PA._hybridSet = null;
   } else {
-    PA.active = true; // resume
+    PA.active = true; // resume from local state
   }
   savePAState();
   const overlay = document.getElementById('placement-overlay');
@@ -1737,19 +1831,30 @@ function renderPAIntro(){
     </div>`;
 }
 
-function renderPAComplete(){
+function renderPAComplete(pendingSync){
+  const headline = pendingSync ? 'Assessment Saved' : 'Assessment Submitted';
+  const subtitle = pendingSync
+    ? 'You appear to be offline, so your responses are saved on this device and will be submitted automatically as soon as your connection is restored. You do not need a new PIN or to retake anything.'
+    : 'Your responses have been received. A certified SIPS assessor will review them and confirm your starting point. You will see a notification on your dashboard once the review is complete.';
+  const boxAccent = pendingSync ? '245,158,11' : '139,92,246';   // amber when pending sync, purple otherwise
+  const boxTitleClr = pendingSync ? '#fbbf24' : '#a78bfa';
+  const boxIcon = pendingSync ? '&#128229;' : '&#9203;';
+  const boxTitle = pendingSync ? 'SAVED — WILL SUBMIT WHEN ONLINE' : 'PENDING ASSESSOR REVIEW';
+  const boxBody = pendingSync
+    ? 'Keep this device connected when you can; your submission will sync on its own — nothing is lost.'
+    : 'You can access your dashboard while you wait. Your placement will be confirmed shortly.';
   document.getElementById('placement-content').innerHTML = `
     <div style="text-align:center;padding:20px 0 32px">
       <div style="width:72px;height:72px;background:rgba(34,197,94,.12);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:32px">&#10003;</div>
-      <div style="font-size:24px;font-weight:800;color:#f1f5f9;margin-bottom:10px">Assessment Submitted</div>
+      <div style="font-size:24px;font-weight:800;color:#f1f5f9;margin-bottom:10px">${headline}</div>
       <div style="font-size:14px;color:#94a3b8;line-height:1.65;max-width:480px;margin:0 auto 28px">
-        Your responses have been received. A certified SIPS assessor will review them and confirm your starting point. You will see a notification on your dashboard once the review is complete.
+        ${subtitle}
       </div>
-      <div style="background:rgba(139,92,246,.08);border:1px solid rgba(139,92,246,.25);border-radius:12px;padding:16px 20px;max-width:400px;margin:0 auto 28px;display:flex;align-items:center;gap:14px">
-        <div style="font-size:28px">&#9203;</div>
+      <div style="background:rgba(${boxAccent},.08);border:1px solid rgba(${boxAccent},.25);border-radius:12px;padding:16px 20px;max-width:400px;margin:0 auto 28px;display:flex;align-items:center;gap:14px">
+        <div style="font-size:28px">${boxIcon}</div>
         <div style="text-align:left">
-          <div style="font-size:12px;font-weight:700;color:#a78bfa;margin-bottom:3px">PENDING ASSESSOR REVIEW</div>
-          <div style="font-size:12.5px;color:#94a3b8">You can access your dashboard while you wait. Your placement will be confirmed shortly.</div>
+          <div style="font-size:12px;font-weight:700;color:${boxTitleClr};margin-bottom:3px">${boxTitle}</div>
+          <div style="font-size:12.5px;color:#94a3b8">${boxBody}</div>
         </div>
       </div>
       <button onclick="paGoToDashboard()" style="background:#8b5cf6;border:none;border-radius:10px;padding:14px 36px;font-size:14px;font-weight:700;color:#fff;cursor:pointer;font-family:'Poppins',sans-serif">Go to My Dashboard</button>
@@ -1806,6 +1911,50 @@ function paPrev(){
   renderPAScreen();
 }
 
+// ── Durable placement submit: retry + on-device queue + auto-flush ──────────
+// A finished assessment must never be lost to flaky wifi. We retry the write,
+// and if it still fails we persist it on-device and flush when back online or
+// on next authenticated load (with an existence check so a lost response that
+// actually succeeded server-side can't create a duplicate).
+async function sbFetchWithRetry(path, opts, attempts){
+  let lastErr;
+  for(let i=0;i<attempts;i++){
+    try { return await sbFetch(path, opts); }
+    catch(e){ lastErr = e; if(i < attempts-1) await new Promise(r=>setTimeout(r, 800*Math.pow(2,i))); }
+  }
+  throw lastErr;
+}
+function queuePendingPlacement(item){
+  try {
+    const q = JSON.parse(localStorage.getItem('sbd_pending_placement')||'[]');
+    q.push({ ...item, queuedAt: new Date().toISOString() });
+    localStorage.setItem('sbd_pending_placement', JSON.stringify(q));
+  } catch(e){ console.warn('queuePendingPlacement failed:', e); }
+}
+let _flushingPlacements = false;
+async function flushPendingPlacements(){
+  if(!IS_LIVE || _flushingPlacements) return;
+  let q;
+  try { q = JSON.parse(localStorage.getItem('sbd_pending_placement')||'[]'); } catch(e){ return; }
+  if(!q || !q.length) return;
+  _flushingPlacements = true;
+  const remaining = [];
+  for(const item of q){
+    try {
+      // Dedupe: if a review already landed for this staff, treat as delivered.
+      let exists = false;
+      try { const ex = await sbFetch(`/rest/v1/placement_reviews?staff_id=eq.${item.body.staff_id}&select=id&limit=1`); exists = !!(ex && ex.length); } catch(_){ exists = false; }
+      if(!exists) await sbFetchWithRetry('/rest/v1/placement_reviews', { method:'POST', body: item.body }, 2);
+      if(item.staffId) sbFetch(`/rest/v1/staff?id=eq.${item.staffId}`, { method:'PATCH', body:{placement_needed:false} }).catch(()=>{});
+      if(item.token) SB.completeAssessmentSession(item.token).catch(()=>{});
+    } catch(e){ remaining.push(item); }
+  }
+  localStorage.setItem('sbd_pending_placement', JSON.stringify(remaining));
+  _flushingPlacements = false;
+  if(remaining.length < q.length){ try { updatePlacementBadge(); } catch(_){} }
+}
+if(typeof window !== 'undefined'){ window.addEventListener('online', function(){ flushPendingPlacements(); }); }
+
 async function submitPlacementAssessment(){
   // [CRITICAL GUARDRAIL - DO NOT REMOVE OR BREAK]
   // This function relies on a globally defined `sbFetch` to persist data to Supabase.
@@ -1828,7 +1977,7 @@ async function submitPlacementAssessment(){
 
   // Separate knowledge (instant) from simulation (needs AI)
   const simQuestions = [];
-  for(const q of PLACEMENT_QUESTIONS){
+  for(const q of getPAQuestions()){
     const ans = PA.answers[q.id];
     if(q.type === 'knowledge'){
       const correct = ans === q.correct;
@@ -1845,7 +1994,7 @@ async function submitPlacementAssessment(){
 
   // Fire ALL simulation AI scores in parallel (~3s instead of ~40s sequential)
   const aiPromises = simQuestions.map(({q, ans}) =>
-    scoreSimulationWithAI(q.q, ans||'').catch(() => null)
+    scoreSimulationWithAI(q.q, ans||'', q.answerKey, q.failIndicator).catch(() => null)
   );
   const aiResults = await Promise.allSettled(aiPromises);
 
@@ -1863,16 +2012,23 @@ async function submitPlacementAssessment(){
     levelScores[q.level].push({weight:1, score:aiScore});
   }
 
-  // Calculate level scores (40% knowledge, 60% simulation per level)
+  // Recommend the highest belt the candidate has earned IN SEQUENCE: every
+  // level from 1 up to and including the recommended one must clear the bar.
+  // Stop at the first level that is missing or below it, so a strong score on
+  // an advanced level alone can never skip the fundamentals beneath it.
+  // (Previously this took the highest level above the bar regardless of the
+  // lower ones, which is why a lucky advanced answer could suggest Black Belt.)
+  const PLACEMENT_PASS = 65; // per-level bar; policy value -- tune with SIPS if needed
   let suggestedBelt = 'White';
   const BELTS = ['White','Yellow','Green','Blue','Brown','Black'];
   for(let lvl=1; lvl<=5; lvl++){
     const items = levelScores[lvl];
-    if(!items.length) continue;
+    if(!items.length) break;            // no questions at this level -> cannot certify beyond
     const total = items.reduce((acc,x)=>acc+(x.weight*x.score),0);
     const maxTotal = items.reduce((acc,x)=>acc+x.weight*100,0);
     const pct = maxTotal > 0 ? (total/maxTotal)*100 : 0;
-    if(pct >= 65) suggestedBelt = BELTS[lvl] || BELTS[lvl-1];
+    if(pct < PLACEMENT_PASS) break;     // failed this level -> belt is the last one passed
+    suggestedBelt = BELTS[lvl];         // cleared every level so far, including this one
   }
 
   // Create placement review record
@@ -1905,38 +2061,40 @@ async function submitPlacementAssessment(){
   DB.placementReviews.push(pr);
   // Mark staff no longer needs placement (assessment done, awaiting review)
   if(s) s.placementNeeded = false;
+  let pendingSync = false;
   if(IS_LIVE){
+    // [GUARDRAIL] These payload keys map directly to the placement_reviews schema.
+    // Do NOT rename them unless the backend schema explicitly changes.
+    const prBody = {
+      staff_id: pr.staffId,
+      fid: pr.fid,
+      status: pr.status,
+      tentative_belt: pr.tentativeBelt,
+      responses: pr.responses,
+      level_scores: pr.levelScores,
+      submitted_at: pr.submittedAt,
+      staff_name: pr.staffName,
+      staff_title: pr.staffTitle,
+      session_id: ASSESSMENT_SESSION.sessionId || null
+    };
+    const sessionToken = ASSESSMENT_SESSION.token || null;
     try {
-      await sbFetch('/rest/v1/placement_reviews', {
-        method:'POST',
-        body: {
-          staff_id: pr.staffId,
-          fid: pr.fid,
-          status: pr.status,
-          tentative_belt: pr.tentativeBelt,
-          responses: pr.responses,
-          level_scores: pr.levelScores,
-          submitted_at: pr.submittedAt,
-          staff_name: pr.staffName,
-          staff_title: pr.staffTitle,
-          session_id: ASSESSMENT_SESSION.sessionId || null
-        }
-      });
-      await sbFetch(`/rest/v1/staff?id=eq.${pr.staffId}`, {
-        method:'PATCH',
-        body: {placement_needed: false}
-      });
+      // Durable submit: retry through transient network blips before giving up.
+      await sbFetchWithRetry('/rest/v1/placement_reviews', { method:'POST', body: prBody }, 4);
+      await sbFetchWithRetry(`/rest/v1/staff?id=eq.${pr.staffId}`, { method:'PATCH', body:{placement_needed:false} }, 3).catch(()=>{});
       // Mark the assessment session as completed
-      if(ASSESSMENT_SESSION.token){
-        SB.completeAssessmentSession(ASSESSMENT_SESSION.token).catch(()=>{});
+      if(sessionToken){
+        SB.completeAssessmentSession(sessionToken).catch(()=>{});
         ASSESSMENT_SESSION = {token:null,sessionId:null,assessorName:null,facilityId:null,expiresAt:null,type:null};
       }
     } catch(e) {
       handleSyncError(e, 'Placement sync');
-      // Submission failed — do not show fake success. Keep PA.submitted = false so the user can retry after re-PIN.
-      PA.submitting = false;
-      alert('Time expired or network error. Your answers are saved locally. Please ask your assessor for a new PIN to resubmit, or have them record your responses manually.');
-      return; // CRITICAL: do NOT proceed to renderPAComplete
+      // Network never recovered across retries — DO NOT lose the finished test.
+      // Persist the whole submission to a durable on-device queue that auto-flushes
+      // when the connection returns or on next login. The candidate is done; they
+      // do not need a new PIN or to retake anything.
+      queuePendingPlacement({ body: prBody, staffId: pr.staffId, token: sessionToken });
+      pendingSync = true;
     }
   } else {
     /* saveDemoData() removed */
@@ -1954,7 +2112,7 @@ async function submitPlacementAssessment(){
   PA.submitting = false;
   PA.submitted = true;
   savePAState();
-  renderPAComplete();
+  renderPAComplete(pendingSync);
 }
 
 function scoreByKeywords(answer, keywords){
@@ -2064,12 +2222,18 @@ function generateFallbackFeedback(answer, keywords, score){
   return 'Response would benefit from more specific detail about safety protocols, documentation, and escalation procedures.';
 }
 
-async function scoreSimulationWithAI(question, answer){
-  // Route through server-side Edge Function (uses OpenRouter key stored in Supabase secrets)
+async function scoreSimulationWithAI(question, answer, answerKey, failIndicator){
+  // Route through server-side Edge Function (uses OpenRouter key stored in Supabase secrets).
+  // answerKey/failIndicator are sent when present (AIP scenarios) so the grader can
+  // score against the answer key; the current function ignores them and scores
+  // generically until the grader upgrade ships (graceful degradation).
   try {
+    const body = { question, answer };
+    if(answerKey) body.answer_key = answerKey;
+    if(failIndicator) body.fail_indicator = failIndicator;
     const result = await sbFetch('/functions/v1/sbd-score-assessment', {
       method: 'POST',
-      body: { question, answer }
+      body
     });
     if (result && result.score !== undefined) return result;
     throw new Error('Invalid AI response');
@@ -2081,6 +2245,7 @@ async function scoreSimulationWithAI(question, answer){
 }
 
 function paGoToDashboard(){
+  flushPendingPlacements(); // best-effort: drain any queued submission now we're navigating
   hidePlacementOverlay();
   sNav(document.querySelector('#s-portal .nav-item[data-view="s-dashboard"]'),'s-dashboard','My Dashboard');
 }
@@ -2104,14 +2269,104 @@ function updatePlacementBadge(){
 // ASSESSOR PLACEMENT REVIEWS PANEL
 // ═══════════════════════════════════════════════════════════════
 
+// Reusable review filter state + bar. Placement reviews use it now; the
+// Observation Review tab will reuse the same bar (Iiggie wanted parity).
+const reviewFilter = {
+  q:'', fid:'all', status:'pending', belt:'All', sort:'newest',
+  reset(){ this.q=''; this.fid='all'; this.belt='All'; this.sort='newest'; }
+};
+function reviewSearchInput(el, fnName){
+  reviewFilter.q = el.value;
+  const caret = el.selectionStart;
+  if(typeof window[fnName]==='function') window[fnName]();
+  const fresh = document.getElementById('reviewSearch_'+fnName);
+  if(fresh){ fresh.focus(); try{ fresh.setSelectionRange(caret,caret); }catch(e){} }
+}
+function reviewFilterBar(onChangeFn){
+  const u = ST.user;
+  let facs = (DB.facilities||[]).filter(f=>f.active!==false);
+  if(u && u.role==='staff_admin' && u.assignedFids && u.assignedFids.length) facs = facs.filter(f=>u.assignedFids.includes(f.id));
+  facs = facs.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  const belts = ['All', ...BELT_ORDER];
+  const active = reviewFilter.q || reviewFilter.fid!=='all' || reviewFilter.belt!=='All' || reviewFilter.sort!=='newest';
+  const sel = "background:#0e1328;border:1px solid rgba(255,255,255,.1);border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:12.5px;font-family:'Poppins',sans-serif;cursor:pointer";
+  return `
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px">
+      <div class="search-wrap" style="min-width:170px;flex:1;max-width:240px">
+        <div class="search-ico"><svg viewBox="0 0 18 18" fill="none" width="14" height="14"><circle cx="7.5" cy="7.5" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M12 12l3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+        <input id="reviewSearch_${onChangeFn}" class="search-inp" placeholder="Search candidate..." value="${reviewFilter.q}" oninput="reviewSearchInput(this,'${onChangeFn}')">
+      </div>
+      <select style="${sel}" onchange="reviewFilter.fid=this.value;${onChangeFn}()">
+        <option value="all">All Facilities</option>
+        ${facs.map(f=>`<option value="${f.id}" ${reviewFilter.fid===f.id?'selected':''}>${f.name}</option>`).join('')}
+      </select>
+      <select style="${sel}" onchange="reviewFilter.sort=this.value;${onChangeFn}()">
+        ${[['newest','Newest first'],['name','Name A-Z'],['facility','By facility'],['score','Score high-low']].map(([v,l])=>`<option value="${v}" ${reviewFilter.sort===v?'selected':''}>${l}</option>`).join('')}
+      </select>
+      <div class="filter-bar" style="margin:0;flex-wrap:nowrap;overflow-x:auto;padding-bottom:0">
+        ${belts.map(b=>`<div class="fchip ${reviewFilter.belt===b?'on':''}" style="${reviewFilter.belt===b&&b!=='All'?'border-color:'+(BELT_CLR[b]||'#888')+'!important;':''}" onclick="reviewFilter.belt='${b}';${onChangeFn}()">${b}</div>`).join('')}
+      </div>
+      ${active?`<button class="btn btn-ghost btn-xs" onclick="reviewFilter.reset();${onChangeFn}()" style="white-space:nowrap">Clear</button>`:''}
+    </div>`;
+}
+// Lightweight page search: shared state + caret-preserving input + box markup
+const PAGE_Q = { reg:'', fa:'', users:'' };
+function pageSearchInput(el, key, renderFn){
+  PAGE_Q[key]=el.value; const c=el.selectionStart;
+  if(typeof window[renderFn]==='function') window[renderFn]();
+  const f=document.getElementById('pageSearch_'+key);
+  if(f){ f.focus(); try{ f.setSelectionRange(c,c); }catch(e){} }
+}
+function pageSearchBox(key, renderFn, ph){
+  return `<div class="search-wrap" style="min-width:170px;flex:1;max-width:240px">
+    <div class="search-ico"><svg viewBox="0 0 18 18" fill="none" width="14" height="14"><circle cx="7.5" cy="7.5" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M12 12l3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+    <input id="pageSearch_${key}" class="search-inp" placeholder="${ph}" value="${PAGE_Q[key]}" oninput="pageSearchInput(this,'${key}','${renderFn}')">
+  </div>`;
+}
+// Tab strip shared by review-style pages (Pending / Reviewed / All with counts)
+function reviewTabs(counts, onChangeFn){
+  const tabs=[['pending','Pending',counts.pending],['reviewed','Reviewed',counts.reviewed],['all','All',counts.all]];
+  return `<div style="display:flex;gap:2px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:16px">
+    ${tabs.map(([v,l,n])=>`<div onclick="reviewFilter.status='${v}';${onChangeFn}()" style="padding:9px 18px;font-size:13px;font-weight:${reviewFilter.status===v?'700':'500'};color:${reviewFilter.status===v?'#f1f5f9':'#64748b'};border-bottom:2px solid ${reviewFilter.status===v?'#8b5cf6':'transparent'};cursor:pointer;margin-bottom:-1px">${l} <span style="font-size:10.5px;color:${reviewFilter.status===v?'#a78bfa':'#475569'};font-weight:700">${n}</span></div>`).join('')}
+  </div>`;
+}
+function applyReviewFilter(pool){
+  const term = reviewFilter.q.trim().toLowerCase();
+  let out = pool.filter(r=>{
+    if(reviewFilter.fid!=='all' && r.fid!==reviewFilter.fid) return false;
+    if(reviewFilter.status==='pending' && r.status!=='pending') return false;
+    if(reviewFilter.status==='reviewed' && r.status==='pending') return false;
+    if(reviewFilter.belt!=='All' && (r.confirmedBelt||r.tentativeBelt)!==reviewFilter.belt) return false;
+    if(term){
+      const s=getStaff(r.staffId);
+      const nm=((cleanName(r.staffName)||(s?fullName(s):'')||'')).toLowerCase();
+      if(!nm.includes(term)) return false;
+    }
+    return true;
+  });
+  const nameOf = r => (cleanName(r.staffName)||'').toLowerCase();
+  out.sort((a,b)=>{
+    if(reviewFilter.sort==='name') return nameOf(a).localeCompare(nameOf(b));
+    if(reviewFilter.sort==='facility') return (getFac(a.fid)?.name||'').localeCompare(getFac(b.fid)?.name||'');
+    if(reviewFilter.sort==='score') return (b._blended??-1)-(a._blended??-1);
+    // newest: pending first (only visible on the All tab), then most recent
+    const pa=a.status==='pending'?0:1, pb=b.status==='pending'?0:1;
+    if(pa!==pb) return pa-pb;
+    return new Date(b.submittedAt||0) - new Date(a.submittedAt||0);
+  });
+  return out;
+}
+
 function renderAPlacementReviews(){
   const u = ST.user;
   let pool = (DB.placementReviews||[]);
   if(u && u.role==='staff_admin' && u.assignedFids && u.assignedFids.length){
     pool = pool.filter(r => u.assignedFids.includes(r.fid));
   }
-  const pending = pool.filter(r=>r.status==='pending');
-  const reviewed = pool.filter(r=>r.status!=='pending');
+  const total = pool.length;
+  // Cache the blended score on each review for the row chip + score sort
+  pool.forEach(r=>{ if(r._blended===undefined) r._blended = (r.responses&&r.responses.length) ? rptComputeModel(r).blended : null; });
+  const list = applyReviewFilter(pool);
 
   const renderResponse = (r, i) => {
     const isKnowledge = r.type === 'knowledge';
@@ -2136,33 +2391,41 @@ function renderAPlacementReviews(){
       </div>`;
   };
 
-  const renderCard = (pr) => {
-    const statusClr = pr.status==='pending' ? '#a78bfa' : '#22c55e';
-    const statusLabel = pr.status==='pending' ? 'Pending Review' : pr.status==='adjusted' ? 'Adjusted' : 'Confirmed';
+  const renderRow = (pr) => {
+    const isPending = pr.status==='pending';
+    const statusClr = isPending ? '#a78bfa' : '#22c55e';
+    const statusLabel = isPending ? 'Pending' : pr.status==='adjusted' ? 'Adjusted' : 'Confirmed';
     const fac = getFac(pr.fid);
-    // Resolve staff name: prefer stored name, fallback to DB.staff lookup
     const staffRec = getStaff(pr.staffId);
     const displayName = cleanName(pr.staffName) || (staffRec ? fullName(staffRec) : (pr.staffId || 'Unknown'));
     const displayTitle = pr.staffTitle || (staffRec ? (staffRec.role||'') : '');
-    const displayDate = pr.submittedAt ? (pr.submittedAt.length > 10 ? new Date(pr.submittedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : pr.submittedAt) : '';
+    const belt = pr.confirmedBelt || pr.tentativeBelt;
+    const displayDate = pr.submittedAt ? (pr.submittedAt.length > 10 ? new Date(pr.submittedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : pr.submittedAt) : '';
     return `
-      <div class="card" style="margin-bottom:16px" id="pr-card-${pr.id}">
-        <div class="card-hd" style="cursor:pointer" onclick="togglePRCard('${pr.id}')">
-          <div style="flex:1">
-            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-              <div style="font-size:15px;font-weight:700;color:#f1f5f9">${displayName}</div>
-              <div style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:12px;background:rgba(139,92,246,.15);color:${statusClr}">${statusLabel.toUpperCase()}</div>
-              ${pr.tentativeBelt ? `<div style="font-size:10px;color:#64748b">System suggestion: <span style="color:${pr.confirmedBelt?'#22c55e':'#f59e0b'}">${pr.confirmedBelt||pr.tentativeBelt} Belt</span></div>` : ''}
+      <div class="card" style="margin-bottom:10px" id="pr-card-${pr.id}">
+        <div style="display:flex;align-items:center;gap:10px;padding:11px 14px">
+          <div onclick="togglePRCard('${pr.id}')" style="display:flex;align-items:center;gap:11px;flex:1;min-width:0;cursor:pointer">
+            <svg viewBox="0 0 18 18" fill="none" width="15" height="15" id="pr-chev-${pr.id}" style="transition:.2s;flex-shrink:0"><path d="M6 3l6 6-6 6" stroke="#64748b" stroke-width="1.5" stroke-linecap="round"/></svg>
+            <div style="min-width:0;flex:1">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <span style="font-size:14px;font-weight:700;color:#f1f5f9">${displayName}</span>
+                ${belt?beltBadge(belt):''}
+                ${pr._blended!=null?`<span style="font-size:11px;font-weight:800;color:${pr._blended>=75?'#22c55e':pr._blended>=65?'#f59e0b':'#ef4444'}" title="Blended score (60% knowledge / 40% simulation)">${pr._blended}%</span>`:''}
+                <span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:${isPending?'rgba(167,139,250,.15)':'rgba(34,197,94,.12)'};color:${statusClr}">${statusLabel.toUpperCase()}</span>
+              </div>
+              <div style="font-size:11px;color:#64748b;margin-top:2px">${[displayTitle, fac?.name, displayDate ? `Submitted ${displayDate}` : null].filter(Boolean).join(' · ')}</div>
             </div>
-            <div style="font-size:11.5px;color:#64748b;margin-top:4px">${[displayTitle, fac?.name, displayDate ? `Submitted ${displayDate}` : null].filter(Boolean).join(' · ')}</div>
           </div>
-          <svg viewBox="0 0 18 18" fill="none" width="16" height="16" id="pr-chev-${pr.id}" style="transition:.2s;flex-shrink:0"><path d="M6 3l6 6-6 6" stroke="#64748b" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <div style="display:flex;gap:7px;flex-shrink:0;align-items:center">
+            <button onclick="event.stopPropagation();downloadAssessmentReport('${pr.id}')" style="background:rgba(196,154,32,.12);border:1px solid rgba(196,154,32,.4);border-radius:7px;padding:7px 13px;font-size:12px;font-weight:700;color:#eab308;cursor:pointer;font-family:'Poppins',sans-serif;white-space:nowrap">${isPending?'Draft Report':'Report'}</button>
+            ${isPending?`<button onclick="event.stopPropagation();togglePRCard('${pr.id}')" style="background:#22c55e;border:none;border-radius:7px;padding:7px 15px;font-size:12px;font-weight:700;color:#052e16;cursor:pointer;font-family:'Poppins',sans-serif;white-space:nowrap">Review</button>`:''}
+          </div>
         </div>
-        <div id="pr-body-${pr.id}" style="display:none;padding:0 0 4px">
-          <div style="height:1px;background:rgba(255,255,255,.06);margin:0 0 16px"></div>
+        <div id="pr-body-${pr.id}" style="display:none;padding:0 14px 14px">
+          <div style="height:1px;background:rgba(255,255,255,.06);margin:0 0 14px"></div>
           <div style="font-size:11px;font-weight:700;color:#64748b;letter-spacing:.06em;margin-bottom:12px">ASSESSMENT RESPONSES</div>
           ${(pr.responses && pr.responses.length) ? pr.responses.map(renderResponse).join('') : `<div style="font-size:12px;color:#64748b;font-style:italic;padding:6px 0 12px">No question-level data captured for this review.</div>`}
-          ${pr.status==='pending' ? `
+          ${isPending ? `
           <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,.06)">
             <div style="font-size:11px;font-weight:700;color:#64748b;letter-spacing:.05em;margin-bottom:10px">ASSESSOR DECISION</div>
             <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
@@ -2191,24 +2454,24 @@ function renderAPlacementReviews(){
       </div>`;
   };
 
+  const pendCount = pool.filter(r=>r.status==='pending').length;
   document.getElementById('a-placementreviews').innerHTML = `
     <div class="card-ttl" style="font-size:18px;font-weight:800;color:#f1f5f9;margin-bottom:6px">Placement Reviews</div>
-    <div style="font-size:12.5px;color:#64748b;margin-bottom:24px">Review new hire assessment responses and confirm starting belt placement.</div>
-
-    ${pending.length === 0 && reviewed.length === 0 ? `
+    <div style="font-size:12.5px;color:#64748b;margin-bottom:16px">Review new hire assessment responses and confirm starting belt placement.</div>
+    ${total === 0 ? '' : reviewTabs({pending:pendCount, reviewed:total-pendCount, all:total}, 'renderAPlacementReviews')}
+    ${total === 0 ? '' : reviewFilterBar('renderAPlacementReviews')}
+    ${total === 0 ? `
     <div class="empty-state">
       <div style="font-size:40px;margin-bottom:12px">&#128203;</div>
       <div class="empty-ttl">No placement reviews yet</div>
       <div class="empty-desc">New hire assessments will appear here once submitted.</div>
-    </div>` : ''}
-
-    ${pending.length > 0 ? `
-    <div style="font-size:11px;font-weight:700;color:#a78bfa;letter-spacing:.07em;margin-bottom:12px">PENDING (${pending.length})</div>
-    ${pending.map(renderCard).join('')}` : ''}
-
-    ${reviewed.length > 0 ? `
-    <div style="font-size:11px;font-weight:700;color:#64748b;letter-spacing:.07em;margin:20px 0 12px">REVIEWED (${reviewed.length})</div>
-    ${reviewed.map(renderCard).join('')}` : ''}
+    </div>`
+    : list.length === 0 ? `
+    <div style="text-align:center;padding:40px 0;color:#64748b">
+      <div style="font-size:13px;font-weight:600;margin-bottom:4px">No reviews match your filters</div>
+      <div style="font-size:12px"><span onclick="reviewFilter.reset();renderAPlacementReviews()" style="color:#a78bfa;cursor:pointer">Clear filters</span></div>
+    </div>`
+    : `<div style="font-size:11px;color:#64748b;margin-bottom:10px">Showing ${list.length} of ${total}</div>${list.map(renderRow).join('')}`}
   `;
 }
 
@@ -2219,6 +2482,212 @@ function togglePRCard(prId){
   const open = body.style.display !== 'none';
   body.style.display = open ? 'none' : 'block';
   if(chev) chev.style.transform = open ? '' : 'rotate(90deg)';
+}
+
+// ============================================================
+// FORMAL BELT ASSESSMENT REPORT (6-page, governing standards)
+// Generated from a placement_reviews record. Source documents:
+// "SBD OS Assessment Report Governing Standards" (May 2026) and the
+// "CANDIDATE NAME Assessment Report" template (both from SIPS).
+// ============================================================
+
+// Thresholds per the governing standards + template.
+// DOCUMENTED: White (blended 75 / K 80 / Sim 72), Yellow (K 83 / Sim 75),
+// Green (blended 81 / K 86 / Sim 78). Blue/Brown/Black follow the same +3
+// progression PENDING the "SBD OS Assessment Scoring Logic Specification"
+// -- confirm those three rows against that document before relying on them.
+const RPT_STANDARDS = {
+  weights: { k: 0.6, sim: 0.4 },                  // blended = 60% knowledge + 40% simulation (template math)
+  kLevelFloor: 80,                                 // knowledge floor, every level
+  simLevelFloors: { 1: 75, 2: 70, 3: 65, 4: 65, 5: 65 },
+  simResponseMin: 50,                              // individual response minimum
+  advisoryBand: 3,                                 // passing within this of a floor -> advisory
+  belts: {
+    White:  { blended: 75, k: 80, sim: 72 },
+    Yellow: { blended: 78, k: 83, sim: 75 },
+    Green:  { blended: 81, k: 86, sim: 78 },
+    Blue:   { blended: 84, k: 89, sim: 81 },
+    Brown:  { blended: 87, k: 92, sim: 84 },
+    Black:  { blended: 90, k: 95, sim: 87 }
+  }
+};
+
+// Derive the full report model from a placement review's stored responses.
+function rptComputeModel(pr){
+  const r1 = (n)=>Math.round(n*10)/10;
+  const levels = {};
+  for(let l=1; l<=5; l++) levels[l] = { k: [], sim: [] };
+  (pr.responses||[]).forEach(r => {
+    if(!levels[r.level]) return;
+    if(r.type === 'knowledge') levels[r.level].k.push(r);
+    else levels[r.level].sim.push(r);
+  });
+  const kLevels = [], simLevels = [];
+  let kCorrect = 0, kTotal = 0, simSum = 0, simN = 0;
+  for(let l=1; l<=5; l++){
+    const ks = levels[l].k, ss = levels[l].sim;
+    const correct = ks.filter(q=>q.correct).length;
+    kCorrect += correct; kTotal += ks.length;
+    const kPct = ks.length ? r1(correct/ks.length*100) : null;
+    const scores = ss.map(q=>q.aiScore||0);
+    scores.forEach(s=>{ simSum+=s; simN++; });
+    const simPct = scores.length ? r1(scores.reduce((a,b)=>a+b,0)/scores.length) : null;
+    const sFloor = RPT_STANDARDS.simLevelFloors[l];
+    kLevels.push({ level:l, pct:kPct, correct, of:ks.length, floor:RPT_STANDARDS.kLevelFloor, pass: kPct!==null && kPct>=RPT_STANDARDS.kLevelFloor });
+    simLevels.push({ level:l, pct:simPct, scores, floor:sFloor, pass: simPct!==null && simPct>=sFloor });
+  }
+  const kOverall = kTotal ? r1(kCorrect/kTotal*100) : 0;
+  const simOverall = simN ? r1(simSum/simN) : 0;
+  const blended = r1(RPT_STANDARDS.weights.k*kOverall + RPT_STANDARDS.weights.sim*simOverall);
+  const belt = pr.confirmedBelt || pr.tentativeBelt || 'White';
+  const th = RPT_STANDARDS.belts[belt] || RPT_STANDARDS.belts.White;
+
+  // Conditions per the severity framework (no auto SUPERVISED PRACTICE:
+  // dangerous-answer classification is an assessor judgment we do not infer).
+  const conditions = [];
+  simLevels.filter(s=>!s.pass && s.pct!==null).forEach(s=>{
+    conditions.push({ sev:'BLOCKING', title:`Simulation Level ${s.level} below floor`,
+      finding:`Simulation level ${s.level} scored ${s.pct}% against the ${s.floor}% floor.`,
+      action:`Scenario practice in the level ${s.level} topic areas with supervisor review, then re-assessment of this simulation level.` });
+  });
+  (pr.responses||[]).filter(r=>r.type!=='knowledge' && (r.aiScore||0) < RPT_STANDARDS.simResponseMin).forEach(r=>{
+    conditions.push({ sev:'BLOCKING', title:`Individual response below the ${RPT_STANDARDS.simResponseMin}-point minimum`,
+      finding:`"${(r.question||'').slice(0,90)}" scored ${r.aiScore}.`,
+      action:`Tabletop walk-through of this scenario with a supervisor; correct handling must be demonstrated and signed off.` });
+  });
+  kLevels.filter(k=>!k.pass && k.pct!==null).forEach(k=>{
+    conditions.push({ sev:'REQUIRED', title:`Knowledge Level ${k.level} below the ${k.floor}% floor`,
+      finding:`Level ${k.level} knowledge scored ${k.pct}% (${k.correct}/${k.of} correct).`,
+      action:`Re-study the level ${k.level} material and re-test; ${k.floor}% or above required.` });
+  });
+  [...kLevels.filter(k=>k.pass && k.pct!==null && k.pct < k.floor+RPT_STANDARDS.advisoryBand),
+   ...simLevels.filter(s=>s.pass && s.pct!==null && s.pct < s.floor+RPT_STANDARDS.advisoryBand)].forEach(b=>{
+    conditions.push({ sev:'ADVISORY', title:`Level ${b.level} ${b.scores?'simulation':'knowledge'} is borderline`,
+      finding:`Passed at ${b.pct}%, within ${RPT_STANDARDS.advisoryBand} points of the ${b.floor}% floor.`,
+      action:`Acknowledge and fold into the development plan. Does not block advancement.` });
+  });
+  const nBlock = conditions.filter(c=>c.sev==='BLOCKING').length;
+  const nReq   = conditions.filter(c=>c.sev==='REQUIRED').length;
+  const nAdv   = conditions.filter(c=>c.sev==='ADVISORY').length;
+  const clean = nBlock===0 && nReq===0 && blended>=th.blended && kOverall>=th.k && simOverall>=th.sim;
+  const determination = clean ? `${belt.toUpperCase()} BELT -- Clean`
+    : `${belt.toUpperCase()} BELT -- Conditional (${nBlock} blocking, ${nReq} required, ${nAdv} advisory)`;
+
+  const order = ['White','Yellow','Green','Blue','Brown','Black'];
+  const nb = order[order.indexOf(belt)+1] || null;
+  const nextTh = nb ? RPT_STANDARDS.belts[nb] : null;
+  const gap = (cur, need)=> cur>=need ? 'Already meets' : `+${r1(need-cur)} pts needed`;
+  return { belt, th, blended, kOverall, simOverall, kLevels, simLevels, conditions, nBlock, nReq, nAdv, clean, determination,
+    nextBelt: nb, nextRows: nextTh ? [
+      ['Blended Score', blended, nextTh.blended, gap(blended,nextTh.blended)],
+      ['Knowledge Overall', kOverall, nextTh.k, gap(kOverall,nextTh.k)],
+      ['Simulation Overall', simOverall, nextTh.sim, gap(simOverall,nextTh.sim)]
+    ] : [] };
+}
+
+function downloadAssessmentReport(prId){
+  const pr = (DB.placementReviews||[]).find(r=>r.id===prId);
+  if(!pr){ toast('Review not found.','err'); return; }
+  if(!pr.responses || !pr.responses.length){ toast('No question-level data stored for this review.','err'); return; }
+  const m = rptComputeModel(pr);
+  const s = getStaff(pr.staffId);
+  const fac = s ? (getFac(s.fid)?.name||'--') : '--';
+  const draft = pr.status === 'pending';
+  const dt = pr.submittedAt ? new Date(pr.submittedAt).toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}) : '--';
+  const pf = (b)=> b ? '<span style="color:#16a34a;font-weight:700">PASS</span>' : '<span style="color:#b91c1c;font-weight:700">FAIL</span>';
+  const hdr = (n)=>`<div style="display:flex;justify-content:space-between;border-bottom:2px solid #0d1b35;padding-bottom:6px;margin-bottom:14px">
+      <div style="font-weight:800;font-size:10pt;color:#0d1b35">SBD OS &nbsp;|&nbsp; Belt Assessment Report &nbsp;|&nbsp; CONFIDENTIAL${draft?' &nbsp;|&nbsp; <span style="color:#b91c1c">DRAFT -- PENDING ASSESSOR CONFIRMATION</span>':''}</div>
+      <div style="font-size:8pt;color:#64748b">Page ${n} &nbsp;|&nbsp; SIPS Healthcare Solutions</div></div>`;
+  const sect = (t)=>`<div style="background:#0d1b35;color:#fff;font-weight:700;font-size:9.5pt;padding:5px 10px;margin:14px 0 8px">${t}</div>`;
+  const sevClr = { 'BLOCKING':'#b92b2b', 'REQUIRED':'#b45309', 'ADVISORY':'#2563eb', 'SUPERVISED PRACTICE REQUIRED':'#7f1d1d' };
+  const wrongRows = (pr.responses||[]).filter(r=>r.type==='knowledge' && !r.correct).map(r=>{
+    const q = (typeof PLACEMENT_QUESTIONS!=='undefined') ? PLACEMENT_QUESTIONS.find(x=>x.id===r.qId) : null;
+    const corr = q && q.options ? q.options[q.correct] : null;
+    return `<tr><td style="padding:5px;border:1px solid #e2e8f0;font-weight:700">L${r.level}</td>
+      <td style="padding:5px;border:1px solid #e2e8f0;color:#b91c1c;font-weight:700">WRONG</td>
+      <td style="padding:5px;border:1px solid #e2e8f0">${r.question||''}</td>
+      <td style="padding:5px;border:1px solid #e2e8f0">${r.answer||'(blank)'}</td>
+      <td style="padding:5px;border:1px solid #e2e8f0;color:#16a34a">${corr||'--'}</td></tr>`;
+  }).join('');
+  const simRows = (pr.responses||[]).filter(r=>r.type!=='knowledge').map(r=>`<tr>
+      <td style="padding:5px;border:1px solid #e2e8f0;font-weight:700">L${r.level}</td>
+      <td style="padding:5px;border:1px solid #e2e8f0;font-weight:700;color:${(r.aiScore||0)>=65?'#16a34a':'#b91c1c'}">${r.aiScore??'--'}</td>
+      <td style="padding:5px;border:1px solid #e2e8f0">${r.question||''}</td>
+      <td style="padding:5px;border:1px solid #e2e8f0;color:#475569">${r.aiFeedback||''}</td></tr>`).join('');
+  const tbl = 'width:100%;border-collapse:collapse;font-size:8pt';
+  const basis = m.clean
+    ? `The candidate met the blended threshold of ${m.th.blended}% with ${m.blended}%, passed every knowledge level against the ${RPT_STANDARDS.kLevelFloor}% floor and every simulation level against its floor. ${m.belt} Belt is awarded clean, with no conditions attached.`
+    : `The candidate demonstrated ${m.kOverall>=m.th.k?'a knowledge foundation that meets the '+m.belt+' Belt standard':'partial knowledge coverage'} (knowledge overall ${m.kOverall}%) alongside a simulation overall of ${m.simOverall}%. The blended score of ${m.blended}% was measured against the ${m.belt} Belt threshold of ${m.th.blended}% (${m.blended>=m.th.blended?'met':'not met'}). ${m.nBlock+m.nReq>0?`${m.nBlock} blocking and ${m.nReq} required condition(s) are attached and form the development path below.`:''} The conditions represent the specific gaps between this performance and an unconditional award, and clearing them is the direct route forward.`;
+  const body = `
+  <div style="font-family:Arial,Helvetica,sans-serif;color:#1f2430;font-size:9pt;line-height:1.45">
+    <div>${hdr(1)}
+      <div style="font-size:16pt;font-weight:800;color:#0d1b35">BELT ASSESSMENT REPORT</div>
+      <div style="font-size:8.5pt;color:#64748b;margin-bottom:12px">Sterile By Design Operating System | SIPS Healthcare Solutions &nbsp;&bull;&nbsp; Assessment date: ${dt}</div>
+      ${sect('CANDIDATE INFORMATION')}
+      <table style="${tbl}">
+        <tr><td style="padding:6px;border:1px solid #e2e8f0;width:30%;font-weight:700">Candidate Name</td><td style="padding:6px;border:1px solid #e2e8f0">${pr.staffName||(s?fullName(s):'--')}</td></tr>
+        <tr><td style="padding:6px;border:1px solid #e2e8f0;font-weight:700">Current Title</td><td style="padding:6px;border:1px solid #e2e8f0">${pr.staffTitle||s?.role||'--'}</td></tr>
+        <tr><td style="padding:6px;border:1px solid #e2e8f0;font-weight:700">Facility</td><td style="padding:6px;border:1px solid #e2e8f0">${fac}</td></tr>
+        <tr><td style="padding:6px;border:1px solid #e2e8f0;font-weight:700">Report Status</td><td style="padding:6px;border:1px solid #e2e8f0">${draft?'DRAFT -- pending assessor confirmation':'FINAL -- '+m.determination}</td></tr>
+      </table>
+      ${sect('ASSESSMENT RESULT SUMMARY')}
+      <table style="${tbl}"><tr>
+        <td style="padding:10px;border:1px solid #e2e8f0;text-align:center;width:33%"><div style="font-size:7.5pt;color:#64748b;font-weight:700">BELT ${draft?'RECOMMENDED':'AWARDED'}</div><div style="font-size:15pt;font-weight:800;color:#0d1b35">${m.belt.toUpperCase()}</div><div style="font-size:7.5pt;color:${m.clean?'#16a34a':'#b45309'};font-weight:700">${m.clean?'CLEAN':'CONDITIONAL'}</div></td>
+        <td style="padding:10px;border:1px solid #e2e8f0;text-align:center;width:34%"><div style="font-size:7.5pt;color:#64748b;font-weight:700">FINAL DETERMINATION</div><div style="font-size:9.5pt;font-weight:700;margin-top:4px">${m.determination}</div></td>
+        <td style="padding:10px;border:1px solid #e2e8f0;text-align:center"><div style="font-size:7.5pt;color:#64748b;font-weight:700">BLENDED SCORE</div><div style="font-size:15pt;font-weight:800;color:#0d1b35">${m.blended}%</div><div style="font-size:7.5pt;color:#64748b">K ${m.kOverall}% | Sim ${m.simOverall}%</div></td>
+      </tr></table>
+      ${sect('CERTIFICATION BASIS AND CONDITIONS')}
+      <div style="font-size:8.5pt">${basis}</div>
+      <div style="page-break-after:always"></div></div>
+    <div>${hdr(2)}
+      ${sect('KNOWLEDGE COMPONENT')}
+      <table style="${tbl}"><tr style="background:#f7f4ef"><th style="padding:5px;border:1px solid #e2e8f0">Level</th><th style="padding:5px;border:1px solid #e2e8f0">Score</th><th style="padding:5px;border:1px solid #e2e8f0">Floor</th><th style="padding:5px;border:1px solid #e2e8f0">Result</th><th style="padding:5px;border:1px solid #e2e8f0">Correct</th></tr>
+        ${m.kLevels.map(k=>`<tr><td style="padding:5px;border:1px solid #e2e8f0;font-weight:700">L${k.level}</td><td style="padding:5px;border:1px solid #e2e8f0">${k.pct??'--'}%</td><td style="padding:5px;border:1px solid #e2e8f0">${k.floor}%</td><td style="padding:5px;border:1px solid #e2e8f0">${pf(k.pass)}</td><td style="padding:5px;border:1px solid #e2e8f0">${k.correct}/${k.of}</td></tr>`).join('')}
+      </table>
+      <div style="margin:8px 0;font-size:9pt"><b>KNOWLEDGE OVERALL: ${m.kOverall}%</b> &nbsp; ${m.belt} Belt floor: ${m.th.k}% | ${m.kOverall>=m.th.k?'PASS':'FAIL by '+(Math.round((m.th.k-m.kOverall)*10)/10)+' pts'}</div>
+      ${sect('INCORRECT AND BLANK RESPONSES')}
+      ${wrongRows ? `<table style="${tbl}"><tr style="background:#f7f4ef"><th style="padding:5px;border:1px solid #e2e8f0">Lvl</th><th style="padding:5px;border:1px solid #e2e8f0">Status</th><th style="padding:5px;border:1px solid #e2e8f0">Question</th><th style="padding:5px;border:1px solid #e2e8f0">Their Answer</th><th style="padding:5px;border:1px solid #e2e8f0">Correct Answer</th></tr>${wrongRows}</table>` : '<div style="font-size:8.5pt;color:#16a34a;font-weight:700">No incorrect knowledge responses.</div>'}
+      <div style="page-break-after:always"></div></div>
+    <div>${hdr(3)}
+      ${sect('SIMULATION COMPONENT')}
+      <table style="${tbl}"><tr style="background:#f7f4ef"><th style="padding:5px;border:1px solid #e2e8f0">Level</th><th style="padding:5px;border:1px solid #e2e8f0">Score</th><th style="padding:5px;border:1px solid #e2e8f0">Floor</th><th style="padding:5px;border:1px solid #e2e8f0">Result</th><th style="padding:5px;border:1px solid #e2e8f0">Responses</th></tr>
+        ${m.simLevels.map(sv=>`<tr><td style="padding:5px;border:1px solid #e2e8f0;font-weight:700">L${sv.level}</td><td style="padding:5px;border:1px solid #e2e8f0">${sv.pct??'--'}%</td><td style="padding:5px;border:1px solid #e2e8f0">${sv.floor}%</td><td style="padding:5px;border:1px solid #e2e8f0">${pf(sv.pass)}</td><td style="padding:5px;border:1px solid #e2e8f0">${sv.scores.join(' ')}</td></tr>`).join('')}
+      </table>
+      <div style="margin:8px 0;font-size:9pt"><b>SIMULATION OVERALL: ${m.simOverall}%</b> &nbsp; ${m.belt} Belt floor: ${m.th.sim}% | ${m.simOverall>=m.th.sim?'PASS':'FAIL by '+(Math.round((m.th.sim-m.simOverall)*10)/10)+' pts'}</div>
+      ${sect('SIMULATION RESPONSE DETAIL')}
+      <table style="${tbl}"><tr style="background:#f7f4ef"><th style="padding:5px;border:1px solid #e2e8f0">Lvl</th><th style="padding:5px;border:1px solid #e2e8f0">Score</th><th style="padding:5px;border:1px solid #e2e8f0">Scenario</th><th style="padding:5px;border:1px solid #e2e8f0">AI Evaluator Notes</th></tr>${simRows}</table>
+      <div style="page-break-after:always"></div></div>
+    <div>${hdr(4)}
+      ${sect('DEVELOPMENT CONDITIONS -- NEXT BELT REQUIREMENTS')}
+      <div style="font-size:8.5pt;margin-bottom:10px">${m.conditions.length ? (draft?'Draft conditions derived from the scoring algorithm; subject to assessor confirmation.':`${m.belt} Belt is active. The conditions below are the path to the next level.`) : 'No conditions attached. The award is clean.'}</div>
+      ${m.conditions.map(c=>`<div style="border:1px solid #e2e8f0;border-left:4px solid ${sevClr[c.sev]||'#64748b'};margin-bottom:8px;padding:7px 10px">
+        <div style="font-weight:800;color:${sevClr[c.sev]||'#0d1b35'};font-size:8pt">${c.sev}</div>
+        <div style="font-weight:700;font-size:9pt;margin:2px 0">${c.title}</div>
+        <div style="font-size:8.5pt"><b>Finding:</b> ${c.finding}</div>
+        <div style="font-size:8.5pt"><b>Required Action:</b> ${c.action}</div></div>`).join('')}
+      <div style="page-break-after:always"></div></div>
+    <div>${hdr(5)}
+      ${sect(m.nextBelt ? 'NEXT BELT TARGET -- '+m.nextBelt.toUpperCase()+' BELT' : 'NEXT BELT TARGET')}
+      ${m.nextBelt ? `<div style="font-size:8.5pt;margin-bottom:8px">To advance to ${m.nextBelt} Belt, the following scores are required:</div>
+      <table style="${tbl}"><tr style="background:#f7f4ef"><th style="padding:6px;border:1px solid #e2e8f0">Metric</th><th style="padding:6px;border:1px solid #e2e8f0">Current Score</th><th style="padding:6px;border:1px solid #e2e8f0">${m.nextBelt} Belt Requires</th><th style="padding:6px;border:1px solid #e2e8f0">Gap to Close</th></tr>
+        ${m.nextRows.map(r=>`<tr><td style="padding:6px;border:1px solid #e2e8f0;font-weight:700">${r[0]}</td><td style="padding:6px;border:1px solid #e2e8f0">${r[1]}%</td><td style="padding:6px;border:1px solid #e2e8f0">${r[2]}%</td><td style="padding:6px;border:1px solid #e2e8f0;font-weight:700;color:${r[3]==='Already meets'?'#16a34a':'#b45309'}">${r[3]}</td></tr>`).join('')}
+      </table>` : '<div style="font-size:8.5pt">Black Belt is the highest certification level. No further belt target applies.</div>'}
+      ${sect('NEXT BELT ASSESSMENT ELIGIBILITY')}
+      <div style="font-size:8.5pt">${m.nBlock>0?`All ${m.nBlock} blocking condition(s) must be cleared and signed off before the next belt assessment can be scheduled.`:m.nReq>0?`The ${m.nReq} required condition(s) must be resolved through re-study and re-test before the next assessment.`:`No conditions block eligibility. The candidate may be scheduled for the next belt assessment when their development plan supports it.`}</div>
+      <div style="page-break-after:always"></div></div>
+    <div>${hdr(6)}
+      ${sect('SIGNATURES')}
+      ${['Assessor','Candidate Acknowledgment','Manager / Supervisor'].map(role=>`
+        <table style="${tbl};margin-bottom:18px"><tr>
+          <td style="padding:18px 8px 4px;border-bottom:1px solid #0d1b35;width:40%;vertical-align:bottom"><span style="font-size:7.5pt;color:#64748b">${role}</span></td>
+          <td style="padding:18px 8px 4px;border-bottom:1px solid #0d1b35;width:35%;vertical-align:bottom"><span style="font-size:7.5pt;color:#64748b">Signature</span></td>
+          <td style="padding:18px 8px 4px;border-bottom:1px solid #0d1b35;vertical-align:bottom"><span style="font-size:7.5pt;color:#64748b">Date</span></td>
+        </tr></table>`).join('')}
+      <div style="font-size:7.5pt;color:#64748b;margin-top:24px;border-top:1px solid #e2e8f0;padding-top:8px">This report is a formal SBD OS certification record. Retain in the candidate's personnel file. | SBD OS Assessment Engine | SIPS Healthcare Solutions</div>
+    </div>
+  </div>`;
+  openPrintWindow(`Belt Assessment Report -- ${pr.staffName||'Candidate'}`, body);
+  if(typeof SB!=='undefined' && SB.logReportDownload) SB.logReportDownload('assessment_report', pr.id).catch?.(()=>{});
 }
 
 function confirmPlacement(prId){
@@ -3423,7 +3892,7 @@ function openPromoteModal(staffId, context){
   });
 }
 
-function submitPromotion(staffId, context){
+async function submitPromotion(staffId, context){
   const posEl    = document.getElementById('pm-position');
   const customEl = document.getElementById('pm-custom');
   const notesEl  = document.getElementById('pm-notes');
@@ -3441,7 +3910,11 @@ function submitPromotion(staffId, context){
 
   // SIPS-level admins can approve immediately. Hospital / system admins submit for approval.
   if(isSIPSAdmin){
-    // Direct approval  --  execute immediately
+    // Direct approval  --  persist first, then execute locally
+    if(IS_LIVE){
+      try{ await SB.updateStaff(staffId, { role: newPos }); }
+      catch(e){ handleSyncError(e, 'Promotion sync'); return; }
+    }
     promoteStaffPosition(staffId, newPos, submittedBy);
     closeModal();
     toast(`${fullName(s)} promoted to <strong>${newPos}</strong>.`,'ok');
@@ -3465,7 +3938,12 @@ function submitPromotion(staffId, context){
       requestedAt:  new Date().toISOString().slice(0,10),
       status:       'pending'
     };
-    if(IS_LIVE){ SB.submitPromotionApproval(mapPromotionApprovalToBackend(newPromo)).catch(e => handleSyncError(e, 'Promo sync')); }
+    if(IS_LIVE){
+      try{
+        const rows = await SB.submitPromotionApproval(mapPromotionApprovalToBackend(newPromo));
+        if(rows && rows[0] && rows[0].id) newPromo.id = rows[0].id;
+      }catch(e){ handleSyncError(e, 'Promo sync'); return; }
+    }
     DB.promotionApprovals.push(newPromo);
     closeModal();
     toast('Promotion request submitted for SIPS review.','info');
@@ -3757,7 +4235,7 @@ function downloadStaffReport(staffId){
       <div>
         <div class="rpt-brand">SIPS Healthcare Solutions &bull; Sterile By Design</div>
         <div class="rpt-title">${fullName(s)}</div>
-        <div class="rpt-sub">${s.role} &bull; ${getFac(s.fid)?.name||'–'} &bull; Sterile Processing Department<br>Belt: ${s.belt} (${BELT_CERT[s.belt]}) &bull; Since ${s.since}</div>
+        <div class="rpt-sub">${s.role} &bull; ${getFac(s.fid)?.name||'–'} &bull; Sterile Processing Department<br>Belt: ${s.belt} (${BELT_CERT[s.belt]}) &bull; Since ${s.since || '—'}</div>
       </div>
       <div class="rpt-grade-box">
         <div class="rpt-grade" style="color:${BELT_CLR_PRINT[s.belt]||'#0f172a'}">${psStars>0?Array(psStars).fill('★').join(''):'–'}</div>
@@ -3766,7 +4244,7 @@ function downloadStaffReport(staffId){
     </div>
 
     ${pStatGrid([
-      ['Days at Belt', daysAt(s.since)+'d', s.belt+' Belt', BELT_CLR_PRINT[s.belt]||'#0f172a'],
+      ['Days at Belt', daysAtLabel(s.since), s.belt+' Belt', BELT_CLR_PRINT[s.belt]||'#0f172a'],
       ['Points', pts.toLocaleString(), 'Rank #'+rank+' system-wide', '#d97706'],
       ['Pass Rate', passRate!==null?passRate+'%':'–', (s.history||[]).length+' assessments', passRate>=80?'#16a34a':passRate>=60?'#d97706':'#dc2626'],
       ['PS Stars', psStars, psStars===0?'No tracks yet':'Tracks done', '#d97706'],
@@ -3838,6 +4316,7 @@ const BELT_CLR_PRINT = {White:'#94a3b8',Yellow:'#d97706',Green:'#16a34a',Blue:'#
 function downloadFacilityReportV2(fid){
   const facId = fid||ST.hFid||ST.curFid;
   const fac = getFac(facId); if(!fac) return;
+  try{
   const st = staffOf(facId);
   const hs = buildHealthScore(facId);
   const stats = facStats(facId);
@@ -3967,7 +4446,7 @@ function downloadFacilityReportV2(fid){
       <td style="font-weight:700">${fullName(s)}</td>
       <td style="font-size:8pt;color:#475569">${renderRoleDropdown(s)}</td>
       <td>${pBelt(s.belt)}</td>
-      <td style="color:#64748b">${daysAt(s.since)}d</td>
+      <td style="color:#64748b">${daysAtLabel(s.since)}</td>
       <td>${[s.cur?.c,s.cur?.s,s.cur?.o].filter(g=>g==='pass').length}/3</td>
       <td style="font-weight:700;color:#d97706">${calcPoints(s).toLocaleString()}</td>
       <td style="color:#d97706">${calcTotalPSStars(s)>0?Array(calcTotalPSStars(s)).fill('★').join(''):'–'}</td>
@@ -3976,6 +4455,7 @@ function downloadFacilityReportV2(fid){
   `;
 
   openPrintWindow(`SBD Facility Report: ${fac.name}`, body);
+  }catch(e){ console.error('Facility report (V2) failed:', e); toast('Report could not be generated: '+(e.message||e),'err'); }
 }
 
 
@@ -4287,7 +4767,7 @@ async function renderSReport(){
 
     <!-- Key Metrics Row -->
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;margin-bottom:16px">
-      ${rptStat('Days at Belt', daysAt(s.since), s.belt+' Belt', BELT_CLR[s.belt])}
+      ${rptStat('Days at Belt', daysAtLabel(s.since,''), s.belt+' Belt', BELT_CLR[s.belt])}
       ${rptStat('Current Gates', [s.cur?.c,s.cur?.s,s.cur?.o].filter(g=>g==='pass').length+'/3', 'Passed', 'var(--ok)')}
       ${rptStat('Adv. Gates', [s.nxt?.c,s.nxt?.s,s.nxt?.o].filter(g=>g==='pass').length+'/3', nextBelt(s.belt)||'Max', 'var(--blue)')}
       ${rptStat('PS Stars', psStars, psStars===0?'No tracks yet':psStars+' completed', 'var(--gold)')}
@@ -4361,7 +4841,7 @@ async function renderSReport(){
           <div style="flex:1">
             <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
               <span style="font-size:13px;font-weight:${isLast?'700':'500'};color:${isLast?BELT_CLR[b]:'var(--txt2)'}">${b} Belt${isLast?' (current)':''}</span>
-              ${isLast?`<span style="font-size:11px;color:var(--txt3)">${daysAt(s.since)} days</span>`:''}
+              ${isLast?`<span style="font-size:11px;color:var(--txt3)">${daysAtPhrase(s.since)}</span>`:''}
             </div>
             <div style="font-size:11.5px;color:var(--txt3);margin-top:2px">${BELT_CERT[b]}</div>
           </div>
@@ -5367,8 +5847,8 @@ function renderSDashboard(){
       </div>
       <div class="stat-card"><div class="stat-accent" style="background:var(--blue)"></div>
         <div class="stat-lbl">Days at ${s.belt} Belt</div>
-        <div class="stat-val" style="color:var(--blue)">${daysAt(s.since)}</div>
-        <div class="stat-sub">Since ${s.since}</div>
+        <div class="stat-val" style="color:var(--blue)">${daysAt(s.since) ?? '—'}</div>
+        <div class="stat-sub">Since ${s.since || '—'}</div>
       </div>
     </div>
     <div class="g2 mb16">
@@ -6612,6 +7092,10 @@ function savePracticeScore(belt, mode, score, total) {
       toast('Assessment request unlocked for ' + belt + ' Belt! You may now request your gate assessment.', 'ok');
     }
   }
+  // Persist — practice scores were memory-only and vanished on reload (ASS-F1 compounding bug).
+  // Narrow single-column PATCH (same pattern as mapStaffPSToBackend): cannot clobber
+  // oip/history/ps_tracks. The whole object is sent because PostgREST replaces jsonb wholesale.
+  if (IS_LIVE) SB.updateStaff(s.id, { practice_scores: s.practiceScores }).catch(e => handleSyncError(e, 'Practice score sync'));
 }
 
 function canRequestAssessment(staffId, belt) {
@@ -6630,11 +7114,14 @@ function getPracticeScores(staffId, belt) {
 function requestGateAssessment(belt, type) {
   const s = getStaff(ST.staffId);
   if (!s) { toast('Profile not found.', 'err'); return; }
-  if (!canRequestAssessment(s.id, belt)) {
+  // Qualification is earned on the CURRENT belt's practice tests; `belt` is the
+  // target (next) belt being requested. Validating against `belt` here is what
+  // made every request bounce (ASS-F1) — the unlock banner reads current-belt scores.
+  if (!canRequestAssessment(s.id, s.belt)) {
     toast('Complete both practice tests at 80% or above before requesting.', 'err');
     return;
   }
-  const scores = getPracticeScores(s.id, belt);
+  const scores = getPracticeScores(s.id, s.belt) || {};
   const existing = DB.queue.find(q => q.sid === s.id && q.targetBelt === belt && q.type === type && q.status === 'pending');
   if (existing) {
     toast('You already have a pending request for this assessment.', 'err');
@@ -6805,7 +7292,9 @@ function renderSStudy() {
               <div style="font-size:10px;color:var(--txt3)">${otherScore>=80?'Threshold met':otherScore>0?'Below 80%':'Not taken'}</div>
             </div>
           </div>
-          ${(bothPassed||canRequestAssessment(s.id,ps.belt)) ? _studyGateBtns(s,nxtBelt,kScore,sScore) : _studyNotPassedMsg(ps.mode,pct)}
+          ${ps.belt===s.belt
+            ? ((bothPassed||canRequestAssessment(s.id,s.belt)) ? _studyGateBtns(s,nxtBelt,kScore,sScore) : _studyNotPassedMsg(ps.mode,pct))
+            : `<div style="background:var(--s2);border:1px solid var(--bdr);border-radius:var(--rs);padding:11px 14px;margin-bottom:14px;font-size:12px;color:var(--txt2)">Preview practice — gate assessment requests unlock from your <strong>${s.belt} Belt</strong> practice tests.</div>`}
 
 
 
@@ -7146,7 +7635,7 @@ function renderXFacilityDetail(fid){
   // "Since" date = when they earned their current belt. Sort by most recent.
   const recentProgressions=[...st]
     .map(s=>({s, daysAgo:daysAt(s.since), sinceDate:new Date(s.since)}))
-    .filter(x=>x.daysAgo<=90) // last 90 days
+    .filter(x=>x.daysAgo!=null&&x.daysAgo<=90) // last 90 days
     .sort((a,b)=>a.daysAgo-b.daysAgo);
 
   // ── STAGNATION ANALYSIS ───────────────────────────────────────────────
@@ -7220,7 +7709,7 @@ function renderXFacilityDetail(fid){
 
   // 8. No recent progressions
   if(recentProgressions.length===0&&st.length>0){
-    const daysSinceLast=Math.min(...st.map(s=>daysAt(s.since)));
+    const daysSinceLast=Math.min(...st.map(s=>daysAt(s.since)).filter(d=>d!=null));
     focuses.push({priority:'low',icon:'📅',label:'No Recent Belt Progressions',
       detail:`No staff members have progressed to a new belt in the past 90 days. The last progression was ${daysSinceLast} days ago. Review whether assessment windows have been missed or if pending assessments need to be scheduled with SIPS.`});
   }
@@ -7361,7 +7850,7 @@ function renderXFacilityDetail(fid){
             return`<tr>
               <td class="fw7" style="white-space:nowrap">${fullName(s)}</td>
               <td style="white-space:nowrap">${beltBadge(s.belt)}</td>
-              <td style="font-size:12px;color:var(--txt2)">${daysAt(s.since)}d</td>
+              <td style="font-size:12px;color:var(--txt2)">${daysAtLabel(s.since)}</td>
               <td style="font-size:12px;font-weight:700;color:${velColor}">${velocity}</td>
               <td style="font-size:11.5px;font-weight:600;color:${wc}">${win.status==='open'?'Open':win.status==='closed'?'Closed':win.status==='locked'?'Locked':'Max'}</td>
               <td style="font-size:11.5px;color:var(--txt2)">${proj.nextBelt?('~'+proj.projectedWeeks+'w → '+proj.nextBelt):'Max belt'}</td>
@@ -7630,7 +8119,7 @@ function renderHDashboard(){
     <div class="card">
       <div class="card-hd"><div class="card-ttl">Recent Staff Activity</div><button class="btn btn-ghost btn-sm" onclick="hNav(document.querySelector('[data-view=h-staff]'),'h-staff','Staff Directory')">View All</button></div>
       <div style="overflow-x:auto"><table class="tbl" style="min-width:380px"><thead><tr><th>Name</th><th class="hide-sm">Role</th><th>Belt</th><th class="hide-sm">Days</th><th>Adv. Gates</th><th class="hide-sm">Pos School</th></tr></thead>
-      <tbody>${st.slice(0,6).map(s=>`<tr onclick="openHProfile('${s.id}')"><td class="fw7" style="white-space:nowrap">${fullName(s)}</td><td class="tc-dim hide-sm">${renderRoleDropdown(s)}</td><td style="white-space:nowrap">${beltBadge(s.belt)}</td><td class="hide-sm" style="font-size:12px;color:var(--txt3)">${daysAt(s.since)}d</td><td>${gateDots(s.nxt)}</td><td class="hide-sm">${(()=>{const st2=calcTotalPSStars(s);const et=getEligibleTracks(s);const at=[...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].filter(t=>['active','testing'].includes(getTrackStatus(s,t)));return at.length>0?'<span class="pill p-warn" style="font-size:9px">In Progress</span>':st2>0?'<span class="pill p-ok" style="font-size:9px">'+Array(st2).fill('★').join('')+'</span>':et.length>0?'<span class="pill p-gold" style="font-size:9px">Available</span>':'<span style="font-size:11px;color:var(--txt3)">--</span>';})()}</td></tr>`).join('')}</tbody>
+      <tbody>${st.slice(0,6).map(s=>`<tr onclick="openHProfile('${s.id}')"><td class="fw7" style="white-space:nowrap">${fullName(s)}</td><td class="tc-dim hide-sm">${renderRoleDropdown(s)}</td><td style="white-space:nowrap">${beltBadge(s.belt)}</td><td class="hide-sm" style="font-size:12px;color:var(--txt3)">${daysAtLabel(s.since)}</td><td>${gateDots(s.nxt)}</td><td class="hide-sm">${(()=>{const st2=calcTotalPSStars(s);const et=getEligibleTracks(s);const at=[...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].filter(t=>['active','testing'].includes(getTrackStatus(s,t)));return at.length>0?'<span class="pill p-warn" style="font-size:9px">In Progress</span>':st2>0?'<span class="pill p-ok" style="font-size:9px">'+Array(st2).fill('★').join('')+'</span>':et.length>0?'<span class="pill p-gold" style="font-size:9px">Available</span>':'<span style="font-size:11px;color:var(--txt3)">--</span>';})()}</td></tr>`).join('')}</tbody>
       </table></div>
     </div>`;
 }
@@ -7653,7 +8142,7 @@ function renderHStaff(){
         <td class="fw7" style="white-space:nowrap">${fullName(s)}</td>
         <td class="tc-dim" style="font-size:11.5px;white-space:nowrap">${renderRoleDropdown(s)}</td>
         <td style="white-space:nowrap">${beltBadge(s.belt)}</td>
-        <td class="hide-sm" style="font-size:12px;color:var(--txt3)">${daysAt(s.since)} days</td>
+        <td class="hide-sm" style="font-size:12px;color:var(--txt3)">${daysAtPhrase(s.since)}</td>
         <td>${gateDots(s.cur)}</td>
         <td>${nb?gateDots(s.nxt):'<span style="font-size:10px;color:var(--txt3)">Max</span>'}</td>
         <td>${s.promo?'<span class="pill p-gold">Eligible</span>':[...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].some(t=>['active','testing'].includes(getTrackStatus(s,t)))?'<span class="pill p-warn">PS Active</span>':calcTotalPSStars(s)>0?'<span class="pill p-ok" style="font-size:9px">'+Array(calcTotalPSStars(s)).fill('★').join('')+'</span>':'<span style="font-size:10.5px;color:var(--txt3)">--</span>'}</td>
@@ -7862,7 +8351,7 @@ function renderHProfile(sid,context){
           })()}
         </div>
         <div style="margin-bottom:8px">${beltBadge(s.belt)} <span style="font-size:12px;color:var(--txt3);margin-left:6px">${BELT_CERT[s.belt]}</span></div>
-        <div class="prof-meta"><span class="pmeta"><svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="2" y="3" width="10" height="10" rx="1" stroke="currentColor" stroke-width="1.3"/><path d="M5 1v3M9 1v3M2 7h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>Since ${s.since}</span><span class="pmeta">${daysAt(s.since)} days at current belt</span>${s.stars>0?`<span class="pmeta tc-gold">${'* '.repeat(s.stars).trim()}</span>`:''}</div>
+        <div class="prof-meta"><span class="pmeta"><svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="2" y="3" width="10" height="10" rx="1" stroke="currentColor" stroke-width="1.3"/><path d="M5 1v3M9 1v3M2 7h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>Since ${s.since || '—'}</span><span class="pmeta">${daysAtPhrase(s.since)} at current belt</span>${s.stars>0?`<span class="pmeta tc-gold">${'* '.repeat(s.stars).trim()}</span>`:''}</div>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         ${context==='admin'?`<button class="btn btn-gold btn-sm" onclick="openRecordModal('${s.id}')">${ICO.record} Record Assessment</button>`:''}
@@ -9608,7 +10097,7 @@ function renderHReports(){
           <td class="fw7" style="white-space:nowrap">${fullName(s)}</td>
           <td style="font-size:11.5px;color:var(--txt2)">${renderRoleDropdown(s)}</td>
           <td style="white-space:nowrap">${beltBadge(s.belt,s)}</td>
-          <td style="font-size:11.5px;color:var(--txt3)">${daysAt(s.since)}d</td>
+          <td style="font-size:11.5px;color:var(--txt3)">${daysAtLabel(s.since)}</td>
           <td>${gateDots(s.cur)}</td>
           <td style="font-weight:700;color:var(--gold);font-size:12px">${calcPoints(s).toLocaleString()}</td>
           <td style="color:var(--gold)">${calcTotalPSStars(s)>0?Array(calcTotalPSStars(s)).fill('★').join(''):'--'}</td>
@@ -10344,7 +10833,7 @@ function renderAAllStaff(){
             <td class="hide-sm tc-dim" style="font-size:11.5px;white-space:nowrap">${fac?fac.name:'--'}</td>
             <td class="hide-sm tc-dim" style="font-size:11.5px">${renderRoleDropdown(s)}</td>
             <td style="white-space:nowrap">${beltBadge(s.belt)}</td>
-            <td class="hide-sm" style="font-size:12px;color:var(--txt3)">${daysAt(s.since)}d</td>
+            <td class="hide-sm" style="font-size:12px;color:var(--txt3)">${daysAtLabel(s.since)}</td>
             <td>${gateDots(s.cur)}</td>
             <td>${nb?gateDots(s.nxt):'<span style="font-size:10px;color:var(--txt3)">Max</span>'}</td>
             <td style="font-weight:700;color:var(--gold);font-size:12px">${pts.toLocaleString()}</td>
@@ -10600,7 +11089,7 @@ function renderAFacility(){
 
   // Populate switcher
   const sel=document.getElementById('fac-switcher-sel');
-  sel.innerHTML=DB.facilities.map(fac=>`<option value="${fac.id}" ${fac.id===ST.curFid?'selected':''}>${fac.name}${fac.loc?` — ${fac.loc}`:''}</option>`).join('');
+  sel.innerHTML=DB.facilities.filter(fac=>fac.active!==false||fac.id===ST.curFid).map(fac=>`<option value="${fac.id}" ${fac.id===ST.curFid?'selected':''}>${fac.name}${fac.loc?` — ${fac.loc}`:''}</option>`).join('');
   document.getElementById('fac-switcher-name').textContent=f.active===false?f.name+' (Inactive)':f.name;
   document.getElementById('fac-switcher').classList.remove('hidden');
   document.getElementById('download-btn').style.display='flex';
@@ -10650,7 +11139,7 @@ function renderFacIntel(el){
   // Belt progression recency
   const recentProgressions=[...st]
     .map(s=>({s,daysAgo:daysAt(s.since)}))
-    .filter(x=>x.daysAgo<=90)
+    .filter(x=>x.daysAgo!=null&&x.daysAgo<=90)
     .sort((a,b)=>a.daysAgo-b.daysAgo);
 
   // Stagnation
@@ -10711,7 +11200,7 @@ function renderFacIntel(el){
       <div class="card-hd"><div class="card-ttl">Progression Velocity – Full Roster</div></div>
       <div style="overflow-x:auto"><table class="tbl" style="min-width:520px">
         <thead><tr><th>Name</th><th>Belt</th><th>Days</th><th>Gates/Mo</th><th>Window</th><th>ETA</th><th>Promo</th></tr></thead>
-        <tbody>${staffWithVelocity.map(({s,proj,win,velocity})=>{const wc=win.status==='open'?'var(--ok)':win.status==='closed'?'var(--err)':'var(--txt3)';const vc=velocity>=1.5?'var(--ok)':velocity>=0.5?'var(--txt2)':'var(--warn)';return`<tr onclick="openAdminProfile('${s.id}')"><td class="fw7" style="white-space:nowrap">${fullName(s)}</td><td>${beltBadge(s.belt)}</td><td style="color:var(--txt3);font-size:12px">${daysAt(s.since)}d</td><td style="font-weight:700;color:${vc}">${velocity}</td><td style="color:${wc};font-size:11.5px;font-weight:600">${win.status==='open'?'Open':win.status==='closed'?'Closed':'Locked'}</td><td style="font-size:11.5px;color:var(--txt2)">${proj.nextBelt?'~'+proj.projectedWeeks+'w':'Max'}</td><td>${s.promo?'<span class="pill p-gold" style="font-size:9px">Yes</span>':'–'}</td></tr>`;}).join('')}
+        <tbody>${staffWithVelocity.map(({s,proj,win,velocity})=>{const wc=win.status==='open'?'var(--ok)':win.status==='closed'?'var(--err)':'var(--txt3)';const vc=velocity>=1.5?'var(--ok)':velocity>=0.5?'var(--txt2)':'var(--warn)';return`<tr onclick="openAdminProfile('${s.id}')"><td class="fw7" style="white-space:nowrap">${fullName(s)}</td><td>${beltBadge(s.belt)}</td><td style="color:var(--txt3);font-size:12px">${daysAtLabel(s.since)}</td><td style="font-weight:700;color:${vc}">${velocity}</td><td style="color:${wc};font-size:11.5px;font-weight:600">${win.status==='open'?'Open':win.status==='closed'?'Closed':'Locked'}</td><td style="font-size:11.5px;color:var(--txt2)">${proj.nextBelt?'~'+proj.projectedWeeks+'w':'Max'}</td><td>${s.promo?'<span class="pill p-gold" style="font-size:9px">Yes</span>':'–'}</td></tr>`;}).join('')}
         </tbody>
       </table></div>
     </div>`;
@@ -10947,7 +11436,7 @@ function renderFacStaff(el){
           <td class="fw7" style="white-space:nowrap">${fullName(s)}</td>
           <td class="tc-dim hide-sm" style="font-size:11.5px">${renderRoleDropdown(s)}</td>
           <td style="white-space:nowrap">${beltBadge(s.belt)}</td>
-          <td class="hide-sm" style="font-size:12px;color:var(--txt3)">${daysAt(s.since)}d</td>
+          <td class="hide-sm" style="font-size:12px;color:var(--txt3)">${daysAtLabel(s.since)}</td>
           <td>${gateDots(s.cur)}</td>
           <td>${nb?gateDots(s.nxt):'<span style="font-size:10px;color:var(--txt3)">Max</span>'}</td>
           <td>${s.promo?'<span class="pill p-gold">Yes</span>':'<span style="font-size:10px;color:var(--txt3)">--</span>'}</td>
@@ -11050,7 +11539,7 @@ function renderFacReports(el){
           <td class="fw7">${fullName(s)}</td>
           <td style="font-size:11.5px;color:var(--txt2)">${renderRoleDropdown(s)}</td>
           <td>${beltBadge(s.belt,s)}</td>
-          <td style="font-size:11.5px;color:var(--txt3)">${daysAt(s.since)}d</td>
+          <td style="font-size:11.5px;color:var(--txt3)">${daysAtLabel(s.since)}</td>
           <td>${gateDots(s.cur)}</td>
           <td style="font-weight:700;color:var(--gold);font-size:12px">${calcPoints(s).toLocaleString()}</td>
           <td style="color:var(--gold)">${calcTotalPSStars(s)>0?Array(calcTotalPSStars(s)).fill('★').join(''):'--'}</td>
@@ -11101,32 +11590,63 @@ let asmFilter='all';
 // GATE ASSESSMENT APPROVAL SYSTEM
 // ============================================================
 
-function approveGateRequest(qid) {
+async function approveGateRequest(qid) {
   const item = DB.queue.find(q => q.id === qid);
   if (!item) return;
   const s = getStaff(item.sid);
   if (!s) return;
   if (!confirm(`Approve ${fullName(s)}'s ${item.type} assessment request for ${item.targetBelt} Belt? This confirms the assessment is scheduled.`)) return;
+
+  const prev = { status: item.status, approvedBy: item.approvedBy, approvedAt: item.approvedAt };
   item.status = 'approved';
   item.approvedBy = ST.name || 'Admin';
   item.approvedAt = new Date().toISOString().slice(0, 10);
-  // Persist approval to Supabase. Use updateAssessmentQueue (NOT resolveAssessmentQueue —
-  // approval is not resolution and must not stamp resolved_at, or the row drops out of
-  // the in.(pending,approved) hydration). Previously this was in-memory only and the
-  // approval vanished on reload.
-  if (IS_LIVE) { SB.updateAssessmentQueue(item.id, { status: 'approved' }).catch(e => handleSyncError(e, 'Gate approval sync')); }
+
+  if (IS_LIVE) {
+    try {
+      await SB.reviewAssessmentQueue(item.id, 'approved', {
+        practiceKnowledge: item.practiceKnowledge ?? null,
+        practiceSimulation: item.practiceSimulation ?? null,
+        review: { action: 'approved', by: item.approvedBy, at: item.approvedAt }
+      });
+    } catch (e) {
+      // Roll back the optimistic change so the UI never shows a false "approved".
+      item.status = prev.status; item.approvedBy = prev.approvedBy; item.approvedAt = prev.approvedAt;
+      toast('Could not save approval — please retry.', 'err');
+      if (ST.aView === 'a-progression') renderAProgression();
+      if (ST.aView === 'a-assessments') renderAAssessments();
+      return;
+    }
+  }
+
+
   toast(`${fullName(s)}: ${item.type} assessment for ${item.targetBelt} Belt approved.`, 'ok');
   updateProgBadge();
   if (ST.aView === 'a-progression') renderAProgression();
   if (ST.aView === 'a-assessments') renderAAssessments();
 }
 
-function denyGateRequest(qid) {
+async function denyGateRequest(qid) {
   const item = DB.queue.find(q => q.id === qid);
   if (!item) return;
   const s = getStaff(item.sid);
   if (!s) return;
   const reason = prompt(`Reason for denying ${fullName(s)}'s ${item.type} request (optional):`);
+
+  if (IS_LIVE) {
+    try {
+      await SB.reviewAssessmentQueue(item.id, 'denied', {
+        practiceKnowledge: item.practiceKnowledge ?? null,
+        practiceSimulation: item.practiceSimulation ?? null,
+        review: { action: 'denied', by: ST.name || 'Admin', at: new Date().toISOString().slice(0, 10), reason: reason || '' }
+      }, /* resolved */ true);
+    } catch (e) {
+      // Don't drop it from the queue if the DB write failed — would re-appear on refresh anyway.
+      toast('Could not save denial — please retry.', 'err');
+      return;
+    }
+  }
+
   item.status = 'denied';
   item.deniedBy = ST.name || 'Admin';
   item.deniedAt = new Date().toISOString().slice(0, 10);
@@ -11376,6 +11896,14 @@ function renderAssessmentAuthBlock(staffList){
 // ============================================================
 // renderAAssessments  --  ENHANCED with practice scores + requests
 // ============================================================
+let asmQ = '';
+function asmSearchInput(el){
+  asmQ = el.value;
+  const caret = el.selectionStart;
+  renderAAssessments();
+  const fresh = document.getElementById('asmSearch');
+  if(fresh){ fresh.focus(); try{ fresh.setSelectionRange(caret,caret); }catch(e){} }
+}
 function renderAAssessments() {
   const el = document.getElementById('a-assessments');
   // Scope facilities to assignedFids for staff_admin -- master_admin sees all
@@ -11383,18 +11911,22 @@ function renderAAssessments() {
   const assignedFids = (!isMaster && ST.user?.assignedFids?.length) ? ST.user.assignedFids : null;
   const allFacs = DB.facilities.filter(f =>
     f.active !== false && (!assignedFids || assignedFids.includes(f.id))
-  );
+  ).slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+
+  // Search by staff name across every block on this page
+  const term = asmQ.trim().toLowerCase();
+  const nameMatch = (sid)=>{ if(!term) return true; const s=getStaff(sid); return s && fullName(s).toLowerCase().includes(term); };
 
   // Separate staff-requested (pending approval) from admin-managed queue
   const staffRequests = DB.queue.filter(item =>
     item.status === 'pending' && item.requestedAt &&
     (!assignedFids || assignedFids.includes(item.fid)) &&
-    (asmFilter === 'all' || item.fid === asmFilter)
+    (asmFilter === 'all' || item.fid === asmFilter) && nameMatch(item.sid)
   );
   const adminQueue = DB.queue.filter(item =>
     (!item.requestedAt || item.status === 'approved') &&
     (!assignedFids || assignedFids.includes(item.fid)) &&
-    (asmFilter === 'all' || item.fid === asmFilter)
+    (asmFilter === 'all' || item.fid === asmFilter) && nameMatch(item.sid)
   );
 
   function practiceBadge(pct) {
@@ -11408,11 +11940,19 @@ function renderAAssessments() {
       Staff who score 80%+ on both SIPS Intelligence practice tests may request their gate assessments here. Review their practice scores before approving or denying the request.
     </div>
     <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
-      ${['all', ...allFacs.map(f => f.id)].map(v => `<div class="fchip ${asmFilter === v ? 'on' : ''}" onclick="asmFilter='${v}';renderAAssessments()">${v === 'all' ? 'All Facilities' : getFac(v)?.name || v}</div>`).join('')}
+      <div class="search-wrap" style="min-width:170px;flex:1;max-width:240px">
+        <div class="search-ico"><svg viewBox="0 0 18 18" fill="none" width="14" height="14"><circle cx="7.5" cy="7.5" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M12 12l3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+        <input id="asmSearch" class="search-inp" placeholder="Search staff..." value="${asmQ}" oninput="asmSearchInput(this)">
+      </div>
+      <select style="background:#0e1328;border:1px solid rgba(255,255,255,.1);border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:12.5px;font-family:'Poppins',sans-serif;cursor:pointer" onchange="asmFilter=this.value;renderAAssessments()">
+        <option value="all">All Facilities</option>
+        ${allFacs.map(f=>`<option value="${f.id}" ${asmFilter===f.id?'selected':''}>${f.name}</option>`).join('')}
+      </select>
+      ${(asmQ||asmFilter!=='all')?`<button class="btn btn-ghost btn-xs" onclick="asmQ='';asmFilter='all';renderAAssessments()" style="white-space:nowrap">Clear</button>`:''}
       <button class="btn btn-gold btn-sm" style="margin-left:auto;flex-shrink:0" onclick="openRecordModal(null)">${ICO.record} Record Assessment</button>
     </div>
 
-    ${renderAssessmentAuthBlock(DB.staff.filter(st => st.placementNeeded && (!assignedFids || assignedFids.includes(st.fid)) && (asmFilter === 'all' || st.fid === asmFilter)))}
+    ${renderAssessmentAuthBlock(DB.staff.filter(st => st.placementNeeded && (!assignedFids || assignedFids.includes(st.fid)) && (asmFilter === 'all' || st.fid === asmFilter) && (!term || fullName(st).toLowerCase().includes(term))))}
 
     ${renderBeltTestReviewSection(assignedFids)}
 
@@ -12204,7 +12744,7 @@ async function addStaff(lockedFid){
   const sim=document.getElementById('ns-sim').value;
   const obs=document.getElementById('ns-obs').value;
   if(!first||!last){toast('Please enter first and last name.','err');return;}
-  const newStaff={id:++DB.nextId,fid,first,last,role,belt,since:since||new Date().toISOString().slice(0,10),stars:0,
+  const newStaff={fid,first,last,role,belt,since:since||new Date().toISOString().slice(0,10),stars:0,
     cur:{c:comp||null,s:sim||null,o:obs||null},nxt:{c:null,s:null,o:null},
     ps:{enrolled:!!psTrack,done:false,track:psTrack,mod:psTrack?'0 of 6':'',tracks:{}},
     oip:{completed:false,completedAt:null,primaryType:null,secondaryType:null,scores:{S:0,St:0,Su:0,A:0},answers:[]},
@@ -12212,13 +12752,25 @@ async function addStaff(lockedFid){
   if(beltIdx(belt)>=2) newStaff.ps.tracks['01']={status:'eligible',promptedAt:since||new Date().toISOString().slice(0,10),startedAt:null,completedAt:null};
   if(beltIdx(belt)>=3) newStaff.ps.tracks['03']={status:'eligible',promptedAt:since||new Date().toISOString().slice(0,10),startedAt:null,completedAt:null};
   
-  try {
-    if(IS_LIVE) {
-      toast('Creating record...', 'info');
-      const sRes = await SB.createStaff(mapStaffToBackend(newStaff));
-      if (sRes && sRes[0] && sRes[0].id) newStaff.id = sRes[0].id;
+  if(IS_LIVE) {
+    toast('Creating record...', 'info');
+    let sRes;
+    try {
+      const payload = mapStaffToBackend(newStaff);
+      delete payload.id; // Postgres assigns the uuid; an explicit null id overrides the column default and 400s
+      sRes = await SB.createStaff(payload);
+    } catch(e) {
+      handleSyncError(e, 'Staff sync');
+      return; // fail closed: no local push, no success toast; modal stays open for retry
     }
-  } catch(e) { handleSyncError(e, 'Staff sync'); }
+    if(!sRes || !sRes[0] || !sRes[0].id) {
+      toast('Staff record was not saved (no id returned). Please try again.','err');
+      return;
+    }
+    newStaff.id = sRes[0].id;
+  } else {
+    newStaff.id = 'local-' + Date.now();
+  }
 
   DB.staff.push(newStaff);
   closeModal();
@@ -12237,7 +12789,18 @@ async function addStaff(lockedFid){
 function openRecordModal(sid){
   // Use hFid as the active facility when called from the hospital portal (facility admin)
   const activeFid = (ST.portal==='hospital' && ST.hFid) ? ST.hFid : ST.curFid;
-  const facOpts=DB.facilities.filter(f=>f.active!==false||f.id===activeFid).map(f=>`<option value="${f.id}" ${f.id===activeFid?'selected':''}>${f.name}${f.loc?` — ${f.loc}`:''}</option>`).join('');
+  // Facility admins record only within their own facility (ASS-F2): the dropdown is
+  // replaced by a locked field. The dropdown remains for admin-portal contexts, deduped
+  // by name+location label (QA saw the same facility listed twice).
+  const facLocked = ST.portal==='hospital' && !!ST.hFid;
+  const _facSeen=new Set();
+  const facOpts=DB.facilities.filter(f=>{
+    if(f.active===false&&f.id!==activeFid) return false;
+    const k=f.name+'|'+(f.loc||'');
+    if(f.id!==activeFid&&_facSeen.has(k)) return false;
+    _facSeen.add(k); return true;
+  }).map(f=>`<option value="${f.id}" ${f.id===activeFid?'selected':''}>${f.name}${f.loc?` — ${f.loc}`:''}</option>`).join('');
+  const actFac=getFac(activeFid);
   const curS=sid?getStaff(sid):null;
   const staffSel=curS?`<div class="form-group"><label class="form-label">Staff Member</label><div style="padding:8px 11px;background:var(--s2);border:1px solid var(--bdr2);border-radius:var(--rs);font-size:12.5px;font-weight:600">${fullName(curS)}</div></div>`:
     `<div class="form-group"><label class="form-label">Staff Member *</label><select class="form-select" id="ra-staff">${staffOf(activeFid).map(s=>`<option value="${s.id}">${fullName(s)}${s.belt?` — ${s.belt} Belt`:''}</option>`).join('')}</select></div>`;
@@ -12247,7 +12810,9 @@ function openRecordModal(sid){
   </div>`:'';
   openModal('Record Assessment',`
     <div class="modal-body">
-      ${!sid?`<div class="form-group"><label class="form-label">Facility</label><select class="form-select" id="ra-fac" onchange="updateRaStaff(this.value)">${facOpts}</select></div>`:''}
+      ${!sid?(facLocked
+        ?`<div class="form-group"><label class="form-label">Facility</label><div style="padding:8px 11px;background:var(--s2);border:1px solid var(--bdr2);border-radius:var(--rs);font-size:12.5px;font-weight:600">${actFac?.name||'My Facility'}${actFac?.loc?` — ${actFac.loc}`:''}</div></div>`
+        :`<div class="form-group"><label class="form-label">Facility</label><select class="form-select" id="ra-fac" onchange="updateRaStaff(this.value)">${facOpts}</select></div>`):''}
       ${staffSel}
       ${gateInfo}
       <div class="form-row"><div class="form-group"><label class="form-label">Assessment Type *</label><select class="form-select" id="ra-type"><option>Competency</option><option>Simulation</option><option>Observation</option></select></div><div class="form-group"><label class="form-label">Target Belt *</label><select class="form-select" id="ra-belt">${BELT_ORDER.map(b=>`<option ${nb&&b===nb?'selected':''}>${b}</option>`).join('')}</select></div></div>
@@ -12280,16 +12845,20 @@ function submitAssessment(sid){
   const staffId=sid||document.getElementById('ra-staff')?.value||null;
   const s=getStaff(staffId);
   if(!s){toast('Please select a staff member.','err');return;}
+  // Facility-portal callers (facility admins) may only record within their own facility.
+  // The modal already locks the facility, but guard here against console/DOM bypass too.
+  if(ST.portal==='hospital'&&ST.hFid&&s.fid!==ST.hFid){toast('You can only record assessments for staff in your own facility.','err');return;}
   const type=document.getElementById('ra-type').value;
   const targetBelt=document.getElementById('ra-belt').value;
+  const note=document.getElementById('ra-notes')?.value.trim()||'';
   const gateKey=type==='Competency'?'c':type==='Simulation'?'s':'o';
   const targetIdx=beltIdx(targetBelt);
   const curIdx=beltIdx(s.belt);
   if(targetIdx===curIdx){ s.cur[gateKey]=raResult; }
   else if(targetIdx===curIdx+1){ s.nxt[gateKey]=raResult; }
-  s.history.push({dt:new Date().toISOString().slice(0,10),type,belt:targetBelt,res:raResult});
+  s.history.push({dt:new Date().toISOString().slice(0,10),type,belt:targetBelt,res:raResult,...(note?{note}:{})});
   if(IS_LIVE){
-    SB.recordAssessment(mapStaffToBackend(s),type,targetBelt,raResult,'',ST.user?.id,new Date().toISOString()).catch(e => handleSyncError(e, 'Backend sync'));
+    SB.recordAssessment(mapStaffToBackend(s),type,targetBelt,raResult,note,ST.user?.id,new Date().toISOString()).catch(e => handleSyncError(e, 'Backend sync'));
     const _q = DB.queue.find(q=>q.sid===staffId&&q.type===type&&q.targetBelt===targetBelt);
     if(_q) SB.resolveAssessmentQueue(_q.id,'resolved').catch(e => { if (e instanceof ReferenceError || e instanceof TypeError || e instanceof SyntaxError) throw e; });
   }
@@ -12302,8 +12871,9 @@ function submitAssessment(sid){
   const nxtS=nextBelt(s.belt)?gatesStatus(s.nxt):null;
   const progressMsg=nxtS?`Gate ${nxtS.p}/3 for ${nextBelt(s.belt)} Belt. ${nxtS.rem} remaining.`:'';
   closeModal();
+  const result=raResult; // capture before reset — the toast below must read the real outcome (ASS-F3)
   raResult=null;
-  toast(`${fullName(s)} | ${type}: <strong>${raResult||'recorded'}</strong>. ${progressMsg}`,raResult==='pass'?'ok':'err');
+  toast(`${fullName(s)} | ${type}: <strong>${result==='pass'?'PASS':'FAIL'}</strong>. ${progressMsg}`,result==='pass'?'ok':'err');
   if(ST.aView==='a-facility') renderFacTab();
   if(ST.aView==='a-assessments') renderAAssessments();
   if(ST.hView==='h-assessments') renderHAssessments();
@@ -12349,12 +12919,14 @@ function downloadReport(){ downloadFacilityReport(ST.curFid); }
 
 function downloadFacilityReport(fid){
   const f=getFac(fid);if(!f)return;
+  try{
   const st=staffOf(fid);
   const stats=facStats(fid);
   const grade=stats.greenPct>=90?'A':stats.greenPct>=75?'B':stats.greenPct>=60?'C+':stats.greenPct>=40?'C':'D';
   const beltTbl=BELT_ORDER.map(b=>{const cnt=st.filter(s=>s.belt===b).length;return`<tr><td>${b} Belt</td><td>${BELT_CERT[b]}</td><td style="text-align:center">${cnt}</td><td style="text-align:center">${st.length?Math.round(cnt/st.length*100):0}%</td></tr>`}).join('');
   const promoReady=st.filter(s=>s.promo);
   const staffTbl=st.sort((a,b)=>beltIdx(b.belt)-beltIdx(a.belt)).map(s=>{
+    try{
     const proj=generateProjection(s);
     const win=getWindowStatus(s);
     const pts=calcPoints(s);
@@ -12362,13 +12934,15 @@ function downloadFacilityReport(fid){
       <td>${fullName(s)}</td>
       <td>${renderRoleDropdown(s)}</td>
       <td style="font-weight:700">${s.belt}</td>
-      <td>${daysAt(s.since)}d</td>
+      <td>${daysAtLabel(s.since)}</td>
       <td style="text-align:center">${[(s.nxt||{}).c,(s.nxt||{}).s,(s.nxt||{}).o].filter(x=>x==='pass').length}/3</td>
       <td style="font-weight:700">${pts.toLocaleString()}</td>
       <td style="color:${win.status==='open'?'#16a34a':'#dc2626'};font-weight:700">${win.status==='open'?'Open':'Closed'}</td>
       <td>${proj.projectedWeeks>0?'~'+proj.projectedWeeks+'w to '+proj.nextBelt:'Max belt'}</td>
       <td style="font-weight:700;color:${proj.promotionRecommended?'#b45309':'#666'}">${proj.promotionRecommended?'YES':'–'}</td>
-    </tr>`;}).join('');
+    </tr>`;
+    }catch(_){ return `<tr><td>${fullName(s)}</td><td colspan="8" style="color:#999">data unavailable</td></tr>`; }
+  }).join('');
   const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>SBD Belt Report – ${f.name}</title>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
   <style>*{box-sizing:border-box}body{font-family:'Poppins',Arial,sans-serif;padding:36px;color:#111;font-size:10.5pt;line-height:1.5}
@@ -12423,13 +12997,21 @@ function downloadFacilityReport(fid){
   if(w){w.document.write(html);w.document.close();}
   else toast('Please allow pop-ups to download reports.','err');
   if(ST.user) SB.logReportDownload(fid, ST.user.id).catch(e => { if (e instanceof ReferenceError || e instanceof TypeError || e instanceof SyntaxError) throw e; });
+  }catch(e){ console.error('Facility report failed:', e); toast('Report could not be generated: '+(e.message||e),'err'); }
 }
 
 // ============================================================ A REGISTRATIONS
 function renderARegistrations(){
-  const pending=DB.pendingRegs.filter(r=>r.status==='pending');
-  const reviewed=DB.pendingRegs.filter(r=>r.status!=='pending');
+  const term=PAGE_Q.reg.trim().toLowerCase();
+  const hit=r=>!term||[r.facility,r.name,r.email,r.location].some(v=>(v||'').toLowerCase().includes(term));
+  const byNewest=(a,b)=>String(b.requested_at||b.requestedAt||'').localeCompare(String(a.requested_at||a.requestedAt||''));
+  const pending=DB.pendingRegs.filter(r=>r.status==='pending'&&hit(r)).sort(byNewest);
+  const reviewed=DB.pendingRegs.filter(r=>r.status!=='pending'&&hit(r)).sort(byNewest);
   document.getElementById('a-registrations').innerHTML=`
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+      ${pageSearchBox('reg','renderARegistrations','Search facility, contact, email...')}
+      ${term?`<button class="btn btn-ghost btn-xs" onclick="PAGE_Q.reg='';renderARegistrations()">Clear</button>`:''}
+    </div>
     <div class="stat-grid" style="grid-template-columns:repeat(3,1fr)">
       <div class="stat-card"><div class="stat-accent" style="background:var(--warn)"></div><div class="stat-lbl">Pending Review</div><div class="stat-val" style="color:var(--warn)">${pending.length}</div><div class="stat-sub">Awaiting activation</div></div>
       <div class="stat-card"><div class="stat-accent" style="background:var(--ok)"></div><div class="stat-lbl">Approved</div><div class="stat-val" style="color:var(--ok)">${DB.pendingRegs.filter(r=>r.status==='approved').length}</div><div class="stat-sub">Accounts activated</div></div>
@@ -12628,7 +13210,7 @@ async function approveReg(rid){
     // Remove pending local status
     r.status='approved';
     const facSel=document.getElementById('fac-switcher-sel');
-    if(facSel) facSel.innerHTML=DB.facilities.map(f=>`<option value="${f.id}">${f.name}${f.loc?` — ${f.loc}`:''}</option>`).join('');
+    if(facSel) facSel.innerHTML=DB.facilities.filter(f=>f.active!==false||f.id===ST.curFid).map(f=>`<option value="${f.id}">${f.name}${f.loc?` — ${f.loc}`:''}</option>`).join('');
     const nb=document.getElementById('reg-nb');
     const pendingCnt=DB.pendingRegs.filter(x=>x.status==='pending').length;
     if(nb){nb.textContent=pendingCnt;nb.style.display=pendingCnt>0?'inline-block':'none';}
@@ -12806,24 +13388,27 @@ function renderAPromoQueue(){
     </div>`:''}`;
 }
 
-function approvePromotion(apId, approved){
+async function approvePromotion(apId, approved){
   const ap=DB.promotionApprovals.find(a=>a.id===apId);
   if(!ap){toast('Approval record not found.','err');return;}
+  const prev={status:ap.status,decidedBy:ap.decidedBy,decidedAt:ap.decidedAt};
   ap.status=approved?'approved':'denied';
   ap.decidedBy=ST.user?.name||'Admin';
   ap.decidedAt=new Date().toISOString().slice(0,10);
   if(IS_LIVE){
-    SB.updatePromotionApproval(ap.id,{status:ap.status,decided_by:ap.decidedBy,decided_at:ap.decidedAt}).catch(e => handleSyncError(e, 'Promo approval sync'));
-    if(approved && ap.proposedBelt){
-      // Invoke the promote_staff_position edge function in live mode
-      sbFetch('/functions/v1/record-assessment',{method:'POST',body:{action:'promote',staffId:ap.staffId,newRole:ap.proposedRole,newBelt:ap.proposedBelt,approvedBy:ST.user?.id,notes:ap.notes}}).catch(e => handleSyncError(e, 'Promo staff sync'));
+    try{
+      // Column names per mapPromotionApprovalFromBackend (reviewed_*, not decided_*)
+      await SB.updatePromotionApproval(ap.id,{status:ap.status,reviewed_by:ap.decidedBy,reviewed_at:ap.decidedAt});
+      // Persist the actual role change (same targeted PATCH as changeStaffRoleInline)
+      if(approved) await SB.updateStaff(ap.staffId,{ role: ap.proposedRole });
+    }catch(e){
+      ap.status=prev.status; ap.decidedBy=prev.decidedBy; ap.decidedAt=prev.decidedAt;
+      handleSyncError(e, 'Promo approval sync');
+      return;
     }
-  } else {
-    if(approved) promoteStaffPosition(ap.staffId, ap.proposedRole, ST.user?.name||'SIPS Admin');
-    /* saveDemoData() removed */
   }
   if(approved){
-    if(!IS_LIVE) promoteStaffPosition(ap.staffId, ap.proposedRole, ST.user?.name||'SIPS Admin');
+    promoteStaffPosition(ap.staffId, ap.proposedRole, ST.user?.name||'SIPS Admin');
     const s=getStaff(ap.staffId);
     toast(`${s?fullName(s):'Staff'} promoted to <strong>${ap.proposedRole}</strong> -- approved.`,'ok');
   } else {
@@ -12869,7 +13454,7 @@ function openFreeAgentFullReport(faId) {
       <td>${beltBadge(h.belt)}</td>
       <td style="font-size:11.5px">${h.type}</td>
       <td><span class="pill ${h.res==='pass'?'p-ok':'p-err'}" style="font-size:10px">${h.res==='pass'?'Pass':'Fail'}</span></td>
-      <td style="font-size:11px;color:var(--txt3)">${h.note||'--'}</td>
+      <td style="font-size:11px;color:var(--txt3)">${h.note?Security.sanitize(h.note):'--'}</td>
     </tr>`).join('');
 
   const html = `<div class="modal-body" style="max-height:80vh;overflow-y:auto">
@@ -12947,7 +13532,7 @@ function openFreeAgentFullReport(faId) {
       <div class="card-hd"><div class="card-ttl">Assessment History</div><span class="pill p-muted">${allHistory.length} events</span></div>
       ${allHistory.length ? `<div style="overflow-x:auto"><table class="tbl tbl-static" style="min-width:460px">
         <thead><tr><th>Date</th><th>Belt</th><th>Type</th><th>Result</th><th>Notes</th></tr></thead>
-        <tbody>${gateRows||allHistory.map(h=>`<tr><td style="font-size:11px">${h.dt||'--'}</td><td>${beltBadge(h.belt)}</td><td style="font-size:11.5px">${h.type}</td><td><span class="pill ${h.res==='pass'?'p-ok':'p-err'}" style="font-size:10px">${h.res==='pass'?'Pass':'Fail'}</span></td><td style="font-size:11px;color:var(--txt3)">${h.note||'--'}</td></tr>`).join('')}</tbody>
+        <tbody>${gateRows||allHistory.map(h=>`<tr><td style="font-size:11px">${h.dt||'--'}</td><td>${beltBadge(h.belt)}</td><td style="font-size:11.5px">${h.type}</td><td><span class="pill ${h.res==='pass'?'p-ok':'p-err'}" style="font-size:10px">${h.res==='pass'?'Pass':'Fail'}</span></td><td style="font-size:11px;color:var(--txt3)">${h.note?Security.sanitize(h.note):'--'}</td></tr>`).join('')}</tbody>
       </table></div>` : '<div style="font-size:12px;color:var(--txt3);padding:12px 14px">No assessment history on record.</div>'}
     </div>
 
@@ -13097,7 +13682,7 @@ function downloadFreeAgentReport(faId) {
       <td>${pBelt(h.belt)}</td>
       <td>${h.type}</td>
       <td><span class="badge ${h.res==='pass'?'badge-green':'badge-err'}">${h.res==='pass'?'Pass':'Fail'}</span></td>
-      <td style="color:#64748b;font-size:7.5pt">${h.note||'–'}</td>
+      <td style="color:#64748b;font-size:7.5pt">${h.note?Security.sanitize(h.note):'–'}</td>
     </tr>`).join('')}</tbody></table>`}
   `;
 
@@ -13106,7 +13691,35 @@ function downloadFreeAgentReport(faId) {
 
 
 // ============================================================ TRANSFER VERIFICATION ENGINE
-function approveTransfer(trId) {
+// Persist an approve/deny decision to the transfer_requests table (STAFF-F6).
+// Non-fatal: the release/assignment itself is already executed (or aborted) by the
+// caller; a failed PATCH only means the queue shows stale status until re-hydration.
+async function _persistTransferDecision(tr){
+  if(!IS_LIVE || !tr || !tr.id || String(tr.id).startsWith('tr-')) return;
+  try {
+    await SB.updateTransferRequest(tr.id, {
+      status: tr.status,
+      decided_by: tr.approvedBy || tr.deniedBy || null,
+      decided_by_name: tr.approvedByName || tr.deniedByName || null,
+      decided_at: new Date().toISOString(),
+      deny_reason: tr.denyReason || null
+    });
+  } catch(e) {
+    console.warn('Transfer decision sync failed:', e.message);
+    toast('Warning: the verification queue status could not be saved — ' + e.message, 'warn');
+  }
+}
+
+// Re-entrancy guard: the Approve button stays live in the DOM while the inner
+// function awaits the backend — a double-click must not execute the release twice.
+async function approveTransfer(trId) {
+  const tr = DB.pendingTransfers && DB.pendingTransfers.find(t => t.id === trId);
+  if(!tr || tr._busy) return;
+  tr._busy = true;
+  try { await _approveTransferInner(trId); } finally { tr._busy = false; }
+}
+
+async function _approveTransferInner(trId) {
   if(!DB.pendingTransfers) return;
   const tr = DB.pendingTransfers.find(t => t.id === trId);
   if(!tr || tr.status !== 'pending') return;
@@ -13130,6 +13743,22 @@ function approveTransfer(trId) {
     const date = tr.effectDate;
     if(!DB.freeAgents) DB.freeAgents = [];
 
+    // STAFF-F6: the backend release executes HERE, on second-admin approval — never at
+    // request time. Fail closed: if it doesn't persist, undo the optimistic approval and
+    // keep the request pending so the staff member is NOT moved.
+    if(IS_LIVE){
+      try {
+        await SB.releaseToFreeAgentRemote({ staffId: tr.staffId, fromFacId: tr.fromFacId, fromFacName: tr.fromFacName, reason: tr.reason, notes: tr.notes });
+      } catch(e) {
+        tr.status = 'pending';
+        delete tr.approvedBy; delete tr.approvedByName; delete tr.approvedAt;
+        toast('Release failed to save: ' + e.message + ' — the staff member was NOT moved.','err');
+        renderAFreeAgents();
+        return;
+      }
+      await _persistTransferDecision(tr);
+    }
+
     const faRecord = {
       ...s,
       id: 'fa-'+Date.now(),
@@ -13145,8 +13774,6 @@ function approveTransfer(trId) {
       ]
     };
     faRecord.history = [...(s.history||[]), {dt:date, type:'Release', belt:s.belt, res:'released', note:`Released from ${fac?.name||'--'}. Reason: ${tr.reason}${tr.notes?' \u2014 '+tr.notes:''}. Approved by ${adminName}.`}];
-    // Backend release already executed at request time via releaseToFreeAgentRemote().
-    // (The old SB.releaseToFreeAgent() call here hit a non-existent endpoint — 404 — and is removed.)
     DB.freeAgents.push(faRecord);
     DB.staff = DB.staff.filter(x => x.id !== tr.staffId);
     DB.users = DB.users.filter(u => !(u.sid === tr.staffId && u.role === 'staff_member'));
@@ -13161,6 +13788,10 @@ function approveTransfer(trId) {
 
     toast(`Release approved. ${cleanName(tr.staffName)} is now in the Free Agent Registry.`,'ok');
 
+    // Pull the canonical free_agents row so the registry shows the real record
+    // (not the locally fabricated fa-<timestamp> one).
+    if(IS_LIVE && typeof initAppData === 'function'){ try { await initAppData(); } catch(_){} }
+
   } else if(tr.type === 'assignment') {
     // Execute the assignment
     const fa = DB.freeAgents.find(f => f.id === tr.faId);
@@ -13169,16 +13800,26 @@ function approveTransfer(trId) {
     const date = tr.effectDate;
 
     // The released staff row still exists on the backend with no facility (fid=null);
-    // re-attach it to the new facility and clear free-agent status. The deployed
-    // sbd-assign-free-agent function expects { staffId, facilityId }. (The previous call
-    // hit a non-existent /assign-free-agent endpoint with mismatched args, so the
-    // assignment never persisted and the person vanished from every facility view.)
+    // re-attach it to the new facility. The deployed sbd-assign-free-agent function
+    // expects { staffId, facilityId } and updates ONLY staff.fid (the sole facility key).
     const origStaffId = fa.staffId || fa.originalId || fa.id;
-    const restoredStaff = {...fa, fid: tr.toFacId, id: origStaffId};
+
     if(IS_LIVE){
-      SB.assignFreeAgentRemote({ staffId: origStaffId, facilityId: tr.toFacId, claimedBy: adminName }).catch(e => handleSyncError(e, 'Assign sync'));
+      try {
+        await SB.assignFreeAgentRemote({ staffId: origStaffId, facilityId: tr.toFacId, claimedBy: adminName });
+      } catch(e) {
+        // Persist failed \u2014 undo the optimistic approval and keep the agent in the pool.
+        tr.status = 'pending';
+        delete tr.approvedBy; delete tr.approvedByName; delete tr.approvedAt;
+        toast('Assignment failed to save: ' + e.message + ' \u2014 the staff member was NOT moved.','err');
+        renderAFreeAgents();
+        return;
+      }
+      await _persistTransferDecision(tr);
     }
-    // Local mirror: replace any stale local row for this staff id with the restored record.
+
+    // Persisted OK \u2192 mirror locally (fallback if the re-hydration below fails).
+    const restoredStaff = {...fa, fid: tr.toFacId, id: origStaffId};
     DB.staff = DB.staff.filter(s => s.id !== origStaffId);
     DB.staff.push(restoredStaff);
     if(!restoredStaff.facilityHistory) restoredStaff.facilityHistory = [];
@@ -13197,6 +13838,9 @@ function approveTransfer(trId) {
     });
 
     toast(`Assignment approved. ${cleanName(tr.staffName)} is now active at <strong>${fac?.name||tr.toFacName}</strong>.`,'ok');
+
+    // Pull canonical staff/free-agent rows so the destination shows the real (not FA-shaped) record.
+    if(IS_LIVE && typeof initAppData === 'function'){ try { await initAppData(); } catch(_){} }
   }
 
   updateFANB();
@@ -13220,17 +13864,19 @@ function denyTransfer(trId) {
   </div>`, 'modal-sm');
 }
 
-function executeDenyTransfer(trId) {
+async function executeDenyTransfer(trId) {
   const reason = document.getElementById('deny-reason-inp')?.value.trim();
   if(!reason) { toast('Please provide a reason for denial.','err'); return; }
   const tr = DB.pendingTransfers&&DB.pendingTransfers.find(t => t.id === trId);
   if(!tr) return;
+  if(tr.status !== 'pending') { closeModal(); return; }
   const adminName = (ST.user&&(ST.user.name||ST.user.email))||'Admin';
   tr.status = 'denied';
   tr.deniedBy = ST.user?.id||'admin';
   tr.deniedByName = adminName;
   tr.deniedAt = new Date().toISOString().slice(0,10);
   tr.denyReason = reason;
+  await _persistTransferDecision(tr);
   closeModal();
   toast(`Transfer denied. ${cleanName(tr.staffName)} was not moved.`,'err');
   updateFANB();
@@ -13261,10 +13907,13 @@ function renderAFreeAgents(){
   if(!window._faTab) window._faTab='agents';
 
   const tab=window._faTab;
-  const fas=DB.freeAgents;
-  const pending=DB.pendingTransfers.filter(t=>t.status==='pending');
-  const allTransfers=DB.pendingTransfers.slice().sort((a,b)=>b.id.localeCompare(a.id));
-  const placed=DB.placementLog;
+  const faTerm=PAGE_Q.fa.trim().toLowerCase();
+  // Name search across all three tabs; shape-agnostic match on the record text
+  const faHit=o=>!faTerm||JSON.stringify(o||{}).toLowerCase().includes(faTerm);
+  const fas=DB.freeAgents.filter(faHit);
+  const pending=DB.pendingTransfers.filter(t=>t.status==='pending'&&faHit(t));
+  const allTransfers=DB.pendingTransfers.filter(faHit).slice().sort((a,b)=>String(b.requestedAt||'').localeCompare(String(a.requestedAt||''))||String(b.id).localeCompare(String(a.id)));
+  const placed=DB.placementLog.filter(faHit);
   const myUserId=ST.user?.id||'admin';
 
   function faTabBtn(id,label,badge){
@@ -13298,10 +13947,14 @@ function renderAFreeAgents(){
       </div>
     </div>
     <!-- Tabs -->
-    <div style="display:flex;gap:4px;overflow-x:auto;margin-bottom:16px;padding-bottom:2px">
+    <div style="display:flex;gap:4px;overflow-x:auto;margin-bottom:10px;padding-bottom:2px">
       ${faTabBtn('agents','Active Free Agents')}
       ${faTabBtn('queue','Transfer Verification', pending.length||'')}
       ${faTabBtn('history','Placement History')}
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+      ${pageSearchBox('fa','renderAFreeAgents','Search by name...')}
+      ${PAGE_Q.fa?`<button class="btn btn-ghost btn-xs" onclick="PAGE_Q.fa='';renderAFreeAgents()">Clear</button>`:''}
     </div>`;
 
   // ── TAB: ACTIVE FREE AGENTS ────────────────────────────────────
@@ -13457,7 +14110,7 @@ function openFreeAgentProfile(faId){
       ${hist.length?`<div class="tl">${hist.map(h=>`<div class="tl-item"><div class="tl-dot" style="background:rgba(96,165,250,.15);color:#60a5fa;font-size:9px">&#9679;</div><div><div class="tl-date">${h.from} \u2013 ${h.to}</div><div class="tl-txt">${h.facName}<span style="font-size:11px;color:#64748b;margin-left:6px">${h.loc||''}</span></div></div></div>`).join('')}</div>`:
       '<div style="font-size:12px;color:#64748b">No facility history recorded.</div>'}
       <div class="section-lbl" style="margin-bottom:6px;margin-top:12px">Full Assessment History</div>
-      <div class="tl">${(fa.history||[]).length?(fa.history||[]).slice().reverse().map(h=>`<div class="tl-item"><div class="tl-dot" style="background:${h.res==='pass'?'rgba(34,197,94,.15)':'rgba(239,68,68,.15)'};color:${h.res==='pass'?'#22c55e':'#ef4444'}">${h.res==='pass'?ICO.check:ICO.x}</div><div><div class="tl-date">${h.dt} &bull; ${beltBadge(h.belt)}</div><div class="tl-txt">${h.type} \u2014 <strong style="color:${h.res==='pass'?'#22c55e':'#ef4444'}">${h.res==='pass'?'Pass':'Fail'}</strong>${h.note?' \u2014 '+h.note:''}</div></div></div>`).join(''):'<div style="font-size:12px;color:#64748b">No assessment history.</div>'}</div>
+      <div class="tl">${(fa.history||[]).length?(fa.history||[]).slice().reverse().map(h=>`<div class="tl-item"><div class="tl-dot" style="background:${h.res==='pass'?'rgba(34,197,94,.15)':'rgba(239,68,68,.15)'};color:${h.res==='pass'?'#22c55e':'#ef4444'}">${h.res==='pass'?ICO.check:ICO.x}</div><div><div class="tl-date">${h.dt} &bull; ${beltBadge(h.belt)}</div><div class="tl-txt">${h.type} \u2014 <strong style="color:${h.res==='pass'?'#22c55e':'#ef4444'}">${h.res==='pass'?'Pass':'Fail'}</strong>${h.note?' \u2014 '+Security.sanitize(h.note):''}</div></div></div>`).join(''):'<div style="font-size:12px;color:#64748b">No assessment history.</div>'}</div>
       <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--bdr)">
         <div style="font-size:11px;color:var(--txt3);margin-bottom:10px">View this free agent's complete staff report as it would appear on an active site assignment.</div>
         <button class="btn btn-gold" style="width:100%;justify-content:center" onclick="openFreeAgentFullReport('${fa.id}')">View Full Staff Report</button>
@@ -13494,7 +14147,7 @@ function openAssignFreeAgentModal(faId){
     </div>`,'modal-md');
 }
 
-function executeFreeAgentAssign(faId){
+async function executeFreeAgentAssign(faId){
   const fa=DB.freeAgents.find(f=>f.id===faId);
   if(!fa){toast('Record not found.','err');return;}
   const fid=document.getElementById('fa-assign-fid')?.value;
@@ -13506,8 +14159,21 @@ function executeFreeAgentAssign(faId){
 
   if(!DB.pendingTransfers) DB.pendingTransfers=[];
 
-  const transfer={
-    id:'tr-'+Date.now(),
+  // STAFF-F5: block duplicate assignment requests for the same free agent.
+  if(DB.pendingTransfers.some(t=>t.status==='pending'&&t.type==='assignment'&&t.faId===faId)){
+    toast(`An assignment request for <strong>${fullName(fa)}</strong> is already awaiting second-admin verification.`,'warn');
+    return;
+  }
+  if(IS_LIVE && !isUuidId(faId)){
+    toast('This free agent record is still syncing. Please refresh the page and try again.','warn');
+    return;
+  }
+  if(IS_LIVE && !(ST.user&&ST.user.id)){
+    toast('Your session is not fully loaded. Please refresh and try again.','err');
+    return;
+  }
+
+  let transfer={
     type:'assignment',
     faId,
     staffName: fullName(fa),
@@ -13523,14 +14189,29 @@ function executeFreeAgentAssign(faId){
     reason: 'Facility assignment',
     notes,
     effectDate: date,
-    status:'pending',
-    faSnapshot: {...fa}
+    status:'pending'
   };
 
-  DB.pendingTransfers.push(transfer);
   // Execution is deferred to approval (approveTransfer) so a second admin must verify
-  // before the staff record is moved. (Previously this fired assignFreeAgentRemote with a
-  // raw transfer object whose field names the edge function rejected.)
+  // before the staff record is moved. The request itself is persisted (STAFF-F6) so the
+  // queue survives reloads and is visible to other admin sessions.
+  if(IS_LIVE){
+    if(window._transferReqBusy){ return; } // double-click while the POST is in flight
+    window._transferReqBusy = true;
+    let saved;
+    try {
+      saved = await SB.createTransferRequest(mapTransferToBackend(transfer));
+    } catch(e) {
+      handleSyncError(e, 'Assignment request sync');
+      return; // fail closed
+    } finally {
+      window._transferReqBusy = false;
+    }
+    if(saved && saved[0]) transfer = mapTransferFromBackend(saved[0]);
+  } else {
+    transfer.id='tr-'+Date.now();
+  }
+  DB.pendingTransfers.push(transfer);
   closeModal();
   toast(`Assignment request submitted for <strong>${fullName(fa)}</strong> to <strong>${fac?.name||fid}</strong>. Awaiting second-admin verification.`,'ok');
   updateFANB();
@@ -13609,7 +14290,7 @@ function releaseToFreeAgent(staffId){
     </div>`,'modal-md');
 }
 
-function executeReleaseToFA(staffId){
+async function executeReleaseToFA(staffId){
   const s=getStaff(staffId);
   if(!s){toast('Staff record not found.','err');return;}
   const fac=getFac(s.fid);
@@ -13620,8 +14301,21 @@ function executeReleaseToFA(staffId){
 
   if(!DB.pendingTransfers) DB.pendingTransfers=[];
 
-  const transfer={
-    id:'tr-'+Date.now(),
+  // STAFF-F5: block duplicate release requests for the same staff member.
+  if(DB.pendingTransfers.some(t=>t.status==='pending'&&t.type==='release'&&t.staffId===s.id)){
+    toast(`A release request for <strong>${fullName(s)}</strong> is already awaiting second-admin verification.`,'warn');
+    return;
+  }
+  if(IS_LIVE && !isUuidId(s.id)){
+    toast('This staff record is still syncing. Please refresh the page and try again.','warn');
+    return;
+  }
+  if(IS_LIVE && !(ST.user&&ST.user.id)){
+    toast('Your session is not fully loaded. Please refresh and try again.','err');
+    return;
+  }
+
+  let transfer={
     type:'release',
     staffId: s.id,
     staffName: fullName(s),
@@ -13635,16 +14329,28 @@ function executeReleaseToFA(staffId){
     requestedAt: new Date().toISOString().slice(0,10),
     reason, notes,
     effectDate: date,
-    status:'pending',
-    staffSnapshot: {...s}
+    status:'pending'
   };
 
-  DB.pendingTransfers.push(transfer);
+  // STAFF-F6: persist the request only. The backend release (sbd-release-to-free-agent)
+  // fires in approveTransfer() once a SECOND admin verifies — never at request time.
   if(IS_LIVE){
-    SB.releaseToFreeAgentRemote(transfer).catch(e => handleSyncError(e, 'Release sync'));
+    if(window._transferReqBusy){ return; } // double-click while the POST is in flight
+    window._transferReqBusy = true;
+    let saved;
+    try {
+      saved = await SB.createTransferRequest(mapTransferToBackend(transfer));
+    } catch(e) {
+      handleSyncError(e, 'Release request sync');
+      return; // fail closed: nothing queued locally that the backend doesn't know about
+    } finally {
+      window._transferReqBusy = false;
+    }
+    if(saved && saved[0]) transfer = mapTransferFromBackend(saved[0]);
   } else {
-    /* saveDemoData() removed */
+    transfer.id='tr-'+Date.now();
   }
+  DB.pendingTransfers.push(transfer);
   closeModal();
   toast(`Release request submitted for <strong>${fullName(s)}</strong>. Awaiting second-admin verification before execution.`,'ok');
   updateFANB();
@@ -13666,11 +14372,13 @@ function renderAAdminUsers(){
     { name: 'I. Zambrano', email: 'izambrano@sipsconsults.com', initials: 'IZ', title: 'SIPS Master Admin' },
     { name: 'D. Payne', email: 'dpayne@sipsconsults.com', initials: 'DP', title: 'SIPS Master Admin' }
   ];
-  const sipsAdmins    = DB.users.filter(u=>(u.role==='master_admin'||u.role==='staff_admin')&&!u.email.match(/jjacobs|izambrano|dpayne/i));
-  const sysUsers      = DB.users.filter(u=>u.role==='system_admin');
-  const facAdminUsers = DB.users.filter(u=>u.role==='facility_admin');
-  const hospUsers     = DB.users.filter(u=>u.role==='hospital');
-  const staffUsers    = DB.users.filter(u=>u.role==='staff_member');
+  const uTerm = PAGE_Q.users.trim().toLowerCase();
+  const uHit = u => !uTerm || (u.name||'').toLowerCase().includes(uTerm) || (u.email||'').toLowerCase().includes(uTerm);
+  const sipsAdmins    = DB.users.filter(u=>(u.role==='master_admin'||u.role==='staff_admin')&&!u.email.match(/jjacobs|izambrano|dpayne/i)&&uHit(u));
+  const sysUsers      = DB.users.filter(u=>u.role==='system_admin'&&uHit(u));
+  const facAdminUsers = DB.users.filter(u=>u.role==='facility_admin'&&uHit(u));
+  const hospUsers     = DB.users.filter(u=>u.role==='hospital'&&uHit(u));
+  const staffUsers    = DB.users.filter(u=>u.role==='staff_member'&&uHit(u));
 
   const tabs = [
     {id:'sips_protected', label:'SIPS Master Admins', count:sipsProtected.length, pill:'p-gold'},
@@ -13777,7 +14485,7 @@ function renderAAdminUsers(){
             <td class="hide-sm" style="font-size:11.5px;color:#64748b">${u.email}</td>
             <td>${u.role==='master_admin'?'<span class="pill p-gold">Master Admin</span>':'<span class="pill p-blue">Assessor</span>'}</td>
             <td style="font-size:11.5px">${u.role==='master_admin'?'<span style="color:#64748b">All facilities</span>':
-              (u.assignedFids&&u.assignedFids.length?u.assignedFids.map(fid=>getFac(fid)?.name||fid).join(', '):'<span style="color:#f59e0b">None assigned</span>')}</td>
+              (u.assignedFids&&u.assignedFids.length?u.assignedFids.map(fid=>getFac(fid)?.name||`<span style="color:var(--txt3);font-style:italic" title="${fid}">Unknown facility</span>`).join(', '):'<span style="color:#f59e0b">None assigned</span>')}</td>
             <td style="white-space:nowrap">${u.id!==ST.user.id?`
               <button class="btn btn-ghost btn-xs" style="margin-right:4px" onclick="openAssignFacilitiesModal('${u.id}')">${ICO.edit} Assign</button>
               <button class="btn btn-ghost btn-xs" style="margin-right:4px" onclick="openEditUserModal('${u.id}')">${ICO.edit} Edit</button>
@@ -13913,6 +14621,10 @@ function renderAAdminUsers(){
       <div style="padding:12px 16px 0;overflow-x:auto;-webkit-overflow-scrolling:touch">
         <div class="tab-bar" style="white-space:nowrap;min-width:max-content">${tabBar}</div>
       </div>
+      <div style="display:flex;gap:8px;align-items:center;margin:12px 0;flex-wrap:wrap">
+        ${pageSearchBox('users','renderAAdminUsers','Search name or email...')}
+        ${PAGE_Q.users?`<button class="btn btn-ghost btn-xs" onclick="PAGE_Q.users='';renderAAdminUsers()">Clear</button>`:''}
+      </div>
       ${tableHTML}
     </div>`;
 }
@@ -13994,13 +14706,27 @@ function openAssignFacilitiesModal(uid){
     <div class="modal-ft"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-gold" onclick="saveAssignedFacilities('${uid}')">${ICO.check} Save</button></div>`,'modal-md');
 }
 
-function saveAssignedFacilities(uid){
+async function saveAssignedFacilities(uid){
   const u=DB.users.find(x=>x.id===uid);
   if(!u)return;
-  u.assignedFids=DB.facilities.filter(f=>document.getElementById('af-'+f.id)?.checked).map(f=>f.id);
-  closeModal();
-  toast(`Facility access updated for ${u.name}.`,'ok');
-  renderAAdminUsers();
+  if(u.protected){toast('Protected accounts cannot be edited.','err');return;}
+  const newFids=DB.facilities.filter(f=>document.getElementById('af-'+f.id)?.checked).map(f=>f.id);
+  try{
+    if(IS_LIVE){
+      toast('Updating facility access...','info');
+      // sbd-sync-user-claims upserts the whole portal row — send the full field set so
+      // facility_id / system_id / name etc. are not nulled out (same payload as saveEditUser).
+      const payload={action:'update',userId:uid,email:u.email,name:u.name,title:u.title||'',role:u.role,assignedFids:newFids,facilityId:u.fid||null,systemId:u.systemId||null};
+      const res=await SB.syncUserClaims(payload);
+      if(res && res.error) throw new Error(res.error.message || res.detail || 'Update sync failed');
+    }
+    u.assignedFids=newFids;
+    closeModal();
+    toast(`Facility access updated for ${u.name}.`,'ok');
+    renderAAdminUsers();
+  }catch(e){
+    toast('Facility access update failed: '+e.message,'err');
+  }
 }
 
 
@@ -14420,7 +15146,7 @@ function parseScheduleCSV(text){
   }
   const rows=[]; const errors=[];
   lines.slice(1).forEach((line,i)=>{
-    const cols=line.split(',').map(c=>c.trim().replace(/^"|"$/g,''));
+    const cols=parseCsvRow(line);
     const date=cols[colDate]||'';
     const shift=(cols[colShift]||'').toUpperCase();
     const first=(cols[colFirst]||'').toLowerCase();
@@ -14540,8 +15266,8 @@ function processBulkUpload(){
     for(let i=1; i<lines.length; i++){
       const rawRow = lines[i];
       if(!rawRow.trim()) continue; // skip blank
-      // standard split by comma (ignoring quoted CSV features for simplicity as instructed by scope)
-      const row = rawRow.split(',').map(s=>s.trim().replace(/^"|"$/g, ''));
+      // quote-aware CSV parse (M7-01): a field like "Smith, Jr" no longer shifts later columns
+      const row = parseCsvRow(rawRow);
       if(row.length < 2) continue;
       payload.push({
         facilityName: colFac>=0 ? row[colFac] : '',
@@ -15266,19 +15992,6 @@ function openEditSystemModal(sid) {
           style="width:100%;background:#0e1328;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:12px;color:#e2e8f0;font-size:14px;font-family:inherit;outline:none">
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
-        <div class="form-group">
-          <label class="form-label">Primary Contact</label>
-          <input id="edit-sys-contact" type="text" value="${sys.contact || ''}" placeholder="Contact name"
-            style="width:100%;background:#0e1328;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:12px;color:#e2e8f0;font-size:14px;font-family:inherit;outline:none">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Contact Email</label>
-          <input id="edit-sys-email" type="email" value="${sys.email || ''}" placeholder="email@system.org"
-            style="width:100%;background:#0e1328;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:12px;color:#e2e8f0;font-size:14px;font-family:inherit;outline:none">
-        </div>
-      </div>
-      
       <div style="display:flex;justify-content:flex-end;gap:12px;margin-top:32px">
         <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
         <button class="btn btn-primary" onclick="updateHospitalSystem('${sid}')" style="background:var(--gold);color:#000">Save Changes</button>
@@ -15292,14 +16005,14 @@ function openEditSystemModal(sid) {
  * Persists an existing hospital system update to the database.
  */
 async function updateHospitalSystem(sid) {
-  const name = document.getElementById('edit-sys-name').value;
-  const contact = document.getElementById('edit-sys-contact').value;
-  const email = document.getElementById('edit-sys-email').value;
+  const name = document.getElementById('edit-sys-name').value.trim();
   if (!name) return toast('Please enter a system name', 'warn');
-  
+
   toast('Updating system...', 'info');
   try {
-    const updateData = { name, contact, email };
+    // hospital_systems only has columns: id, name, active, created_at.
+    // Sending contact/email made PostgREST reject the whole PATCH (FAC-09).
+    const updateData = { name };
     
     if (window.IS_LIVE && (window.SB || SB).updateHospitalSystem) {
       const res = await (window.SB || SB).updateHospitalSystem(sid, updateData);
@@ -15666,6 +16379,27 @@ function cleanOptimisticCache() {
 }
 
 // Inline role change from the All Staff table dropdown
+// Resolve the sbd_portal_users login tied to a staff member. The DB has no
+// reliable staff<->login key yet (the staff_id column is the wrong type and is
+// empty), so we try the explicit sid link first, then fall back to an exact
+// normalized full-name match. Protected admin logins are never returned.
+// Returns { user } on a single confident match, or { reason } when it can't.
+function resolveLoginForStaff(s){
+  if(!s) return { reason:'no_staff' };
+  const PROTECTED = ['master_admin','staff_admin','system_admin'];
+  const norm = str => (str||'').toLowerCase().replace(/\s+/g,' ').trim();
+  // 1) explicit link, if any logins actually have it populated
+  let hits = DB.users.filter(u => u.sid && u.sid === s.id);
+  // 2) fall back to an exact normalized full-name match
+  if(hits.length === 0){
+    const target = norm(`${s.first||''} ${s.last||''}`);
+    if(target) hits = DB.users.filter(u => norm(u.name) === target);
+  }
+  hits = hits.filter(u => !PROTECTED.includes(u.role));
+  if(hits.length === 1) return { user: hits[0] };
+  return { reason: hits.length === 0 ? 'no_match' : 'ambiguous' };
+}
+
 function changeStaffRoleInline(staffId, newRole){
   const s = getStaff(staffId);
   if(!s) return;
@@ -15685,23 +16419,35 @@ function changeStaffRoleInline(staffId, newRole){
   };
   const newAccess = positionToAccess[newRole];
   if(newAccess){
-    // Find linked user account(s) for this staff member
-    const linkedUsers = DB.users.filter(u => u.sid === staffId);
-    linkedUsers.forEach(u => {
-      // Only upgrade/adjust accounts at staff_member or hospital level
-      // Never downgrade system_admin, staff_admin, or master_admin
-      const protectedRoles = ['master_admin','staff_admin','system_admin'];
-      if(!protectedRoles.includes(u.role) && u.role !== newAccess){
+    // The staff<->login link is not reliably populated in the DB yet, so
+    // resolve the matching login on demand (explicit link, then exact name).
+    const match = resolveLoginForStaff(s);
+    if(match.user){
+      const u = match.user;
+      if(u.role !== newAccess){
         const oldAccess = u.role;
         u.role = newAccess;
-        console.log(`[Role] Account ${u.email}: portal access ${oldAccess} \u2192 ${newAccess}`);
+        console.log(`[Role] Account ${u.email}: portal access ${oldAccess} -> ${newAccess}`);
         if(IS_LIVE && typeof SB !== 'undefined' && SB.updateUserProfile) {
           SB.updateUserProfile(u.authUid, { role: newAccess })
-            .then(() => { if(SB.syncUserClaims) SB.syncUserClaims({ userId: u.authUid, role: newAccess }); })
-            .catch(e => console.warn('[Role] User sync failed:', e.message));
+            .then(() => {
+              if(SB.syncUserClaims) SB.syncUserClaims({ userId: u.authUid, role: newAccess });
+              toast(`Portal access updated for <strong>${u.email}</strong> (now ${newAccess}). They may need to log out and back in.`,'ok');
+            })
+            .catch(e => {
+              console.warn('[Role] User sync failed:', e.message);
+              toast(`Role saved, but updating <strong>${u.email}</strong>'s portal access failed \u2014 please set it manually.`,'err');
+            });
         }
       }
-    });
+    } else {
+      // No confident login match -- do NOT guess. Tell the admin to do it by hand.
+      const why = match.reason === 'ambiguous'
+        ? `more than one login matches "${fullName(s)}"`
+        : `no login matched "${fullName(s)}"`;
+      console.warn(`[Role] Portal access not auto-updated (${match.reason}) for ${fullName(s)}`);
+      toast(`Role set to <strong>${newRole}</strong>, but portal access was not changed (${why}). Please update their login access manually.`,'warn');
+    }
   }
 
   // Sync to backend if live

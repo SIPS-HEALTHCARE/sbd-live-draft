@@ -30,13 +30,43 @@ serve(async (req) => {
             });
         }
 
-        const { question, answer } = await req.json();
+        const { question, answer, answer_key, fail_indicator } = await req.json();
         if (!question || !answer) {
             return new Response(JSON.stringify({ error: 'Missing question or answer' }), {
                 status: 400,
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' }
             });
         }
+
+        // Answer-key-aware grading when the caller supplies the scenario's
+        // expected_response (and optionally a fail indicator) -- the AIP
+        // scenario bank. Falls back to the original generic rubric when not
+        // provided, so existing {question, answer} callers are unchanged.
+        const keyAware = typeof answer_key === 'string' && answer_key.trim().length > 0;
+        const promptContent = keyAware
+            ? `You are grading a sterile processing (SPD) candidate's response to a situational scenario against the official SBD answer key.
+
+Scenario: ${question}
+
+Official answer key (the elements a correct response must contain): ${answer_key}
+${fail_indicator ? `\nDANGER / FAIL INDICATOR -- if the candidate's response does or recommends this, it is a patient-safety failure:\n${fail_indicator}\n` : ''}
+Candidate response: ${answer}
+
+Score 0-100 by how completely the response covers the answer key's required elements with sound patient-safety judgment. Reward correct escalation and contamination control; penalize missing key steps.${fail_indicator ? ' If the response triggers the fail indicator, cap the score at 30 and set "dangerous": true.' : ''}
+
+Respond with ONLY a JSON object like: {"score":75,"feedback":"One sentence naming the key elements present or missing.","dangerous":false}
+No markdown, no preamble.`
+            : `You are evaluating a sterile processing department (SPD) technician candidate's response to a situational question. Score the response 0-100 based on:
+- Understanding of patient safety principles (40%)
+- Knowledge of correct SPD procedures (30%)
+- Professional judgment and escalation awareness (30%)
+
+Question: ${question}
+
+Candidate response: ${answer}
+
+Respond with ONLY a JSON object like: {"score":75,"feedback":"One sentence of specific constructive feedback."}
+No markdown, no preamble.`;
 
         const orRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
@@ -48,21 +78,8 @@ serve(async (req) => {
             },
             body: JSON.stringify({
                 model: 'anthropic/claude-3.5-haiku',
-                messages: [{
-                    role: 'user',
-                    content: `You are evaluating a sterile processing department (SPD) technician candidate's response to a situational question. Score the response 0-100 based on:
-- Understanding of patient safety principles (40%)
-- Knowledge of correct SPD procedures (30%)  
-- Professional judgment and escalation awareness (30%)
-
-Question: ${question}
-
-Candidate response: ${answer}
-
-Respond with ONLY a JSON object like: {"score":75,"feedback":"One sentence of specific constructive feedback."}
-No markdown, no preamble.`
-                }],
-                max_tokens: 150,
+                messages: [{ role: 'user', content: promptContent }],
+                max_tokens: keyAware ? 220 : 150,
                 temperature: 0.3,
             }),
         });

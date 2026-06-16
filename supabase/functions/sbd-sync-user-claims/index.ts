@@ -11,9 +11,14 @@ serve(async (req) => {
         return new Response('ok', { headers: corsHeaders });
     }
     
+    // Hoisted so the catch block can roll back a half-created user (AUTH-F1).
+    let supabaseAdmin: any = null;
+    let authCreated = false;
+    let createdAuthUid: string | null = null;
+
     try {
         // Initialize Supabase Admin Client (service role - full access)
-        const supabaseAdmin = createClient(
+        supabaseAdmin = createClient(
             Deno.env.get('SUPABASE_URL') ?? '',
             Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
             { auth: { autoRefreshToken: false, persistSession: false } }
@@ -145,6 +150,8 @@ serve(async (req) => {
             }
             finalUserId = authData.user.id;
             authUid = authData.user.id;
+            authCreated = true;            // track for rollback if a later step fails (AUTH-F1)
+            createdAuthUid = authData.user.id;
         } else if (isUpdate) {
             // For updates, the finalUserId passed from the frontend is usually the sbd_portal_users.id.
             // We need to fetch the existing user's auth_uid to avoid foreign key violations.
@@ -272,6 +279,14 @@ serve(async (req) => {
 
     } catch (err: any) {
         console.error('Sync Error:', err);
+        // AUTH-F1: if we created the auth user in THIS call but a later step failed,
+        // delete it so we don't leave an orphaned auth.users row with no profile —
+        // which would otherwise burn that email address for future re-registration.
+        if (authCreated && createdAuthUid && supabaseAdmin) {
+            const { error: rbErr } = await supabaseAdmin.auth.admin.deleteUser(createdAuthUid);
+            if (rbErr) console.error('AUTH-F1 rollback FAILED for orphaned auth user', createdAuthUid, rbErr);
+            else console.log('AUTH-F1 rollback: deleted orphaned auth user', createdAuthUid);
+        }
         const errMsg = err instanceof Error ? err.message : String(err);
         return new Response(JSON.stringify({ error: errMsg || "Unknown sync error" }), {
             status: 400,

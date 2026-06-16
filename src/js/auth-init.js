@@ -1952,7 +1952,7 @@ function initTourDrag() {
 window.onload = function(){
   initTourDrag();
   const sel = document.getElementById('fac-switcher-sel');
-  if(sel) sel.innerHTML = DB.facilities.map(f=>`<option value="${f.id}">${f.name}</option>`).join('');
+  if(sel) sel.innerHTML = DB.facilities.filter(f=>f.active!==false||f.id===ST.curFid).map(f=>`<option value="${f.id}">${f.name}</option>`).join('');
 
   // Init swipe-to-close for all four portals
   ['h','a','s','x'].forEach(p => initSwipeClose(p));
@@ -1969,13 +1969,22 @@ window.onload = function(){
 
   // Note: Session restoration is handled exclusively by restoreSessionOnLoad on DOMContentLoaded to avoid duplicate race conditions.
 
-  // Set up inactivity auto-logout (2 minutes)
+  // Set up inactivity auto-logout (2 minutes) — suppressed during onboarding tour
   let inactivityTimer;
+  const onboardingActive = () => {
+    // Tour engine running, or the welcome/tour overlays are visible on screen
+    if (typeof OB !== 'undefined' && OB.tourRunning) return true;
+    const w = document.getElementById('welcome-overlay');
+    const t = document.getElementById('tour-overlay');
+    return (w && w.classList.contains('open')) || (t && t.classList.contains('active'));
+  };
   const resetInactivityTimer = () => {
     clearTimeout(inactivityTimer);
     // Only auto-logout if we have an active session
     if (localStorage.getItem('sbd_session') && typeof logout === 'function') {
       inactivityTimer = setTimeout(() => {
+        // Never log out mid-tour — reschedule and re-check after another interval
+        if (onboardingActive()) { resetInactivityTimer(); return; }
         console.log('User inactive for 2 minutes. Auto-logging out.');
         logout();
       }, 120000); // 2 minutes
@@ -1995,7 +2004,7 @@ async function initAppData(){
   window.SBD_INITIALIZING = true;
   console.log('SBD Platform: Multi-table data hydration started...');
   try {
-    const [facs, staff, systems, users, reviews, queue, registrations, freeAgents, promotions, onboarding, beltTestResults] = await Promise.race([
+    const [facs, staff, systems, users, reviews, queue, registrations, freeAgents, promotions, onboarding, beltTestResults, transfers] = await Promise.race([
       Promise.all([
         SB.getFacilities().catch(e=>{ console.error('facs load err', e); return []; }),
         SB.getAllStaff().catch(e=>{ console.error('staff load err', e); return []; }),
@@ -2007,7 +2016,8 @@ async function initAppData(){
         SB.getFreeAgents().catch(e=>{ console.error('fa load err', e); return []; }),
         SB.getPromotionApprovals().catch(e=>{ console.error('promos load err', e); return []; }),
         (ST.user ? SB.getUserOnboarding(ST.user.authUid || ST.user.id) : Promise.resolve([])).catch(e=>{ console.error('onboarding load err', e); return []; }),
-        (SB.getBeltTestResults ? SB.getBeltTestResults() : Promise.resolve([])).catch(e=>{ console.error('belt results load err', e); return []; })
+        (SB.getBeltTestResults ? SB.getBeltTestResults() : Promise.resolve([])).catch(e=>{ console.error('belt results load err', e); return []; }),
+        (SB.getTransferRequests ? SB.getTransferRequests() : Promise.resolve([])).catch(e=>{ console.error('transfers load err', e); return []; })
       ]),
       new Promise((_,rej)=>setTimeout(()=>rej(new Error('Initial data load timeout')), 20000))
     ]);
@@ -2088,14 +2098,19 @@ async function initAppData(){
     if(typeof mapPromotionApprovalFromBackend === 'function') window.DB.promotionApprovals = (promotions||[]).map(mapPromotionApprovalFromBackend); else window.DB.promotionApprovals = promotions||[];
     if(typeof mapOnboardingFromBackend === 'function') window.DB.onboarding = (onboarding||[]).map(mapOnboardingFromBackend); else window.DB.onboarding = onboarding||[];
     if(typeof mapBeltTestResultFromBackend === 'function') window.DB.beltTestResults = (beltTestResults||[]).map(mapBeltTestResultFromBackend); else window.DB.beltTestResults = beltTestResults||[];
+    // STAFF-F6: hydrate the dual-admin transfer verification queue from the DB so
+    // any admin session sees pending release/assignment requests (was memory-only).
+    if(typeof mapTransferFromBackend === 'function') window.DB.pendingTransfers = (transfers||[]).map(mapTransferFromBackend).filter(Boolean);
 
     console.log(`SBD Platform: Hydrated ${window.DB.facilities.length} facs, ${window.DB.staff.length} staff, ${window.DB.hospitalSystems.length} systems, ${window.DB.users.length} users.`);
+    // Durable submit: flush any placement assessment that was queued offline on a prior session.
+    if(typeof flushPendingPlacements === 'function') flushPendingPlacements();
     if(window.DB.staff.length === 0) console.warn('SBD DIAG: staff array is EMPTY after hydration. Raw staff value:', staff);
     if(window.DB.facilities.length === 0) console.warn('SBD DIAG: facilities array is EMPTY after hydration. Raw facs value:', facs);
     
     // Refresh UI components
     const sel = document.getElementById('fac-switcher-sel');
-    if(sel) sel.innerHTML = DB.facilities.map(f=>`<option value="${f.id}">${f.name}</option>`).join('');
+    if(sel) sel.innerHTML = DB.facilities.filter(f=>f.active!==false||f.id===ST.curFid).map(f=>`<option value="${f.id}">${f.name}</option>`).join('');
     
     // Trigger view refreshes ONLY if user is already authenticated.
     // During initial doLogin(), ST.user isn't set until AFTER initAppData() returns,

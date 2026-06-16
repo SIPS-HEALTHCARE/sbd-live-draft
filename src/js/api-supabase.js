@@ -186,8 +186,14 @@ const SB = {
   },
   submitAssessmentQueue(data){ return sbFetch('/rest/v1/sbd_assessment_queue', { method:'POST', body:data }); },
   resolveAssessmentQueue(id, status){ return sbFetch(`/rest/v1/sbd_assessment_queue?id=eq.${id}`, { method:'PATCH', body:{ status, resolved_at:new Date().toISOString() } }); },
-  // Set queue status WITHOUT stamping resolved_at (approval is not resolution — A4).
-  updateAssessmentQueue(id, data){ return sbFetch(`/rest/v1/sbd_assessment_queue?id=eq.${id}`, { method:'PATCH', body:data }); },
+  // Persist an admin review action (approve/deny) on a gate request. `data` carries the merged
+  // {practiceKnowledge, practiceSimulation, review:{...}} so the row's practice scores survive
+  // (PostgREST PATCH replaces the column wholesale). `resolved` stamps resolved_at for terminal actions.
+  reviewAssessmentQueue(id, status, data, resolved){
+    const body = { status, data };
+    if (resolved) body.resolved_at = new Date().toISOString();
+    return sbFetch(`/rest/v1/sbd_assessment_queue?id=eq.${id}`, { method:'PATCH', body });
+  },
   // ── Dynamic Belt Test (A4) ──
   generateBeltTest(staffId, targetBelt){ return sbFetch('/functions/v1/sbd-generate-belt-test', { method:'POST', body:{ staff_id:staffId, target_belt:targetBelt } }); },
   getMyBeltTest(staffId, targetBelt){ return sbFetch(`/rest/v1/sbd_belt_tests?staff_id=eq.${staffId}&target_belt=eq.${encodeURIComponent(targetBelt)}&status=eq.active&select=*&limit=1`); },
@@ -214,6 +220,28 @@ const SB = {
   getAllAdminProfiles(){ return sbFetch('/rest/v1/sbd_portal_users?select=*&order=name.asc'); },
   updateUserProfile(userId, data){ return sbFetch(`/rest/v1/sbd_portal_users?auth_uid=eq.${userId}`, { method:'PATCH', body:data }); },
   syncUserClaims(data){ return sbFetch('/functions/v1/sbd-sync-user-claims', { method:'POST', body:data }); },
+  // ── David OG access ──
+  // Mirrors supabase/functions/david-chat/auth.ts so the nav matches what the
+  // backend will actually authorize. master_admin → always (supreme); otherwise
+  // the facility toggle AND the per-user toggle must both be active. RLS scopes
+  // david_user_access to the caller's own row. Returns {authorized, tier}.
+  async getDavidAccess(user){
+    try {
+      if(!user) return { authorized:false, tier:null };
+      if(user.role === 'master_admin') return { authorized:true, tier:'supreme' };
+      if(!user.fid) return { authorized:false, tier:null };
+      const fac = await sbFetch(`/rest/v1/david_facility_access?facility_id=eq.${encodeURIComponent(user.fid)}&select=is_active,tier`);
+      const facRow = Array.isArray(fac) ? fac[0] : null;
+      if(!facRow || !facRow.is_active) return { authorized:false, tier:null };
+      const usr = await sbFetch(`/rest/v1/david_user_access?user_id=eq.${encodeURIComponent(user.id)}&select=is_active`);
+      const usrRow = Array.isArray(usr) ? usr[0] : null;
+      if(!usrRow || !usrRow.is_active) return { authorized:false, tier:null };
+      return { authorized:true, tier: facRow.tier || 'base' };
+    } catch(e){
+      console.warn('getDavidAccess failed:', e);
+      return { authorized:false, tier:null };
+    }
+  },
   // ── Registrations ──
   getPendingRegistrations(){ return sbFetch('/rest/v1/registrations?status=eq.pending&select=*&order=requested_at.desc'); },
   submitRegistration(data){ return sbFetch('/rest/v1/registrations', { method:'POST', prefer:'return=minimal', body:data }); },
@@ -244,13 +272,17 @@ const SB = {
   updateHospitalSystem(id, data){ return sbFetch(`/rest/v1/hospital_systems?id=eq.${id}&select=id,name,active,created_at`, { method:'PATCH', body:data }); },
   deleteHospitalSystem(id){ return sbFetch(`/rest/v1/hospital_systems?id=eq.${id}`, { method:'DELETE' }); },
   // ── Free Agents ──
-  getFreeAgents(){ return sbFetch('/rest/v1/sbd_free_agents?select=*&order=released_at.desc'); },
-  purgeFreeAgent(id){ return sbFetch(`/rest/v1/sbd_free_agents?id=eq.${id}`, { method:'DELETE' }); },
+  getFreeAgents(){ return sbFetch('/rest/v1/free_agents?select=*&order=released_at.desc'); },
+  purgeFreeAgent(id){ return sbFetch(`/rest/v1/free_agents?id=eq.${id}`, { method:'DELETE' }); },
   releaseToFreeAgent(data){ return sbFetch('/functions/v1/release-to-free-agent', { method:'POST', body:data }); },
   assignFreeAgent(data){ return sbFetch('/functions/v1/assign-free-agent', { method:'POST', body:data }); },
   // ── Free Agent remote helpers (named to match IS_LIVE call sites) ──
   releaseToFreeAgentRemote(data){ return sbFetch('/functions/v1/sbd-release-to-free-agent', { method:'POST', body:data }); },
   assignFreeAgentRemote(data){ return sbFetch('/functions/v1/sbd-assign-free-agent', { method:'POST', body:data }); },
+  // ── Transfer Requests (dual-admin verification queue, transfer_requests table) ──
+  getTransferRequests(){ return sbFetch('/rest/v1/transfer_requests?select=*&order=requested_at.desc'); },
+  createTransferRequest(data){ return sbFetch('/rest/v1/transfer_requests', { method:'POST', body:data }); },
+  updateTransferRequest(id, data){ return sbFetch(`/rest/v1/transfer_requests?id=eq.${id}`, { method:'PATCH', body:data }); },
   // ── Schedule ──
   getSchedule(fid, startDate, endDate){ return sbFetch(`/rest/v1/sbd_schedule?facility_id=eq.${encodeURIComponent(fid)}&date=gte.${startDate}&date=lte.${endDate}&select=*&order=date.asc`); },
   getStaffScheduleRange(fid, startDate, endDate){ return sbFetch(`/rest/v1/sbd_schedule?facility_id=eq.${encodeURIComponent(fid)}&date=gte.${startDate}&date=lte.${endDate}&select=*&order=date.asc`); },
@@ -287,6 +319,7 @@ function resetDB(){
   DB.queue = [];
   DB.promotionApprovals = [];
   DB.freeAgents = [];
+  DB.pendingTransfers = [];
   DB.pendingRegs = [];
   DB.placementReviews = [];
   DB.beltTestResults = [];
@@ -299,34 +332,99 @@ function resetDB(){
 // All live-mode reads go through fromBackend mappers.
 // All live-mode writes go through toBackend mappers.
 
-// ── Free Agents (sbd_free_agents table) ──────────────────────────────────────
+// ── Free Agents (free_agents table) ──────────────────────────────────────────
 // The free agent record is shaped like a staff object so it can be passed to
 // calcPoints(), beltBadge(), etc. without crashing.
 function mapFreeAgentFromBackend(row){
   if(!row) return null;
   return {
     id:             row.id,
-    staffId:        row.staff_id,
+    staffId:        row.staff_id,            // uuid → matches staff.id for the assign round-trip
     // Staff-compatible shape so UI helpers (calcPoints, beltBadge etc.) work:
-    first:          row.first_name || (row.name||'').split(' ')[0] || '--',
-    last:           row.last_name  || (row.name||'').split(' ').slice(1).join(' ') || '',
-    role:           row.staff_role || '',
-    belt:           row.belt       || 'White',
-    since:          row.belt_since || null,
-    stars:          row.stars      || 0,
+    first:          row.first || (row.name||'').split(' ')[0] || '--',
+    last:           row.last  || (row.name||'').split(' ').slice(1).join(' ') || '',
+    role:           row.role        || '',
+    belt:           row.belt        || 'White',
+    since:          row.since       || null,
+    stars:          row.stars       || 0,
     promo:          false,
     cur:            { c: null, s: null, o: null },
     nxt:            { c: null, s: null, o: null },
-    ps:             row.ps_data    || { enrolled:false, done:false, track:null, mod:null, tracks:{} },
-    oip:            row.oip        || null,
+    ps:             row.ps_data       || { enrolled:false, done:false, track:null, mod:null, tracks:{} },
+    oip:            row.oip           || null,
     history:        row.staff_history || [],
-    // Free-agent specific fields:
-    fid:            row.previous_facility_id || null,
-    fromFacName:    row.from_facility_name   || '--',
-    releaseReason:  row.release_reason       || row.reason || '',
-    releaseNotes:   row.release_notes        || row.notes  || '',
-    releasedAt:     row.released_at          || null,
+    // Free-agent specific fields (free_agents table columns):
+    fid:            row.from_fac_id   || null,
+    fromFacName:    row.from_fac_name || '--',
+    releaseReason:  row.release_reason|| '',
+    releaseNotes:   row.release_notes || '',
+    releasedAt:     row.released_at   || null,
     facilityHistory:[]
+  };
+}
+
+// ── Transfer Requests (transfer_requests table) ───────────────────────────────
+// The dual-admin verification queue (DB.pendingTransfers). Persisted so a second
+// admin in another session can see and approve requests; execution of the actual
+// release/assignment is deferred to approveTransfer().
+
+// Optimistic local ids ('fa-…', 'local-…', 'fac-…') must never reach a uuid
+// column — Postgres 400s the whole insert on invalid uuid syntax.
+function isUuidId(v){ return typeof v==='string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v); }
+
+function mapTransferFromBackend(row){
+  if(!row) return null;
+  const tr = {
+    id:              row.id,
+    type:            row.type,
+    staffId:         row.staff_id || null,
+    faId:            row.fa_id    || null,
+    staffName:       row.staff_name || '',
+    belt:            row.belt || 'White',
+    fromFacId:       row.from_fac_id   || null,
+    fromFacName:     row.from_fac_name || (row.type==='assignment' ? 'Free Agent Pool' : '--'),
+    toFacId:         row.to_fac_id     || null,
+    toFacName:       row.to_fac_name   || (row.type==='release' ? 'Free Agent Pool' : '--'),
+    toFacLoc:        row.to_fac_loc    || '',
+    reason:          row.reason || '',
+    notes:           row.notes  || '',
+    effectDate:      row.effect_date || null,
+    status:          row.status || 'pending',
+    requestedBy:     row.requested_by,
+    requestedByName: row.requested_by_name || 'Admin',
+    requestedAt:     (row.requested_at || '').slice(0,10)
+  };
+  if(row.status === 'approved'){
+    tr.approvedBy     = row.decided_by;
+    tr.approvedByName = row.decided_by_name || 'Admin';
+    tr.approvedAt     = (row.decided_at || '').slice(0,10);
+  } else if(row.status === 'denied'){
+    tr.deniedBy       = row.decided_by;
+    tr.deniedByName   = row.decided_by_name || 'Admin';
+    tr.deniedAt       = (row.decided_at || '').slice(0,10);
+    tr.denyReason     = row.deny_reason || '';
+  }
+  return tr;
+}
+function mapTransferToBackend(tr){
+  if(!tr) return null;
+  return {
+    type:              tr.type,
+    staff_id:          isUuidId(tr.staffId)   ? tr.staffId   : null,
+    fa_id:             isUuidId(tr.faId)      ? tr.faId      : null,
+    staff_name:        tr.staffName || null,
+    belt:              tr.belt || null,
+    from_fac_id:       isUuidId(tr.fromFacId) ? tr.fromFacId : null,
+    from_fac_name:     tr.fromFacName || null,
+    to_fac_id:         isUuidId(tr.toFacId)   ? tr.toFacId   : null,
+    to_fac_name:       tr.toFacName   || null,
+    to_fac_loc:        tr.toFacLoc    || null,
+    reason:            tr.reason || null,
+    notes:             tr.notes  || null,
+    effect_date:       tr.effectDate || null,
+    status:            tr.status || 'pending',
+    requested_by:      tr.requestedBy,
+    requested_by_name: tr.requestedByName || null
   };
 }
 
@@ -336,7 +434,7 @@ function mapPromotionApprovalFromBackend(row){
   return {
     id:              row.id,
     staffId:         row.staff_id,
-    fid:             row.fid,
+    fid:             row.facility_id,
     status:          row.status          || 'pending',
     currentRole:     row.current_role    || '',
     proposedRole:    row.proposed_role   || '',
@@ -356,16 +454,16 @@ function mapPromotionApprovalToBackend(ap){
   if(!ap) return null;
   return {
     staff_id:      ap.staffId,
-    fid:           ap.fid,
+    facility_id:   ap.fid,
     current_role:  ap.currentRole,
     proposed_role: ap.proposedRole,
     from_belt:     ap.belt,
-    to_belt:       ap.proposedBelt,
+    to_belt:       ap.proposedBelt || null,
     status:        ap.status    || 'pending',
     submitted_by:  ap.submittedBy,
     reviewed_by:   ap.decidedBy  || null,
     reviewed_at:   ap.decidedAt  || null,
-    review_notes:  ap.reviewNotes || ''
+    review_notes:  ap.reviewNotes || ap.notes || ''
   };
 }
 
@@ -393,6 +491,7 @@ function mapStaffFromBackend(row){
     },
     oip: row.oip || null,
     history: row.history || [],
+    practiceScores: row.practice_scores || {},
     created_at: row.created_at,
     updated_at: row.updated_at,
     placementNeeded: row.placement_needed,
@@ -418,7 +517,8 @@ function mapStaffToBackend(staff){
     ps_mod: staff.ps?.mod || null,
     ps_tracks: staff.ps?.tracks || null,
     oip: staff.oip || null,
-    history: staff.history || null
+    history: staff.history || null,
+    practice_scores: staff.practiceScores || null
   };
   if(staff.cur){
     obj.cur_comp = staff.cur.c || null;
@@ -431,6 +531,23 @@ function mapStaffToBackend(staff){
     obj.nxt_obs  = staff.nxt.o || null;
   }
   return obj;
+}
+
+// Backend column subset for Position School progress + stars, derived from the
+// canonical mapStaffToBackend mapping so the column names live in exactly one
+// place. The award-star / track flows must PATCH these real columns -- writing
+// a bare `ps` key (which is NOT a column on staff) silently 400s and loses the
+// star on the next refresh.
+function mapStaffPSToBackend(staff){
+  const full = mapStaffToBackend(staff) || {};
+  return {
+    ps_enrolled: full.ps_enrolled,
+    ps_done:     full.ps_done,
+    ps_track:    full.ps_track,
+    ps_mod:      full.ps_mod,
+    ps_tracks:   full.ps_tracks,
+    stars:       full.stars
+  };
 }
 
 function mapFacilityFromBackend(row){
@@ -467,6 +584,8 @@ function mapFacilityToBackend(fac){
 
 function mapQueueFromBackend(row){
   if(!row) return null;
+  const d = row.data || {};
+  const rev = d.review || {};
   return {
     id: row.id,
     sid: row.staff_id,
@@ -476,7 +595,12 @@ function mapQueueFromBackend(row){
     status: row.status,
     date: row.requested_at ? new Date(row.requested_at).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}) : '',
     requested_at: row.requested_at,
-    resolved_at: row.resolved_at || null
+    requestedAt: row.requested_at || null,           // camel — badge + request filters depend on this
+    resolved_at: row.resolved_at || null,
+    practiceKnowledge: d.practiceKnowledge ?? undefined,
+    practiceSimulation: d.practiceSimulation ?? undefined,
+    approvedBy: rev.action==='approved' ? rev.by : undefined,
+    approvedAt: rev.action==='approved' ? rev.at : undefined
   };
 }
 
@@ -488,7 +612,11 @@ function mapQueueToBackend(item){
     assessment_type: item.type,
     target_belt: item.targetBelt,
     status: item.status || 'pending',
-    requested_at: item.requested_at || new Date().toISOString()
+    requested_at: item.requested_at || item.requestedAt || new Date().toISOString(),
+    data: {
+      practiceKnowledge: item.practiceKnowledge ?? null,
+      practiceSimulation: item.practiceSimulation ?? null
+    }
   };
 }
 
