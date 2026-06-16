@@ -2344,44 +2344,498 @@ function applyReviewFilter(pool){
   return out;
 }
 
+// ============================================================ OVS — OBSERVATION SYSTEM
+// The third assessment gate (alongside Competency + Simulation). Three flows:
+//   Step 3  candidate requests an observation -> gets a PIN (requestObservation)
+//   Step 4  authorized observer unlocks with two PINs, scores the belt instrument
+//           (the 12 seeded observation_checklists), can Stop-Work, submits
+//   Step 5  admin reviews the submission, confirms, and the Observation gate writes
+// No demo data: instruments come from the live observation_checklists rows; records
+// from the live observations table. Gate writes go through SB.updateStaff (targeted
+// single-column PATCH — never wipes oip/history/ps_tracks).
+
+let ovsCapture = null;      // { obsId, unlocked, observerStaffId, observerName }
+let ovsArmed = null;        // { action, id } two-tap confirmation (sandbox-safe; no native confirm())
+
+// The active belt instrument for a given belt label (system of record; read-only).
+function ovsInstrument(belt){
+  const list = (window.DB && DB.observationChecklists) || [];
+  return list.find(c => c.belt === belt && c.active !== false) || null;
+}
+
+// Flatten an instrument into the units an observer actually scores. Items are 0-3
+// scale; composite Part B and components dimensions are pass/fail.
+function ovsScorableUnits(cl){
+  if(!cl) return [];
+  const schema = cl.schema || {}; const type = schema.type;
+  const units = [];
+  (cl.items || []).forEach(it => units.push({
+    id: it.id, n: it.n, text: it.text, kind: 'scale',
+    meta: it.type ? (it.type === 'M' ? 'Mandatory' : 'Recommended') : (it.domain || it.tier || ''),
+    group: type === 'composite' ? 'Part A — Shift Items' : (it.tier || it.domain || 'Checklist Items')
+  }));
+  if(type === 'composite') (schema.presentation || []).forEach(c => units.push({
+    id: c.id, n: c.n, text: c.text, kind: 'pf', meta: 'Pass / Fail', group: 'Part B — Leadership Presentation'
+  }));
+  if(type === 'components') (schema.components || []).forEach(c => (c.dims || []).forEach(d => units.push({
+    id: d.id, text: d.text, kind: 'pf', meta: 'Pass / Fail', group: c.name
+  })));
+  return units;
+}
+
+// Compute the outcome from stored scores + the instrument's schema. Mirrors
+// SBD_OVS_Observation_Logic: POINTS / MR / COMPOSITE / COMPONENTS / TIERED.
+// Returns {outcome, total, reasons[], recommendedBelt}. outcome ∈
+// advance | conditional | do_not_advance | incomplete.
+function ovsComputeOutcome(cl, scores, stopWork){
+  scores = scores || {};
+  if(stopWork && stopWork.active)
+    return { outcome:'do_not_advance', total:null, reasons:['Stop-Work executed — DO NOT ADVANCE regardless of scores'], recommendedBelt:null };
+  if(!cl) return { outcome:'incomplete', total:null, reasons:['No instrument loaded'], recommendedBelt:null };
+  const schema = cl.schema || {}; const type = schema.type; const items = cl.items || [];
+
+  if(type === 'points'){
+    let total = 0, anyZero = false, scoredAll = true;
+    items.forEach(it => { const v = scores[it.id]; if(v===undefined||v===null){ scoredAll=false; return; } if(Number(v)===0) anyZero=true; total += Number(v); });
+    const floor = schema.floorPoints || 55;
+    if(!scoredAll) return { outcome:'incomplete', total, reasons:['Score every item to compute the result'], recommendedBelt:null };
+    if(anyZero)   return { outcome:'do_not_advance', total, reasons:['An item scored 0 — automatic non-completion'], recommendedBelt:null };
+    if(total >= floor) return { outcome:'advance', total, reasons:[`Total ${total} ≥ floor ${floor}, no zeros`], recommendedBelt:null };
+    return { outcome:'do_not_advance', total, reasons:[`Total ${total} below floor ${floor}`], recommendedBelt:null };
+  }
+
+  if(type === 'mr'){
+    let manFail = [], recPass = 0, recTotal = 0, scoredAll = true;
+    items.forEach(it => { const v = scores[it.id]; const isM = it.type === 'M'; if(v===undefined||v===null){ scoredAll=false; return; } const pass = Number(v) >= 2; if(isM){ if(!pass) manFail.push(it.n); } else { recTotal++; if(pass) recPass++; } });
+    const minRec = (schema.rules && schema.rules.advance && schema.rules.advance.minRecommended) || 4;
+    if(manFail.length) return { outcome:'do_not_advance', total:recPass, reasons:[`Mandatory item${manFail.length>1?'s':''} ${manFail.join(', ')} failed — full re-observation`], recommendedBelt:null };
+    if(!scoredAll)     return { outcome:'incomplete', total:recPass, reasons:['Score every item to compute the result'], recommendedBelt:null };
+    if(recPass >= minRec) return { outcome:'advance', total:recPass, reasons:[`All mandatory passed; ${recPass}/${recTotal} recommended passed (≥${minRec})`], recommendedBelt:null };
+    return { outcome:'conditional', total:recPass, reasons:[`All mandatory passed; ${recPass}/${recTotal} recommended passed (<${minRec}) — conditional with remediation`], recommendedBelt:null };
+  }
+
+  if(type === 'composite'){
+    let manFail = [], partAScored = true;
+    items.forEach(it => { const v = scores[it.id]; if(v===undefined||v===null){ partAScored=false; return; } if(it.type === 'M' && Number(v) < 2) manFail.push(it.n); });
+    if(manFail.length) return { outcome:'do_not_advance', total:null, reasons:[`Mandatory shift item${manFail.length>1?'s':''} ${manFail.join(', ')} failed — full shift re-observation`], recommendedBelt:null };
+    const pres = schema.presentation || [];
+    let pPass = 0, presScored = true;
+    pres.forEach(c => { const v = scores[c.id]; if(v===undefined||v===null){ presScored=false; return; } if(v === 'pass') pPass++; });
+    const adv  = (schema.rules && schema.rules.presentation && schema.rules.presentation.advance) || 8;
+    const cMin = (schema.rules && schema.rules.presentation && schema.rules.presentation.conditionalMin) || 6;
+    if(!partAScored || !presScored) return { outcome:'incomplete', total:pPass, reasons:['Score all shift items and all 10 presentation criteria'], recommendedBelt:null };
+    if(pPass >= adv)  return { outcome:'advance', total:pPass, reasons:[`Mandatory shift items passed; presentation ${pPass}/10 (≥${adv})`], recommendedBelt:null };
+    if(pPass >= cMin) return { outcome:'conditional', total:pPass, reasons:[`Presentation ${pPass}/10 — conditional; re-deliver within 30 days`], recommendedBelt:null };
+    return { outcome:'do_not_advance', total:pPass, reasons:[`Presentation ${pPass}/10 (below ${cMin})`], recommendedBelt:null };
+  }
+
+  if(type === 'components'){
+    const comps = schema.components || [];
+    const allDims = comps.reduce((n,c)=> n + (c.dims||[]).length, 0);
+    let failDims = [], scoredDims = 0;
+    comps.forEach(c => (c.dims||[]).forEach(d => { const v = scores[d.id]; if(v!==undefined&&v!==null) scoredDims++; if(v !== 'pass' && v!==undefined&&v!==null) failDims.push(d.id); }));
+    if(allDims === 0) return { outcome:'incomplete', total:null, reasons:['This instrument has no scored components seeded yet'], recommendedBelt:null };
+    if(scoredDims < allDims) return { outcome:'incomplete', total:scoredDims, reasons:['Score every component dimension'], recommendedBelt:null };
+    if(failDims.length) return { outcome:'do_not_advance', total:allDims-failDims.length, reasons:[`${failDims.length} component dimension${failDims.length>1?'s':''} failed — every dimension must pass`], recommendedBelt:null };
+    return { outcome:'advance', total:allDims, reasons:['All certification components passed'], recommendedBelt:null };
+  }
+
+  if(type === 'tiered'){
+    const tiers = schema.tiers || [];
+    let placed = null;
+    for(let i=0;i<tiers.length;i++){
+      const t = tiers[i];
+      const tierItems = items.filter(it => (it.tier||'') === t.label);
+      const met = tierItems.length > 0 && tierItems.every(it => Number(scores[it.id]) >= 2);
+      if(met) placed = t; else break; // contiguous from the floor — stop at the first unmet tier
+    }
+    if(!placed) return { outcome:'do_not_advance', total:0, reasons:['No tier fully met — not ready for independent placement'], recommendedBelt:'Below White' };
+    return { outcome:'advance', total:null, reasons:[`Highest tier fully met: ${placed.label}`], recommendedBelt:placed.places };
+  }
+
+  return { outcome:'incomplete', total:null, reasons:['Unrecognized instrument schema'], recommendedBelt:null };
+}
+
+// Visual chip for an outcome string.
+function ovsOutcomeChip(outcome){
+  const map = {
+    advance:        ['ADVANCE','#22c55e','#22c55e1a','#22c55e55'],
+    conditional:    ['CONDITIONAL','#f59e0b','#f59e0b1a','#f59e0b55'],
+    do_not_advance: ['DO NOT ADVANCE','#ef4444','#ef44441a','#ef444455'],
+    incomplete:     ['IN PROGRESS','#94a3b8','#94a3b81a','#94a3b855']
+  };
+  const [t,c,bg,bd] = map[outcome] || map.incomplete;
+  return `<span class="pill" style="color:${c};background:${bg};border:1px solid ${bd};font-weight:800;font-size:11px;letter-spacing:.3px">${t}</span>`;
+}
+
+// ── Step 3: candidate requests an observation ────────────────────────────────
+function requestObservation(sid, targetBelt){
+  const s = getStaff(sid); if(!s) return;
+  // Already an open request for this belt? Re-show the PIN instead of duplicating.
+  const existing = (DB.observations||[]).find(o => o.staffId === s.id && o.targetBelt === targetBelt && ['requested','in_progress','submitted'].includes(o.status));
+  if(existing){
+    const pin = existing.handshake && existing.handshake.candidate_pin;
+    closeModal();
+    toast(`You already have an open ${targetBelt} observation. Your PIN is ${pin||'on file'}.`,'info');
+    return;
+  }
+  const pin = String(Math.floor(1000 + Math.random()*9000));
+  const handshake = { candidate_pin: pin, requested_at: new Date().toISOString() };
+  const row = { staffId:s.id, fid:s.fid, targetBelt, context:'gate', checklistBelt:targetBelt, checklistVersion:1, status:'requested', handshake, itemScores:{}, createdAt:new Date().toISOString() };
+  const backend = { staff_id:s.id, fid:s.fid, target_belt:targetBelt, context:'gate', checklist_belt:targetBelt, checklist_version:1, status:'requested', handshake, item_scores:{} };
+  if(IS_LIVE && typeof SB!=='undefined' && SB.insertObservation){
+    SB.insertObservation(backend).then(res => {
+      const created = Array.isArray(res) ? res[0] : res;
+      if(created && created.id) row.id = created.id;
+      if(!DB.observations) DB.observations = [];
+      DB.observations.unshift(row);
+    }).catch(e => handleSyncError(e,'Observation request'));
+  } else {
+    row.id = 'obs-' + Date.now();
+    if(!DB.observations) DB.observations = [];
+    DB.observations.unshift(row);
+  }
+  closeModal();
+  openModal('Observation Requested', `
+    <div class="modal-body" style="text-align:center">
+      <div style="font-size:32px;margin-bottom:8px">&#128065;</div>
+      <div style="font-size:13px;color:var(--txt2);line-height:1.6;margin-bottom:14px">Give this PIN to your observer when they assess you on the floor for <strong>${targetBelt} Belt</strong>. They enter it (with their own PIN) to begin.</div>
+      <div style="font-size:38px;font-weight:800;letter-spacing:6px;color:var(--gold);background:var(--s2);border:1px solid var(--bdr2);border-radius:12px;padding:18px">${pin}</div>
+      <div style="font-size:11px;color:var(--txt3);margin-top:10px">Keep this PIN. It stays the same until the observation is complete.</div>
+    </div>
+    <div class="modal-ft"><button class="btn btn-gold" onclick="closeModal()">Got it</button></div>`, 'modal-sm');
+}
+
+// ── Step 4: observer-side list + capture ─────────────────────────────────────
 function renderAObservations(){
-  // Day-1 shell: the Observations tab exists and is navigable. The on-the-floor
-  // capture flow (PIN entry + scored checklist + danger stop) lands in a later
-  // Observer milestone. Honest empty state -- no demo data (per repo rules).
   const el = document.getElementById('a-observations');
   if(!el) return;
+  if(ovsCapture){ el.innerHTML = ovsRenderCapture(); return; }
+
+  const u = ST.user;
+  let pool = (DB.observations || []).filter(o => ['requested','in_progress','returned'].includes(o.status));
+  if(u && u.role === 'staff_admin' && u.assignedFids && u.assignedFids.length)
+    pool = pool.filter(o => u.assignedFids.includes(o.fid));
+
+  const requested = pool.filter(o => o.status === 'requested').length;
+  const inProg    = pool.filter(o => o.status === 'in_progress').length;
+  const observers = (DB.staff || []).filter(s => s.observer).length;
+
+  const rows = pool.map(o => {
+    const s = getStaff(o.staffId); const fac = getFac(o.fid);
+    const cl = ovsInstrument(o.checklistBelt || o.targetBelt);
+    const items = cl ? ovsScorableUnits(cl).length : 0;
+    const statusPill = o.status === 'returned'
+      ? '<span class="pill" style="color:#f59e0b;background:#f59e0b1a;border:1px solid #f59e0b55">Returned</span>'
+      : o.status === 'in_progress'
+      ? '<span class="pill" style="color:#0ea5e9;background:#0ea5e91a;border:1px solid #0ea5e955">In progress</span>'
+      : '<span class="pill" style="color:#94a3b8;background:#94a3b81a;border:1px solid #94a3b855">Awaiting observer</span>';
+    return `<tr style="border-top:1px solid var(--bdr)">
+      <td style="padding:10px 8px"><div style="font-weight:700">${s?fullName(s):'Unknown'}</div><div style="font-size:11px;color:var(--txt3)">${fac?fac.name:'—'}</div></td>
+      <td style="padding:10px 8px">${beltBadge(o.targetBelt)}</td>
+      <td style="padding:10px 8px;font-size:12px;color:var(--txt2)">${items} items</td>
+      <td style="padding:10px 8px">${statusPill}</td>
+      <td style="padding:10px 8px;text-align:right"><button class="btn btn-gold btn-sm" onclick="ovsOpenCapture('${o.id}')">${o.status==='in_progress'?'Resume':'Conduct'}</button></td>
+    </tr>`;
+  }).join('');
+
   el.innerHTML = `
-    <div style="max-width:760px">
+    <div>
       <h2 style="margin:0 0 6px">Observations</h2>
-      <p style="color:var(--txt2);font-size:13px;margin:0 0 20px">On-the-floor performance checks &mdash; the third assessment gate, alongside Competency and Simulation.</p>
+      <p style="color:var(--txt2);font-size:13px;margin:0 0 16px">On-the-floor performance checks &mdash; the third assessment gate, alongside Competency and Simulation.</p>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px">
+        <div class="stat-card"><div class="stat-accent" style="background:#94a3b8"></div><div class="stat-lbl">Awaiting Observer</div><div class="stat-val">${requested}</div><div class="stat-sub">candidate requested</div></div>
+        <div class="stat-card"><div class="stat-accent" style="background:#0ea5e9"></div><div class="stat-lbl">In Progress</div><div class="stat-val">${inProg}</div><div class="stat-sub">being scored</div></div>
+        <div class="stat-card"><div class="stat-accent" style="background:var(--gold)"></div><div class="stat-lbl">Authorized Observers</div><div class="stat-val">${observers}</div><div class="stat-sub">can conduct</div></div>
+      </div>
+      ${pool.length ? `
+      <div class="card"><div class="card-body" style="padding:4px 8px">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead><tr style="text-align:left;color:var(--txt3);font-size:11px;text-transform:uppercase;letter-spacing:.4px">
+            <th style="padding:8px">Candidate</th><th style="padding:8px">Target Belt</th><th style="padding:8px">Instrument</th><th style="padding:8px">Status</th><th style="padding:8px;text-align:right">Action</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div></div>` : `
       <div style="border:1px dashed var(--bdr);border-radius:12px;padding:32px;text-align:center;background:var(--s1)">
         <div style="font-size:28px;margin-bottom:10px">&#128065;</div>
-        <div style="font-weight:700;margin-bottom:6px">No observations in progress</div>
-        <div style="color:var(--txt3);font-size:12.5px;line-height:1.6;max-width:460px;margin:0 auto">
-          Once a candidate passes their placement assessment, they can request an observation. An authorized observer then records their performance against the belt checklist here.<br><br>
-          <span style="color:var(--txt2)">Coming in this module: observer role &amp; PINs, the scored checklist, and the &ldquo;do not advance&rdquo; safety stop.</span>
-        </div>
-      </div>
+        <div style="font-weight:700;margin-bottom:6px">No observations waiting</div>
+        <div style="color:var(--txt3);font-size:12.5px;line-height:1.6;max-width:460px;margin:0 auto">When a candidate requests an observation from their portal, it appears here for an authorized observer to conduct.</div>
+      </div>`}
     </div>`;
 }
 
+// Enter the capture flow for one observation.
+function ovsOpenCapture(obsId){
+  const o = (DB.observations||[]).find(x => x.id === obsId);
+  if(!o){ toast('Observation not found.','err'); return; }
+  ovsCapture = { obsId, unlocked:false, observerStaffId:null, observerName:null };
+  if(o.status === 'in_progress' && o.itemScores) ovsCapture.scores = { ...o.itemScores };
+  renderAObservations();
+}
+
+function ovsBack(){ ovsCapture = null; ovsArmed = null; renderAObservations(); }
+
+// Two-PIN handshake: the observer proves identity with their reusable PIN, the
+// candidate consents with the PIN they were issued. Both must match to unlock.
+function ovsUnlock(){
+  const o = (DB.observations||[]).find(x => x.id === ovsCapture.obsId); if(!o) return;
+  const obsPin  = (document.getElementById('ovs-observer-pin')||{}).value || '';
+  const candPin = (document.getElementById('ovs-candidate-pin')||{}).value || '';
+  const observer = (DB.staff||[]).find(s => s.observer && s.observationPin && String(s.observationPin) === obsPin.trim());
+  if(!observer){ toast('Observer PIN not recognized. Only an authorized observer with a PIN can begin.','err'); return; }
+  if(!o.handshake || String(o.handshake.candidate_pin) !== candPin.trim()){ toast('Candidate PIN does not match this observation.','err'); return; }
+  ovsCapture.unlocked = true;
+  ovsCapture.observerStaffId = observer.id;
+  ovsCapture.observerName = fullName(observer);
+  if(!ovsCapture.scores) ovsCapture.scores = { ...(o.itemScores||{}) };
+  if(!ovsCapture.stopWork) ovsCapture.stopWork = o.stopWork || { active:false };
+  toast(`Verified — observer ${ovsCapture.observerName}. Begin scoring.`,'ok');
+  renderAObservations();
+}
+
+function ovsScore(itemId, value){
+  if(!ovsCapture || !ovsCapture.unlocked) return;
+  ovsCapture.scores = ovsCapture.scores || {};
+  ovsCapture.scores[itemId] = value;
+  renderAObservations();
+}
+
+function ovsToggleStopWork(){
+  if(!ovsCapture) return;
+  ovsCapture.stopWork = ovsCapture.stopWork || { active:false };
+  ovsCapture.stopWork.active = !ovsCapture.stopWork.active;
+  if(ovsCapture.stopWork.active) ovsCapture.stopWork.at = new Date().toISOString();
+  toast(ovsCapture.stopWork.active ? 'STOP-WORK active — this observation will be DO NOT ADVANCE.' : 'Stop-Work cleared.', ovsCapture.stopWork.active ? 'err' : 'ok');
+  renderAObservations();
+}
+
+function ovsRenderCapture(){
+  const o = (DB.observations||[]).find(x => x.id === ovsCapture.obsId);
+  if(!o) return '<div style="padding:20px">Observation not found. <button class="btn btn-ghost btn-sm" onclick="ovsBack()">Back</button></div>';
+  const s = getStaff(o.staffId); const fac = getFac(o.fid);
+  const cl = ovsInstrument(o.checklistBelt || o.targetBelt);
+  const header = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div>
+        <button class="btn btn-ghost btn-sm" onclick="ovsBack()" style="margin-bottom:8px">&larr; Back to Observations</button>
+        <h2 style="margin:0">Observation — ${s?fullName(s):'Unknown'}</h2>
+        <div style="font-size:12px;color:var(--txt3)">${fac?fac.name:'—'} &middot; Target ${beltBadge(o.targetBelt)} &middot; ${cl?(cl.schema&&cl.schema.type||'').toUpperCase()+' instrument':'no instrument'}</div>
+      </div>
+    </div>`;
+
+  if(!cl || ovsScorableUnits(cl).length === 0){
+    return `<div>${header}<div style="border:1px dashed var(--bdr);border-radius:12px;padding:28px;text-align:center;background:var(--s1);color:var(--txt2);font-size:13px">No scored checklist is seeded for ${o.targetBelt} Belt yet. Nothing to score.</div></div>`;
+  }
+
+  if(!ovsCapture.unlocked){
+    return `<div style="max-width:460px">${header}
+      <div class="card"><div class="card-body">
+        <div style="font-weight:700;margin-bottom:4px">Two-PIN check</div>
+        <div style="font-size:12px;color:var(--txt3);line-height:1.6;margin-bottom:14px">Enter the observer's PIN and the candidate's PIN to begin. Both are required — this confirms the right observer is scoring the right candidate, in person.</div>
+        <label style="font-size:12px;color:var(--txt2);font-weight:600">Observer PIN</label>
+        <input id="ovs-observer-pin" inputmode="numeric" maxlength="4" class="form-input" style="width:100%;margin:4px 0 12px;letter-spacing:4px;font-size:18px;text-align:center;box-sizing:border-box" placeholder="••••">
+        <label style="font-size:12px;color:var(--txt2);font-weight:600">Candidate PIN</label>
+        <input id="ovs-candidate-pin" inputmode="numeric" maxlength="4" class="form-input" style="width:100%;margin:4px 0 16px;letter-spacing:4px;font-size:18px;text-align:center;box-sizing:border-box" placeholder="••••">
+        <button class="btn btn-gold" style="width:100%;justify-content:center" onclick="ovsUnlock()">Unlock checklist</button>
+      </div></div>
+    </div>`;
+  }
+
+  // Unlocked → scored checklist, grouped, with a live outcome preview.
+  const units = ovsScorableUnits(cl);
+  const scores = ovsCapture.scores || {};
+  const stop = ovsCapture.stopWork || { active:false };
+  const scored = units.filter(u => scores[u.id] !== undefined && scores[u.id] !== null).length;
+  const outcome = ovsComputeOutcome(cl, scores, stop);
+
+  // Group units in render order.
+  const groups = []; const gmap = {};
+  units.forEach(u => { if(!gmap[u.group]){ gmap[u.group] = []; groups.push(u.group); } gmap[u.group].push(u); });
+
+  const scaleBtns = (u) => [3,2,1,0].map(v => {
+    const on = Number(scores[u.id]) === v;
+    const clr = v===0?'#ef4444':v===1?'#f59e0b':v===2?'#84cc16':'#22c55e';
+    return `<button onclick="ovsScore('${u.id}',${v})" style="flex:1;padding:7px 4px;border-radius:8px;font-weight:800;font-size:13px;cursor:pointer;border:1.5px solid ${on?clr:'var(--bdr2)'};background:${on?clr:'transparent'};color:${on?'#0b0f17':'var(--txt2)'}">${v}</button>`;
+  }).join('');
+  const pfBtns = (u) => ['pass','fail'].map(v => {
+    const on = scores[u.id] === v; const clr = v==='pass'?'#22c55e':'#ef4444';
+    return `<button onclick="ovsScore('${u.id}','${v}')" style="flex:1;padding:7px 4px;border-radius:8px;font-weight:800;font-size:12px;cursor:pointer;border:1.5px solid ${on?clr:'var(--bdr2)'};background:${on?clr:'transparent'};color:${on?'#0b0f17':'var(--txt2)'}">${v.toUpperCase()}</button>`;
+  }).join('');
+
+  const body = groups.map(g => `
+    <div style="margin-bottom:14px">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--txt3);font-weight:700;margin:6px 0 8px">${g}</div>
+      ${gmap[g].map(u => `
+        <div style="padding:10px 12px;border:1px solid var(--bdr);border-radius:10px;margin-bottom:8px;background:var(--s1)">
+          <div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:8px">
+            <div style="font-size:13px;line-height:1.5">${u.n?`<span style="color:var(--txt3)">${u.n}.</span> `:''}${u.text}</div>
+            ${u.meta?`<span style="font-size:10px;color:${u.meta==='Mandatory'?'#ef4444':'var(--txt3)'};font-weight:700;white-space:nowrap;align-self:flex-start">${u.meta}</span>`:''}
+          </div>
+          <div style="display:flex;gap:6px">${u.kind==='pf'?pfBtns(u):scaleBtns(u)}</div>
+        </div>`).join('')}
+    </div>`).join('');
+
+  const armed = ovsArmed && ovsArmed.action==='submit' && ovsArmed.id===ovsCapture.obsId;
+  const canSubmit = outcome.outcome !== 'incomplete';
+
+  return `<div style="max-width:760px">${header}
+    <div class="card" style="position:sticky;top:0;z-index:5"><div class="card-body" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <div style="font-size:12px;color:var(--txt2)">Observer: <strong>${ovsCapture.observerName}</strong> &middot; ${scored}/${units.length} scored</div>
+      <div style="display:flex;align-items:center;gap:10px">
+        ${ovsOutcomeChip(outcome.outcome)}
+        <button class="btn btn-sm" onclick="ovsToggleStopWork()" style="border:1.5px solid #ef4444;color:${stop.active?'#0b0f17':'#ef4444'};background:${stop.active?'#ef4444':'transparent'};font-weight:800">${stop.active?'■ STOP-WORK ON':'⛔ Stop-Work'}</button>
+      </div>
+    </div></div>
+    ${stop.active?`<div style="margin:10px 0;padding:10px 12px;background:#ef44441a;border:1px solid #ef444455;border-radius:8px;color:#ef4444;font-size:12px;font-weight:600">Stop-Work is active. On submit this observation records DO NOT ADVANCE regardless of item scores.</div>`:''}
+    <div style="margin-top:14px">${body}</div>
+    <div class="card"><div class="card-body">
+      <div style="font-size:12px;color:var(--txt2);margin-bottom:10px"><strong>Result preview:</strong> ${ovsOutcomeChip(outcome.outcome)} ${outcome.reasons[0]?`<span style="color:var(--txt3)">— ${outcome.reasons[0]}</span>`:''}</div>
+      <button class="btn ${armed?'btn-gold':'btn-primary'}" style="width:100%;justify-content:center" ${canSubmit?'':'disabled style="opacity:.5;cursor:not-allowed;width:100%;justify-content:center"'} onclick="ovsSubmit()">${armed?'Tap again to confirm submit':canSubmit?'Submit observation':'Score every item to submit'}</button>
+    </div></div>
+  </div>`;
+}
+
+// Submit: two-tap, then persist the record (status submitted, review pending).
+function ovsSubmit(){
+  if(!ovsCapture || !ovsCapture.unlocked) return;
+  const o = (DB.observations||[]).find(x => x.id === ovsCapture.obsId); if(!o) return;
+  const cl = ovsInstrument(o.checklistBelt || o.targetBelt);
+  const scores = ovsCapture.scores || {};
+  const stop = ovsCapture.stopWork || { active:false };
+  const outcome = ovsComputeOutcome(cl, scores, stop);
+  if(outcome.outcome === 'incomplete'){ toast('Score every item before submitting.','err'); return; }
+  // Two-tap arm
+  if(!(ovsArmed && ovsArmed.action==='submit' && ovsArmed.id===o.id)){
+    ovsArmed = { action:'submit', id:o.id };
+    setTimeout(()=>{ if(ovsArmed && ovsArmed.action==='submit' && ovsArmed.id===o.id){ ovsArmed=null; renderAObservations(); } }, 6000);
+    renderAObservations(); return;
+  }
+  ovsArmed = null;
+  const now = new Date().toISOString();
+  const handshake = { ...(o.handshake||{}), observer_id: ovsCapture.observerStaffId, observer_used_at: now };
+  // local
+  o.status = 'submitted'; o.reviewStatus = 'pending'; o.itemScores = scores;
+  o.stopWork = stop; o.totalPoints = outcome.total; o.outcome = outcome.outcome;
+  o.outcomeReasons = outcome.reasons; o.recommendedBelt = outcome.recommendedBelt;
+  o.observerId = ovsCapture.observerStaffId; o.observerName = ovsCapture.observerName;
+  o.handshake = handshake; o.submittedAt = now;
+  const backend = {
+    status:'submitted', review_status:'pending', item_scores:scores, stop_work:stop,
+    total_points: outcome.total, outcome: outcome.outcome, outcome_reasons: outcome.reasons,
+    recommended_belt: outcome.recommendedBelt, assessor_id: ovsCapture.observerStaffId,
+    assessor_name: ovsCapture.observerName, handshake, submitted_at: now, last_active_at: now
+  };
+  if(IS_LIVE && typeof SB!=='undefined' && SB.updateObservation && !String(o.id).startsWith('obs-')){
+    SB.updateObservation(o.id, backend).catch(e => handleSyncError(e,'Observation submit'));
+  }
+  ovsCapture = null;
+  toast(`Observation submitted — ${outcome.outcome.replace(/_/g,' ')}. It's now in Observation Reviews.`,'ok');
+  renderAObservations();
+}
+
+// ── Step 5: admin review + gate write ────────────────────────────────────────
 function renderAObservationReviews(){
-  // Day-1 shell: mirrors Placement Reviews (the parity Iiggie asked for). Real
-  // list + filter bar + gate confirmation slot in once submissions exist.
   const el = document.getElementById('a-observationreviews');
   if(!el) return;
+  const u = ST.user;
+  let pool = (DB.observations || []).filter(o => o.status === 'submitted' || o.status === 'reviewed');
+  if(u && u.role === 'staff_admin' && u.assignedFids && u.assignedFids.length)
+    pool = pool.filter(o => u.assignedFids.includes(o.fid));
+
+  const pending  = pool.filter(o => o.status === 'submitted').length;
+  const reviewed = pool.filter(o => o.status === 'reviewed').length;
+  const advanced = pool.filter(o => o.status === 'reviewed' && (o.outcome === 'advance' || o.outcome === 'conditional')).length;
+
+  const rows = pool.map(o => {
+    const s = getStaff(o.staffId); const fac = getFac(o.fid);
+    const armedC = ovsArmed && ovsArmed.action==='confirm' && ovsArmed.id===o.id;
+    const armedR = ovsArmed && ovsArmed.action==='return'  && ovsArmed.id===o.id;
+    const actions = o.status === 'submitted'
+      ? `<button class="btn btn-sm ${armedC?'btn-gold':'btn-primary'}" onclick="confirmObservation('${o.id}')">${armedC?'Confirm?':'Confirm & write gate'}</button>
+         <button class="btn btn-ghost btn-sm" onclick="returnObservation('${o.id}')" style="margin-left:6px">${armedR?'Return?':'Return'}</button>`
+      : `<span class="pill p-ok" style="font-size:11px">Gate written</span>`;
+    return `<tr style="border-top:1px solid var(--bdr)">
+      <td style="padding:10px 8px"><div style="font-weight:700">${s?fullName(s):'Unknown'}</div><div style="font-size:11px;color:var(--txt3)">${fac?fac.name:'—'}</div></td>
+      <td style="padding:10px 8px">${beltBadge(o.targetBelt)}</td>
+      <td style="padding:10px 8px">${ovsOutcomeChip(o.outcome)}</td>
+      <td style="padding:10px 8px;font-size:12px;color:var(--txt2)">${o.observerName||'—'}<div style="font-size:11px;color:var(--txt3)">${o.outcomeReasons&&o.outcomeReasons[0]?o.outcomeReasons[0]:''}</div></td>
+      <td style="padding:10px 8px;text-align:right">${actions}</td>
+    </tr>`;
+  }).join('');
+
   el.innerHTML = `
     <div>
       <h2 style="margin:0 0 6px">Observation Reviews</h2>
-      <p style="color:var(--txt2);font-size:13px;margin:0 0 20px">Review completed observations, confirm pass/fail, and clear the Observation gate &mdash; same flow as Placement Reviews.</p>
+      <p style="color:var(--txt2);font-size:13px;margin:0 0 16px">Confirm a submitted observation to write the candidate's Observation gate &mdash; same flow as Placement Reviews.</p>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px">
+        <div class="stat-card"><div class="stat-accent" style="background:#0ea5e9"></div><div class="stat-lbl">Awaiting Review</div><div class="stat-val">${pending}</div><div class="stat-sub">submitted</div></div>
+        <div class="stat-card"><div class="stat-accent" style="background:#22c55e"></div><div class="stat-lbl">Reviewed</div><div class="stat-val">${reviewed}</div><div class="stat-sub">gate written</div></div>
+        <div class="stat-card"><div class="stat-accent" style="background:var(--gold)"></div><div class="stat-lbl">Advanced</div><div class="stat-val">${advanced}</div><div class="stat-sub">passed the gate</div></div>
+      </div>
+      ${pool.length ? `
+      <div class="card"><div class="card-body" style="padding:4px 8px">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead><tr style="text-align:left;color:var(--txt3);font-size:11px;text-transform:uppercase;letter-spacing:.4px">
+            <th style="padding:8px">Candidate</th><th style="padding:8px">Belt</th><th style="padding:8px">Outcome</th><th style="padding:8px">Observer / Basis</th><th style="padding:8px;text-align:right">Action</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div></div>` : `
       <div style="border:1px dashed var(--bdr);border-radius:12px;padding:32px;text-align:center;background:var(--s1)">
         <div style="font-size:28px;margin-bottom:10px">&#128203;</div>
         <div style="font-weight:700;margin-bottom:6px">No completed observations to review yet</div>
-        <div style="color:var(--txt3);font-size:12.5px;line-height:1.6;max-width:460px;margin:0 auto">
-          Submitted observations will appear here with filter &amp; search by facility, just like Placement Reviews. Confirming one updates that staff member&rsquo;s Observation gate.
-        </div>
-      </div>
+        <div style="color:var(--txt3);font-size:12.5px;line-height:1.6;max-width:460px;margin:0 auto">Submitted observations appear here. Confirming one writes that candidate's Observation gate.</div>
+      </div>`}
     </div>`;
+}
+
+// Confirm a submission → write the Observation gate (nxt.o) via a targeted PATCH.
+function confirmObservation(obsId){
+  const o = (DB.observations||[]).find(x => x.id === obsId); if(!o) return;
+  // Two-tap arm (sandbox-safe; never a native confirm()).
+  if(!(ovsArmed && ovsArmed.action==='confirm' && ovsArmed.id===obsId)){
+    ovsArmed = { action:'confirm', id:obsId };
+    setTimeout(()=>{ if(ovsArmed && ovsArmed.action==='confirm' && ovsArmed.id===obsId){ ovsArmed=null; renderAObservationReviews(); } }, 6000);
+    renderAObservationReviews(); return;
+  }
+  ovsArmed = null;
+  const s = getStaff(o.staffId);
+  if(!s){ toast('Candidate not found.','err'); return; }
+  const gateVal = (o.outcome === 'advance' || o.outcome === 'conditional') ? 'pass' : 'fail';
+  // Recompute from stored scores at approval so the written result reflects the record.
+  const cl = ovsInstrument(o.checklistBelt || o.targetBelt);
+  const recomputed = ovsComputeOutcome(cl, o.itemScores, o.stopWork);
+  const finalVal = (recomputed.outcome === 'advance' || recomputed.outcome === 'conditional') ? 'pass' : 'fail';
+  if(!s.nxt) s.nxt = { c:null, s:null, o:null };
+  s.nxt.o = finalVal;
+  const now = new Date().toISOString();
+  o.status = 'reviewed'; o.reviewStatus = 'approved';
+  o.reviewedBy = ST.user && ST.user.id; o.reviewedByName = ST.user && (ST.user.name || ST.user.email); o.reviewedAt = now;
+  if(IS_LIVE && typeof SB!=='undefined'){
+    if(SB.updateStaff) SB.updateStaff(s.id, { nxt_obs: finalVal }).catch(e => handleSyncError(e,'Observation gate write'));
+    if(SB.updateObservation && !String(o.id).startsWith('obs-'))
+      SB.updateObservation(o.id, { status:'reviewed', review_status:'approved', reviewed_by:o.reviewedBy, reviewed_by_name:o.reviewedByName, reviewed_at:now }).catch(e => handleSyncError(e,'Observation review'));
+  }
+  toast(`Observation gate written for ${fullName(s)}: ${finalVal.toUpperCase()} (${o.targetBelt} Belt).`, finalVal==='pass'?'ok':'err');
+  renderAObservationReviews();
+}
+
+// Return a submission to the observer (no gate write).
+function returnObservation(obsId){
+  const o = (DB.observations||[]).find(x => x.id === obsId); if(!o) return;
+  if(!(ovsArmed && ovsArmed.action==='return' && ovsArmed.id===obsId)){
+    ovsArmed = { action:'return', id:obsId };
+    setTimeout(()=>{ if(ovsArmed && ovsArmed.action==='return' && ovsArmed.id===obsId){ ovsArmed=null; renderAObservationReviews(); } }, 6000);
+    renderAObservationReviews(); return;
+  }
+  ovsArmed = null;
+  const now = new Date().toISOString();
+  o.status = 'in_progress'; o.reviewStatus = 'returned'; o.returnReason = 'Returned for re-scoring';
+  if(IS_LIVE && typeof SB!=='undefined' && SB.updateObservation && !String(o.id).startsWith('obs-'))
+    SB.updateObservation(o.id, { status:'in_progress', review_status:'returned', return_reason:o.returnReason, reviewed_at:now }).catch(e => handleSyncError(e,'Observation return'));
+  toast('Observation returned to the observer for re-scoring.','info');
+  renderAObservationReviews();
 }
 
 function renderAPlacementReviews(){
@@ -5341,9 +5795,9 @@ function openApplyModal(sid){
       </div>
       <div style="font-size:13px;font-weight:600;margin-bottom:8px">Select the gate you want to apply for:</div>
       ${gatesNeeded.map(g=>`
-        <div style="padding:12px;background:var(--s2);border:1px solid var(--bdr2);border-radius:var(--rs);margin-bottom:8px;cursor:pointer;transition:.15s" onclick="submitApply(${sid},'${g.key}','${nb}')" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--bdr2)'">
+        <div style="padding:12px;background:var(--s2);border:1px solid var(--bdr2);border-radius:var(--rs);margin-bottom:8px;cursor:pointer;transition:.15s" onclick="${g.key==='o'?`requestObservation('${s.id}','${nb}')`:`submitApply(${sid},'${g.key}','${nb}')`}" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--bdr2)'">
           <div style="font-weight:700;margin-bottom:3px">${g.label} Assessment</div>
-          <div style="font-size:11.5px;color:var(--txt3)">For ${nb} Belt certification. Conducted by an SBD-certified assessor.</div>
+          <div style="font-size:11.5px;color:var(--txt3)">${g.key==='o'?`On-the-floor observation for ${nb} Belt. You get a PIN to give your observer.`:`For ${nb} Belt certification. Conducted by an SBD-certified assessor.`}</div>
         </div>`).join('')}
       ${gatesNeeded.length===0?`<div style="text-align:center;padding:20px;color:var(--ok);font-weight:700">All gates passed! Awaiting belt certification review.</div>`:''}
     </div>
