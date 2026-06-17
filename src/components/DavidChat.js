@@ -826,6 +826,24 @@ class DavidChat {
         this.input = container.querySelector('#david-query');
         this.btn = container.querySelector('#david-btn');
 
+        // Jump-to-latest arrow (Iiggie's ask): appears when scrolled up, jumps to newest.
+        try {
+            const jumpBtn = document.createElement('button');
+            jumpBtn.type = 'button';
+            jumpBtn.id = 'david-jump-latest';
+            jumpBtn.title = 'Jump to latest';
+            jumpBtn.innerHTML = '&#8595;';
+            jumpBtn.style.cssText = 'position:absolute;right:22px;bottom:90px;width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,.2);background:rgba(20,24,38,.92);color:#e2e8f0;font-size:16px;cursor:pointer;display:none;z-index:6;box-shadow:0 2px 8px rgba(0,0,0,.35)';
+            jumpBtn.onclick = () => { this.msgArea.scrollTop = this.msgArea.scrollHeight; };
+            const host = this.msgArea.parentElement || this.container;
+            if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
+            host.appendChild(jumpBtn);
+            this.msgArea.addEventListener('scroll', () => {
+                const nearBottom = this.msgArea.scrollHeight - this.msgArea.scrollTop - this.msgArea.clientHeight < 80;
+                jumpBtn.style.display = nearBottom ? 'none' : 'block';
+            });
+        } catch (_) {}
+
         this.btn.onclick = () => this.sendMessage();
         this.input.onkeydown = (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -1238,6 +1256,24 @@ class DavidChat {
                 this.input.scrollIntoView({ block: 'nearest' });
             };
             div.appendChild(editBtn);
+        }
+        if (formatRole === 'ai') {
+            // Copy button on David's responses (Iiggie's ask). Copies the raw response text.
+            const copyBtn = document.createElement('button');
+            copyBtn.type = 'button';
+            copyBtn.className = 'david-copy-btn';
+            copyBtn.title = 'Copy response';
+            copyBtn.textContent = '⧉ Copy';
+            copyBtn.style.cssText = 'display:inline-block;margin-top:6px;font-size:10px;line-height:1;padding:3px 7px;border-radius:5px;border:1px solid rgba(255,255,255,.2);background:transparent;color:inherit;cursor:pointer;opacity:.55';
+            copyBtn.onmouseenter = () => { copyBtn.style.opacity = '1'; };
+            copyBtn.onmouseleave = () => { copyBtn.style.opacity = '.55'; };
+            copyBtn.onclick = () => {
+                const write = navigator.clipboard && navigator.clipboard.writeText
+                    ? navigator.clipboard.writeText(displayContent)
+                    : Promise.reject();
+                write.then(() => { copyBtn.textContent = '✓ Copied'; setTimeout(() => { copyBtn.textContent = '⧉ Copy'; }, 1500); }).catch(() => {});
+            };
+            div.appendChild(copyBtn);
         }
         const ts = document.createElement('div');
         ts.className = 'david-msg-time';
