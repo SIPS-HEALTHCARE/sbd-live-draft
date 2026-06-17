@@ -33,12 +33,16 @@ CREATE INDEX IF NOT EXISTS sbd_belt_tests_fac_idx   ON public.sbd_belt_tests (fa
 
 ALTER TABLE public.sbd_belt_tests ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "bt_master_all" ON public.sbd_belt_tests;
+DROP POLICY IF EXISTS "bt_staff_admin_select" ON public.sbd_belt_tests;
+DROP POLICY IF EXISTS "bt_facility_select" ON public.sbd_belt_tests;
+DROP POLICY IF EXISTS "bt_member_self_select" ON public.sbd_belt_tests;
 CREATE POLICY "bt_master_all" ON public.sbd_belt_tests FOR ALL TO authenticated
     USING (auth.jwt()->>'role' = 'master_admin')
     WITH CHECK (auth.jwt()->>'role' = 'master_admin');
 CREATE POLICY "bt_staff_admin_select" ON public.sbd_belt_tests FOR SELECT TO authenticated
     USING (auth.jwt()->>'role' = 'staff_admin'
-           AND facility_id = ANY((SELECT assigned_facility_ids FROM public.sbd_portal_users WHERE auth_uid = auth.uid())));
+           AND EXISTS (SELECT 1 FROM public.sbd_portal_users u WHERE u.auth_uid = auth.uid() AND facility_id::text = ANY(u.assigned_facility_ids)));
 CREATE POLICY "bt_facility_select" ON public.sbd_belt_tests FOR SELECT TO authenticated
     USING (facility_id = (auth.jwt()->>'facility_id')::uuid);
 CREATE POLICY "bt_member_self_select" ON public.sbd_belt_tests FOR SELECT TO authenticated
@@ -93,14 +97,20 @@ CREATE INDEX IF NOT EXISTS sbd_btr_status_idx ON public.sbd_belt_test_results (s
 
 ALTER TABLE public.sbd_belt_test_results ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "btr_master_all" ON public.sbd_belt_test_results;
+DROP POLICY IF EXISTS "btr_staff_admin_all" ON public.sbd_belt_test_results;
+DROP POLICY IF EXISTS "btr_facility_all" ON public.sbd_belt_test_results;
+DROP POLICY IF EXISTS "btr_hospital_select" ON public.sbd_belt_test_results;
+DROP POLICY IF EXISTS "btr_member_self_insert" ON public.sbd_belt_test_results;
+DROP POLICY IF EXISTS "btr_member_self_select" ON public.sbd_belt_test_results;
 CREATE POLICY "btr_master_all" ON public.sbd_belt_test_results FOR ALL TO authenticated
     USING (auth.jwt()->>'role' = 'master_admin')
     WITH CHECK (auth.jwt()->>'role' = 'master_admin');
 CREATE POLICY "btr_staff_admin_all" ON public.sbd_belt_test_results FOR ALL TO authenticated
     USING (auth.jwt()->>'role' = 'staff_admin'
-           AND facility_id = ANY((SELECT assigned_facility_ids FROM public.sbd_portal_users WHERE auth_uid = auth.uid())))
+           AND EXISTS (SELECT 1 FROM public.sbd_portal_users u WHERE u.auth_uid = auth.uid() AND facility_id::text = ANY(u.assigned_facility_ids)))
     WITH CHECK (auth.jwt()->>'role' = 'staff_admin'
-           AND facility_id = ANY((SELECT assigned_facility_ids FROM public.sbd_portal_users WHERE auth_uid = auth.uid())));
+           AND EXISTS (SELECT 1 FROM public.sbd_portal_users u WHERE u.auth_uid = auth.uid() AND facility_id::text = ANY(u.assigned_facility_ids)));
 CREATE POLICY "btr_facility_all" ON public.sbd_belt_test_results FOR ALL TO authenticated
     USING (auth.jwt()->>'role' = 'facility_admin' AND facility_id = (auth.jwt()->>'facility_id')::uuid)
     WITH CHECK (auth.jwt()->>'role' = 'facility_admin' AND facility_id = (auth.jwt()->>'facility_id')::uuid);
@@ -140,3 +150,16 @@ CREATE TRIGGER sbd_btr_mark_test_submitted
 AFTER INSERT ON public.sbd_belt_test_results
 FOR EACH ROW
 EXECUTE FUNCTION public.sbd_mark_belt_test_submitted();
+
+-- ── Question bank store (single row, JSONB) ─────────────────────────────────
+-- Holds the authored bank incl. correct answers + critical tags. RLS is enabled
+-- with NO policies, so no client can read it; the generation edge fn reads it
+-- with the service role (bypasses RLS). Keeps the answer key private. Load the
+-- data with: INSERT INTO public.sbd_belt_bank (id, data) VALUES (1, $bank$...$bank$::jsonb)
+--            ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = now();
+CREATE TABLE IF NOT EXISTS public.sbd_belt_bank (
+    id         integer PRIMARY KEY,
+    data       jsonb NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.sbd_belt_bank ENABLE ROW LEVEL SECURITY;

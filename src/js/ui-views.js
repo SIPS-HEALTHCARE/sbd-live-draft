@@ -11799,6 +11799,48 @@ async function remediateBeltTestResult(id){
 }
 
 // Section injected into renderAAssessments. Scoped by assignedFids for staff_admin.
+// Assessor-side: list staff whose Competency+Simulation gates are approved for
+// their next belt (same eligibility as the candidate's entry card) and offer a
+// "Generate Belt PIN" button. This is the assessor half of the proctored belt
+// test — the candidate hits the PIN gate, the assessor generates the matching
+// assessment_type='belt' PIN here.
+function renderBeltPinAuthBlock(assignedFids){
+  if (typeof btEligible !== 'function' || typeof nextBelt !== 'function') return '';
+  const eligible = DB.staff.filter(st => {
+    if (st.releasedAt) return false;
+    if (assignedFids && !assignedFids.includes(st.fid)) return false;
+    if (asmFilter !== 'all' && st.fid !== asmFilter) return false;
+    const nb = nextBelt(st.belt);
+    return nb && btEligible(st.id, nb);
+  });
+  if (!eligible.length) return '';
+  return `
+    <div style="margin-bottom:20px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <div style="font-size:12px;font-weight:700;color:var(--txt1);letter-spacing:.05em">&#128274; BELT TEST AUTHORIZATION</div>
+        <span class="pill p-purple">${eligible.length} ready</span>
+      </div>
+      <div class="card">
+        <div style="padding:10px 14px;background:rgba(139,92,246,.06);border-bottom:1px solid var(--bdr2);font-size:11.5px;color:var(--txt3);line-height:1.5">
+          These staff have approved Competency + Simulation gates and can take their proctored belt test. Generate a one-time PIN (valid 10 min) and enter it on the candidate's device to begin.
+        </div>
+        <div style="overflow-x:auto">
+          <table class="tbl tbl-static" style="min-width:560px">
+            <thead><tr><th>Staff Member</th><th>Facility</th><th>Target Belt</th><th>Action</th></tr></thead>
+            <tbody>
+              ${eligible.map(st => `<tr>
+                <td class="fw7">${fullName(st)}</td>
+                <td style="font-size:11.5px;color:var(--txt3)">${getFac(st.fid)?.name || st.fid || '--'}</td>
+                <td>${beltBadge(nextBelt(st.belt))}</td>
+                <td><button class="btn btn-gold btn-xs" onclick="showGeneratePinModal('${st.id}','belt')">&#128274; Generate Belt PIN</button></td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+}
+
 function renderBeltTestReviewSection(assignedFids){
   const pending = (DB.beltTestResults || []).filter(r =>
     r.status === 'PENDING_REVIEW' &&
@@ -11953,6 +11995,8 @@ function renderAAssessments() {
     </div>
 
     ${renderAssessmentAuthBlock(DB.staff.filter(st => st.placementNeeded && (!assignedFids || assignedFids.includes(st.fid)) && (asmFilter === 'all' || st.fid === asmFilter) && (!term || fullName(st).toLowerCase().includes(term))))}
+
+    ${renderBeltPinAuthBlock(assignedFids)}
 
     ${renderBeltTestReviewSection(assignedFids)}
 
