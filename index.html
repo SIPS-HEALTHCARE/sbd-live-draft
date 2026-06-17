@@ -294,6 +294,9 @@
       <div class="nav-item" data-view="h-guide" onclick="hNav(this,'h-guide','Platform Guide')">
         <span class="ico"><svg viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.4"/><path d="M7 7.5a2 2 0 013.5 1.5c0 1-1.5 1.5-1.5 1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="9" cy="13" r=".75" fill="currentColor"/></svg></span>Platform Guide
       </div>
+      <div class="nav-item" data-view="h-david" id="nav-david-h" onclick="hNav(this,'h-david','David OG Intelligence Hub')" style="display:none">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 8V4H8"/><rect x="4" y="8" width="10" height="8" rx="2"/><circle cx="7" cy="12" r="1"/><circle cx="11" cy="12" r="1"/><path d="M9 16v2M7 18h4"/></svg></span>David OG
+      </div>
     </nav>
     <div class="sb-ft">
       <div class="user-row">
@@ -327,6 +330,7 @@
       <div id="h-progression" class="hidden"></div>
       <div id="h-guide" class="hidden"></div>
       <div id="h-settings" class="hidden"></div>
+      <div id="h-david" class="hidden"></div>
     </div>
   </div>
 </div>
@@ -522,6 +526,9 @@
       <div class="nav-item" data-view="s-guide" onclick="sNav(this,'s-guide','Platform Guide')">
         <span class="ico"><svg viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.4"/><path d="M7 7.5a2 2 0 013.5 1.5c0 1-1.5 1.5-1.5 1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="9" cy="13" r=".75" fill="currentColor"/></svg></span>Platform Guide
       </div>
+      <div class="nav-item" data-view="s-david" id="nav-david-s" onclick="sNav(this,'s-david','David OG Coach')" style="display:none">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 8V4H8"/><rect x="4" y="8" width="10" height="8" rx="2"/><circle cx="7" cy="12" r="1"/><circle cx="11" cy="12" r="1"/><path d="M9 16v2M7 18h4"/></svg></span>David OG
+      </div>
     </nav>
     <div class="sb-ft">
       <div class="user-row">
@@ -554,6 +561,7 @@
       <div id="s-study" class="hidden"></div>
       <div id="s-guide" class="hidden"></div>
       <div id="s-settings" class="hidden"></div>
+      <div id="s-david" class="hidden"></div>
     </div>
   </div>
 </div>
@@ -590,6 +598,9 @@
       <div class="nav-item" data-view="x-guide" onclick="xNav(this,'x-guide','Platform Guide')">
         <span class="ico"><svg viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.4"/><path d="M7 7.5a2 2 0 013.5 1.5c0 1-1.5 1.5-1.5 1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="9" cy="13" r=".75" fill="currentColor"/></svg></span>Platform Guide
       </div>
+      <div class="nav-item" data-view="x-david" id="nav-david-x" onclick="xNav(this,'x-david','David OG Intelligence Hub')" style="display:none">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 8V4H8"/><rect x="4" y="8" width="10" height="8" rx="2"/><circle cx="7" cy="12" r="1"/><circle cx="11" cy="12" r="1"/><path d="M9 16v2M7 18h4"/></svg></span>David OG
+      </div>
     </nav>
     <div class="sb-ft">
       <div class="user-row">
@@ -621,6 +632,7 @@
       <div id="x-reports" class="hidden"></div>
       <div id="x-guide" class="hidden"></div>
       <div id="x-settings" class="hidden"></div>
+      <div id="x-david" class="hidden"></div>
     </div>
   </div>
 </div>
@@ -676,15 +688,17 @@
 <div id="toast"></div>
 
 
-  <script src="src/js/logic.js?v=22"></script>
+  <script src="src/js/logic.js?v=23"></script>
   <script src="src/js/utils.js?v=27"></script>
-  <script src="src/js/api-supabase.js?v=34"></script>
+  <script src="src/js/api-supabase.js?v=36"></script>
   <script src="src/js/auth-password.js?v=20"></script>
-  <script src="src/js/ui-views.js?v=106"></script>
+  <script src="src/js/activity.js?v=1"></script>
+  <script src="src/js/ui-views.js?v=109"></script>
   <script src="src/js/settings.js?v=19"></script>
   <script src="src/js/onboarding.js?v=19"></script>
   <script src="src/js/auth-init.js?v=27"></script>
-  <script src="src/components/DavidChat.js?v=11"></script>
+  <script src="src/js/david-serializers.js?v=3"></script>
+  <script src="src/components/DavidChat.js?v=15"></script>
   <script src="src/components/DavidAdminDashboard.js"></script>
 
 

@@ -1261,10 +1261,25 @@ class DavidChat {
         const role = user.role || 'staff_member';
         const assignedFids = user.assignedFids || [];
         const isMaster = role === 'master_admin';
-        
-        // 1. Filter Facilities
-        const authorizedFacilities = _db.facilities.filter(f => 
-            isMaster || assignedFids.includes(f.id) || (role === 'facility_admin' && f.id === user.facility_id)
+
+        // M.0 part 3 — STAFF SELF-SCOPE: a staff member's David sees ONLY their own record.
+        // Return a self-only snapshot; never expose other staff, facilities, or network data.
+        if (role === 'staff_member') {
+            return this.buildStaffSelfContext(_db, _st);
+        }
+
+        // 1. Filter Facilities — scoped by role.
+        // NOTE: the mapped user object uses `fid` / `systemId` / `assignedFids` (mapUserFromBackend);
+        // there is NO `user.facility_id`. The previous code compared against `user.facility_id`
+        // (undefined), so facility_admin/hospital/system_admin all received an EMPTY snapshot.
+        const sysFids = (role === 'system_admin' && user.systemId)
+            ? (_db.facilities || []).filter(f => f.systemId === user.systemId).map(f => f.id)
+            : [];
+        const authorizedFacilities = (_db.facilities || []).filter(f =>
+            isMaster
+            || assignedFids.includes(f.id)                                                   // staff_admin
+            || ((role === 'facility_admin' || role === 'hospital') && f.id === user.fid)      // single-facility leaders
+            || (role === 'system_admin' && sysFids.includes(f.id))                            // system admin
         );
         const authFidList = authorizedFacilities.map(f => f.id);
 
@@ -1390,9 +1405,91 @@ class DavidChat {
         `.trim();
     }
 
+    // M.0 part 3 — self-only context for a staff_member. Exposes nothing about anyone else.
+    buildStaffSelfContext(_db, _st) {
+        const me = (_db.staff || []).find(s => String(s.id) === String(_st.staffId));
+        if (!me) return "No personal training record is loaded yet for this account.";
+        const myFac = (_db.facilities || []).find(f => f.id === me.fid);
+        const g = (x) => x || '—';
+        const ps = me.ps || {};
+        return `
+            DAVID PERSONAL COACHING SNAPSHOT — you are coaching THIS person about THEIR OWN progress only:
+            - Name: ${`${me.first || ''} ${me.last || ''}`.trim() || 'Technician'}
+            - Facility: ${myFac ? myFac.name : '—'}
+            - Current belt: ${g(me.belt)} (${me.stars || 0} star${me.stars === 1 ? '' : 's'})
+            - Current-belt gates: Competency=${g(me.cur?.c)}, Simulation=${g(me.cur?.s)}, Observation=${g(me.cur?.o)}
+            - Next-belt gates: Competency=${g(me.nxt?.c)}, Simulation=${g(me.nxt?.s)}, Observation=${g(me.nxt?.o)}
+            - Position School: enrolled=${ps.enrolled ? 'yes' : 'no'}, completed=${ps.done ? 'yes' : 'no'}${ps.track ? `, track=${ps.track}` : ''}
+            - Practice scores (best % per belt/mode): ${JSON.stringify(me.practiceScores || {})}
+            [SCOPE]: You can see ONLY this person's own record. You have NO access to other staff, other facilities, the assessment queue, or network data. If asked about anyone else, say you can only help them with their own training.
+        `.trim();
+    }
+
+    // M.0 part 4 — role-aware system persona. Directives 8 (curriculum) & 9 (standards copyright)
+    // are legally load-bearing and kept verbatim for EVERY role.
+    buildPersonality() {
+        const _st = (typeof ST !== 'undefined') ? ST : null;
+        const role = (_st && _st.user && _st.user.role) || 'master_admin';
+        const isExec = role === 'master_admin' || role === 'staff_admin';
+        const isStaff = role === 'staff_member';
+
+        const CURRICULUM = `CURRICULUM COACHING (KNOWLEDGE BASE): For ANY question about the SBD belt or position-school curriculum — belt requirements, study material, practice questions, situational scenarios, sterile-processing procedures, assessment prep, or how a candidate advances or should be coached — you MUST first search your knowledge base to pull the exact SBD curriculum for the relevant belt/level, then coach strictly from what it returns (Learner Guide content, the question/answer keys, fail indicators, and observation-gate criteria). Name the belt/level you are drawing from. Do NOT invent or approximate curriculum from general knowledge; if the search returns nothing for that topic, say the content for that belt/area is not loaded yet rather than guessing.`;
+        const COPYRIGHT = `STANDARDS SAFE-USE (COPYRIGHT COMPLIANCE — overrides curriculum coaching for external standards): SBD curriculum and Sterile by Design materials are OUR intellectual property and may be quoted exactly. External standards are NOT: NEVER reproduce verbatim text, tables, figures, diagrams, or appendices from AAMI, HSPA, Joint Commission, NFPA, ANSI, or any other copyrighted standard. Teach the principle — the purpose, the risk, the best practice, the operational application — in original Sterile by Design language, and CITE the standard you drew from (e.g. "per ANSI/AAMI ST79") while directing the user to consult the current edition of the official publication for authoritative requirements. If a user asks what a standard SAYS or requests its official wording, do not quote it — explain the requirement in your own words and refer them to the publisher's official publication. Prefer public regulatory sources (CDC, CMS, OSHA, FDA) where public guidance fits. You are never a digital copy of any standard: you are the Sterile by Design Operations Coach, built on SBD OS methodologies, SOPs, competencies, and quality systems.`;
+        const BRAND = `STRICT BRAND EXCLUSIVITY: SIPS Healthcare Solutions uses SBD OS (Sterile By Design OS) and OTIS exclusively. NEVER recommend, mention, or train users on competitor technologies; use ONLY OTIS and SBD OS as examples. Absolutely DO NOT mention CensiTrac, Censis, SPM, T-DOC, Impress, or any other third-party tracking system.`;
+        const OUTPUT = `OUTPUT FORMAT: You may use a brief <thinking>...</thinking> block for private reasoning, but you MUST ALWAYS follow it with your actual answer as plain text OUTSIDE the thinking block. The user only sees text outside <thinking>; never respond with only a thinking block. Never output raw SQL, JSON, or technical logs — synthesize and present results conversationally.`;
+
+        if (isStaff) {
+            return `
+                PERSONALITY & ROLE:
+                You are David OG, a warm, encouraging personal Sterile Processing coach speaking DIRECTLY to one technician. Always use the second person ("you", "your"). You help THIS person understand their belt progress, prepare for their next assessment, and study the curriculum. Be supportive, specific, and practical — like a great preceptor.
+
+                ${OUTPUT}
+                ${BRAND}
+                ${CURRICULUM}
+                ${COPYRIGHT}
+
+                SCOPE: You can only see this person's own record. You cannot see or discuss other technicians, other facilities, or network-wide data, and you have no database access. If asked about anyone else or for data you don't have, gently redirect to coaching them on their own progress.
+            `.trim();
+        }
+
+        if (isExec) {
+            return `
+                PERSONALITY & CAPABILITIES:
+                You are David OG, the highly intelligent and highly conversational operational partner for SIPS Healthcare Solutions.
+
+                ${OUTPUT}
+                WARM, HUMAN EXCELLENCE: Speak with warmth, high emotional intelligence, and sharp operational awareness — a trusted, top-tier Director of Operations who happens to have instantaneous database access.
+                AGGRESSIVE INTELLIGENCE: Challenge flawed premises quietly when you see bad data, but keep it friendly.
+                PRE-COGNITION: Anticipate the real "why" behind a prompt; synthesize what the data means, don't just list it.
+                ${BRAND}
+                MASTER ADMIN PRECISION: You are reporting to the Master Admin (CEO / COO) of a large healthcare enterprise. Provide ruthless, executive-level insight: cross-facility benchmarking, risk exposure, resource allocation. Do not assume the org is small from sparse test data.
+                ${CURRICULUM}
+                ${COPYRIGHT}
+                COMMAND CENTER — CROSS-PERSON ANALYSIS: When asked to compare people, judge who is struggling, or find trends, operate as the operations analyst. Pull the real data, then synthesize across as many people as the question needs: (a) COMPARE & CONTRAST individuals; (b) FLAG AT-RISK staff with the recommended intervention; (c) SURFACE PATTERNS across assessments, study habits, and facilities. Render a chart when comparing people or showing a trend, and close with the operational takeaway.
+
+                Execute your tasks perfectly while maintaining casual, highly intelligent human conversation.
+            `.trim();
+        }
+
+        // Facility / system leaders (hospital, facility_admin, system_admin): scoped, third-person.
+        return `
+            PERSONALITY & CAPABILITIES:
+            You are David OG, the operational partner for a SIPS Healthcare Solutions facility leader. Speak in the third person about their team (use names). You help them run their OWN facility/system: staff readiness, assessment backlog, coaching priorities, and compliance.
+
+            ${OUTPUT}
+            WARM, HUMAN EXCELLENCE: Warm, emotionally intelligent, operationally sharp — a trusted Director of Operations for their site(s).
+            PRE-COGNITION: Anticipate the real "why"; synthesize what the data means for their team.
+            ${BRAND}
+            LEADERSHIP ANALYSIS: Within the leader's OWN facility or system only: (a) compare and contrast their technicians' strengths, gaps, belt and assessment history; (b) flag at-risk staff with the recommended intervention; (c) surface patterns in study habits and readiness. Render a chart when comparing people or showing a trend, and close with the operational takeaway. You have NO access to other facilities or the wider network.
+            ${CURRICULUM}
+            ${COPYRIGHT}
+        `.trim();
+    }
+
     async sendMessage() {
         const text = this.input.value.trim();
         if (!text || this.btn.disabled) return;
+        if (typeof logActivity === 'function') logActivity('david_query', {});  // P1
 
         this.clearDynamicChips();
 
@@ -1425,35 +1522,38 @@ class DavidChat {
             const preStreamHistoryLengths = this.history.length;
 
             const snapshot = this.getPlatformSnapshot();
-            const personality = `
-                PERSONALITY & CAPABILITIES:
-                You are David OG, the highly intelligent and highly conversational operational partner for SIPS Healthcare Solutions.
-                
-                SHADOW DIRECTIVES (O1-LEVEL PROTOCOL):
-                1. THINKING IS OPTIONAL — YOUR ANSWER IS NOT: You may use a brief <thinking> ... </thinking> block for private reasoning, but you MUST ALWAYS follow it with your actual answer to the user as plain text OUTSIDE the thinking block. The user ONLY sees text that is outside <thinking>. NEVER respond with only a thinking block, and never end your turn inside one. If you called a tool, you MUST then write the user a clear, plain-text answer that uses what the tool returned. When in doubt, answer directly without any thinking block.
-                2. WARM, HUMAN EXCELLENCE: Never behave like a rigid, robotic AI. Do not use phrases like "I have indexed the data" or "Need operational insights?". Speak to the CEO with warmth, high emotional intelligence, and sharp operational awareness. Act like a trusted, top-tier human Director of Operations who happens to have instantaneous database access. 
-                3. AGGRESSIVE INTELLIGENCE: Challenge flawed premises quietly when you see bad data, but keep it friendly.
-                4. PRE-COGNITION: When pulling data, anticipate the *real* "why" behind the prompt. Don't just list data—synthesize what it means for the organization.
-                5. STRICT BRAND EXCLUSIVITY: SIPS Healthcare Solutions uses SBD OS (Sterile By Design OS) and OTIS exclusively. You MUST NEVER recommend, mention, or train users on competitor technologies. If a template or user requests tracking software examples, ONLY use OTIS and SBD OS as your examples. Absolutely DO NOT mention CensiTrac, Censis, SPM, T-DOC, Impress, or any other third-party tracking system under any circumstances.
-                6. NO RAW TRACES OR CODE: Unless explicitly requested by the user, NEVER output raw SQL queries, JSON result previews, or technical logs in your output. You are speaking to business executives. Synthesize the data and present the final figures conversationally.
-                7. MASTER ADMIN PRECISION: You are reporting to the Master Admin (CEO / COO) of a massive healthcare enterprise. Never assume the organization is 'small' or in an 'early growth phase' just because a specific test query returns sparse data. Provide ruthless, executive-level operational insights. Focus on cross-facility benchmarking, risk exposure, and precise resource allocation. Do not explain basic concepts. Give the data, the risk, and the action.
-                8. CURRICULUM COACHING (KNOWLEDGE BASE): For ANY question about the SBD belt or position-school curriculum — belt requirements, study material, practice questions, situational scenarios, sterile-processing procedures, assessment prep, or how a candidate advances or should be coached — you MUST first search your knowledge base to pull the exact SBD curriculum for the relevant belt/level, then coach strictly from what it returns (Learner Guide content, the question/answer keys, fail indicators, and observation-gate criteria). Name the belt/level you are drawing from. Do NOT invent or approximate curriculum from general knowledge; if the search returns nothing for that topic, say the content for that belt/area is not loaded yet rather than guessing.
-                9. STANDARDS SAFE-USE (COPYRIGHT COMPLIANCE — overrides Directive 8 for external standards): SBD curriculum and Sterile by Design materials are OUR intellectual property and may be quoted exactly. External standards are NOT: NEVER reproduce verbatim text, tables, figures, diagrams, or appendices from AAMI, HSPA, Joint Commission, NFPA, ANSI, or any other copyrighted standard. Teach the principle — the purpose, the risk, the best practice, the operational application — in original Sterile by Design language, and CITE the standard you drew from (e.g. "per ANSI/AAMI ST79") while directing the user to consult the current edition of the official publication for authoritative requirements. If a user asks what a standard SAYS or requests its official wording, do not quote it — explain the requirement in your own words and refer them to the publisher's official publication. Prefer public regulatory sources (CDC, CMS, OSHA, FDA) where public guidance fits. You are never a digital copy of any standard: you are the Sterile by Design Operations Coach, built on SBD OS methodologies, SOPs, competencies, and quality systems.
-                10. COMMAND CENTER — CROSS-PERSON ANALYSIS (master admin): When asked to compare people, judge who is struggling, or find trends, operate as the CEO's operations analyst, not a lookup tool. PULL the real data with your database tool, then SYNTHESIZE it across as many people as the question needs (no artificial limit for admins). You are expected to excel at three things: (a) COMPARE & CONTRAST individuals — strengths, gaps, belt and assessment history, knowledge vs simulation, trajectory — and say plainly who is stronger and why; (b) FLAG AT-RISK staff — anyone slipping on scores, stalled on a gate, or trending toward failing their next assessment — with the recommended intervention; (c) SURFACE PATTERNS across assessments, study habits, and whole facilities — common weak spots, who is ready for promotion, where coaching should focus. When you compare people or show a trend, render a chart. Always close with the operational takeaway: what it means and the action to take.
+            const personality = this.buildPersonality();
 
-                Execute your tasks perfectly while maintaining casual, highly intelligent human conversation.
-            `;
-            
+            // Channel A (P0.3 + P1) — append dynamic per-entity context. Staff get their own
+            // practice history + engagement; facility leaders get facility-wide engagement.
+            // Best-effort; never blocks the send.
+            let channelA = '';
+            try {
+                const _st = (typeof ST !== 'undefined') ? ST : null;
+                const _role = _st && _st.user ? _st.user.role : null;
+                const S = window.DavidSerializers;
+                if (S && _role === 'staff_member') {
+                    const parts = await Promise.all([
+                        S.aiSerializePracticeHistory(_st.staffId),
+                        S.aiSerializeEngagement(_st.staffId),
+                        S.aiSerializeVelocity(_st.staffId),
+                    ]);
+                    channelA = parts.filter(Boolean).join('\n\n');
+                } else if (S && (_role === 'facility_admin' || _role === 'hospital') && _st.user.fid) {
+                    channelA = await S.aiSerializeFacilityEngagement(_st.user.fid) || '';
+                }
+            } catch (e) { /* context enrichment is optional */ }
+
             const res = await fetch(this.apiUrl, {
                 method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json', 
-                    'Authorization': token ? `Bearer ${token}` : '' 
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': token ? `Bearer ${token}` : ''
                 },
-                body: JSON.stringify({ 
-                    message: text, 
+                body: JSON.stringify({
+                    message: text,
                     history: this.history,
-                    systemPrompt: personality + "\n\nCONTEXT:\n" + snapshot
+                    systemPrompt: personality + "\n\nCONTEXT:\n" + snapshot + (channelA ? "\n\n" + channelA : "")
                 })
             });
 

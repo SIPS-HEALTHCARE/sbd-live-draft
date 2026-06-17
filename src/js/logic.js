@@ -167,6 +167,28 @@ function generateProjection(staff){
   };
 }
 
+// ── VELOCITY & READINESS ENGINE (P2) ───────────────────────────────────────────
+// Built on EXISTING prod data (staff.history is the real belt record written by
+// sbd-record-assessment; staff.since is the current-belt earn date) — no new table needed.
+// calcVelocity: passed gates per active month (mirrors the scoreboard velocity metric).
+function calcVelocity(staff){
+  if(!staff) return {passedGates:0, months:1, gatesPerMonth:0};
+  const passedGates = (staff.history||[]).filter(h=>h && h.res==='pass').length;
+  const months = Math.max(1, Math.round((typeof daysAt==='function'?daysAt(staff.since):0)/30));
+  return { passedGates, months, gatesPerMonth: +(passedGates/months).toFixed(2) };
+}
+// calcGateReadiness: roadmap §6.3 weighted score — practice 40 / study 20 / trend 20 / consistency 20.
+// `signals` are supplied by the async serializer (practice% from practiceScores, study & consistency
+// from sbd_activity_log, trend from sbd_practice_attempts). Returns {total 0-100, breakdown}.
+function calcGateReadiness(staff, signals){
+  const s = signals || {};
+  const practice    = Math.max(0, Math.min(40, Math.round((s.practicePct||0)/100*40)));
+  const study       = Math.max(0, Math.min(20, Math.round(s.studyScore||0)));
+  const trend       = Math.max(0, Math.min(20, Math.round(s.trendScore||0)));
+  const consistency = Math.max(0, Math.min(20, Math.round(s.consistencyScore||0)));
+  return { total: practice+study+trend+consistency, breakdown:{practice, study, trend, consistency} };
+}
+
 // ── SYSTEM HELPERS ────────────────────────────────────────────────────────────
 function getSystem(sid){  return (DB.systems||[]).find(s=>s.id===sid); }
 function systemFacs(sid){ return DB.facilities.filter(f=>f.systemId===sid); }

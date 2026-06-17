@@ -88,6 +88,7 @@ async function doLogin(preAuthSession=null){
       userProfile.assignedFids = userProfile.assigned_fids;
     }
     ST.user = userProfile;
+    if (typeof startActivitySession === 'function') startActivitySession();  // P1: begin engagement session (logs login + session_start)
 
     // -- HYDRATE MEMORY CACHE WITH LIVE DATA --
     await initAppData();
@@ -230,6 +231,7 @@ function logout(){
     console.warn('SBD: Blocked logout during active login/initialization');
     return;
   }
+  if (typeof endActivitySession === 'function') endActivitySession();  // P1: flush session_end + logout before state is cleared
   if(IS_LIVE){
     try { fetch(`${SB_API_URL}/auth/v1/logout`,{method:'POST',headers:{'apikey':SB_ANON_KEY,'Authorization':'Bearer '+(ST.session?.access_token||'')}}).catch(e => { if (e instanceof ReferenceError || e instanceof TypeError || e instanceof SyntaxError) throw e; }); } catch(e){}
   }
@@ -291,6 +293,7 @@ function enterPortal(type){
     if(_sEl) _sEl.classList.add('active'); else document.querySelector('#s-portal .nav-item[data-view="s-dashboard"]').classList.add('active');
     document.getElementById('s-topbar-title').textContent=_st;
     document.getElementById('s-portal').classList.remove('hidden');
+    applyDavidNavGate('nav-david-s', u);
     renderSView(_sv);
     return;
   }
@@ -312,6 +315,7 @@ function enterPortal(type){
     if(_xEl) _xEl.classList.add('active'); else document.querySelector('#x-portal .nav-item[data-view="x-dashboard"]').classList.add('active');
     document.getElementById('x-topbar-title').textContent=_xt;
     document.getElementById('x-portal').classList.remove('hidden');
+    applyDavidNavGate('nav-david-x', u);
     renderXView(_xv);
     return;
   }
@@ -349,6 +353,7 @@ function enterPortal(type){
     if(_hEl) _hEl.classList.add('active'); else document.querySelector('#h-portal .nav-item[data-view="h-dashboard"]').classList.add('active');
     document.getElementById('h-topbar-title').textContent=_ht;
     document.getElementById('h-portal').classList.remove('hidden');
+    applyDavidNavGate('nav-david-h', u);
     renderHView(_hv);
     return;
   }
@@ -366,20 +371,7 @@ function enterPortal(type){
   if (_navDavidDash) _navDavidDash.style.display = isMaster ? 'flex' : 'none';
   document.getElementById('nav-freeagents').style.display=isMaster?'flex':'none';
   document.getElementById('nav-systems').style.display=isMaster?'flex':'none';
-  const _navDavid = document.getElementById('nav-david');
-  if (_navDavid) {
-    // David OG visibility mirrors the backend (david-chat/auth.ts): master_admin
-    // always; otherwise the facility + per-user access toggles must both be on.
-    // Backend still enforces access on every call, so this is UX only.
-    _navDavid.style.display = 'none';
-    if (u && u.role === 'master_admin') {
-      _navDavid.style.display = 'flex';
-    } else if (u && typeof IS_LIVE !== 'undefined' && IS_LIVE && typeof SB !== 'undefined' && SB.getDavidAccess) {
-      SB.getDavidAccess(u)
-        .then(acc => { if (acc && acc.authorized) _navDavid.style.display = 'flex'; })
-        .catch(() => {});
-    }
-  }
+  applyDavidNavGate('nav-david', u);
   // Placement reviews visible to all SIPS admins (master + staff_admin)
   const _navPlacement=document.getElementById('nav-placementreviews');
   if(_navPlacement) _navPlacement.style.display='flex';
@@ -494,11 +486,12 @@ function renderSView(view){
     toast('RBAC Guard: Unauthorized access to Staff Portal', 'err');
     return;
   }
-  ['s-dashboard','s-belt','s-window','s-scoreboard','s-posschool','s-report','s-oip','s-schedule','s-history','s-study','s-guide','s-settings'].forEach(v=>{
+  ['s-dashboard','s-belt','s-window','s-scoreboard','s-posschool','s-report','s-oip','s-schedule','s-history','s-study','s-guide','s-settings','s-david'].forEach(v=>{
     const el=document.getElementById(v);
     if(el){el.classList.add('hidden');el.classList.remove('fade-in');}
   });
   ST.sView=view;
+  if(typeof logActivity==='function') logActivity('view',{view});
   const el=document.getElementById(view);
   if(el){el.classList.remove('hidden');void el.offsetWidth;el.classList.add('fade-in');}
   const fns={
@@ -514,6 +507,7 @@ function renderSView(view){
     's-study':renderSStudy,
     's-guide':()=>renderGuideView('s'),
     's-settings':renderSettingsView,
+    's-david':()=>renderDavidView('s-david'),
   };
   if(fns[view]) setTimeout(fns[view],30);
 }
@@ -525,11 +519,12 @@ function renderXView(view){
     toast('RBAC Guard: Unauthorized access to System Portal', 'err');
     return;
   }
-  ['x-dashboard','x-facilities','x-facility','x-staff','x-schedule','x-reports','x-guide','x-settings'].forEach(v=>{
+  ['x-dashboard','x-facilities','x-facility','x-staff','x-schedule','x-reports','x-guide','x-settings','x-david'].forEach(v=>{
     const el=document.getElementById(v);
     if(el){el.classList.add('hidden');el.classList.remove('fade-in');}
   });
   ST.xView=view;
+  if(typeof logActivity==='function') logActivity('view',{view});
   const el=document.getElementById(view);
   if(el){el.classList.remove('hidden');void el.offsetWidth;el.classList.add('fade-in');}
   const fns={
@@ -541,6 +536,7 @@ function renderXView(view){
     'x-reports':renderXReports,
     'x-guide':()=>renderGuideView('x'),
     'x-settings':renderSettingsView,
+    'x-david':()=>renderDavidView('x-david'),
   };
   if(fns[view]) setTimeout(fns[view],30);
 }
@@ -570,11 +566,12 @@ function renderHView(view){
     toast('RBAC Guard: Unauthorized access to Facility Portal', 'err');
     return;
   }
-  ['h-dashboard','h-staff','h-profile','h-milestones','h-posschool','h-scoreboard','h-schedule','h-attendance','h-reports','h-assessments','h-progression','h-guide','h-settings'].forEach(v=>{
+  ['h-dashboard','h-staff','h-profile','h-milestones','h-posschool','h-scoreboard','h-schedule','h-attendance','h-reports','h-assessments','h-progression','h-guide','h-settings','h-david'].forEach(v=>{
     const el=document.getElementById(v);
     if(el){ el.classList.add('hidden'); el.classList.remove('fade-in'); }
   });
   ST.hView=view;
+  if(typeof logActivity==='function') logActivity('view',{view});
   const el=document.getElementById(view);
   if(el){ el.classList.remove('hidden'); void el.offsetWidth; el.classList.add('fade-in'); }
   // Facility admin nav visibility
@@ -596,6 +593,7 @@ function renderHView(view){
     'h-progression':()=>renderHProgression(),
     'h-guide':()=>renderGuideView('h'),
     'h-settings':renderSettingsView,
+    'h-david':()=>renderDavidView('h-david'),
   };
   if(fns[view]) setTimeout(fns[view],30);
 }
@@ -612,6 +610,7 @@ function renderAView(view){
     if(el){ el.classList.add('hidden'); el.classList.remove('fade-in'); }
   });
   ST.aView=view;
+  if(typeof logActivity==='function') logActivity('view',{view});
   const el=document.getElementById(view);
   if(el){ el.classList.remove('hidden'); void el.offsetWidth; el.classList.add('fade-in'); }
   const fns={
@@ -636,17 +635,36 @@ function renderAView(view){
   if(fns[view]) setTimeout(fns[view],30);
 }
 
-function renderADavidView() {
-  const container = document.getElementById('a-david');
+// Shared DAVID mount — used by every portal (M.1). window.DAVID is a singleton; a user is
+// only ever in one portal at a time, so re-pointing it via renderIn(id) into the active
+// portal's container is safe. DavidChat reads ST.user.role internally, so it self-scopes.
+function renderDavidView(id) {
+  const container = document.getElementById(id);
   if (!container) return;
+  if (typeof DavidChat === 'undefined') {
+    container.innerHTML = '<div style="padding:40px; color:var(--txt2); text-align:center">Initializing David OG Intelligence Terminal...</div>';
+    return;
+  }
   if (!window.DAVID) {
-    if (typeof DavidChat === 'undefined') {
-      container.innerHTML = '<div style="padding:40px; color:var(--txt2); text-align:center">Initializing David OG Intelligence Terminal...</div>';
-      return;
-    }
-    window.DAVID = new DavidChat({ containerId: 'a-david' });
+    window.DAVID = new DavidChat({ containerId: id });
   } else {
-    window.DAVID.renderIn('a-david');
+    window.DAVID.renderIn(id);
+  }
+}
+function renderADavidView() { renderDavidView('a-david'); }
+
+// David OG nav visibility — mirrors backend auth (david-chat/auth.ts): master_admin always;
+// otherwise the facility + per-user toggles must both be active (checked live via getDavidAccess).
+// Backend re-enforces on every call, so this is UX only. Shared by all portals (M.1).
+function applyDavidNavGate(navId, u) {
+  const el = document.getElementById(navId);
+  if (!el) return;
+  el.style.display = 'none';
+  if (u && u.role === 'master_admin') { el.style.display = 'flex'; return; }
+  if (u && typeof IS_LIVE !== 'undefined' && IS_LIVE && typeof SB !== 'undefined' && SB.getDavidAccess) {
+    SB.getDavidAccess(u)
+      .then(acc => { if (acc && acc.authorized) el.style.display = 'flex'; })
+      .catch(() => {});
   }
 }
 
@@ -7041,6 +7059,7 @@ function startPracticeTest(belt, mode) {
   if (!bank) return;
   const pool = mode === 'knowledge' ? bank.knowledge : bank.simulation;
   if (!pool || !pool.length) return;
+  if (typeof logActivity === 'function') logActivity('practice_start', { belt, mode });
   // Shuffle full pool, take up to 100
   const shuffled = [...pool].sort(() => Math.random() - 0.5).slice(0, 100);
   PRACTICE_STATE = {
@@ -7101,6 +7120,27 @@ function savePracticeScore(belt, mode, score, total) {
   // Narrow single-column PATCH (same pattern as mapStaffPSToBackend): cannot clobber
   // oip/history/ps_tracks. The whole object is sent because PostgREST replaces jsonb wholesale.
   if (IS_LIVE) SB.updateStaff(s.id, { practice_scores: s.practiceScores }).catch(e => handleSyncError(e, 'Practice score sync'));
+
+  // P0.3 — append-only attempt log (ADDITIONAL to the best-score write above; never replaces it).
+  // Captures the per-question misses from PRACTICE_STATE so David can coach from real gaps.
+  // Self-graded data (learner clicks correct/incorrect) — flagged self_graded so it is treated
+  // as self-assessment, not machine-verified.
+  try {
+    if (IS_LIVE && typeof PRACTICE_STATE !== 'undefined' && Array.isArray(PRACTICE_STATE.answers)) {
+      const wrong = PRACTICE_STATE.answers
+        .filter(a => !a.correct)
+        .map(a => ({ q: (a.q && (a.q.q || a.q.s)) || '', diff: (a.q && a.q.diff) || null }));
+      SB.logPracticeAttempt({
+        staff_id: s.id,
+        fid: s.fid || null,
+        belt, mode, score, total, pct,
+        wrong_questions: wrong,
+        source: 'practice_bank',
+        self_graded: true
+      }).catch(e => handleSyncError(e, 'Practice attempt log'));
+    }
+  } catch (e) { /* attempt logging is best-effort; never block the score save */ }
+  if (typeof logActivity === 'function') logActivity('practice_complete', { belt, mode, pct });
 }
 
 function canRequestAssessment(staffId, belt) {
@@ -7146,6 +7186,7 @@ function requestGateAssessment(belt, type) {
   };
   if(IS_LIVE){ SB.submitAssessmentQueue(mapQueueToBackend(newReq)).catch(e => handleSyncError(e, 'Queue sync')); }
   DB.queue.push(newReq);
+  if (typeof logActivity === 'function') logActivity('assessment_request', { belt, type });
   toast(type + ' assessment request submitted for ' + belt + ' Belt. Your Lead and admin have been notified.', 'ok');
   renderSStudy();
   // Refresh any open views
