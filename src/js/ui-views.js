@@ -3344,6 +3344,9 @@ function confirmPlacement(prId){
     s.belt = chosenBelt;
     s.since = new Date().toISOString().split('T')[0];
     s.placementNeeded = false;
+    // Placed = certified at that belt. Grandfather the current-belt gates so the
+    // assessment window opens; otherwise getWindowStatus() locks the next-belt climb.
+    s.cur = {c:'pass', s:'pass', o:'pass'};
     if(!s.history) s.history = [];
     s.history.unshift({
       dt: pr.confirmedAt,
@@ -3368,7 +3371,8 @@ function confirmPlacement(prId){
     if(s){
       sbFetch(`/rest/v1/staff?id=eq.${s.id}`, {
         method:'PATCH',
-        body: {belt: chosenBelt, since: s.since, placement_needed: false, history: s.history}
+        body: {belt: chosenBelt, since: s.since, placement_needed: false, history: s.history,
+               cur_comp:'pass', cur_sim:'pass', cur_obs:'pass'}
       }).catch(e => handleSyncError(e, 'Staff update sync'));
     }
   } else {
@@ -8910,7 +8914,10 @@ function submitBeltOverride(staffId, context){
   s.since = effectDate;
 
   if(isPromotion){
-    // Promotion: clear advancement gates (they'll advance from new belt now)
+    // Promotion: grandfather current-belt gates (promoted = certified at new belt),
+    // then clear advancement gates for the new climb. Without grandfathering cur,
+    // getWindowStatus() locks the window and the staffer can never apply for the next belt.
+    s.cur = {c:'pass', s:'pass', o:'pass'};
     s.nxt = {c:null,s:null,o:null};
   } else {
     // Demotion: reset both current and advancement gates
@@ -8932,11 +8939,13 @@ function submitBeltOverride(staffId, context){
   if(IS_LIVE){
     sbFetch(`/rest/v1/staff?id=eq.${s.id}`, {
       method:'PATCH',
-      body: { 
-        belt: newBelt, 
-        since: s.since, 
+      body: {
+        belt: newBelt,
+        since: s.since,
         history: s.history,
-        cur_comp: null, cur_sim: null, cur_obs: null,
+        cur_comp: isPromotion ? 'pass' : null,
+        cur_sim:  isPromotion ? 'pass' : null,
+        cur_obs:  isPromotion ? 'pass' : null,
         nxt_comp: null, nxt_sim: null, nxt_obs: null
       }
     }).catch(e => handleSyncError(e, 'Belt override sync'));
