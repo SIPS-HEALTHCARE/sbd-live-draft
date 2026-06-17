@@ -1299,8 +1299,8 @@ class DavidChat {
         const isMaster = role === 'master_admin';
         
         // 1. Filter Facilities
-        const authorizedFacilities = _db.facilities.filter(f => 
-            isMaster || assignedFids.includes(f.id) || (role === 'facility_admin' && f.id === user.facility_id)
+        const authorizedFacilities = _db.facilities.filter(f =>
+            isMaster || assignedFids.includes(f.id) || ((role === 'facility_admin' || role === 'hospital') && f.id === user.facility_id)
         );
         const authFidList = authorizedFacilities.map(f => f.id);
 
