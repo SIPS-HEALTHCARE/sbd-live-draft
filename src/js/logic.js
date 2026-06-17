@@ -167,6 +167,57 @@ function generateProjection(staff){
   };
 }
 
+// ── VELOCITY & READINESS ENGINE (P2) ───────────────────────────────────────────
+// Built on EXISTING prod data (staff.history is the real belt record written by
+// sbd-record-assessment; staff.since is the current-belt earn date) — no new table needed.
+// calcVelocity: passed gates per active month (mirrors the scoreboard velocity metric).
+function calcVelocity(staff){
+  if(!staff) return {passedGates:0, months:1, gatesPerMonth:0};
+  const passedGates = (staff.history||[]).filter(h=>h && h.res==='pass').length;
+  const months = Math.max(1, Math.round((typeof daysAt==='function'?daysAt(staff.since):0)/30));
+  return { passedGates, months, gatesPerMonth: +(passedGates/months).toFixed(2) };
+}
+// calcGateReadiness: roadmap §6.3 weighted score — practice 40 / study 20 / trend 20 / consistency 20.
+// `signals` are supplied by the async serializer (practice% from practiceScores, study & consistency
+// from sbd_activity_log, trend from sbd_practice_attempts). Returns {total 0-100, breakdown}.
+function calcGateReadiness(staff, signals){
+  const s = signals || {};
+  const practice    = Math.max(0, Math.min(40, Math.round((s.practicePct||0)/100*40)));
+  const study       = Math.max(0, Math.min(20, Math.round(s.studyScore||0)));
+  const trend       = Math.max(0, Math.min(20, Math.round(s.trendScore||0)));
+  const consistency = Math.max(0, Math.min(20, Math.round(s.consistencyScore||0)));
+  return { total: practice+study+trend+consistency, breakdown:{practice, study, trend, consistency} };
+}
+
+// ── COMPLIANCE FORECAST ENGINE (P4) ─────────────────────────────────────────────
+// Trajectory + gap analysis from a facility's staff list (in-memory). Forecasts the Green+
+// competency share and surfaces the bottleneck (stalled staff on the critical path). The
+// caller (serializer) supplies the target %/date from the user's question; this returns the
+// raw trajectory inputs so David can reason "reachable by <date>?" and name who's blocking.
+function calcComplianceForecast(staffList){
+  if(!Array.isArray(staffList) || !staffList.length) return null;
+  const greenPlus = ['Green','Blue','Brown','Black'];
+  const n = staffList.length;
+  const greenPlusCount = staffList.filter(s=>greenPlus.includes(s.belt)).length;
+  const currentPct = Math.round(greenPlusCount/n*100);
+  const belowGreen = staffList.filter(s=>!greenPlus.includes(s.belt));
+  // Avg facility velocity (gates/month) from the P2 calculator.
+  const avgVelocity = +(staffList.reduce((a,s)=>a+((typeof calcVelocity==='function')?(calcVelocity(s).gatesPerMonth||0):0),0)/n).toFixed(2);
+  // Bottleneck: below-Green staff stalled 45d+ at their belt with no progress to the next.
+  const bottlenecks = belowGreen.filter(s=>{
+    const d=(typeof daysAt==='function')?daysAt(s.since):0;
+    const prog=[s.nxt&&s.nxt.c,s.nxt&&s.nxt.s,s.nxt&&s.nxt.o].filter(x=>x==='pass').length;
+    return d!=null && d>=45 && prog===0;
+  });
+  // Rough survey-readiness composite (competency now; regulatory-KB component lights up after
+  // P0.2 seeds the standards content). 0-100.
+  const surveyReadiness = Math.round(currentPct*0.7 + Math.min(100, avgVelocity*100)*0.3);
+  return {
+    n, currentPct, greenPlusCount, belowGreen: belowGreen.length, avgVelocity, surveyReadiness,
+    bottleneckNames: bottlenecks.map(s=>`${s.first||''} ${s.last||''}`.trim()||String(s.id))
+  };
+}
+
 // ── SYSTEM HELPERS ────────────────────────────────────────────────────────────
 function getSystem(sid){  return (DB.systems||[]).find(s=>s.id===sid); }
 function systemFacs(sid){ return DB.facilities.filter(f=>f.systemId===sid); }
