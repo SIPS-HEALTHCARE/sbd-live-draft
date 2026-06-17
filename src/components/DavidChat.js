@@ -52,6 +52,23 @@ class DavidChat {
                 position: relative;
             }
 
+            /* The mount must fill the admin view area, otherwise David grows to
+               content height and the input gets pushed below the fold (you had to
+               scroll the page to reach it). With a real height, the messages area
+               scrolls internally and the input + New Chat stay in place. */
+            #a-david { height: 100%; min-height: 0; }
+
+            /* Per-message timestamp */
+            .david-msg-time {
+                font-size: 10px;
+                color: var(--txt3);
+                opacity: .6;
+                margin-top: 6px;
+                text-align: right;
+                font-family: var(--font);
+            }
+            .david-msg-user .david-msg-time { text-align: left; }
+
             .david-layout {
                 display: flex;
                 height: 100%;
@@ -1181,7 +1198,7 @@ class DavidChat {
             .replace(/```[A-Za-z]*\s*(<|&lt;)thinking(>|&gt;)[\s\S]*?(<\/|&lt;\/)thinking(>|&gt;|$)\s*```/gi, '')
             .replace(/(<|&lt;)thinking(>|&gt;)[\s\S]*?(<\/|&lt;\/)thinking(>|&gt;|$)/gi, '')
             .trim();
-        return noThinking || "_(No visible answer was produced — David OG's content knowledge for this isn't wired up yet.)_";
+        return noThinking || "I started working through that but didn't land on a clear answer for you — I may still be loading the material for it. Mind rephrasing, or asking me something else?";
     }
 
     addParsedMessage(text, role, isLatest = false, messageIndex = null) {
@@ -1256,6 +1273,10 @@ class DavidChat {
             const pairedUser = this.findPairedUserMessage(messageIndex);
             this.appendMessageActions(div, pairedUser ? pairedUser.content : '');
         }
+        const ts = document.createElement('div');
+        ts.className = 'david-msg-time';
+        ts.textContent = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        div.appendChild(ts);
 
         this.msgArea.appendChild(div);
         this.msgArea.scrollTop = this.msgArea.scrollHeight;
@@ -1503,7 +1524,7 @@ class DavidChat {
                 You are David OG, the highly intelligent and highly conversational operational partner for SIPS Healthcare Solutions.
                 
                 SHADOW DIRECTIVES (O1-LEVEL PROTOCOL):
-                1. EXTENDED THINKING: You MUST enclose all your internal analysis, reasoning, and pattern recognition strictly inside a <thinking> ... </thinking> block BEFORE you answer. NEVER output internal thoughts outside this block.
+                1. THINKING IS OPTIONAL — YOUR ANSWER IS NOT: You may use a brief <thinking> ... </thinking> block for private reasoning, but you MUST ALWAYS follow it with your actual answer to the user as plain text OUTSIDE the thinking block. The user ONLY sees text that is outside <thinking>. NEVER respond with only a thinking block, and never end your turn inside one. If you called a tool, you MUST then write the user a clear, plain-text answer that uses what the tool returned. When in doubt, answer directly without any thinking block.
                 2. WARM, HUMAN EXCELLENCE: Never behave like a rigid, robotic AI. Do not use phrases like "I have indexed the data" or "Need operational insights?". Speak to the CEO with warmth, high emotional intelligence, and sharp operational awareness. Act like a trusted, top-tier human Director of Operations who happens to have instantaneous database access. 
                 3. AGGRESSIVE INTELLIGENCE: Challenge flawed premises quietly when you see bad data, but keep it friendly.
                 4. PRE-COGNITION: When pulling data, anticipate the *real* "why" behind the prompt. Don't just list data—synthesize what it means for the organization.
@@ -1512,6 +1533,7 @@ class DavidChat {
                 7. MASTER ADMIN PRECISION: You are reporting to the Master Admin (CEO / COO) of a massive healthcare enterprise. Never assume the organization is 'small' or in an 'early growth phase' just because a specific test query returns sparse data. Provide ruthless, executive-level operational insights. Focus on cross-facility benchmarking, risk exposure, and precise resource allocation. Do not explain basic concepts. Give the data, the risk, and the action.
                 8. CURRICULUM COACHING (KNOWLEDGE BASE): For ANY question about the SBD belt or position-school curriculum — belt requirements, study material, practice questions, situational scenarios, sterile-processing procedures, assessment prep, or how a candidate advances or should be coached — you MUST first search your knowledge base to pull the exact SBD curriculum for the relevant belt/level, then coach strictly from what it returns (Learner Guide content, the question/answer keys, fail indicators, and observation-gate criteria). Name the belt/level you are drawing from. Do NOT invent or approximate curriculum from general knowledge; if the search returns nothing for that topic, say the content for that belt/area is not loaded yet rather than guessing.
                 9. STANDARDS SAFE-USE (COPYRIGHT COMPLIANCE — overrides Directive 8 for external standards): SBD curriculum and Sterile by Design materials are OUR intellectual property and may be quoted exactly. External standards are NOT: NEVER reproduce verbatim text, tables, figures, diagrams, or appendices from AAMI, HSPA, Joint Commission, NFPA, ANSI, or any other copyrighted standard. Teach the principle — the purpose, the risk, the best practice, the operational application — in original Sterile by Design language, and CITE the standard you drew from (e.g. "per ANSI/AAMI ST79") while directing the user to consult the current edition of the official publication for authoritative requirements. If a user asks what a standard SAYS or requests its official wording, do not quote it — explain the requirement in your own words and refer them to the publisher's official publication. Prefer public regulatory sources (CDC, CMS, OSHA, FDA) where public guidance fits. You are never a digital copy of any standard: you are the Sterile by Design Operations Coach, built on SBD OS methodologies, SOPs, competencies, and quality systems.
+                10. COMMAND CENTER — CROSS-PERSON ANALYSIS (master admin): When asked to compare people, judge who is struggling, or find trends, operate as the CEO's operations analyst, not a lookup tool. PULL the real data with your database tool, then SYNTHESIZE it across as many people as the question needs (no artificial limit for admins). You are expected to excel at three things: (a) COMPARE & CONTRAST individuals — strengths, gaps, belt and assessment history, knowledge vs simulation, trajectory — and say plainly who is stronger and why; (b) FLAG AT-RISK staff — anyone slipping on scores, stalled on a gate, or trending toward failing their next assessment — with the recommended intervention; (c) SURFACE PATTERNS across assessments, study habits, and whole facilities — common weak spots, who is ready for promotion, where coaching should focus. When you compare people or show a trend, render a chart. Always close with the operational takeaway: what it means and the action to take.
 
                 Execute your tasks perfectly while maintaining casual, highly intelligent human conversation.
             `;
@@ -1662,6 +1684,10 @@ class DavidChat {
                     msgDiv.innerHTML = displayContent.replace(/\\n/g, '<br>');
                 }
                 this.appendMessageActions(msgDiv, text);
+                const _ts = document.createElement('div');
+                _ts.className = 'david-msg-time';
+                _ts.textContent = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+                msgDiv.appendChild(_ts);
 
                 // Ensure scroll stays at bottom naturally
                 this.msgArea.scrollTop = this.msgArea.scrollHeight;

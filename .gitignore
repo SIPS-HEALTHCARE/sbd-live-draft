@@ -30,3 +30,5 @@ WHEALTHY/
 !sample_staff_upload.csv
 .claude/settings.local.json
 plans/
+# Generated preview from curriculum ingestion dry-run (regenerable)
+scripts/curriculum-ingest-preview.json

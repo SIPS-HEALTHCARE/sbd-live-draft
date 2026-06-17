@@ -2004,7 +2004,7 @@ async function initAppData(){
   window.SBD_INITIALIZING = true;
   console.log('SBD Platform: Multi-table data hydration started...');
   try {
-    const [facs, staff, systems, users, reviews, queue, registrations, freeAgents, promotions, onboarding, beltTestResults, transfers] = await Promise.race([
+    const [facs, staff, systems, users, reviews, queue, registrations, freeAgents, promotions, onboarding, beltTestResults, transfers, observations, obsChecklists] = await Promise.race([
       Promise.all([
         SB.getFacilities().catch(e=>{ console.error('facs load err', e); return []; }),
         SB.getAllStaff().catch(e=>{ console.error('staff load err', e); return []; }),
@@ -2017,7 +2017,9 @@ async function initAppData(){
         SB.getPromotionApprovals().catch(e=>{ console.error('promos load err', e); return []; }),
         (ST.user ? SB.getUserOnboarding(ST.user.authUid || ST.user.id) : Promise.resolve([])).catch(e=>{ console.error('onboarding load err', e); return []; }),
         (SB.getBeltTestResults ? SB.getBeltTestResults() : Promise.resolve([])).catch(e=>{ console.error('belt results load err', e); return []; }),
-        (SB.getTransferRequests ? SB.getTransferRequests() : Promise.resolve([])).catch(e=>{ console.error('transfers load err', e); return []; })
+        (SB.getTransferRequests ? SB.getTransferRequests() : Promise.resolve([])).catch(e=>{ console.error('transfers load err', e); return []; }),
+        (SB.getObservations ? SB.getObservations() : Promise.resolve([])).catch(e=>{ console.error('observations load err', e); return []; }),
+        (SB.getObservationChecklists ? SB.getObservationChecklists() : Promise.resolve([])).catch(e=>{ console.error('obs checklists load err', e); return []; })
       ]),
       new Promise((_,rej)=>setTimeout(()=>rej(new Error('Initial data load timeout')), 20000))
     ]);
@@ -2101,6 +2103,9 @@ async function initAppData(){
     // STAFF-F6: hydrate the dual-admin transfer verification queue from the DB so
     // any admin session sees pending release/assignment requests (was memory-only).
     if(typeof mapTransferFromBackend === 'function') window.DB.pendingTransfers = (transfers||[]).map(mapTransferFromBackend).filter(Boolean);
+    // OVS: observations (live records) + the 12 seeded instruments (read-only system of record).
+    if(typeof mapObservationFromBackend === 'function') window.DB.observations = (observations||[]).map(mapObservationFromBackend).filter(Boolean); else window.DB.observations = observations||[];
+    window.DB.observationChecklists = obsChecklists||[];
 
     console.log(`SBD Platform: Hydrated ${window.DB.facilities.length} facs, ${window.DB.staff.length} staff, ${window.DB.hospitalSystems.length} systems, ${window.DB.users.length} users.`);
     // Durable submit: flush any placement assessment that was queued offline on a prior session.

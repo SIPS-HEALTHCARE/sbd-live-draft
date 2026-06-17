@@ -264,6 +264,12 @@ const SB = {
   getPromotionApprovals(fid){ const f=fid?`&facility_id=eq.${encodeURIComponent(fid)}`:''; return sbFetch(`/rest/v1/sbd_promotions?status=eq.pending${f}&select=*&order=created_at.desc`); },
   submitPromotionApproval(data){ return sbFetch('/rest/v1/sbd_promotions', { method:'POST', body:data }); },
   updatePromotionApproval(id, data){ return sbFetch(`/rest/v1/sbd_promotions?id=eq.${id}`, { method:'PATCH', body:data }); },
+  // ── Observations (OVS — third assessment gate) ──
+  // Instruments (12 seeded rows) are the system of record; never mutated from the app.
+  getObservationChecklists(){ return sbFetch('/rest/v1/observation_checklists?active=eq.true&select=*'); },
+  getObservations(){ return sbFetch('/rest/v1/observations?select=*&order=created_at.desc'); },
+  insertObservation(data){ return sbFetch('/rest/v1/observations', { method:'POST', body:data }); },
+  updateObservation(id, data){ return sbFetch(`/rest/v1/observations?id=eq.${id}`, { method:'PATCH', body:data }); },
   // ── Hospital Systems ──
   getHospitalSystems(){ return sbFetch('/rest/v1/hospital_systems?select=id,name,active,created_at&order=name.asc'); },
   createHospitalSystem(data){ return sbFetch('/rest/v1/hospital_systems?select=id,name,active,created_at', { method:'POST', body:data }); },
@@ -323,6 +329,8 @@ function resetDB(){
   DB.pendingRegs = [];
   DB.placementReviews = [];
   DB.beltTestResults = [];
+  DB.observations = [];
+  DB.observationChecklists = [];
   DB.schedule = [];
   DB.attendance = [];
   console.log('SBD Platform: Global state reset.');
@@ -482,6 +490,8 @@ function mapStaffFromBackend(row){
     promo: row.promo || row.promo_recommended || false,
     cur: { c: row.cur_comp || null, s: row.cur_sim || null, o: row.cur_obs || null },
     nxt: { c: row.nxt_comp || null, s: row.nxt_sim || null, o: row.nxt_obs || null },
+    observer: row.observer || false,
+    observationPin: row.observation_pin || null,
     ps: {
       enrolled: row.ps_enrolled || false,
       done: row.ps_done || false,
@@ -530,6 +540,7 @@ function mapStaffToBackend(staff){
     obj.nxt_sim  = staff.nxt.s || null;
     obj.nxt_obs  = staff.nxt.o || null;
   }
+  if(staff.observer !== undefined) obj.observer = !!staff.observer;
   return obj;
 }
 
@@ -753,6 +764,39 @@ if (typeof window !== 'undefined') {
   window.mapBeltTestFromBackend = mapBeltTestFromBackend;
   window.mapBeltTestResultFromBackend = mapBeltTestResultFromBackend;
   window.mapBeltTestResultToBackend = mapBeltTestResultToBackend;
+}
+// ── Observations (observations table) ────────────────────────────────────────
+// One row per observation. The instrument snapshot, item scores, handshake PINs,
+// computed outcome, and the review decision all live on the row.
+function mapObservationFromBackend(row){
+  if(!row) return null;
+  return {
+    id:              row.id,
+    staffId:         row.staff_id,
+    fid:             row.fid,
+    targetBelt:      row.target_belt,
+    context:         row.context || 'gate',
+    checklistBelt:   row.checklist_belt || null,
+    checklistVersion:row.checklist_version || 1,
+    status:          row.status || 'draft',
+    itemScores:      row.item_scores || {},
+    stopWork:        row.stop_work || null,
+    totalPoints:     row.total_points,
+    outcome:         row.outcome || null,
+    outcomeReasons:  row.outcome_reasons || [],
+    handshake:       row.handshake || null,
+    observerId:      row.assessor_id || null,
+    observerName:    row.assessor_name || null,
+    recommendedBelt: row.recommended_belt || null,
+    reviewStatus:    row.review_status || 'pending',
+    reviewedBy:      row.reviewed_by || null,
+    reviewedByName:  row.reviewed_by_name || null,
+    reviewedAt:      row.reviewed_at || null,
+    returnReason:    row.return_reason || null,
+    startedAt:       row.started_at || null,
+    submittedAt:     row.submitted_at || null,
+    createdAt:       row.created_at || null
+  };
 }
 
 function mapHospitalSystemFromBackend(row){

@@ -384,6 +384,12 @@ function enterPortal(type){
   const _navPlacement=document.getElementById('nav-placementreviews');
   if(_navPlacement) _navPlacement.style.display='flex';
   if(typeof updatePlacementBadge === 'function') updatePlacementBadge();
+  // Observer module (shell) — visible to SIPS admins. Per-observer role gating
+  // and the candidate request/PIN flow land in later Observer milestones.
+  const _navObs=document.getElementById('nav-observations');
+  if(_navObs) _navObs.style.display='flex';
+  const _navObsRev=document.getElementById('nav-observationreviews');
+  if(_navObsRev) _navObsRev.style.display='flex';
   // Promo queue visible to all SIPS admins (master + assessors)
   const _navPromo=document.getElementById('nav-promoqueue');
   if(_navPromo) _navPromo.style.display='flex';
@@ -601,7 +607,7 @@ function renderAView(view){
     toast('RBAC Guard: Unauthorized access to Network Portal', 'err');
     return;
   }
-  ['a-overview','a-leaderboard','a-allstaff','a-scoreboard','a-facilities','a-facility','a-registrations','a-assessments','a-progression','a-upload','a-reports','a-david','a-daviddashboard','a-adminusers','a-promoqueue','a-freeagents','a-placementreviews','a-guide','a-settings','a-systems','a-systems-dashboard'].forEach(v=>{
+  ['a-overview','a-leaderboard','a-allstaff','a-scoreboard','a-facilities','a-facility','a-registrations','a-assessments','a-progression','a-upload','a-reports','a-david','a-daviddashboard','a-adminusers','a-promoqueue','a-freeagents','a-placementreviews','a-observations','a-observationreviews','a-guide','a-settings','a-systems','a-systems-dashboard'].forEach(v=>{
     const el=document.getElementById(v);
     if(el){ el.classList.add('hidden'); el.classList.remove('fade-in'); }
   });
@@ -620,6 +626,8 @@ function renderAView(view){
     'a-promoqueue':renderAPromoQueue,
     'a-freeagents':renderAFreeAgents,
     'a-placementreviews':renderAPlacementReviews,
+    'a-observations':renderAObservations,
+    'a-observationreviews':renderAObservationReviews,
     'a-systems':renderASystems,
     'a-systems-dashboard':()=>renderASystemsDashboard(ST.curSystemId),
     'a-guide':()=>renderGuideView('a'),
@@ -1133,7 +1141,7 @@ const PLACEMENT_QUESTIONS = [
   {id:'p5',level:1,type:'knowledge',q:'Why must instruments be pre-rinsed or kept moist before decontamination?',
    options:['To improve instrument grip during the manual scrubbing phase','To prevent bioburden from drying and hardening on the surface','To significantly reduce the total time required for sterilization','To minimize the required concentration of enzymatic detergents'],correct:1},
   {id:'p6',level:1,type:'knowledge',q:'Which of the following is the correct workflow direction in SPD?',
-   options:['Clean to dirty','Dirty to clean, one direction only','Back and forth as needed','Either direction is acceptable'],correct:1},
+   options:['Clean to dirty','Dirty to clean, one direction only','Back and forth as needed','Either direction is acceptable'],correct:1,dangerousAnswers:[0]},
   {id:'p7',level:1,type:'knowledge',q:'What is bioburden?',
    options:['The accumulated total weight of a heavily loaded surgical tray','The number of viable microorganisms on an item before sterilization','The residual chemical film left by industrial cleaning detergents','The protective packaging layer used for heat-sensitive instruments'],correct:1},
   {id:'p8',level:1,type:'knowledge',q:'Which action is correct when you receive a tray with a missing instrument?',
@@ -1163,7 +1171,7 @@ const PLACEMENT_QUESTIONS = [
   {id:'p19',level:2,type:'knowledge',q:'What does a broken seal on packaging indicate?',
    options:['The item is still sterile if it looks clean','Sterility cannot be guaranteed and the item must be reprocessed','Only the outer layer matters','The item can be used if surgery is same-day'],correct:1},
   {id:'p20',level:2,type:'knowledge',q:'What is the correct action when you find an instrument with active rust?',
-   options:['Polish it and return it to service','Remove it from service and report it to the Lead','Use it if surgery is scheduled','Soak it in saline to neutralize the rust'],correct:1},
+   options:['Polish it and return it to service','Remove it from service and report it to the Lead','Use it if surgery is scheduled','Soak it in saline to neutralize the rust'],correct:1,dangerousAnswers:[3]},
   {id:'p21',level:2,type:'simulation',q:'An instrument tray returns from the OR with visible debris after a completed sterilization cycle. Describe exactly what you do, step by step.',
    keywords:['quarantine','pull','remove','reprocess','decontaminate','report','document','supervisor','log','notify']},
   {id:'p22',level:2,type:'simulation',q:'While packaging instruments you notice a previously wrapped tray has a broken seal from a prior cycle. What action do you take and what do you communicate to the team?',
@@ -1185,11 +1193,11 @@ const PLACEMENT_QUESTIONS = [
   {id:'p29',level:3,type:'knowledge',q:'What does event-related sterility mean?',
    options:['Items automatically expire on a fixed calendar date and year','Sterility is maintained until an event compromises package integrity','Sterility timeframe begins the hour an item leaves the department','It applies specifically to implants used in orthopedic surgeries'],correct:1},
   {id:'p30',level:3,type:'knowledge',q:'What is the correct process if a sterilizer load fails to complete its cycle?',
-   options:['Re-run the same load immediately using an identical program shift','Quarantine items and document the failure before reprocessing','Release items that were physically near the end of the process','Manually verify items are clean before releasing them to the unit'],correct:1},
+   options:['Re-run the same load immediately using an identical program shift','Quarantine items and document the failure before reprocessing','Release items that were physically near the end of the process','Manually verify items are clean before releasing them to the unit'],correct:1,dangerousAnswers:[0]},
   {id:'p31',level:3,type:'knowledge',q:'What must be checked on a laparoscopic instrument before packaging?',
    options:['Only the outer visible surface for soil and residual debris','Insulation integrity, lumen patency, jaw function, and all seals','Just the tip alignment and the overall handle comfort levels','The total weight of the set compared to the original count sheet'],correct:1},
   {id:'p32',level:3,type:'knowledge',q:'What is the correct response when the OR calls urgently for a set currently in the sterilizer?',
-   options:['Directly open the sterilizer chamber and hand over the requested set','Route the call to the Lead and document it — never interrupt a cycle','Tell the OR staff the requested set will be ready in five minutes','Remove only those specific items that the clinical team needs now'],correct:1},
+   options:['Directly open the sterilizer chamber and hand over the requested set','Route the call to the Lead and document it — never interrupt a cycle','Tell the OR staff the requested set will be ready in five minutes','Remove only those specific items that the clinical team needs now'],correct:1,dangerousAnswers:[0,2]},
   {id:'p33',level:3,type:'simulation',
    q:"A biological indicator from this morning's sterilization run comes back positive. Walk through your full response, including documentation and impact on any items already distributed.",
    keywords:['recall','quarantine','notify','document','supervisor','infection control','report','log','pull','remove','affected','incident']},
@@ -1202,7 +1210,7 @@ const PLACEMENT_QUESTIONS = [
 
   // ── LEVEL 4: Advanced Practice ────────────────────────────────────────────
   {id:'p37',level:4,type:'knowledge',q:'What does IUSS stand for and when is it acceptable to use it?',
-   options:['Immediate Use Steam Sterilization - used only for large orthopedic implants','Intermediate Urgent Sterilization - a routine protocol for processing under 15 minutes','Immediate Use Steam Sterilization - only when no other option exists and fully documented','Internal Urgent Sterilization - a specialized process for all same-day procedures'],correct:2},
+   options:['Immediate Use Steam Sterilization - used only for large orthopedic implants','Intermediate Urgent Sterilization - a routine protocol for processing under 15 minutes','Immediate Use Steam Sterilization - only when no other option exists and fully documented','Internal Urgent Sterilization - a specialized process for all same-day procedures'],correct:2,dangerousAnswers:[1,3]},
   {id:'p38',level:4,type:'knowledge',q:'Which organization publishes the primary U.S. standards for sterile processing practice?',
    options:['CDC only','AAMI/ANSI and AORN','OSHA exclusively','The Joint Commission only'],correct:1},
   {id:'p39',level:4,type:'knowledge',q:'What is the primary risk with loaner instrument sets that are not managed properly?',
@@ -1955,6 +1963,50 @@ async function flushPendingPlacements(){
 }
 if(typeof window !== 'undefined'){ window.addEventListener('online', function(){ flushPendingPlacements(); }); }
 
+// SBD OS Belt Suggestion Engine v2.1 (SIPS Developer Update Brief, Fix 1, June 2026).
+// Applies all three gates -- blended, knowledge (K) floor, and simulation floor -- plus the
+// dangerous-answer block and the K-based White Belt rule. Replaces the prior logic that
+// suggested a belt from level/knowledge scores alone, which could label a candidate above
+// what they actually earned (or ignore a dangerous answer).
+const SBD_BELT_THRESHOLDS = [
+  { belt: 'Black',  blended: 90, k: 92, sim: 87 },
+  { belt: 'Brown',  blended: 87, k: 91, sim: 84 },
+  { belt: 'Blue',   blended: 85, k: 89, sim: 82 },
+  { belt: 'Green',  blended: 81, k: 86, sim: 78 },
+  { belt: 'Yellow', blended: 78, k: 83, sim: 75 },
+  { belt: 'White',  blended: 75, k: 80, sim: 72 },
+];
+function sbdSuggestBelt(kOverall, kL1, simOverall, blended, hasDangerousKAnswer){
+  // Step 1 -- dangerous knowledge answers block all belt issuance
+  if(hasDangerousKAnswer) return 'No Belt';
+  // Step 2 -- highest belt where blended AND K both pass; sim decides Clean vs Conditional
+  for(const t of SBD_BELT_THRESHOLDS){
+    if(blended >= t.blended && kOverall >= t.k){
+      return simOverall >= t.sim ? t.belt + ' Belt' : t.belt + ' Belt Conditional';
+    }
+  }
+  // Step 3 -- K-based White Belt
+  if(kOverall >= 80 && kL1 >= 80) return 'White Belt Conditional';
+  // Step 4 -- no belt
+  return 'No Belt';
+}
+
+// Re-derive the belt-engine suggestion ("Green Belt", "Brown Belt Conditional", "No Belt")
+// from a placement review's stored responses, so the assessor sees the same determination
+// on reload (not just at submit time). Returns null if there's no question-level data.
+function prSuggestion(pr){
+  const kR = (pr && pr.responses || []).filter(r => r.type === 'knowledge');
+  const simR = (pr && pr.responses || []).filter(r => r.type === 'simulation');
+  if(!kR.length && !simR.length) return null;
+  const avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
+  const kOverall = Math.round(avg(kR.map(r => r.score)));
+  const kL1 = Math.round(avg(kR.filter(r => r.level === 1).map(r => r.score)));
+  const simOverall = Math.round(avg(simR.map(r => r.aiScore)));
+  const blended = Math.round(kOverall * 0.6 + simOverall * 0.4);
+  const dangerous = kR.some(r => r.isDangerous && !r.correct);
+  return sbdSuggestBelt(kOverall, kL1, simOverall, blended, dangerous);
+}
+
 async function submitPlacementAssessment(){
   // [CRITICAL GUARDRAIL - DO NOT REMOVE OR BREAK]
   // This function relies on a globally defined `sbFetch` to persist data to Supabase.
@@ -1982,7 +2034,7 @@ async function submitPlacementAssessment(){
     if(q.type === 'knowledge'){
       const correct = ans === q.correct;
       const score = correct ? 100 : 0;
-      responses.push({qId:q.id, level:q.level, type:'knowledge', question:q.q, answer:q.options[ans]||'No answer', correctAnswer:q.options[q.correct]||'—', correct, score});
+      responses.push({qId:q.id, level:q.level, type:'knowledge', question:q.q, answer:q.options[ans]||'No answer', correctAnswer:q.options[q.correct]||'—', correct, score, isDangerous: (Array.isArray(q.dangerousAnswers) && q.dangerousAnswers.includes(ans))});
       levelScores[q.level].push({weight:1, score});
     } else {
       // Prepare keyword fallback immediately, queue AI call
@@ -2012,24 +2064,24 @@ async function submitPlacementAssessment(){
     levelScores[q.level].push({weight:1, score:aiScore});
   }
 
-  // Recommend the highest belt the candidate has earned IN SEQUENCE: every
-  // level from 1 up to and including the recommended one must clear the bar.
-  // Stop at the first level that is missing or below it, so a strong score on
-  // an advanced level alone can never skip the fundamentals beneath it.
-  // (Previously this took the highest level above the bar regardless of the
-  // lower ones, which is why a lucky advanced answer could suggest Black Belt.)
-  const PLACEMENT_PASS = 65; // per-level bar; policy value -- tune with SIPS if needed
-  let suggestedBelt = 'White';
-  const BELTS = ['White','Yellow','Green','Blue','Brown','Black'];
-  for(let lvl=1; lvl<=5; lvl++){
-    const items = levelScores[lvl];
-    if(!items.length) break;            // no questions at this level -> cannot certify beyond
-    const total = items.reduce((acc,x)=>acc+(x.weight*x.score),0);
-    const maxTotal = items.reduce((acc,x)=>acc+x.weight*100,0);
-    const pct = maxTotal > 0 ? (total/maxTotal)*100 : 0;
-    if(pct < PLACEMENT_PASS) break;     // failed this level -> belt is the last one passed
-    suggestedBelt = BELTS[lvl];         // cleared every level so far, including this one
-  }
+  // Belt suggestion (SBD Developer Update Brief, Fix 1): score on the blended,
+  // knowledge, and simulation floors plus the dangerous-answer block -- not on
+  // knowledge/level scores alone. See sbdSuggestBelt() above.
+  const _kResp = responses.filter(r => r.type === 'knowledge');
+  const _simResp = responses.filter(r => r.type === 'simulation');
+  const _avg = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+  const kOverall = Math.round(_avg(_kResp.map(r => r.score)));
+  const kL1 = Math.round(_avg(_kResp.filter(r => r.level === 1).map(r => r.score)));
+  const simOverall = Math.round(_avg(_simResp.map(r => r.aiScore)));
+  const blended = Math.round(kOverall * 0.6 + simOverall * 0.4);
+  // Dangerous-answer block is wired but stays inert until SIPS supplies the per-question
+  // dangerous-answer list (Governing Standards) and questions carry q.isDangerous.
+  const hasDangerousKAnswer = _kResp.some(r => r.isDangerous && !r.correct);
+  // Full engine determination (e.g. "Brown Belt Conditional", "No Belt") is shown to the
+  // assessor as a suggestion chip; tentativeBelt stores the clean belt word the plumbing
+  // (badge, confirm dropdown) expects. "No Belt" falls back to White as a safe placeholder.
+  const _suggestion = sbdSuggestBelt(kOverall, kL1, simOverall, blended, hasDangerousKAnswer);
+  const suggestedBelt = (_suggestion.match(/White|Yellow|Green|Blue|Brown|Black/) || ['White'])[0];
 
   // Create placement review record
   const s = getStaff(PA.staffId);
@@ -2357,6 +2409,521 @@ function applyReviewFilter(pool){
   return out;
 }
 
+// ============================================================ OVS — OBSERVATION SYSTEM
+// The third assessment gate (alongside Competency + Simulation). Three flows:
+//   Step 3  candidate requests an observation -> gets a PIN (requestObservation)
+//   Step 4  authorized observer unlocks with two PINs, scores the belt instrument
+//           (the 12 seeded observation_checklists), can Stop-Work, submits
+//   Step 5  admin reviews the submission, confirms, and the Observation gate writes
+// No demo data: instruments come from the live observation_checklists rows; records
+// from the live observations table. Gate writes go through SB.updateStaff (targeted
+// single-column PATCH — never wipes oip/history/ps_tracks).
+
+let ovsCapture = null;      // { obsId, unlocked, observerStaffId, observerName }
+let ovsArmed = null;        // { action, id } two-tap confirmation (sandbox-safe; no native confirm())
+
+// The active belt instrument for a given belt label (system of record; read-only).
+function ovsInstrument(belt){
+  const list = (window.DB && DB.observationChecklists) || [];
+  return list.find(c => c.belt === belt && c.active !== false) || null;
+}
+
+// Flatten an instrument into the units an observer actually scores. Items are 0-3
+// scale; composite Part B and components dimensions are pass/fail.
+function ovsScorableUnits(cl){
+  if(!cl) return [];
+  const schema = cl.schema || {}; const type = schema.type;
+  const units = [];
+  (cl.items || []).forEach(it => units.push({
+    id: it.id, n: it.n, text: it.text, kind: 'scale',
+    meta: it.type ? (it.type === 'M' ? 'Mandatory' : 'Recommended') : (it.domain || it.tier || ''),
+    group: type === 'composite' ? 'Part A — Shift Items' : (it.tier || it.domain || 'Checklist Items')
+  }));
+  if(type === 'composite') (schema.presentation || []).forEach(c => units.push({
+    id: c.id, n: c.n, text: c.text, kind: 'pf', meta: 'Pass / Fail', group: 'Part B — Leadership Presentation'
+  }));
+  if(type === 'components') (schema.components || []).forEach(c => (c.dims || []).forEach(d => units.push({
+    id: d.id, text: d.text, kind: 'pf', meta: 'Pass / Fail', group: c.name
+  })));
+  return units;
+}
+
+// Compute the outcome from stored scores + the instrument's schema. Mirrors
+// SBD_OVS_Observation_Logic: POINTS / MR / COMPOSITE / COMPONENTS / TIERED.
+// Returns {outcome, total, reasons[], recommendedBelt}. outcome ∈
+// advance | conditional | do_not_advance | incomplete.
+function ovsComputeOutcome(cl, scores, stopWork){
+  scores = scores || {};
+  if(stopWork && stopWork.active)
+    return { outcome:'do_not_advance', total:null, reasons:['Stop-Work executed — DO NOT ADVANCE regardless of scores'], recommendedBelt:null };
+  if(!cl) return { outcome:'incomplete', total:null, reasons:['No instrument loaded'], recommendedBelt:null };
+  const schema = cl.schema || {}; const type = schema.type; const items = cl.items || [];
+
+  if(type === 'points'){
+    let total = 0, anyZero = false, scoredAll = true;
+    items.forEach(it => { const v = scores[it.id]; if(v===undefined||v===null){ scoredAll=false; return; } if(Number(v)===0) anyZero=true; total += Number(v); });
+    const floor = schema.floorPoints || 55;
+    if(!scoredAll) return { outcome:'incomplete', total, reasons:['Score every item to compute the result'], recommendedBelt:null };
+    if(anyZero)   return { outcome:'do_not_advance', total, reasons:['An item scored 0 — automatic non-completion'], recommendedBelt:null };
+    if(total >= floor) return { outcome:'advance', total, reasons:[`Total ${total} ≥ floor ${floor}, no zeros`], recommendedBelt:null };
+    return { outcome:'do_not_advance', total, reasons:[`Total ${total} below floor ${floor}`], recommendedBelt:null };
+  }
+
+  if(type === 'mr'){
+    let manFail = [], recPass = 0, recTotal = 0, scoredAll = true;
+    items.forEach(it => { const v = scores[it.id]; const isM = it.type === 'M'; if(v===undefined||v===null){ scoredAll=false; return; } const pass = Number(v) >= 2; if(isM){ if(!pass) manFail.push(it.n); } else { recTotal++; if(pass) recPass++; } });
+    const minRec = (schema.rules && schema.rules.advance && schema.rules.advance.minRecommended) || 4;
+    if(manFail.length) return { outcome:'do_not_advance', total:recPass, reasons:[`Mandatory item${manFail.length>1?'s':''} ${manFail.join(', ')} failed — full re-observation`], recommendedBelt:null };
+    if(!scoredAll)     return { outcome:'incomplete', total:recPass, reasons:['Score every item to compute the result'], recommendedBelt:null };
+    if(recPass >= minRec) return { outcome:'advance', total:recPass, reasons:[`All mandatory passed; ${recPass}/${recTotal} recommended passed (≥${minRec})`], recommendedBelt:null };
+    return { outcome:'conditional', total:recPass, reasons:[`All mandatory passed; ${recPass}/${recTotal} recommended passed (<${minRec}) — conditional with remediation`], recommendedBelt:null };
+  }
+
+  if(type === 'composite'){
+    let manFail = [], partAScored = true;
+    items.forEach(it => { const v = scores[it.id]; if(v===undefined||v===null){ partAScored=false; return; } if(it.type === 'M' && Number(v) < 2) manFail.push(it.n); });
+    if(manFail.length) return { outcome:'do_not_advance', total:null, reasons:[`Mandatory shift item${manFail.length>1?'s':''} ${manFail.join(', ')} failed — full shift re-observation`], recommendedBelt:null };
+    const pres = schema.presentation || [];
+    let pPass = 0, presScored = true;
+    pres.forEach(c => { const v = scores[c.id]; if(v===undefined||v===null){ presScored=false; return; } if(v === 'pass') pPass++; });
+    const adv  = (schema.rules && schema.rules.presentation && schema.rules.presentation.advance) || 8;
+    const cMin = (schema.rules && schema.rules.presentation && schema.rules.presentation.conditionalMin) || 6;
+    if(!partAScored || !presScored) return { outcome:'incomplete', total:pPass, reasons:['Score all shift items and all 10 presentation criteria'], recommendedBelt:null };
+    if(pPass >= adv)  return { outcome:'advance', total:pPass, reasons:[`Mandatory shift items passed; presentation ${pPass}/10 (≥${adv})`], recommendedBelt:null };
+    if(pPass >= cMin) return { outcome:'conditional', total:pPass, reasons:[`Presentation ${pPass}/10 — conditional; re-deliver within 30 days`], recommendedBelt:null };
+    return { outcome:'do_not_advance', total:pPass, reasons:[`Presentation ${pPass}/10 (below ${cMin})`], recommendedBelt:null };
+  }
+
+  if(type === 'components'){
+    const comps = schema.components || [];
+    const allDims = comps.reduce((n,c)=> n + (c.dims||[]).length, 0);
+    let failDims = [], scoredDims = 0;
+    comps.forEach(c => (c.dims||[]).forEach(d => { const v = scores[d.id]; if(v!==undefined&&v!==null) scoredDims++; if(v !== 'pass' && v!==undefined&&v!==null) failDims.push(d.id); }));
+    if(allDims === 0) return { outcome:'incomplete', total:null, reasons:['This instrument has no scored components seeded yet'], recommendedBelt:null };
+    if(scoredDims < allDims) return { outcome:'incomplete', total:scoredDims, reasons:['Score every component dimension'], recommendedBelt:null };
+    if(failDims.length) return { outcome:'do_not_advance', total:allDims-failDims.length, reasons:[`${failDims.length} component dimension${failDims.length>1?'s':''} failed — every dimension must pass`], recommendedBelt:null };
+    return { outcome:'advance', total:allDims, reasons:['All certification components passed'], recommendedBelt:null };
+  }
+
+  if(type === 'tiered'){
+    const tiers = schema.tiers || [];
+    let placed = null;
+    for(let i=0;i<tiers.length;i++){
+      const t = tiers[i];
+      const tierItems = items.filter(it => (it.tier||'') === t.label);
+      const met = tierItems.length > 0 && tierItems.every(it => Number(scores[it.id]) >= 2);
+      if(met) placed = t; else break; // contiguous from the floor — stop at the first unmet tier
+    }
+    if(!placed) return { outcome:'do_not_advance', total:0, reasons:['No tier fully met — not ready for independent placement'], recommendedBelt:'Below White' };
+    return { outcome:'advance', total:null, reasons:[`Highest tier fully met: ${placed.label}`], recommendedBelt:placed.places };
+  }
+
+  return { outcome:'incomplete', total:null, reasons:['Unrecognized instrument schema'], recommendedBelt:null };
+}
+
+// Visual chip for an outcome string.
+function ovsOutcomeChip(outcome){
+  const map = {
+    advance:        ['ADVANCE','#22c55e','#22c55e1a','#22c55e55'],
+    conditional:    ['CONDITIONAL','#f59e0b','#f59e0b1a','#f59e0b55'],
+    do_not_advance: ['DO NOT ADVANCE','#ef4444','#ef44441a','#ef444455'],
+    incomplete:     ['IN PROGRESS','#94a3b8','#94a3b81a','#94a3b855']
+  };
+  const [t,c,bg,bd] = map[outcome] || map.incomplete;
+  return `<span class="pill" style="color:${c};background:${bg};border:1px solid ${bd};font-weight:800;font-size:11px;letter-spacing:.3px">${t}</span>`;
+}
+
+// ── Step 3: candidate requests an observation ────────────────────────────────
+function requestObservation(sid, targetBelt){
+  const s = getStaff(sid); if(!s) return;
+  // Already an open request for this belt? Re-show the PIN instead of duplicating.
+  const existing = (DB.observations||[]).find(o => o.staffId === s.id && o.targetBelt === targetBelt && ['requested','in_progress','submitted'].includes(o.status));
+  if(existing){
+    const pin = existing.handshake && existing.handshake.candidate_pin;
+    closeModal();
+    toast(`You already have an open ${targetBelt} observation. Your PIN is ${pin||'on file'}.`,'info');
+    return;
+  }
+  const pin = String(Math.floor(1000 + Math.random()*9000));
+  const handshake = { candidate_pin: pin, requested_at: new Date().toISOString() };
+  const row = { staffId:s.id, fid:s.fid, targetBelt, context:'gate', checklistBelt:targetBelt, checklistVersion:1, status:'requested', handshake, itemScores:{}, createdAt:new Date().toISOString() };
+  const backend = { staff_id:s.id, fid:s.fid, target_belt:targetBelt, context:'gate', checklist_belt:targetBelt, checklist_version:1, status:'requested', handshake, item_scores:{} };
+  if(IS_LIVE && typeof SB!=='undefined' && SB.insertObservation){
+    SB.insertObservation(backend).then(res => {
+      const created = Array.isArray(res) ? res[0] : res;
+      if(created && created.id) row.id = created.id;
+      if(!DB.observations) DB.observations = [];
+      DB.observations.unshift(row);
+    }).catch(e => handleSyncError(e,'Observation request'));
+  } else {
+    row.id = 'obs-' + Date.now();
+    if(!DB.observations) DB.observations = [];
+    DB.observations.unshift(row);
+  }
+  closeModal();
+  openModal('Observation Requested', `
+    <div class="modal-body" style="text-align:center">
+      <div style="font-size:32px;margin-bottom:8px">&#128065;</div>
+      <div style="font-size:13px;color:var(--txt2);line-height:1.6;margin-bottom:14px">Give this PIN to your observer when they assess you on the floor for <strong>${targetBelt} Belt</strong>. They enter it (with their own PIN) to begin.</div>
+      <div style="font-size:38px;font-weight:800;letter-spacing:6px;color:var(--gold);background:var(--s2);border:1px solid var(--bdr2);border-radius:12px;padding:18px">${pin}</div>
+      <div style="font-size:11px;color:var(--txt3);margin-top:10px">Keep this PIN. It stays the same until the observation is complete.</div>
+    </div>
+    <div class="modal-ft"><button class="btn btn-gold" onclick="closeModal()">Got it</button></div>`, 'modal-sm');
+}
+
+// ── Step 4: observer-side list + capture ─────────────────────────────────────
+function renderAObservations(){
+  const el = document.getElementById('a-observations');
+  if(!el) return;
+  if(ovsCapture){ el.innerHTML = ovsRenderCapture(); return; }
+
+  const u = ST.user;
+  let pool = (DB.observations || []).filter(o => ['requested','in_progress','returned'].includes(o.status));
+  if(u && u.role === 'staff_admin' && u.assignedFids && u.assignedFids.length)
+    pool = pool.filter(o => u.assignedFids.includes(o.fid));
+
+  const requested = pool.filter(o => o.status === 'requested').length;
+  const inProg    = pool.filter(o => o.status === 'in_progress').length;
+  const observers = (DB.staff || []).filter(s => s.observer).length;
+
+  const rows = pool.map(o => {
+    const s = getStaff(o.staffId); const fac = getFac(o.fid);
+    const cl = ovsInstrument(o.checklistBelt || o.targetBelt);
+    const items = cl ? ovsScorableUnits(cl).length : 0;
+    const statusPill = o.status === 'returned'
+      ? '<span class="pill" style="color:#f59e0b;background:#f59e0b1a;border:1px solid #f59e0b55">Returned</span>'
+      : o.status === 'in_progress'
+      ? '<span class="pill" style="color:#0ea5e9;background:#0ea5e91a;border:1px solid #0ea5e955">In progress</span>'
+      : '<span class="pill" style="color:#94a3b8;background:#94a3b81a;border:1px solid #94a3b855">Awaiting observer</span>';
+    return `<tr style="border-top:1px solid var(--bdr)">
+      <td style="padding:10px 8px"><div style="font-weight:700">${s?fullName(s):'Unknown'}</div><div style="font-size:11px;color:var(--txt3)">${fac?fac.name:'—'}</div></td>
+      <td style="padding:10px 8px">${beltBadge(o.targetBelt)}</td>
+      <td style="padding:10px 8px;font-size:12px;color:var(--txt2)">${items} items</td>
+      <td style="padding:10px 8px">${statusPill}</td>
+      <td style="padding:10px 8px;text-align:right"><button class="btn btn-gold btn-sm" onclick="ovsOpenCapture('${o.id}')">${o.status==='in_progress'?'Resume':'Conduct'}</button></td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div>
+      <h2 style="margin:0 0 6px">Observations</h2>
+      <p style="color:var(--txt2);font-size:13px;margin:0 0 16px">On-the-floor performance checks &mdash; the third assessment gate, alongside Competency and Simulation.</p>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px">
+        <div class="stat-card"><div class="stat-accent" style="background:#94a3b8"></div><div class="stat-lbl">Awaiting Observer</div><div class="stat-val">${requested}</div><div class="stat-sub">candidate requested</div></div>
+        <div class="stat-card"><div class="stat-accent" style="background:#0ea5e9"></div><div class="stat-lbl">In Progress</div><div class="stat-val">${inProg}</div><div class="stat-sub">being scored</div></div>
+        <div class="stat-card"><div class="stat-accent" style="background:var(--gold)"></div><div class="stat-lbl">Authorized Observers</div><div class="stat-val">${observers}</div><div class="stat-sub">can conduct</div></div>
+      </div>
+      ${pool.length ? `
+      <div class="card"><div class="card-body" style="padding:4px 8px">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead><tr style="text-align:left;color:var(--txt3);font-size:11px;text-transform:uppercase;letter-spacing:.4px">
+            <th style="padding:8px">Candidate</th><th style="padding:8px">Target Belt</th><th style="padding:8px">Instrument</th><th style="padding:8px">Status</th><th style="padding:8px;text-align:right">Action</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div></div>` : `
+      <div style="border:1px dashed var(--bdr);border-radius:12px;padding:32px;text-align:center;background:var(--s1)">
+        <div style="font-size:28px;margin-bottom:10px">&#128065;</div>
+        <div style="font-weight:700;margin-bottom:6px">No observations waiting</div>
+        <div style="color:var(--txt3);font-size:12.5px;line-height:1.6;max-width:460px;margin:0 auto">When a candidate requests an observation from their portal, it appears here for an authorized observer to conduct.</div>
+      </div>`}
+    </div>`;
+}
+
+// Enter the capture flow for one observation.
+function ovsOpenCapture(obsId){
+  const o = (DB.observations||[]).find(x => x.id === obsId);
+  if(!o){ toast('Observation not found.','err'); return; }
+  ovsCapture = { obsId, unlocked:false, observerStaffId:null, observerName:null };
+  if(o.status === 'in_progress' && o.itemScores) ovsCapture.scores = { ...o.itemScores };
+  renderAObservations();
+}
+
+function ovsBack(){ ovsCapture = null; ovsArmed = null; renderAObservations(); }
+
+// Two-PIN handshake: the observer proves identity with their reusable PIN, the
+// candidate consents with the PIN they were issued. Both must match to unlock.
+function ovsUnlock(){
+  const o = (DB.observations||[]).find(x => x.id === ovsCapture.obsId); if(!o) return;
+  const obsPin  = (document.getElementById('ovs-observer-pin')||{}).value || '';
+  const candPin = (document.getElementById('ovs-candidate-pin')||{}).value || '';
+  const observer = (DB.staff||[]).find(s => s.observer && s.observationPin && String(s.observationPin) === obsPin.trim());
+  if(!observer){ toast('Observer PIN not recognized. Only an authorized observer with a PIN can begin.','err'); return; }
+  if(!o.handshake || String(o.handshake.candidate_pin) !== candPin.trim()){ toast('Candidate PIN does not match this observation.','err'); return; }
+  ovsCapture.unlocked = true;
+  ovsCapture.observerStaffId = observer.id;
+  ovsCapture.observerName = fullName(observer);
+  if(!ovsCapture.scores) ovsCapture.scores = { ...(o.itemScores||{}) };
+  if(!ovsCapture.stopWork) ovsCapture.stopWork = o.stopWork || { active:false };
+  toast(`Verified — observer ${ovsCapture.observerName}. Begin scoring.`,'ok');
+  renderAObservations();
+}
+
+function ovsScore(itemId, value){
+  if(!ovsCapture || !ovsCapture.unlocked) return;
+  ovsCapture.scores = ovsCapture.scores || {};
+  ovsCapture.scores[itemId] = value;
+  renderAObservations();
+}
+
+function ovsToggleStopWork(){
+  if(!ovsCapture) return;
+  ovsCapture.stopWork = ovsCapture.stopWork || { active:false };
+  ovsCapture.stopWork.active = !ovsCapture.stopWork.active;
+  if(ovsCapture.stopWork.active) ovsCapture.stopWork.at = new Date().toISOString();
+  toast(ovsCapture.stopWork.active ? 'STOP-WORK active — this observation will be DO NOT ADVANCE.' : 'Stop-Work cleared.', ovsCapture.stopWork.active ? 'err' : 'ok');
+  renderAObservations();
+}
+
+function ovsRenderCapture(){
+  const o = (DB.observations||[]).find(x => x.id === ovsCapture.obsId);
+  if(!o) return '<div style="padding:20px">Observation not found. <button class="btn btn-ghost btn-sm" onclick="ovsBack()">Back</button></div>';
+  const s = getStaff(o.staffId); const fac = getFac(o.fid);
+  const cl = ovsInstrument(o.checklistBelt || o.targetBelt);
+  const header = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div>
+        <button class="btn btn-ghost btn-sm" onclick="ovsBack()" style="margin-bottom:8px">&larr; Back to Observations</button>
+        <h2 style="margin:0">Observation — ${s?fullName(s):'Unknown'}</h2>
+        <div style="font-size:12px;color:var(--txt3)">${fac?fac.name:'—'} &middot; Target ${beltBadge(o.targetBelt)} &middot; ${cl?(cl.schema&&cl.schema.type||'').toUpperCase()+' instrument':'no instrument'}</div>
+      </div>
+    </div>`;
+
+  if(!cl || ovsScorableUnits(cl).length === 0){
+    return `<div>${header}<div style="border:1px dashed var(--bdr);border-radius:12px;padding:28px;text-align:center;background:var(--s1);color:var(--txt2);font-size:13px">No scored checklist is seeded for ${o.targetBelt} Belt yet. Nothing to score.</div></div>`;
+  }
+
+  if(!ovsCapture.unlocked){
+    return `<div style="max-width:460px">${header}
+      <div class="card"><div class="card-body">
+        <div style="font-weight:700;margin-bottom:4px">Two-PIN check</div>
+        <div style="font-size:12px;color:var(--txt3);line-height:1.6;margin-bottom:14px">Enter the observer's PIN and the candidate's PIN to begin. Both are required — this confirms the right observer is scoring the right candidate, in person.</div>
+        <label style="font-size:12px;color:var(--txt2);font-weight:600">Observer PIN</label>
+        <input id="ovs-observer-pin" inputmode="numeric" maxlength="4" class="form-input" style="width:100%;margin:4px 0 12px;letter-spacing:4px;font-size:18px;text-align:center;box-sizing:border-box" placeholder="••••">
+        <label style="font-size:12px;color:var(--txt2);font-weight:600">Candidate PIN</label>
+        <input id="ovs-candidate-pin" inputmode="numeric" maxlength="4" class="form-input" style="width:100%;margin:4px 0 16px;letter-spacing:4px;font-size:18px;text-align:center;box-sizing:border-box" placeholder="••••">
+        <button class="btn btn-gold" style="width:100%;justify-content:center" onclick="ovsUnlock()">Unlock checklist</button>
+      </div></div>
+    </div>`;
+  }
+
+  // Unlocked → scored checklist, grouped, with a live outcome preview.
+  const units = ovsScorableUnits(cl);
+  const scores = ovsCapture.scores || {};
+  const stop = ovsCapture.stopWork || { active:false };
+  const scored = units.filter(u => scores[u.id] !== undefined && scores[u.id] !== null).length;
+  const outcome = ovsComputeOutcome(cl, scores, stop);
+
+  // Group units in render order.
+  const groups = []; const gmap = {};
+  units.forEach(u => { if(!gmap[u.group]){ gmap[u.group] = []; groups.push(u.group); } gmap[u.group].push(u); });
+
+  const scaleBtns = (u) => [3,2,1,0].map(v => {
+    const on = Number(scores[u.id]) === v;
+    const clr = v===0?'#ef4444':v===1?'#f59e0b':v===2?'#84cc16':'#22c55e';
+    return `<button onclick="ovsScore('${u.id}',${v})" style="flex:1;padding:7px 4px;border-radius:8px;font-weight:800;font-size:13px;cursor:pointer;border:1.5px solid ${on?clr:'var(--bdr2)'};background:${on?clr:'transparent'};color:${on?'#0b0f17':'var(--txt2)'}">${v}</button>`;
+  }).join('');
+  const pfBtns = (u) => ['pass','fail'].map(v => {
+    const on = scores[u.id] === v; const clr = v==='pass'?'#22c55e':'#ef4444';
+    return `<button onclick="ovsScore('${u.id}','${v}')" style="flex:1;padding:7px 4px;border-radius:8px;font-weight:800;font-size:12px;cursor:pointer;border:1.5px solid ${on?clr:'var(--bdr2)'};background:${on?clr:'transparent'};color:${on?'#0b0f17':'var(--txt2)'}">${v.toUpperCase()}</button>`;
+  }).join('');
+
+  const body = groups.map(g => `
+    <div style="margin-bottom:14px">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--txt3);font-weight:700;margin:6px 0 8px">${g}</div>
+      ${gmap[g].map(u => `
+        <div style="padding:10px 12px;border:1px solid var(--bdr);border-radius:10px;margin-bottom:8px;background:var(--s1)">
+          <div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:8px">
+            <div style="font-size:13px;line-height:1.5">${u.n?`<span style="color:var(--txt3)">${u.n}.</span> `:''}${u.text}</div>
+            ${u.meta?`<span style="font-size:10px;color:${u.meta==='Mandatory'?'#ef4444':'var(--txt3)'};font-weight:700;white-space:nowrap;align-self:flex-start">${u.meta}</span>`:''}
+          </div>
+          <div style="display:flex;gap:6px">${u.kind==='pf'?pfBtns(u):scaleBtns(u)}</div>
+        </div>`).join('')}
+    </div>`).join('');
+
+  const armed = ovsArmed && ovsArmed.action==='submit' && ovsArmed.id===ovsCapture.obsId;
+  const canSubmit = outcome.outcome !== 'incomplete';
+
+  return `<div style="max-width:760px">${header}
+    <div class="card" style="position:sticky;top:0;z-index:5"><div class="card-body" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <div style="font-size:12px;color:var(--txt2)">Observer: <strong>${ovsCapture.observerName}</strong> &middot; ${scored}/${units.length} scored</div>
+      <div style="display:flex;align-items:center;gap:10px">
+        ${ovsOutcomeChip(outcome.outcome)}
+        <button class="btn btn-sm" onclick="ovsToggleStopWork()" style="border:1.5px solid #ef4444;color:${stop.active?'#0b0f17':'#ef4444'};background:${stop.active?'#ef4444':'transparent'};font-weight:800">${stop.active?'■ STOP-WORK ON':'⛔ Stop-Work'}</button>
+      </div>
+    </div></div>
+    ${stop.active?`<div style="margin:10px 0;padding:10px 12px;background:#ef44441a;border:1px solid #ef444455;border-radius:8px;color:#ef4444;font-size:12px;font-weight:600">Stop-Work is active. On submit this observation records DO NOT ADVANCE regardless of item scores.</div>`:''}
+    <div style="margin-top:14px">${body}</div>
+    <div class="card"><div class="card-body">
+      <div style="font-size:12px;color:var(--txt2);margin-bottom:10px"><strong>Result preview:</strong> ${ovsOutcomeChip(outcome.outcome)} ${outcome.reasons[0]?`<span style="color:var(--txt3)">— ${outcome.reasons[0]}</span>`:''}</div>
+      <button class="btn ${armed?'btn-gold':'btn-primary'}" style="width:100%;justify-content:center" ${canSubmit?'':'disabled style="opacity:.5;cursor:not-allowed;width:100%;justify-content:center"'} onclick="ovsSubmit()">${armed?'Tap again to confirm submit':canSubmit?'Submit observation':'Score every item to submit'}</button>
+    </div></div>
+  </div>`;
+}
+
+// Submit: two-tap, then persist the record (status submitted, review pending).
+function ovsSubmit(){
+  if(!ovsCapture || !ovsCapture.unlocked) return;
+  const o = (DB.observations||[]).find(x => x.id === ovsCapture.obsId); if(!o) return;
+  const cl = ovsInstrument(o.checklistBelt || o.targetBelt);
+  const scores = ovsCapture.scores || {};
+  const stop = ovsCapture.stopWork || { active:false };
+  const outcome = ovsComputeOutcome(cl, scores, stop);
+  if(outcome.outcome === 'incomplete'){ toast('Score every item before submitting.','err'); return; }
+  // Two-tap arm
+  if(!(ovsArmed && ovsArmed.action==='submit' && ovsArmed.id===o.id)){
+    ovsArmed = { action:'submit', id:o.id };
+    setTimeout(()=>{ if(ovsArmed && ovsArmed.action==='submit' && ovsArmed.id===o.id){ ovsArmed=null; renderAObservations(); } }, 6000);
+    renderAObservations(); return;
+  }
+  ovsArmed = null;
+  const now = new Date().toISOString();
+  const handshake = { ...(o.handshake||{}), observer_id: ovsCapture.observerStaffId, observer_used_at: now };
+  // local
+  o.status = 'submitted'; o.reviewStatus = 'pending'; o.itemScores = scores;
+  o.stopWork = stop; o.totalPoints = outcome.total; o.outcome = outcome.outcome;
+  o.outcomeReasons = outcome.reasons; o.recommendedBelt = outcome.recommendedBelt;
+  o.observerId = ovsCapture.observerStaffId; o.observerName = ovsCapture.observerName;
+  o.handshake = handshake; o.submittedAt = now;
+  const backend = {
+    status:'submitted', review_status:'pending', item_scores:scores, stop_work:stop,
+    total_points: outcome.total, outcome: outcome.outcome, outcome_reasons: outcome.reasons,
+    recommended_belt: outcome.recommendedBelt, assessor_id: ovsCapture.observerStaffId,
+    assessor_name: ovsCapture.observerName, handshake, submitted_at: now, last_active_at: now
+  };
+  if(IS_LIVE && typeof SB!=='undefined' && SB.updateObservation && !String(o.id).startsWith('obs-')){
+    SB.updateObservation(o.id, backend).catch(e => handleSyncError(e,'Observation submit'));
+  }
+  ovsCapture = null;
+  toast(`Observation submitted — ${outcome.outcome.replace(/_/g,' ')}. It's now in Observation Reviews.`,'ok');
+  renderAObservations();
+}
+
+// ── Step 5: admin review + gate write ────────────────────────────────────────
+let ovsReviewFac = 'All', ovsReviewQ = '';
+function ovsReviewSetFac(v){ ovsReviewFac = v; renderAObservationReviews(); }
+function ovsReviewSearch(v){
+  ovsReviewQ = v;
+  renderAObservationReviews();
+  const inp = document.getElementById('ovs-rev-search');
+  if(inp){ inp.focus(); try{ inp.setSelectionRange(v.length, v.length); }catch(_){} }
+}
+function renderAObservationReviews(){
+  const el = document.getElementById('a-observationreviews');
+  if(!el) return;
+  const u = ST.user;
+  let pool = (DB.observations || []).filter(o => o.status === 'submitted' || o.status === 'reviewed');
+  if(u && u.role === 'staff_admin' && u.assignedFids && u.assignedFids.length)
+    pool = pool.filter(o => u.assignedFids.includes(o.fid));
+  // Facility filter + candidate search (mirrors Placement Reviews).
+  const facIds = [...new Set(pool.map(o => o.fid).filter(Boolean))];
+  const view = pool.filter(o =>
+    (ovsReviewFac === 'All' || o.fid === ovsReviewFac) &&
+    (!ovsReviewQ || ((getStaff(o.staffId) && fullName(getStaff(o.staffId)) || '').toLowerCase().includes(ovsReviewQ.toLowerCase())))
+  );
+
+  const pending  = pool.filter(o => o.status === 'submitted').length;
+  const reviewed = pool.filter(o => o.status === 'reviewed').length;
+  const advanced = pool.filter(o => o.status === 'reviewed' && (o.outcome === 'advance' || o.outcome === 'conditional')).length;
+
+  const rows = view.map(o => {
+    const s = getStaff(o.staffId); const fac = getFac(o.fid);
+    const armedC = ovsArmed && ovsArmed.action==='confirm' && ovsArmed.id===o.id;
+    const armedR = ovsArmed && ovsArmed.action==='return'  && ovsArmed.id===o.id;
+    const actions = o.status === 'submitted'
+      ? `<button class="btn btn-sm ${armedC?'btn-gold':'btn-primary'}" onclick="confirmObservation('${o.id}')">${armedC?'Confirm?':'Confirm & write gate'}</button>
+         <button class="btn btn-ghost btn-sm" onclick="returnObservation('${o.id}')" style="margin-left:6px">${armedR?'Return?':'Return'}</button>`
+      : `<span class="pill p-ok" style="font-size:11px">Gate written</span>`;
+    return `<tr style="border-top:1px solid var(--bdr)">
+      <td style="padding:10px 8px"><div style="font-weight:700">${s?fullName(s):'Unknown'}</div><div style="font-size:11px;color:var(--txt3)">${fac?fac.name:'—'}</div></td>
+      <td style="padding:10px 8px">${beltBadge(o.targetBelt)}</td>
+      <td style="padding:10px 8px">${ovsOutcomeChip(o.outcome)}</td>
+      <td style="padding:10px 8px;font-size:12px;color:var(--txt2)">${o.observerName||'—'}<div style="font-size:11px;color:var(--txt3)">${o.outcomeReasons&&o.outcomeReasons[0]?o.outcomeReasons[0]:''}</div></td>
+      <td style="padding:10px 8px;text-align:right">${actions}</td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div>
+      <h2 style="margin:0 0 6px">Observation Reviews</h2>
+      <p style="color:var(--txt2);font-size:13px;margin:0 0 16px">Confirm a submitted observation to write the candidate's Observation gate &mdash; same flow as Placement Reviews.</p>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px">
+        <div class="stat-card"><div class="stat-accent" style="background:#0ea5e9"></div><div class="stat-lbl">Awaiting Review</div><div class="stat-val">${pending}</div><div class="stat-sub">submitted</div></div>
+        <div class="stat-card"><div class="stat-accent" style="background:#22c55e"></div><div class="stat-lbl">Reviewed</div><div class="stat-val">${reviewed}</div><div class="stat-sub">gate written</div></div>
+        <div class="stat-card"><div class="stat-accent" style="background:var(--gold)"></div><div class="stat-lbl">Advanced</div><div class="stat-val">${advanced}</div><div class="stat-sub">passed the gate</div></div>
+      </div>
+      ${pool.length ? `
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+        <select onchange="ovsReviewSetFac(this.value)" class="form-input" style="max-width:240px">
+          <option value="All"${ovsReviewFac==='All'?' selected':''}>All facilities</option>
+          ${facIds.map(fid=>{const f=getFac(fid);return `<option value="${fid}"${ovsReviewFac===fid?' selected':''}>${f?f.name:fid}</option>`;}).join('')}
+        </select>
+        <input id="ovs-rev-search" class="form-input" style="max-width:260px;box-sizing:border-box" placeholder="Search candidate..." value="${(ovsReviewQ||'').replace(/"/g,'&quot;')}" oninput="ovsReviewSearch(this.value)">
+      </div>
+      ${view.length ? `<div class="card"><div class="card-body" style="padding:4px 8px">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead><tr style="text-align:left;color:var(--txt3);font-size:11px;text-transform:uppercase;letter-spacing:.4px">
+            <th style="padding:8px">Candidate</th><th style="padding:8px">Belt</th><th style="padding:8px">Outcome</th><th style="padding:8px">Observer / Basis</th><th style="padding:8px;text-align:right">Action</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div></div>` : `<div style="border:1px dashed var(--bdr);border-radius:12px;padding:24px;text-align:center;background:var(--s1);color:var(--txt3);font-size:12.5px">No reviews match the current filter.</div>`}` : `
+      <div style="border:1px dashed var(--bdr);border-radius:12px;padding:32px;text-align:center;background:var(--s1)">
+        <div style="font-size:28px;margin-bottom:10px">&#128203;</div>
+        <div style="font-weight:700;margin-bottom:6px">No completed observations to review yet</div>
+        <div style="color:var(--txt3);font-size:12.5px;line-height:1.6;max-width:460px;margin:0 auto">Submitted observations appear here. Confirming one writes that candidate's Observation gate.</div>
+      </div>`}
+    </div>`;
+}
+
+// Confirm a submission → write the Observation gate (nxt.o) via a targeted PATCH.
+function confirmObservation(obsId){
+  const o = (DB.observations||[]).find(x => x.id === obsId); if(!o) return;
+  // Two-tap arm (sandbox-safe; never a native confirm()).
+  if(!(ovsArmed && ovsArmed.action==='confirm' && ovsArmed.id===obsId)){
+    ovsArmed = { action:'confirm', id:obsId };
+    setTimeout(()=>{ if(ovsArmed && ovsArmed.action==='confirm' && ovsArmed.id===obsId){ ovsArmed=null; renderAObservationReviews(); } }, 6000);
+    renderAObservationReviews(); return;
+  }
+  ovsArmed = null;
+  const s = getStaff(o.staffId);
+  if(!s){ toast('Candidate not found.','err'); return; }
+  const gateVal = (o.outcome === 'advance' || o.outcome === 'conditional') ? 'pass' : 'fail';
+  // Recompute from stored scores at approval so the written result reflects the record.
+  const cl = ovsInstrument(o.checklistBelt || o.targetBelt);
+  const recomputed = ovsComputeOutcome(cl, o.itemScores, o.stopWork);
+  const finalVal = (recomputed.outcome === 'advance' || recomputed.outcome === 'conditional') ? 'pass' : 'fail';
+  if(!s.nxt) s.nxt = { c:null, s:null, o:null };
+  s.nxt.o = finalVal;
+  const now = new Date().toISOString();
+  o.status = 'reviewed'; o.reviewStatus = 'approved';
+  o.reviewedBy = ST.user && ST.user.id; o.reviewedByName = ST.user && (ST.user.name || ST.user.email); o.reviewedAt = now;
+  if(IS_LIVE && typeof SB!=='undefined'){
+    if(SB.updateStaff) SB.updateStaff(s.id, { nxt_obs: finalVal }).catch(e => handleSyncError(e,'Observation gate write'));
+    if(SB.updateObservation && !String(o.id).startsWith('obs-'))
+      SB.updateObservation(o.id, { status:'reviewed', review_status:'approved', reviewed_by:o.reviewedBy, reviewed_by_name:o.reviewedByName, reviewed_at:now }).catch(e => handleSyncError(e,'Observation review'));
+  }
+  toast(`Observation gate written for ${fullName(s)}: ${finalVal.toUpperCase()} (${o.targetBelt} Belt).`, finalVal==='pass'?'ok':'err');
+  renderAObservationReviews();
+}
+
+// Return a submission to the observer (no gate write).
+function returnObservation(obsId){
+  const o = (DB.observations||[]).find(x => x.id === obsId); if(!o) return;
+  if(!(ovsArmed && ovsArmed.action==='return' && ovsArmed.id===obsId)){
+    ovsArmed = { action:'return', id:obsId };
+    setTimeout(()=>{ if(ovsArmed && ovsArmed.action==='return' && ovsArmed.id===obsId){ ovsArmed=null; renderAObservationReviews(); } }, 6000);
+    renderAObservationReviews(); return;
+  }
+  ovsArmed = null;
+  const now = new Date().toISOString();
+  o.status = 'in_progress'; o.reviewStatus = 'returned'; o.returnReason = 'Returned for re-scoring';
+  if(IS_LIVE && typeof SB!=='undefined' && SB.updateObservation && !String(o.id).startsWith('obs-'))
+    SB.updateObservation(o.id, { status:'in_progress', review_status:'returned', return_reason:o.returnReason, reviewed_at:now }).catch(e => handleSyncError(e,'Observation return'));
+  toast('Observation returned to the observer for re-scoring.','info');
+  renderAObservationReviews();
+}
+
 function renderAPlacementReviews(){
   const u = ST.user;
   let pool = (DB.placementReviews||[]);
@@ -2410,6 +2977,7 @@ function renderAPlacementReviews(){
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                 <span style="font-size:14px;font-weight:700;color:#f1f5f9">${displayName}</span>
                 ${belt?beltBadge(belt):''}
+                ${(()=>{ if(!isPending) return ''; const sug=prSuggestion(pr); return sug?`<span title="Belt engine suggestion (blended + K + simulation floors, dangerous-answer block)" style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:rgba(196,154,32,.12);color:#eab308">SUGGESTED: ${sug.toUpperCase()}</span>`:''; })()}
                 ${pr._blended!=null?`<span style="font-size:11px;font-weight:800;color:${pr._blended>=75?'#22c55e':pr._blended>=65?'#f59e0b':'#ef4444'}" title="Blended score (60% knowledge / 40% simulation)">${pr._blended}%</span>`:''}
                 <span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:${isPending?'rgba(167,139,250,.15)':'rgba(34,197,94,.12)'};color:${statusClr}">${statusLabel.toUpperCase()}</span>
               </div>
@@ -2458,6 +3026,11 @@ function renderAPlacementReviews(){
   document.getElementById('a-placementreviews').innerHTML = `
     <div class="card-ttl" style="font-size:18px;font-weight:800;color:#f1f5f9;margin-bottom:6px">Placement Reviews</div>
     <div style="font-size:12.5px;color:#64748b;margin-bottom:16px">Review new hire assessment responses and confirm starting belt placement.</div>
+    ${total === 0 ? '' : `<div class="stat-grid" style="margin-bottom:16px">
+      <div class="stat-card"><div class="stat-accent" style="background:#a78bfa"></div><div class="stat-lbl">Awaiting Review</div><div class="stat-val" style="color:#a78bfa">${pendCount}</div><div class="stat-sub">pending placement</div></div>
+      <div class="stat-card"><div class="stat-accent" style="background:var(--ok)"></div><div class="stat-lbl">Reviewed</div><div class="stat-val" style="color:var(--ok)">${total-pendCount}</div><div class="stat-sub">confirmed</div></div>
+      <div class="stat-card"><div class="stat-accent" style="background:var(--gold)"></div><div class="stat-lbl">Avg Blended Score</div><div class="stat-val" style="color:var(--gold)">${(()=>{const bs=pool.map(r=>r._blended).filter(x=>x!=null);return bs.length?Math.round(bs.reduce((a,b)=>a+b,0)/bs.length)+'%':'--';})()}</div><div class="stat-sub">across ${total}</div></div>
+    </div>`}
     ${total === 0 ? '' : reviewTabs({pending:pendCount, reviewed:total-pendCount, all:total}, 'renderAPlacementReviews')}
     ${total === 0 ? '' : reviewFilterBar('renderAPlacementReviews')}
     ${total === 0 ? `
@@ -2506,9 +3079,9 @@ const RPT_STANDARDS = {
     White:  { blended: 75, k: 80, sim: 72 },
     Yellow: { blended: 78, k: 83, sim: 75 },
     Green:  { blended: 81, k: 86, sim: 78 },
-    Blue:   { blended: 84, k: 89, sim: 81 },
-    Brown:  { blended: 87, k: 92, sim: 84 },
-    Black:  { blended: 90, k: 95, sim: 87 }
+    Blue:   { blended: 85, k: 89, sim: 82 },
+    Brown:  { blended: 87, k: 91, sim: 84 },
+    Black:  { blended: 90, k: 92, sim: 87 }
   }
 };
 
@@ -2542,9 +3115,20 @@ function rptComputeModel(pr){
   const belt = pr.confirmedBelt || pr.tentativeBelt || 'White';
   const th = RPT_STANDARDS.belts[belt] || RPT_STANDARDS.belts.White;
 
-  // Conditions per the severity framework (no auto SUPERVISED PRACTICE:
-  // dangerous-answer classification is an assessor judgment we do not infer).
+  // Dangerous answers (Governing Standards): WRONG -- DANGEROUS knowledge responses.
+  // Wired to q.isDangerous; stays inert until SIPS supplies the dangerous-answer list.
+  const dangerous = (pr.responses||[]).filter(r => r.type==='knowledge' && r.isDangerous && !r.correct);
+  const anyDangerous = dangerous.length > 0;
+  const kL1pct = (kLevels.find(k=>k.level===1)||{}).pct;
+
+  // Conditions per the severity framework. Dangerous answers come FIRST as SUPERVISED
+  // PRACTICE REQUIRED and must resolve before any other condition is evaluated.
   const conditions = [];
+  dangerous.forEach(r=>{
+    conditions.push({ sev:'SUPERVISED PRACTICE REQUIRED', title:`Dangerous answer -- ${(r.question||'').slice(0,70)}`,
+      finding:`Answered "${r.answer||'(blank)'}". If acted upon in the department this would create a direct patient-safety risk.`,
+      action:`A supervisor must directly observe correct practice in this area and sign off. Written re-study alone does not clear it, and no other condition is evaluated until this is resolved.` });
+  });
   simLevels.filter(s=>!s.pass && s.pct!==null).forEach(s=>{
     conditions.push({ sev:'BLOCKING', title:`Simulation Level ${s.level} below floor`,
       finding:`Simulation level ${s.level} scored ${s.pct}% against the ${s.floor}% floor.`,
@@ -2566,18 +3150,56 @@ function rptComputeModel(pr){
       finding:`Passed at ${b.pct}%, within ${RPT_STANDARDS.advisoryBand} points of the ${b.floor}% floor.`,
       action:`Acknowledge and fold into the development plan. Does not block advancement.` });
   });
+  const nSup   = conditions.filter(c=>c.sev==='SUPERVISED PRACTICE REQUIRED').length;
   const nBlock = conditions.filter(c=>c.sev==='BLOCKING').length;
   const nReq   = conditions.filter(c=>c.sev==='REQUIRED').length;
   const nAdv   = conditions.filter(c=>c.sev==='ADVISORY').length;
-  const clean = nBlock===0 && nReq===0 && blended>=th.blended && kOverall>=th.k && simOverall>=th.sim;
-  const determination = clean ? `${belt.toUpperCase()} BELT -- Clean`
-    : `${belt.toUpperCase()} BELT -- Conditional (${nBlock} blocking, ${nReq} required, ${nAdv} advisory)`;
 
+  // Outcome -- the four Governing-Standards outcomes (Clean / Conditional / Knowledge
+  // Foundation / No Belt), not just clean-vs-conditional.
+  const WHITE = RPT_STANDARDS.belts.White;
+  const allKPass = kLevels.filter(k=>k.pct!==null).every(k=>k.pass);
+  const allSimPass = simLevels.filter(s=>s.pct!==null).every(s=>s.pass);
+  const belowMin = (pr.responses||[]).some(r=>r.type!=='knowledge' && (r.aiScore||0) < RPT_STANDARDS.simResponseMin);
+  let outcome;
+  if(blended>=th.blended && allKPass && allSimPass && !belowMin && !anyDangerous) outcome='CLEAN';
+  else if(blended>=th.blended) outcome='CONDITIONAL';
+  else if(kOverall>=80 && kL1pct!=null && kL1pct>=80 && !anyDangerous && (simOverall<WHITE.sim || blended<WHITE.blended)) outcome='KNOWLEDGE_FOUNDATION';
+  else outcome='NO_BELT';
+  const clean = outcome==='CLEAN';
+  const beltAwarded = (outcome==='CLEAN'||outcome==='CONDITIONAL') ? belt : null;
+  const condSummary = [nSup&&`${nSup} supervised-practice`, nBlock&&`${nBlock} blocking`, nReq&&`${nReq} required`, nAdv&&`${nAdv} advisory`].filter(Boolean).join(', ') || 'no conditions';
+  const determination =
+      outcome==='CLEAN' ? `${belt.toUpperCase()} BELT -- Clean`
+    : outcome==='CONDITIONAL' ? `${belt.toUpperCase()} BELT -- Conditional (${condSummary})`
+    : outcome==='KNOWLEDGE_FOUNDATION' ? `Knowledge Foundation Acknowledged -- belt not yet issued`
+    : `No Belt Issued`;
+
+  // Role amplification (Governing Standards section 6).
+  const titleStr = (pr.staffTitle||'').toLowerCase();
+  const roleAmp = (/manager|supervisor|lead/.test(titleStr) && (anyDangerous || nBlock>0))
+    ? `This candidate holds a ${pr.staffTitle} role, so these gaps carry operational weight beyond personal certification: a leader cannot credibly hold staff to standards they have not demonstrated. Dangerous-answer or blocking conditions here require elevated sign-off (supervisor/manager).`
+    : '';
+
+  // Classification (Governing Standards section 3) drives tone; topStrength is the area to
+  // acknowledge first (strength before gaps is required in every non-clean report).
+  const distBelow = r1(th.blended - blended);
+  const classification = outcome==='CLEAN' ? null
+    : outcome==='CONDITIONAL' ? 'B'
+    : (anyDangerous || kOverall < WHITE.k) ? 'D'
+    : (distBelow <= 3 ? 'A' : 'C');
+  const _best = [...kLevels.filter(k=>k.pct!=null).map(k=>({lbl:`Knowledge Level ${k.level}`, pct:k.pct})),
+                 ...simLevels.filter(s=>s.pct!=null).map(s=>({lbl:`Simulation Level ${s.level}`, pct:s.pct}))]
+                 .sort((a,b)=>b.pct-a.pct)[0];
+  const topStrength = _best ? `${_best.lbl} (${_best.pct}%)` : null;
+
+  // Next-belt target. When a belt was awarded, point to the next belt; when none was
+  // issued, the path is White Belt (re-assess at White first per the standard).
   const order = ['White','Yellow','Green','Blue','Brown','Black'];
-  const nb = order[order.indexOf(belt)+1] || null;
+  const nb = beltAwarded ? (order[order.indexOf(beltAwarded)+1] || null) : 'White';
   const nextTh = nb ? RPT_STANDARDS.belts[nb] : null;
   const gap = (cur, need)=> cur>=need ? 'Already meets' : `+${r1(need-cur)} pts needed`;
-  return { belt, th, blended, kOverall, simOverall, kLevels, simLevels, conditions, nBlock, nReq, nAdv, clean, determination,
+  return { belt, beltAwarded, outcome, classification, topStrength, th, blended, kOverall, simOverall, kLevels, simLevels, conditions, dangerous, anyDangerous, roleAmp, nSup, nBlock, nReq, nAdv, clean, determination,
     nextBelt: nb, nextRows: nextTh ? [
       ['Blended Score', blended, nextTh.blended, gap(blended,nextTh.blended)],
       ['Knowledge Overall', kOverall, nextTh.k, gap(kOverall,nextTh.k)],
@@ -2603,21 +3225,31 @@ function downloadAssessmentReport(prId){
   const wrongRows = (pr.responses||[]).filter(r=>r.type==='knowledge' && !r.correct).map(r=>{
     const q = (typeof PLACEMENT_QUESTIONS!=='undefined') ? PLACEMENT_QUESTIONS.find(x=>x.id===r.qId) : null;
     const corr = q && q.options ? q.options[q.correct] : null;
-    return `<tr><td style="padding:5px;border:1px solid #e2e8f0;font-weight:700">L${r.level}</td>
-      <td style="padding:5px;border:1px solid #e2e8f0;color:#b91c1c;font-weight:700">WRONG</td>
+    const dng = !!r.isDangerous;
+    return `<tr style="${dng?'background:#fdeaea':''}"><td style="padding:5px;border:1px solid #e2e8f0;font-weight:700">L${r.level}</td>
+      <td style="padding:5px;border:1px solid #e2e8f0;color:${dng?'#7f1d1d':'#b91c1c'};font-weight:700">${dng?'WRONG -- DANGEROUS':'WRONG'}</td>
       <td style="padding:5px;border:1px solid #e2e8f0">${r.question||''}</td>
       <td style="padding:5px;border:1px solid #e2e8f0">${r.answer||'(blank)'}</td>
       <td style="padding:5px;border:1px solid #e2e8f0;color:#16a34a">${corr||'--'}</td></tr>`;
   }).join('');
+  const dangerFootnote = (m.dangerous && m.dangerous.length) ? `<div style="margin-top:8px;padding:8px 10px;background:#fdeaea;border-left:4px solid #7f1d1d;color:#7f1d1d;font-size:8pt"><b>PATIENT SAFETY -- DANGEROUS ANSWERS.</b> ${m.dangerous.map(r=>`&ldquo;${(r.question||'').slice(0,90)}&rdquo;: the answer given, if acted upon in the department, is a direct patient-safety risk; clearance requires supervised practice.`).join('<br>')}</div>` : '';
   const simRows = (pr.responses||[]).filter(r=>r.type!=='knowledge').map(r=>`<tr>
       <td style="padding:5px;border:1px solid #e2e8f0;font-weight:700">L${r.level}</td>
       <td style="padding:5px;border:1px solid #e2e8f0;font-weight:700;color:${(r.aiScore||0)>=65?'#16a34a':'#b91c1c'}">${r.aiScore??'--'}</td>
       <td style="padding:5px;border:1px solid #e2e8f0">${r.question||''}</td>
       <td style="padding:5px;border:1px solid #e2e8f0;color:#475569">${r.aiFeedback||''}</td></tr>`).join('');
   const tbl = 'width:100%;border-collapse:collapse;font-size:8pt';
-  const basis = m.clean
-    ? `The candidate met the blended threshold of ${m.th.blended}% with ${m.blended}%, passed every knowledge level against the ${RPT_STANDARDS.kLevelFloor}% floor and every simulation level against its floor. ${m.belt} Belt is awarded clean, with no conditions attached.`
-    : `The candidate demonstrated ${m.kOverall>=m.th.k?'a knowledge foundation that meets the '+m.belt+' Belt standard':'partial knowledge coverage'} (knowledge overall ${m.kOverall}%) alongside a simulation overall of ${m.simOverall}%. The blended score of ${m.blended}% was measured against the ${m.belt} Belt threshold of ${m.th.blended}% (${m.blended>=m.th.blended?'met':'not met'}). ${m.nBlock+m.nReq>0?`${m.nBlock} blocking and ${m.nReq} required condition(s) are attached and form the development path below.`:''} The conditions represent the specific gaps between this performance and an unconditional award, and clearing them is the direct route forward.`;
+  const OUT = { CLEAN:['CLEAN','#16a34a'], CONDITIONAL:['CONDITIONAL','#b45309'], KNOWLEDGE_FOUNDATION:['KNOWLEDGE FOUNDATION','#2563eb'], NO_BELT:['NO BELT','#b91c1c'] };
+  const [outLabel, outClr] = OUT[m.outcome] || OUT.NO_BELT;
+  const condText = [m.nSup&&`${m.nSup} supervised-practice`, m.nBlock&&`${m.nBlock} blocking`, m.nReq&&`${m.nReq} required`, m.nAdv&&`${m.nAdv} advisory`].filter(Boolean).join(', ') || 'no conditions';
+  const strengthLead = (m.outcome!=='CLEAN' && m.topStrength) ? `The candidate's strongest area was ${m.topStrength}. ` : '';
+  const closeNote = m.classification==='A' ? ' This is a close miss; a focused, targeted remediation should produce a passing result.' : '';
+  const basis = strengthLead + (
+      m.outcome==='CLEAN' ? `The candidate met the ${m.belt} Belt blended threshold of ${m.th.blended}% with ${m.blended}%, and passed every knowledge and simulation level floor. ${m.belt} Belt is awarded clean, with no conditions attached.`
+    : m.outcome==='CONDITIONAL' ? `The candidate met the ${m.belt} Belt blended threshold (${m.blended}% against ${m.th.blended}%), with knowledge overall ${m.kOverall}% and simulation overall ${m.simOverall}%. ${m.belt} Belt is awarded with conditions: ${condText}. The conditions below are the path to the next level, not penalties.`
+    : m.outcome==='KNOWLEDGE_FOUNDATION' ? `The candidate demonstrated a genuine knowledge foundation (knowledge overall ${m.kOverall}%, meeting the 80% standard), but simulation overall of ${m.simOverall}% is not yet at the threshold to issue a belt. This is a real achievement; the belt is the next concrete target once the simulation gaps below are developed.`
+    : `The blended score of ${m.blended}% is below the White Belt threshold of 75%${m.kOverall<80?`, and knowledge overall (${m.kOverall}%) is below the 80% foundation`:''}. No belt is issued at this assessment. The path forward below is structured and achievable; re-assessment is at White Belt.`
+  ) + closeNote + (m.roleAmp ? ` ${m.roleAmp}` : '');
   const body = `
   <div style="font-family:Arial,Helvetica,sans-serif;color:#1f2430;font-size:9pt;line-height:1.45">
     <div>${hdr(1)}
@@ -2632,7 +3264,7 @@ function downloadAssessmentReport(prId){
       </table>
       ${sect('ASSESSMENT RESULT SUMMARY')}
       <table style="${tbl}"><tr>
-        <td style="padding:10px;border:1px solid #e2e8f0;text-align:center;width:33%"><div style="font-size:7.5pt;color:#64748b;font-weight:700">BELT ${draft?'RECOMMENDED':'AWARDED'}</div><div style="font-size:15pt;font-weight:800;color:#0d1b35">${m.belt.toUpperCase()}</div><div style="font-size:7.5pt;color:${m.clean?'#16a34a':'#b45309'};font-weight:700">${m.clean?'CLEAN':'CONDITIONAL'}</div></td>
+        <td style="padding:10px;border:1px solid #e2e8f0;text-align:center;width:33%"><div style="font-size:7.5pt;color:#64748b;font-weight:700">BELT ${draft?'RECOMMENDED':'AWARDED'}</div><div style="font-size:15pt;font-weight:800;color:#0d1b35">${m.beltAwarded?m.beltAwarded.toUpperCase():'NONE'}</div><div style="font-size:7.5pt;color:${outClr};font-weight:700">${outLabel}</div></td>
         <td style="padding:10px;border:1px solid #e2e8f0;text-align:center;width:34%"><div style="font-size:7.5pt;color:#64748b;font-weight:700">FINAL DETERMINATION</div><div style="font-size:9.5pt;font-weight:700;margin-top:4px">${m.determination}</div></td>
         <td style="padding:10px;border:1px solid #e2e8f0;text-align:center"><div style="font-size:7.5pt;color:#64748b;font-weight:700">BLENDED SCORE</div><div style="font-size:15pt;font-weight:800;color:#0d1b35">${m.blended}%</div><div style="font-size:7.5pt;color:#64748b">K ${m.kOverall}% | Sim ${m.simOverall}%</div></td>
       </tr></table>
@@ -2647,6 +3279,7 @@ function downloadAssessmentReport(prId){
       <div style="margin:8px 0;font-size:9pt"><b>KNOWLEDGE OVERALL: ${m.kOverall}%</b> &nbsp; ${m.belt} Belt floor: ${m.th.k}% | ${m.kOverall>=m.th.k?'PASS':'FAIL by '+(Math.round((m.th.k-m.kOverall)*10)/10)+' pts'}</div>
       ${sect('INCORRECT AND BLANK RESPONSES')}
       ${wrongRows ? `<table style="${tbl}"><tr style="background:#f7f4ef"><th style="padding:5px;border:1px solid #e2e8f0">Lvl</th><th style="padding:5px;border:1px solid #e2e8f0">Status</th><th style="padding:5px;border:1px solid #e2e8f0">Question</th><th style="padding:5px;border:1px solid #e2e8f0">Their Answer</th><th style="padding:5px;border:1px solid #e2e8f0">Correct Answer</th></tr>${wrongRows}</table>` : '<div style="font-size:8.5pt;color:#16a34a;font-weight:700">No incorrect knowledge responses.</div>'}
+      ${dangerFootnote}
       <div style="page-break-after:always"></div></div>
     <div>${hdr(3)}
       ${sect('SIMULATION COMPONENT')}
@@ -5861,6 +6494,7 @@ function renderSDashboard(){
           </div>
           <div class="irow"><div class="ilbl">Current Belt Gates</div><div class="ival">${gateDots(s.cur)}</div></div>
           ${nb?`<div class="irow"><div class="ilbl">Next Belt Gates (${nb})</div><div class="ival">${gateDots(s.nxt)} <span style="font-size:11px;color:var(--txt3)">${nxtSt.p}/3</span></div></div>`:''}
+          ${(()=>{ const ob=(DB.observations||[]).find(o=>o.staffId===s.id && ['requested','in_progress'].includes(o.status)); const pin=ob&&ob.handshake&&ob.handshake.candidate_pin; return pin?`<div class="irow"><div class="ilbl">Observation PIN</div><div class="ival"><span class="pill" style="background:#0ea5e91a;color:#0ea5e9;border:1px solid #0ea5e955;font-weight:800;letter-spacing:3px;font-size:13px">${pin}</span> <span style="font-size:10px;color:var(--txt3)">give this to your observer</span></div></div>`:''; })()}
           <div class="irow"><div class="ilbl">Stars Earned</div><div class="ival tc-gold">${calcTotalPSStars(s)>0?Array(calcTotalPSStars(s)).fill('★').join(' '):'None yet'}&nbsp;<span style="font-size:10px;color:var(--txt3);font-style:italic">${calcTotalPSStars(s)>0?'('+calcTotalPSStars(s)+' PS track'+(calcTotalPSStars(s)>1?'s':'')+' completed)':''}</span></div></div>
           <div class="irow"><div class="ilbl">Position School</div><div class="ival">${(()=>{const et=getEligibleTracks(s);const ct=calcTotalPSStars(s);if(ct>0&&et.length===0)return'<span class="pill p-ok">'+ct+' star'+(ct>1?'s':'')+' earned</span>';if(et.length>0)return'<span class="pill p-warn">'+et.length+' track'+(et.length>1?'s':'')+' available</span>';return'<span class="pill p-muted">Unlocks at Green Belt</span>';})()} <button class="btn btn-ghost btn-xs" style="margin-left:6px" onclick="sNav(document.querySelector('#s-portal .nav-item[data-view=s-posschool]'),'s-posschool','Position School')">View</button></div></div>
           <div class="irow" style="border:none"><div class="ilbl">Promotion Eligible</div><div class="ival">${s.promo?'<span class="pill p-gold">Yes – Eligible</span>':'<span style="color:var(--txt3);font-size:12px">Not yet</span>'}</div></div>
@@ -5926,9 +6560,9 @@ function openApplyModal(sid){
       </div>
       <div style="font-size:13px;font-weight:600;margin-bottom:8px">Select the gate you want to apply for:</div>
       ${gatesNeeded.map(g=>`
-        <div style="padding:12px;background:var(--s2);border:1px solid var(--bdr2);border-radius:var(--rs);margin-bottom:8px;cursor:pointer;transition:.15s" onclick="submitApply(${sid},'${g.key}','${nb}')" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--bdr2)'">
+        <div style="padding:12px;background:var(--s2);border:1px solid var(--bdr2);border-radius:var(--rs);margin-bottom:8px;cursor:pointer;transition:.15s" onclick="${g.key==='o'?`requestObservation('${s.id}','${nb}')`:`submitApply(${sid},'${g.key}','${nb}')`}" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--bdr2)'">
           <div style="font-weight:700;margin-bottom:3px">${g.label} Assessment</div>
-          <div style="font-size:11.5px;color:var(--txt3)">For ${nb} Belt certification. Conducted by an SBD-certified assessor.</div>
+          <div style="font-size:11.5px;color:var(--txt3)">${g.key==='o'?`On-the-floor observation for ${nb} Belt. You get a PIN to give your observer.`:`For ${nb} Belt certification. Conducted by an SBD-certified assessor.`}</div>
         </div>`).join('')}
       ${gatesNeeded.length===0?`<div style="text-align:center;padding:20px;color:var(--ok);font-weight:700">All gates passed! Awaiting belt certification review.</div>`:''}
     </div>
@@ -8339,7 +8973,7 @@ function renderHProfile(sid,context){
     <div class="prof-banner">
       <div class="prof-av">${userInitials(s)}</div>
       <div style="flex:1">
-        <div class="prof-name">${fullName(s)}</div>
+        <div class="prof-name">${fullName(s)}${s.observer?` <span style="font-size:10px;font-weight:600;color:#0ea5e9;background:#0ea5e91a;border:1px solid #0ea5e955;padding:2px 7px;border-radius:8px;vertical-align:middle;margin-left:6px">&#128065; Observer</span>`:''}</div>
         <div class="prof-role">
           ${s.role} &bull; 
           ${(()=>{
@@ -8358,6 +8992,8 @@ function renderHProfile(sid,context){
         ${context==='admin'||context==='h'?`<button class="btn btn-blue btn-sm" onclick="openPromoteModal('${s.id}','${context}')">&#x2B06; Promote</button>`:''}
         <button class="btn btn-ghost btn-sm" onclick="downloadStaffReport('${s.id}')">${ICO.dl} Report</button>
         ${(ST.user&&ST.user.role==='master_admin')?`<button class="btn btn-ghost btn-sm" onclick="openBeltOverrideModal('${s.id}','${context}')" style="border-color:var(--gold-bd);color:var(--gold)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Override Belt</button>`:''}
+        ${(ST.user&&ST.user.role==='master_admin')?`<button class="btn btn-ghost btn-sm" onclick="toggleObserver('${s.id}','${context}')" style="border-color:${s.observer?'#0ea5e9':'var(--bdr)'};color:${s.observer?'#0ea5e9':'var(--txt2)'}" title="${s.observer?'Revoke observer access':'Grant observer access'}"><svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 10s3-5.5 8-5.5S18 10 18 10s-3 5.5-8 5.5S2 10 2 10z"/><circle cx="10" cy="10" r="2.3"/></svg> ${s.observer?'Observer: On':'Make Observer'}</button>`:''}
+        ${(ST.user&&ST.user.role==='master_admin'&&s.observer)?(s.observationPin?`<span class="pill" style="background:#0ea5e91a;color:#0ea5e9;border:1px solid #0ea5e955;font-size:11px;padding:5px 9px;border-radius:8px;font-weight:700;align-self:center">Observer PIN: ${s.observationPin}</span>`:`<button class="btn btn-ghost btn-sm" onclick="generateObserverPin('${s.id}','${context}')" style="border-color:#0ea5e9;color:#0ea5e9">&#128273; Generate PIN</button>`):''}
         ${context==='admin'&&(ST.user&&ST.user.role==='master_admin')?`<button class="btn btn-err btn-sm" onclick="releaseToFreeAgent('${s.id}')" title="Release staff member to Free Agent Registry" style="margin-left:auto"><svg width="13" height="13" viewBox="0 0 18 18" fill="none"><path d="M12 14H15a1 1 0 001-1V5a1 1 0 00-1-1H12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M9 12l3-3-3-3M12 9H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Release</button>`:''}
       </div>
     </div>
@@ -10293,6 +10929,8 @@ function renderAOverview(){
       <div class="stat-card"><div class="stat-accent" style="background:var(--blue)"></div><div class="stat-lbl">Total Staff Enrolled</div><div class="stat-val" style="color:var(--blue)">${n}</div><div class="stat-sub">Across all departments</div></div>
       <div class="stat-card"><div class="stat-accent" style="background:var(--ok)"></div><div class="stat-lbl">Network Green Belt %</div><div class="stat-val" style="color:var(--ok)">${n?Math.round(aboveG/n*100):0}%</div><div class="stat-sub">${aboveG} of ${n} at Green+</div></div>
       <div class="stat-card"><div class="stat-accent" style="background:var(--warn)"></div><div class="stat-lbl">Pending Assessments</div><div class="stat-val" style="color:var(--warn)">${DB.queue.filter(q=>!assignedFids||assignedFids.includes(q.fid)).length}</div><div class="stat-sub">Awaiting SBD decision</div></div>
+      <div class="stat-card"><div class="stat-accent" style="background:#0ea5e9"></div><div class="stat-lbl">Authorized Observers</div><div class="stat-val" style="color:#0ea5e9">${allSt.filter(s=>s.observer).length}</div><div class="stat-sub">Can conduct observations</div></div>
+      <div class="stat-card"><div class="stat-accent" style="background:#8b5cf6"></div><div class="stat-lbl">Observation Gate Passed</div><div class="stat-val" style="color:#8b5cf6">${allSt.filter(s=>s.cur&&s.cur.o==='pass').length}</div><div class="stat-sub">${n?Math.round(allSt.filter(s=>s.cur&&s.cur.o==='pass').length/n*100):0}% of ${n} staff</div></div>
     </div>
     ${(()=>{
       const eligible=DB.staff.filter(s=>beltIdx(s.belt)>=2);
@@ -10354,8 +10992,8 @@ function renderAOverview(){
       </div>
     </div>
     <div class="card"><div class="card-hd"><div class="card-ttl">Facility Scoreboard</div><button class="btn btn-ghost btn-sm" onclick="aNav(document.querySelector('[data-view=a-leaderboard]'),'a-leaderboard','Facility Leaderboard')">Full Leaderboard</button></div>
-      <table class="tbl"><thead><tr><th>Rank</th><th>Facility</th><th>Staff</th><th>Green Belt %</th><th>Avg Belt</th><th>Trend</th><th>Action</th></tr></thead>
-      <tbody>${DB.facilities.filter(f=>f.active!==false).map((f,i)=>{const st=facStats(f.id);const ranks=['r1','r2','r3','rn','rn'];return`<tr onclick="goFacility('${f.id}')"><td><div class="rank ${ranks[i]}">${i+1}</div></td><td class="fw7">${f.name}</td><td style="font-size:12px;color:var(--txt3)">${st.n}</td><td><div style="display:flex;align-items:center;gap:8px"><div style="width:60px;height:5px;background:var(--s3);border-radius:2px"><div style="height:100%;width:${st.greenPct}%;background:${st.greenPct>=75?'var(--ok)':st.greenPct>=50?'var(--gold)':'var(--warn)'};border-radius:2px"></div></div><span class="fw7 ${st.greenPct>=75?'tc-ok':st.greenPct>=50?'tc-gold':'tc-warn'}">${st.greenPct}%</span></div></td><td class="tc-gold fw7">${st.avgBelt}</td><td><span style="color:var(--ok);font-size:11px;font-weight:600">+</span></td><td><button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();goFacility('${f.id}')">${ICO.view} View</button></td></tr>`}).join('')}
+      <table class="tbl"><thead><tr><th>Rank</th><th>Facility</th><th>Staff</th><th>Green Belt %</th><th>Avg Belt</th><th>Action</th></tr></thead>
+      <tbody>${DB.facilities.filter(f=>f.active!==false).map((f,i)=>{const st=facStats(f.id);const ranks=['r1','r2','r3','rn','rn'];return`<tr onclick="goFacility('${f.id}')"><td><div class="rank ${ranks[i]}">${i+1}</div></td><td class="fw7">${f.name}</td><td style="font-size:12px;color:var(--txt3)">${st.n}</td><td><div style="display:flex;align-items:center;gap:8px"><div style="width:60px;height:5px;background:var(--s3);border-radius:2px"><div style="height:100%;width:${st.greenPct}%;background:${st.greenPct>=75?'var(--ok)':st.greenPct>=50?'var(--gold)':'var(--warn)'};border-radius:2px"></div></div><span class="fw7 ${st.greenPct>=75?'tc-ok':st.greenPct>=50?'tc-gold':'tc-warn'}">${st.greenPct}%</span></div></td><td class="tc-gold fw7">${st.avgBelt}</td><td><button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();goFacility('${f.id}')">${ICO.view} View</button></td></tr>`}).join('')}
       </tbody>
     </table></div>`;
 }
@@ -11583,6 +12221,37 @@ function openAdminProfile(sid){
   setTimeout(()=>renderHProfile(sid,'admin'),50);
 }
 
+// Grant / revoke Observer access (master-admin only). Flips the staff.observer
+// flag via a targeted single-column write -- never touches other staff fields.
+function toggleObserver(sid, context){
+  const s=getStaff(sid); if(!s) return;
+  if(!(ST.user&&ST.user.role==='master_admin')){toast('Only master admins can grant observer access.','err');return;}
+  const next=!s.observer;
+  s.observer=next;
+  if(IS_LIVE && typeof SB!=='undefined' && SB.updateStaff){
+    SB.updateStaff(sid,{observer:next}).catch(e=>{ s.observer=!next; handleSyncError(e,'Observer toggle'); if(typeof renderHProfile==='function') renderHProfile(sid,context); });
+  }
+  toast(`${fullName(s)} ${next?'is now an authorized observer.':'is no longer an observer.'}`, next?'ok':'err');
+  if(typeof renderHProfile==='function') renderHProfile(sid,context);
+}
+
+// Generate a reusable observation PIN for an authorized observer (master-admin only).
+// One-time generation; the same PIN is reused for every observation thereafter.
+// Stored via a targeted single-column write to staff.observation_pin.
+function generateObserverPin(sid, context){
+  const s=getStaff(sid); if(!s) return;
+  if(!(ST.user&&ST.user.role==='master_admin')){toast('Only master admins can manage observer PINs.','err');return;}
+  if(!s.observer){toast('Grant observer access first, then generate a PIN.','err');return;}
+  if(s.observationPin){toast(`Observer PIN is ${s.observationPin} (PINs are reused, not regenerated).`,'ok');return;}
+  const pin=String(Math.floor(1000+Math.random()*9000)); // 4-digit, reused thereafter
+  s.observationPin=pin;
+  if(IS_LIVE && typeof SB!=='undefined' && SB.updateStaff){
+    SB.updateStaff(sid,{observation_pin:pin}).catch(e=>{ s.observationPin=null; handleSyncError(e,'Observer PIN'); if(typeof renderHProfile==='function') renderHProfile(sid,context); });
+  }
+  toast(`${fullName(s)}'s observer PIN: ${pin}`,'ok');
+  if(typeof renderHProfile==='function') renderHProfile(sid,context);
+}
+
 // ============================================================ A ASSESSMENTS (global)
 let asmFilter='all';
 
@@ -11988,6 +12657,11 @@ function renderAAssessments() {
   }
 
   el.innerHTML = `
+    ${(staffRequests.length+adminQueue.length) === 0 ? '' : `<div class="stat-grid" style="margin-bottom:16px">
+      <div class="stat-card"><div class="stat-accent" style="background:var(--warn)"></div><div class="stat-lbl">Staff Requests</div><div class="stat-val" style="color:var(--warn)">${staffRequests.length}</div><div class="stat-sub">awaiting approval</div></div>
+      <div class="stat-card"><div class="stat-accent" style="background:var(--blue)"></div><div class="stat-lbl">In Admin Queue</div><div class="stat-val" style="color:var(--blue)">${adminQueue.length}</div><div class="stat-sub">to record</div></div>
+      <div class="stat-card"><div class="stat-accent" style="background:var(--gold)"></div><div class="stat-lbl">Total Items</div><div class="stat-val" style="color:var(--gold)">${staffRequests.length+adminQueue.length}</div><div class="stat-sub">on this page</div></div>
+    </div>`}
     <div style="background:rgba(196,154,32,.07);border:1px solid var(--gold-bd);border-radius:var(--rs);padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--txt2);line-height:1.5">
       Staff who score 80%+ on both SIPS Intelligence practice tests may request their gate assessments here. Review their practice scores before approving or denying the request.
     </div>
@@ -13451,9 +14125,9 @@ async function approvePromotion(apId, approved){
   ap.decidedAt=new Date().toISOString().slice(0,10);
   if(IS_LIVE){
     try{
-      // Column names per mapPromotionApprovalFromBackend (reviewed_*, not decided_*)
+      // Column names per mapPromotionApprovalFromBackend (reviewed_*, not decided_*).
       await SB.updatePromotionApproval(ap.id,{status:ap.status,reviewed_by:ap.decidedBy,reviewed_at:ap.decidedAt});
-      // Persist the actual role change (same targeted PATCH as changeStaffRoleInline)
+      // Persist the role change: targeted single-column PATCH -- never touches oip/history/ps_tracks.
       if(approved) await SB.updateStaff(ap.staffId,{ role: ap.proposedRole });
     }catch(e){
       ap.status=prev.status; ap.decidedBy=prev.decidedBy; ap.decidedAt=prev.decidedAt;
@@ -13462,6 +14136,7 @@ async function approvePromotion(apId, approved){
     }
   }
   if(approved){
+    // Apply the role promotion locally (updates on-screen role + pushes Promotion history).
     promoteStaffPosition(ap.staffId, ap.proposedRole, ST.user?.name||'SIPS Admin');
     const s=getStaff(ap.staffId);
     toast(`${s?fullName(s):'Staff'} promoted to <strong>${ap.proposedRole}</strong> -- approved.`,'ok');
