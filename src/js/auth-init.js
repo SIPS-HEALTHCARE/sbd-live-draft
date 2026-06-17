@@ -2108,6 +2108,10 @@ async function initAppData(){
     console.log(`SBD Platform: Hydrated ${window.DB.facilities.length} facs, ${window.DB.staff.length} staff, ${window.DB.hospitalSystems.length} systems, ${window.DB.users.length} users.`);
     // Durable submit: flush any placement assessment that was queued offline on a prior session.
     if(typeof flushPendingPlacements === 'function') flushPendingPlacements();
+    // Recovery: convert any finished-but-unsubmitted placement test on this device into a
+    // review (dedupe-guarded). Covers a final submit that never completed or a device save
+    // that failed -- the answers were saved, but no review reached the assessor's queue.
+    if(typeof recoverUnsubmittedPlacement === 'function') recoverUnsubmittedPlacement();
     if(window.DB.staff.length === 0) console.warn('SBD DIAG: staff array is EMPTY after hydration. Raw staff value:', staff);
     if(window.DB.facilities.length === 0) console.warn('SBD DIAG: facilities array is EMPTY after hydration. Raw facs value:', facs);
     
