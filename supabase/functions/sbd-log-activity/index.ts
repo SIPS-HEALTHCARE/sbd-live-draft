@@ -17,6 +17,7 @@ const ALLOWED = new Set([
     'login', 'logout', 'session_start', 'session_end', 'heartbeat',
     'view', 'practice_start', 'practice_complete', 'assessment_request', 'david_query',
 ]);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 serve(async (req) => {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -32,7 +33,8 @@ serve(async (req) => {
         const { data: { user }, error: authErr } = await supabase.auth.getUser(jwt);
         if (authErr || !user) return json({ error: 'Unauthorized' }, 401);
 
-        // Resolve identity server-side (never trust the client for these).
+        // Resolve identity server-side (never trust the client for these). The auth UID
+        // lives in the auth_uid column, not id.
         const { data: profile } = await supabase
             .from('sbd_portal_users')
             .select('id, role, facility_id, staff_id')
@@ -43,15 +45,23 @@ serve(async (req) => {
         const events = Array.isArray(payload?.events) ? payload.events.slice(0, MAX_EVENTS) : [];
         if (!events.length) return json({ inserted: 0 }, 200);
 
+        // sbd_activity_log.staff_id and facility_id are uuid columns. sbd_portal_users.staff_id
+        // is a legacy INTEGER (never compatible) and facility_id is TEXT (may be a non-uuid code),
+        // so coerce both safely: staff.id == the auth uid for staff members (sbd-sync-user-claims),
+        // so use user.id for them to keep rows readable under the staff_id = auth.uid() RLS scope;
+        // null otherwise. facility_id only passes through when it is a real uuid.
+        const staffId = profile?.role === 'staff_member' ? user.id : null;
+        const rawFid = profile?.facility_id;
+        const facilityId = (typeof rawFid === 'string' && UUID_RE.test(rawFid)) ? rawFid : null;
+
         const rows = events
             .filter((e: any) => e && ALLOWED.has(String(e.event_type)))
             .map((e: any) => ({
                 user_id: profile?.id || null,
-                // staff.id == the auth uid for staff members (sbd-sync-user-claims), so fall back
-                // to user.id when the portal row has no explicit staff_id — this keeps rows readable
-                // under the `staff_id = auth.uid()` RLS self-scope.
-                staff_id: profile?.staff_id || (profile?.role === 'staff_member' ? user.id : null),
-                facility_id: profile?.facility_id || null,
+                staff_id: staffId,
+                facility_id: facilityId,
+                // `action` is a legacy NOT NULL column; mirror event_type so inserts are accepted.
+                action: String(e.event_type),
                 event_type: String(e.event_type),
                 event_meta: (e.event_meta && typeof e.event_meta === 'object') ? e.event_meta : {},
                 created_at: typeof e.ts === 'string' ? e.ts : new Date().toISOString(),
