@@ -29,7 +29,17 @@ serve(async (req) => {
 
         if (!openRouterKey) throw new Error('OPENROUTER_API_KEY is not configured in Supabase secrets.');
 
-        const { message, history = [], systemPrompt = '' } = await req.json();
+        const { message, history = [], systemPrompt = '', model = '' } = await req.json();
+
+        // M.3 — per-mode model routing. The client sends a `model` hint (cheaper model for
+        // low-stakes modes like Knowledge/Study); validate it against an allowlist and fall back
+        // to the default, so an unknown/bad hint can never break a request.
+        const DEFAULT_MODEL = 'anthropic/claude-sonnet-4.5';
+        const ALLOWED_MODELS = new Set([
+            'anthropic/claude-sonnet-4.5',
+            'anthropic/claude-haiku-4.5',
+        ]);
+        const chosenModel = (typeof model === 'string' && ALLOWED_MODELS.has(model)) ? model : DEFAULT_MODEL;
 
         const authHeader = req.headers.get('Authorization') || '';
         let authResult;
@@ -87,9 +97,22 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
 `;
 
         const messages: Array<any> = [];
+
+        // ── M.0 HARD TOOL GATING (server-enforced — never trust the model to self-limit) ──
+        // Raw SQL is restricted to the master_admin ROLE only (Decision 4 v1). This MUST be
+        // role-based, not tier-based: facilityTier 'supreme' is operator-assignable to a
+        // facility (auth.ts:43), so gating SQL on tier would let a facility escalate to full
+        // RLS-bypassing DB access. Knowledge-base search is read-only over curriculum, so it
+        // is allowed for premium+ tiers and master. Base tier gets no tools.
+        const isMaster = profile?.role === 'master_admin';
+        const canSql = isMaster;
+        const canWiki = isMaster || facilityTier === 'premium' || facilityTier === 'supreme';
+
         let tierDirectives = `\n[INTELLIGENCE TIER: ${facilityTier.toUpperCase()}]\n`;
-        if (facilityTier === 'supreme') {
-            tierDirectives += "You are operating in SUPREME tier. You have unrestricted access to forecasting, charts, and live automation via exec_sql.\n";
+        if (isMaster) {
+            tierDirectives += "You are operating with master administrator privileges: full forecasting, charting, live database access via exec_sql, and knowledge base retrieval.\n";
+        } else if (canWiki) {
+            tierDirectives += "You have forecasting, charting, and knowledge base retrieval. You do NOT have direct database access — never claim to run SQL or query the database directly.\n";
         }
         if (systemPrompt) {
             messages.push({ role: 'system', content: systemPrompt + '\n' + memoryInjection + '\n' + shadowDirectives + '\n' + tierDirectives + customFacilityDirective });
@@ -99,10 +122,13 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
         }
         messages.push({ role: 'user', content: message });
 
-        const tools = [
-            { type: "function", function: { name: "execute_database_sql", description: "Execute raw SQL against the Supabase database.", parameters: { type: "object", properties: { query: { type: "string", description: "The safe SQL query string to run." } }, required: ["query"] } } },
-            { type: "function", function: { name: "search_wiki_graph", description: "Search the SBD curriculum knowledge base. Use heavily for belt/curriculum questions. Returns exact context.", parameters: { type: "object", properties: { query: { type: "string", description: "The semantic search query." } }, required: ["query"] } } }
-        ];
+        // Built conditionally per the M.0 capability flags above. Only the tools the caller is
+        // actually authorized for are offered to the model (and re-checked at dispatch below).
+        const SQL_TOOL = { type: "function", function: { name: "execute_database_sql", description: "Execute raw SQL against the Supabase database.", parameters: { type: "object", properties: { query: { type: "string", description: "The safe SQL query string to run." } }, required: ["query"] } } };
+        const WIKI_TOOL = { type: "function", function: { name: "search_wiki_graph", description: "Search the SBD curriculum knowledge base. Use heavily for belt/curriculum questions. Returns exact context.", parameters: { type: "object", properties: { query: { type: "string", description: "The semantic search query." } }, required: ["query"] } } };
+        const tools: Array<any> = [];
+        if (canSql) tools.push(SQL_TOOL);
+        if (canWiki) tools.push(WIKI_TOOL);
 
         const { readable, writable } = new TransformStream();
         const writer = writable.getWriter();
@@ -110,7 +136,7 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
 
         let fullContent = '';
 
-        async function runAutonomousLoop(messageChain: any[], depth: number = 0) {
+        async function runAutonomousLoop(messageChain: any[], depth: number = 0, modelOverride: string | null = null) {
             if (depth > 8) return;
 
             const orRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -122,9 +148,11 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
                     'X-Title': 'DAVID Intelligence - SBD Belt Platform',
                 },
                 body: JSON.stringify({
-                    model: 'anthropic/claude-sonnet-4.5',
+                    model: modelOverride || chosenModel,
                     messages: messageChain,
-                    tools: tools,
+                    // Omit `tools` entirely when the caller has none (base tier) — an empty
+                    // tools array is rejected by some providers.
+                    ...(tools.length > 0 ? { tools } : {}),
                     max_tokens: 4000,
                     temperature: 0.7,
                     stream: true,
@@ -134,6 +162,13 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
             if (!orRes.ok) {
                 const errBody = await orRes.text();
                 console.error('[DAVID] OpenRouter error:', errBody);
+                // M.3 self-heal: if a routed (non-default) model failed, retry once on the default
+                // model with the same (unmutated) message chain — so a bad cheap-model slug can
+                // never break a turn; it just falls back to Sonnet.
+                if (!modelOverride && chosenModel !== DEFAULT_MODEL) {
+                    console.warn('[DAVID] Model', chosenModel, 'failed; retrying on', DEFAULT_MODEL);
+                    return runAutonomousLoop(messageChain, depth, DEFAULT_MODEL);
+                }
                 await writer.write(encoder.encode(`data: ${JSON.stringify({ error: `AI service error: ${errBody}` })}\n\n`));
                 return;
             }
@@ -185,18 +220,30 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
                 try {
                     const parsedArgs = JSON.parse(currentToolCallArgs);
                     if (currentToolCallName === 'execute_database_sql') {
-                        await writer.write(encoder.encode(`data: ${JSON.stringify({ text: `\n\n> Running analysis...\n\n` })}\n\n`));
-                        toolResult = await executeAdminSql(supabase, parsedArgs.query);
+                        // Defense in depth: this tool is not offered to non-master callers, but
+                        // reject server-side too in case the model fabricates the call.
+                        if (!canSql) {
+                            console.warn(`[DAVID] Blocked unauthorized execute_database_sql (role=${profile?.role}, tier=${facilityTier})`);
+                            toolResult = JSON.stringify({ error: 'Unauthorized: direct database access is restricted to master administrators.' });
+                        } else {
+                            await writer.write(encoder.encode(`data: ${JSON.stringify({ text: `\n\n> Running analysis...\n\n` })}\n\n`));
+                            toolResult = await executeAdminSql(supabase, parsedArgs.query);
+                        }
                     } else if (currentToolCallName === 'search_wiki_graph') {
-                        await writer.write(encoder.encode(`data: ${JSON.stringify({ text: `\n\n> Searching knowledge base...\n\n` })}\n\n`));
-                        const pineconeKey = Deno.env.get('PINECONE_API_KEY');
-                        if (!pineconeKey) throw new Error("PINECONE_API_KEY missing.");
-                        const r = await fetch('https://sbd-knowledge-ai-44928mo.svc.aped-4627-b74a.pinecone.io/records/namespaces/master-docs/search', {
-                            method: 'POST',
-                            headers: { 'Api-Key': pineconeKey, 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ query: { inputs: { text: parsedArgs.query }, top_k: 5 } })
-                        });
-                        toolResult = JSON.stringify(await r.json());
+                        if (!canWiki) {
+                            console.warn(`[DAVID] Blocked unauthorized search_wiki_graph (role=${profile?.role}, tier=${facilityTier})`);
+                            toolResult = JSON.stringify({ error: 'Unauthorized: knowledge base search is not enabled for this tier.' });
+                        } else {
+                            await writer.write(encoder.encode(`data: ${JSON.stringify({ text: `\n\n> Searching knowledge base...\n\n` })}\n\n`));
+                            const pineconeKey = Deno.env.get('PINECONE_API_KEY');
+                            if (!pineconeKey) throw new Error("PINECONE_API_KEY missing.");
+                            const r = await fetch('https://sbd-knowledge-ai-44928mo.svc.aped-4627-b74a.pinecone.io/records/namespaces/master-docs/search', {
+                                method: 'POST',
+                                headers: { 'Api-Key': pineconeKey, 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ query: { inputs: { text: parsedArgs.query }, top_k: 5 } })
+                            });
+                            toolResult = JSON.stringify(await r.json());
+                        }
                     } else {
                         toolResult = JSON.stringify({ error: 'Unknown tool requested.' });
                     }
@@ -227,7 +274,7 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
                     const forced = await fetch('https://openrouter.ai/api/v1/chat/completions', {
                         method: 'POST',
                         headers: { 'Authorization': `Bearer ${openRouterKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://belt.sterilebydesign.ai', 'X-Title': 'DAVID' },
-                        body: JSON.stringify({ model: 'anthropic/claude-sonnet-4.5', messages, max_tokens: 3000, temperature: 0.7, stream: true }),
+                        body: JSON.stringify({ model: DEFAULT_MODEL, messages, max_tokens: 3000, temperature: 0.7, stream: true }),
                     });
                     if (forced.ok && forced.body) {
                         const fReader = forced.body.getReader();
