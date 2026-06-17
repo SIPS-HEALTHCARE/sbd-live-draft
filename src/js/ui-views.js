@@ -1708,6 +1708,12 @@ function _enterPlacementAssessmentInner(s){
     PA.currentQ = restore.currentQ || 1;
     PA.submitted = false;
   } else if (PA.staffId !== s.id || PA.submitted) {
+    // Before discarding the current local test for a DIFFERENT candidate, rescue any
+    // finished-but-unsubmitted assessment it still holds (dedupe-guarded; a no-op if the
+    // test was incomplete or already submitted). Runs on a copy so the reset below is safe.
+    if(!PA.submitted && PA.staffId && PA.staffId !== s.id){
+      try { recoverUnsubmittedPlacement(JSON.parse(JSON.stringify(PA))); } catch(_){}
+    }
     PA.active = true;
     PA.staffId = s.id;
     PA.answers = {};
@@ -2028,14 +2034,42 @@ async function submitPlacementAssessment(){
       <div style="font-size:13px;color:#64748b">This takes just a moment.</div>
     </div>`;
 
+  const { pendingSync } = await paPersistSubmission({
+    staffId: PA.staffId,
+    answers: PA.answers,
+    questions: getPAQuestions(),
+    sessionId: ASSESSMENT_SESSION.sessionId || null,
+    sessionToken: ASSESSMENT_SESSION.token || null
+  });
+  // Clear the in-memory session only on a clean submit (mirrors prior behavior). On a
+  // queued/pending sync we keep it so the durable flush can still complete the session.
+  if(!pendingSync && ASSESSMENT_SESSION.token){
+    ASSESSMENT_SESSION = {token:null,sessionId:null,assessorName:null,facilityId:null,expiresAt:null,type:null};
+  }
+
+  PA.submitting = false;
+  PA.submitted = true;
+  savePAState();
+  renderPAComplete(pendingSync);
+}
+
+// ── Headless scoring + persistence core ─────────────────────────────────────
+// Scores the responses, builds the placement_reviews record, and persists it
+// (in-memory DB + durable on-device queue) exactly as the live submit always has.
+// Pulled out of submitPlacementAssessment so the SAME proven path can also be driven
+// by the unsubmitted-assessment recovery (recoverUnsubmittedPlacement) without touching
+// the DOM or the global PA / ASSESSMENT_SESSION state.
+// [CRITICAL GUARDRAIL - DO NOT REMOVE OR BREAK] Persists via the global `sbFetch` to
+// POST `placement_reviews`. Do NOT rename the payload keys unless the backend schema changes.
+async function paPersistSubmission({ staffId, answers, questions, sessionId, sessionToken }){
   // Score knowledge questions locally, fire AI scoring in parallel
   const responses = [];
   let levelScores = {1:[], 2:[], 3:[], 4:[], 5:[]};
 
   // Separate knowledge (instant) from simulation (needs AI)
   const simQuestions = [];
-  for(const q of getPAQuestions()){
-    const ans = PA.answers[q.id];
+  for(const q of questions){
+    const ans = answers[q.id];
     if(q.type === 'knowledge'){
       const correct = ans === q.correct;
       const score = correct ? 100 : 0;
@@ -2089,7 +2123,7 @@ async function submitPlacementAssessment(){
   const suggestedBelt = (_suggestion.match(/White|Yellow|Green|Blue|Brown|Black/) || ['White'])[0];
 
   // Create placement review record
-  const s = getStaff(PA.staffId);
+  const s = getStaff(staffId);
   // Compute final level score percentages for storage
   const levelScorePcts = {};
   for(let lvl=1; lvl<=5; lvl++){
@@ -2101,7 +2135,7 @@ async function submitPlacementAssessment(){
   }
   const pr = {
     id: 'pr-' + Date.now(),
-    staffId: PA.staffId,
+    staffId: staffId,
     fid: s ? s.fid : 'test-a',
     staffName: s ? fullName(s) : 'Unknown',
     staffTitle: s ? (s.role||s.title||'') : '',
@@ -2132,9 +2166,8 @@ async function submitPlacementAssessment(){
       submitted_at: pr.submittedAt,
       staff_name: pr.staffName,
       staff_title: pr.staffTitle,
-      session_id: ASSESSMENT_SESSION.sessionId || null
+      session_id: sessionId || null
     };
-    const sessionToken = ASSESSMENT_SESSION.token || null;
     try {
       // Durable submit: retry through transient network blips before giving up.
       await sbFetchWithRetry('/rest/v1/placement_reviews', { method:'POST', body: prBody }, 4);
@@ -2142,7 +2175,6 @@ async function submitPlacementAssessment(){
       // Mark the assessment session as completed
       if(sessionToken){
         SB.completeAssessmentSession(sessionToken).catch(()=>{});
-        ASSESSMENT_SESSION = {token:null,sessionId:null,assessorName:null,facilityId:null,expiresAt:null,type:null};
       }
     } catch(e) {
       handleSyncError(e, 'Placement sync');
@@ -2157,11 +2189,58 @@ async function submitPlacementAssessment(){
     /* saveDemoData() removed */
   }
   updatePlacementBadge();
+  return { pr, pendingSync };
+}
 
-  PA.submitting = false;
-  PA.submitted = true;
-  savePAState();
-  renderPAComplete(pendingSync);
+// ── Recovery: a finished placement assessment that never became a review ─────
+// Root cause of the "did an assembly and it didn't save" reports: a candidate can
+// answer every question (their answers autosave to the server) but the final submit
+// never converts the session into a placement_reviews row -- the final step was not
+// completed, or the device save failed. Their answers are not lost, but no review is
+// created, so it never reaches the assessor's queue.
+// This rescues any such finished-but-unsubmitted test: on authenticated load, and
+// before a new candidate overwrites the local PA state. Dedupe-guarded against the
+// staff's existing reviews so a test that DID land can never double-submit.
+async function recoverUnsubmittedPlacement(state){
+  if(!IS_LIVE) return false;
+  const st = state || PA;
+  if(!st || st.submitted || st.submitting || !st.staffId) return false;
+  const qs = st.shuffledQuestions;
+  if(!Array.isArray(qs) || !qs.length) return false;
+  const isAnswered = q => {
+    const a = st.answers ? st.answers[q.id] : undefined;
+    if(q.type === 'simulation') return typeof a === 'string' && a.trim().length >= 80;
+    return a !== undefined && a !== null;
+  };
+  if(!qs.every(isAnswered)) return false; // only a fully finished test is auto-recovered
+  // Dedupe: if a review already exists for this staff, the test landed -- mark done.
+  try {
+    const ex = await sbFetch(`/rest/v1/placement_reviews?staff_id=eq.${encodeURIComponent(st.staffId)}&select=id&limit=1`);
+    if(ex && ex.length){
+      st.submitted = true;
+      if(st === PA){ try{ localStorage.setItem('sbd_pa_state', JSON.stringify(PA)); }catch(_){} }
+      return false;
+    }
+  } catch(_){ return false; } // network problem -- leave it; the next load retries
+  console.warn('[PA-recover] completing an unsubmitted placement assessment for staff', st.staffId);
+  st.submitting = true;
+  try {
+    await paPersistSubmission({
+      staffId: st.staffId,
+      answers: st.answers || {},
+      questions: qs,
+      sessionId: null,
+      sessionToken: null
+    });
+  } catch(e){
+    console.warn('[PA-recover] failed; will retry next load:', e && (e.message||e));
+    st.submitting = false;
+    return false;
+  }
+  st.submitting = false;
+  st.submitted = true;
+  if(st === PA){ try{ localStorage.setItem('sbd_pa_state', JSON.stringify(PA)); }catch(_){} }
+  return true;
 }
 
 function scoreByKeywords(answer, keywords){
