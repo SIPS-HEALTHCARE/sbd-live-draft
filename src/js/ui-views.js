@@ -11708,9 +11708,19 @@ function adaptBeltResultToReview(r){
   let outcome, tone, classification;
   if (r.outcome === 'PASS') { outcome = 'CLEAN'; tone = '#16a34a'; classification = 'A'; }
   else if (r.outcome === 'CONDITIONAL_PASS') { outcome = 'CONDITIONAL'; tone = '#60a5fa'; classification = 'B'; }
-  else { // REMEDIATION — split per Governing Standards
+  else { // REMEDIATION — Knowledge Foundation vs No Belt, per Governing Standards §2.
+    // KF requires ALL of: knowledge overall >= 80, knowledge L1 floor (80%) met,
+    // and NO patient-safety miss (the belt-test analog of a "dangerous knowledge
+    // answer" is a CRITICAL_QUESTION_MISS). Any of those failing => No Belt.
     const wf = cfg.White || {};
-    if (r.kOverall >= (wf.kOverallMin || 80) && r.simOverall < (wf.simOverallMin || 72)) { outcome = 'KNOWLEDGE FOUNDATION'; tone = '#f59e0b'; classification = 'B'; }
+    const kL1 = (r.kLevelScores && (r.kLevelScores.L1 != null ? r.kLevelScores.L1 : r.kLevelScores['1']));
+    const criticalMiss = (r.conditions || []).some(c => c.type === 'CRITICAL_QUESTION_MISS') ||
+                         (r.remediationFlags || []).some(f => f.flag === 'CRITICAL_QUESTION_MISS');
+    const kfEligible = r.kOverall >= (wf.kOverallMin || 80)
+                    && (kL1 == null || kL1 >= (wf.kLevelFloors ? (wf.kLevelFloors[1] || 80) : 80))
+                    && !criticalMiss
+                    && r.simOverall < (wf.simOverallMin || 72);
+    if (kfEligible) { outcome = 'KNOWLEDGE FOUNDATION'; tone = '#f59e0b'; classification = 'B'; }
     else { outcome = 'NO BELT'; tone = '#ef4444'; classification = 'C'; }
   }
   const conditions = (r.conditions || []).map(_beltConditionToReport);
