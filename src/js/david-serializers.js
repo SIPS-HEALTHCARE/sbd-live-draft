@@ -155,5 +155,22 @@
     return `LEARNING VELOCITY & READINESS:\n${lines.join('\n')}`;
   }
 
-  window.DavidSerializers = { aiSerializePracticeHistory, aiSerializeEngagement, aiSerializeFacilityEngagement, aiSerializeVelocity };
+  // P4 — facility compliance forecast: current Green+ %, velocity trajectory, survey-readiness,
+  // and the bottleneck (critical-path staff). Built on in-memory DB.staff + logic.js engine.
+  async function aiSerializeComplianceForecast(fid) {
+    if (!fid || typeof DB === 'undefined' || !DB.staff) return '';
+    const staffList = DB.staff.filter(s => s.fid === fid);
+    if (!staffList.length) return '';
+    const f = (typeof calcComplianceForecast === 'function') ? calcComplianceForecast(staffList) : null;
+    if (!f) return '';
+    const lines = [
+      `  • Current Green+ (Green/Blue/Brown/Black): ${f.currentPct}% (${f.greenPlusCount}/${f.n})`,
+      `  • Below Green: ${f.belowGreen}; facility avg velocity ${f.avgVelocity} gates/month`,
+      `  • Survey-readiness (competency-weighted): ${f.surveyReadiness}/100`,
+    ];
+    if (f.bottleneckNames.length) lines.push(`  • Bottleneck (stalled 45d+, no progress): ${f.bottleneckNames.slice(0, 10).join(', ')}`);
+    return `COMPLIANCE FORECAST (this facility):\n${lines.join('\n')}\n  To answer "will we hit X% Green+ by <date>": project from current %, the below-Green count, and the avg velocity; flag the bottleneck staff as the critical path to close the gap.`;
+  }
+
+  window.DavidSerializers = { aiSerializePracticeHistory, aiSerializeEngagement, aiSerializeFacilityEngagement, aiSerializeVelocity, aiSerializeComplianceForecast };
 })();

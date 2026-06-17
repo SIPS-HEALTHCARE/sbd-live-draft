@@ -2,6 +2,45 @@
  * DAVID AI Chat Component - Sidebar Embedded Version
  * Dynamic AI Visual Intelligence Dashboard
  */
+
+// M.2 — role-aware mode system (the sanctioned, scoped version of the roadmap's AI_PROMPTS).
+// Each mode adds a focused directive to the system prompt; tabs switch the active mode. Tool
+// access is still enforced server-side (M.0) — modes only steer focus, they don't grant tools.
+const DAVID_MODES = {
+    staff: [
+        { id: 'coach', label: 'Coach', desc: 'Coaching on your own progress', directive: 'COACH MODE — focus on this technician\'s own progress, gaps and next steps. Be encouraging and specific; use their practice history and gate-readiness.' },
+        { id: 'study', label: 'Study', desc: 'Study help for your belt', directive: 'STUDY MODE — help the user study and understand the curriculum for their belt. Search the knowledge base, explain simply, and quiz them when useful.' },
+        { id: 'knowledge', label: 'Knowledge', desc: 'Look up curriculum & standards', directive: 'KNOWLEDGE MODE — answer curriculum/standards questions by searching the knowledge base first; name the belt/level. Apply Directive 9 for external standards.' },
+    ],
+    manager: [
+        { id: 'briefing', label: 'Briefing', desc: 'What changed + priorities', directive: 'BRIEFING MODE — lead with what changed and the top priorities/alerts for this facility; concise and action-oriented.' },
+        { id: 'guide', label: 'Guide', desc: 'Team development guidance', directive: 'GUIDE MODE — advise the leader on developing their team: who to coach, how, and toward which gates.' },
+        { id: 'ops', label: 'Ops', desc: 'Assessment queue & operations', directive: 'OPS MODE — focus on the assessment backlog, windows, and day-to-day operations for this facility.' },
+        { id: 'workforce', label: 'Workforce', desc: 'Belt distribution & readiness', directive: 'WORKFORCE MODE — analyze the team\'s belt distribution, velocity, readiness, and at-risk staff.' },
+        { id: 'knowledge', label: 'Knowledge', desc: 'Curriculum & standards', directive: 'KNOWLEDGE MODE — answer curriculum/standards questions from the knowledge base; name the belt/level; Directive 9 for external standards.' },
+    ],
+    system: [
+        { id: 'netintel', label: 'Net Intel', desc: 'Cross-facility intelligence', directive: 'NETWORK INTELLIGENCE MODE — compare facilities in this system; surface network patterns, risks, and outliers.' },
+        { id: 'briefing', label: 'Briefing', desc: 'What changed + priorities', directive: 'BRIEFING MODE — lead with what changed and the top priorities/alerts across the system.' },
+        { id: 'workforce', label: 'Workforce', desc: 'Belt distribution & readiness', directive: 'WORKFORCE MODE — analyze belt distribution, velocity, and readiness across the system.' },
+        { id: 'knowledge', label: 'Knowledge', desc: 'Curriculum & standards', directive: 'KNOWLEDGE MODE — curriculum/standards from the knowledge base; name the belt/level; Directive 9.' },
+    ],
+    master: [
+        { id: 'netintel', label: 'Net Intel', desc: 'Network-wide intelligence', directive: 'NETWORK INTELLIGENCE MODE — operate as the executive analyst across the whole SIPS network; compare, rank, and surface patterns.' },
+        { id: 'briefing', label: 'Briefing', desc: 'Executive briefing', directive: 'BRIEFING MODE — executive summary of what changed and the top strategic priorities/alerts.' },
+        { id: 'workforce', label: 'Workforce', desc: 'Talent & readiness', directive: 'WORKFORCE MODE — talent pipeline, belt distribution, velocity, promotion-readiness, and at-risk staff network-wide.' },
+        { id: 'guide', label: 'Guide', desc: 'Coaching guidance', directive: 'GUIDE MODE — coaching and development guidance.' },
+        { id: 'knowledge', label: 'Knowledge', desc: 'Curriculum & standards', directive: 'KNOWLEDGE MODE — curriculum/standards from the knowledge base; name the belt/level; Directive 9.' },
+        { id: 'adminops', label: 'Admin Ops', desc: 'Platform administration', directive: 'ADMIN OPS MODE — assist with platform administration and data operations (master admin).' },
+    ],
+};
+function davidModesForRole(role) {
+    if (role === 'staff_member') return DAVID_MODES.staff;
+    if (role === 'facility_admin' || role === 'hospital') return DAVID_MODES.manager;
+    if (role === 'system_admin') return DAVID_MODES.system;
+    return DAVID_MODES.master; // master_admin / staff_admin / fallback
+}
+
 class DavidChat {
     constructor(options = {}) {
         this.containerId = options.containerId;
@@ -763,7 +802,12 @@ class DavidChat {
         const _st = (typeof ST !== 'undefined') ? ST : {};
         const user = _st.user || { role: 'admin', name: 'Admin' };
         const roleLabel = (user.role || 'admin').replace('_', ' ').toUpperCase();
-        
+
+        // M.2 mode tabs for this role (persist the active mode across re-renders).
+        const _modes = davidModesForRole(user.role);
+        if (!this.activeMode || !_modes.some(m => m.id === this.activeMode)) this.activeMode = _modes[0] ? _modes[0].id : null;
+        const _modeTabs = _modes.map(m => `<button type="button" data-mode="${m.id}" title="${m.desc}" onclick="DAVID.switchMode('${m.id}')" style="font-size:11px;padding:4px 11px;border-radius:14px;border:1px solid var(--bdr,#333);background:${m.id === this.activeMode ? '#c49a20' : 'transparent'};color:${m.id === this.activeMode ? '#1a1a1a' : 'var(--txt2,#99a)'};cursor:pointer;font-weight:600;white-space:nowrap">${m.label}</button>`).join('');
+
         container.innerHTML = `
             <div class="david-container">
                 <div class="david-layout">
@@ -784,6 +828,7 @@ class DavidChat {
                                 <p>Strategic Intelligence Dashboard &bull; Access Level: ${roleLabel}</p>
                             </div>
                         </div>
+                        <div class="david-mode-tabs" id="david-mode-tabs" style="display:flex;gap:6px;flex-wrap:wrap;padding:6px 16px 0;align-items:center">${_modeTabs}</div>
                         <div class="david-quick-actions" id="david-qa">
                             <button class="david-qa-btn" onclick="DAVID.handleQA('Summarize authorized facility activity')">📊 Scope Audit</button>
                             <button class="david-qa-btn" onclick="DAVID.handleQA('Analyze competency distribution in my scope')">🎓 Competency Distribution</button>
@@ -848,6 +893,34 @@ class DavidChat {
 
         // Initialize Chat History from DB
         this.loadSessions();
+    }
+
+    // M.2 — switch the active mode (tab click). Restyles tabs; takes effect on the next send.
+    switchMode(modeId) {
+        this.activeMode = modeId;
+        const tabs = this.container && this.container.querySelectorAll('#david-mode-tabs [data-mode]');
+        if (tabs) tabs.forEach(b => {
+            const on = b.getAttribute('data-mode') === modeId;
+            b.style.background = on ? '#c49a20' : 'transparent';
+            b.style.color = on ? '#1a1a1a' : 'var(--txt2,#99a)';
+        });
+    }
+
+    // M.2 — the active mode's directive, appended to the system prompt.
+    getActiveModeDirective() {
+        try {
+            const role = (typeof ST !== 'undefined' && ST.user) ? ST.user.role : null;
+            const modes = davidModesForRole(role);
+            const m = modes.find(x => x.id === this.activeMode) || modes[0];
+            return m ? `\n\n[ACTIVE MODE: ${m.label}] ${m.directive}` : '';
+        } catch (e) { return ''; }
+    }
+
+    // M.3 — cheaper model for low-stakes modes (Knowledge/Study); Sonnet for analysis/coaching.
+    // The edge function allowlists this and falls back to Sonnet for anything unrecognized.
+    getActiveModel() {
+        const CHEAP = ['knowledge', 'study'];
+        return CHEAP.includes(this.activeMode) ? 'anthropic/claude-haiku-4.5' : 'anthropic/claude-sonnet-4.5';
     }
 
     // --- UI Overlays ---
@@ -959,10 +1032,35 @@ class DavidChat {
             } else {
                 await this.createNewSession();
             }
+            this.maybeShowProactiveBriefing();   // P3: unsolicited alert briefing for leaders on a fresh chat
         } catch (e) {
             console.warn('[DAVID] Failed to load sessions:', e);
             this.renderGreetingOnly();
         }
+    }
+
+    // P3 — on open, a leader with a fresh/empty chat gets an unsolicited briefing of active alerts.
+    // Rendered transiently (not persisted to the session) and only once per page load.
+    async maybeShowProactiveBriefing() {
+        try {
+            if (this._briefingShown) return;
+            const _st = (typeof ST !== 'undefined') ? ST : null;
+            const role = _st && _st.user ? _st.user.role : null;
+            const leaderRoles = ['facility_admin', 'hospital', 'system_admin', 'master_admin', 'staff_admin'];
+            if (!leaderRoles.includes(role)) return;
+            if (this.history && this.history.length > 0) return;   // only on a fresh/empty chat
+            if (!window.DavidAlerts) return;
+            let scope = 'admin', id = null;
+            if (role === 'facility_admin' || role === 'hospital') { scope = 'facility'; id = _st.user.fid; }
+            else if (role === 'system_admin') { scope = 'system'; id = _st.user.systemId; }
+            const alerts = await window.DavidAlerts.scanAlerts(scope, id);
+            if (alerts && alerts.length) {
+                this._briefingShown = true;
+                const top = alerts.slice(0, 8).map(a => `- ${a.message}`).join('\n');
+                const more = alerts.length > 8 ? `\n…and ${alerts.length - 8} more.` : '';
+                this.addParsedMessage(`**Briefing — what's changed since your last visit** (${alerts.length} alert${alerts.length > 1 ? 's' : ''}):\n\n${top}${more}\n\n_Ask me about any of these for a recommended action._`, 'ai');
+            }
+        } catch (e) { /* briefing is best-effort */ }
     }
 
     async createNewSession(title = 'New Chat') {
@@ -1523,6 +1621,7 @@ class DavidChat {
 
             const snapshot = this.getPlatformSnapshot();
             const personality = this.buildPersonality();
+            const modeDirective = this.getActiveModeDirective();
 
             // Channel A (P0.3 + P1) — append dynamic per-entity context. Staff get their own
             // practice history + engagement; facility leaders get facility-wide engagement.
@@ -1532,15 +1631,24 @@ class DavidChat {
                 const _st = (typeof ST !== 'undefined') ? ST : null;
                 const _role = _st && _st.user ? _st.user.role : null;
                 const S = window.DavidSerializers;
+                const A = window.DavidAlerts;
                 if (S && _role === 'staff_member') {
                     const parts = await Promise.all([
                         S.aiSerializePracticeHistory(_st.staffId),
                         S.aiSerializeEngagement(_st.staffId),
                         S.aiSerializeVelocity(_st.staffId),
+                        A ? A.aiSerializeAlerts('staff', _st.staffId) : '',
                     ]);
                     channelA = parts.filter(Boolean).join('\n\n');
-                } else if (S && (_role === 'facility_admin' || _role === 'hospital') && _st.user.fid) {
-                    channelA = await S.aiSerializeFacilityEngagement(_st.user.fid) || '';
+                } else if ((_role === 'facility_admin' || _role === 'hospital') && _st.user.fid) {
+                    const parts = await Promise.all([
+                        S ? S.aiSerializeFacilityEngagement(_st.user.fid) : '',
+                        S ? S.aiSerializeComplianceForecast(_st.user.fid) : '',
+                        A ? A.aiSerializeAlerts('facility', _st.user.fid) : '',
+                    ]);
+                    channelA = parts.filter(Boolean).join('\n\n');
+                } else if (_role === 'system_admin' && _st.user.systemId && A) {
+                    channelA = await A.aiSerializeAlerts('system', _st.user.systemId) || '';
                 }
             } catch (e) { /* context enrichment is optional */ }
 
@@ -1553,7 +1661,8 @@ class DavidChat {
                 body: JSON.stringify({
                     message: text,
                     history: this.history,
-                    systemPrompt: personality + "\n\nCONTEXT:\n" + snapshot + (channelA ? "\n\n" + channelA : "")
+                    model: this.getActiveModel(),   // M.3 — server allowlists + falls back to Sonnet
+                    systemPrompt: personality + modeDirective + "\n\nCONTEXT:\n" + snapshot + (channelA ? "\n\n" + channelA : "")
                 })
             });
 

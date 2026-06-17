@@ -29,7 +29,17 @@ serve(async (req) => {
 
         if (!openRouterKey) throw new Error('OPENROUTER_API_KEY is not configured in Supabase secrets.');
 
-        const { message, history = [], systemPrompt = '' } = await req.json();
+        const { message, history = [], systemPrompt = '', model = '' } = await req.json();
+
+        // M.3 — per-mode model routing. The client sends a `model` hint (cheaper model for
+        // low-stakes modes like Knowledge/Study); validate it against an allowlist and fall back
+        // to the default, so an unknown/bad hint can never break a request.
+        const DEFAULT_MODEL = 'anthropic/claude-sonnet-4.5';
+        const ALLOWED_MODELS = new Set([
+            'anthropic/claude-sonnet-4.5',
+            'anthropic/claude-haiku-4.5',
+        ]);
+        const chosenModel = (typeof model === 'string' && ALLOWED_MODELS.has(model)) ? model : DEFAULT_MODEL;
 
         const authHeader = req.headers.get('Authorization') || '';
         let authResult;
@@ -126,7 +136,7 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
 
         let fullContent = '';
 
-        async function runAutonomousLoop(messageChain: any[], depth: number = 0) {
+        async function runAutonomousLoop(messageChain: any[], depth: number = 0, modelOverride: string | null = null) {
             if (depth > 8) return;
 
             const orRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -138,7 +148,7 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
                     'X-Title': 'DAVID Intelligence - SBD Belt Platform',
                 },
                 body: JSON.stringify({
-                    model: 'anthropic/claude-sonnet-4.5',
+                    model: modelOverride || chosenModel,
                     messages: messageChain,
                     // Omit `tools` entirely when the caller has none (base tier) — an empty
                     // tools array is rejected by some providers.
@@ -152,6 +162,13 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
             if (!orRes.ok) {
                 const errBody = await orRes.text();
                 console.error('[DAVID] OpenRouter error:', errBody);
+                // M.3 self-heal: if a routed (non-default) model failed, retry once on the default
+                // model with the same (unmutated) message chain — so a bad cheap-model slug can
+                // never break a turn; it just falls back to Sonnet.
+                if (!modelOverride && chosenModel !== DEFAULT_MODEL) {
+                    console.warn('[DAVID] Model', chosenModel, 'failed; retrying on', DEFAULT_MODEL);
+                    return runAutonomousLoop(messageChain, depth, DEFAULT_MODEL);
+                }
                 await writer.write(encoder.encode(`data: ${JSON.stringify({ error: `AI service error: ${errBody}` })}\n\n`));
                 return;
             }
@@ -257,7 +274,7 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
                     const forced = await fetch('https://openrouter.ai/api/v1/chat/completions', {
                         method: 'POST',
                         headers: { 'Authorization': `Bearer ${openRouterKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://belt.sterilebydesign.ai', 'X-Title': 'DAVID' },
-                        body: JSON.stringify({ model: 'anthropic/claude-sonnet-4.5', messages, max_tokens: 3000, temperature: 0.7, stream: true }),
+                        body: JSON.stringify({ model: DEFAULT_MODEL, messages, max_tokens: 3000, temperature: 0.7, stream: true }),
                     });
                     if (forced.ok && forced.body) {
                         const fReader = forced.body.getReader();

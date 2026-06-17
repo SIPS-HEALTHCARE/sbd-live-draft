@@ -189,6 +189,35 @@ function calcGateReadiness(staff, signals){
   return { total: practice+study+trend+consistency, breakdown:{practice, study, trend, consistency} };
 }
 
+// ── COMPLIANCE FORECAST ENGINE (P4) ─────────────────────────────────────────────
+// Trajectory + gap analysis from a facility's staff list (in-memory). Forecasts the Green+
+// competency share and surfaces the bottleneck (stalled staff on the critical path). The
+// caller (serializer) supplies the target %/date from the user's question; this returns the
+// raw trajectory inputs so David can reason "reachable by <date>?" and name who's blocking.
+function calcComplianceForecast(staffList){
+  if(!Array.isArray(staffList) || !staffList.length) return null;
+  const greenPlus = ['Green','Blue','Brown','Black'];
+  const n = staffList.length;
+  const greenPlusCount = staffList.filter(s=>greenPlus.includes(s.belt)).length;
+  const currentPct = Math.round(greenPlusCount/n*100);
+  const belowGreen = staffList.filter(s=>!greenPlus.includes(s.belt));
+  // Avg facility velocity (gates/month) from the P2 calculator.
+  const avgVelocity = +(staffList.reduce((a,s)=>a+((typeof calcVelocity==='function')?(calcVelocity(s).gatesPerMonth||0):0),0)/n).toFixed(2);
+  // Bottleneck: below-Green staff stalled 45d+ at their belt with no progress to the next.
+  const bottlenecks = belowGreen.filter(s=>{
+    const d=(typeof daysAt==='function')?daysAt(s.since):0;
+    const prog=[s.nxt&&s.nxt.c,s.nxt&&s.nxt.s,s.nxt&&s.nxt.o].filter(x=>x==='pass').length;
+    return d!=null && d>=45 && prog===0;
+  });
+  // Rough survey-readiness composite (competency now; regulatory-KB component lights up after
+  // P0.2 seeds the standards content). 0-100.
+  const surveyReadiness = Math.round(currentPct*0.7 + Math.min(100, avgVelocity*100)*0.3);
+  return {
+    n, currentPct, greenPlusCount, belowGreen: belowGreen.length, avgVelocity, surveyReadiness,
+    bottleneckNames: bottlenecks.map(s=>`${s.first||''} ${s.last||''}`.trim()||String(s.id))
+  };
+}
+
 // ── SYSTEM HELPERS ────────────────────────────────────────────────────────────
 function getSystem(sid){  return (DB.systems||[]).find(s=>s.id===sid); }
 function systemFacs(sid){ return DB.facilities.filter(f=>f.systemId===sid); }
