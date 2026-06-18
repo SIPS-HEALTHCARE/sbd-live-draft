@@ -2004,7 +2004,7 @@ async function initAppData(){
   window.SBD_INITIALIZING = true;
   console.log('SBD Platform: Multi-table data hydration started...');
   try {
-    const [facs, staff, systems, users, reviews, queue, registrations, freeAgents, promotions, onboarding, transfers, observations, obsChecklists] = await Promise.race([
+    const [facs, staff, systems, users, reviews, queue, registrations, freeAgents, promotions, onboarding, beltTestResults, transfers, observations, obsChecklists] = await Promise.race([
       Promise.all([
         SB.getFacilities().catch(e=>{ console.error('facs load err', e); return []; }),
         SB.getAllStaff().catch(e=>{ console.error('staff load err', e); return []; }),
@@ -2016,9 +2016,10 @@ async function initAppData(){
         SB.getFreeAgents().catch(e=>{ console.error('fa load err', e); return []; }),
         SB.getPromotionApprovals().catch(e=>{ console.error('promos load err', e); return []; }),
         (ST.user ? SB.getUserOnboarding(ST.user.authUid || ST.user.id) : Promise.resolve([])).catch(e=>{ console.error('onboarding load err', e); return []; }),
-        SB.getTransferRequests().catch(e=>{ console.error('transfers load err', e); return []; }),
-        SB.getObservations().catch(e=>{ console.error('observations load err', e); return []; }),
-        SB.getObservationChecklists().catch(e=>{ console.error('obs checklists load err', e); return []; })
+        (SB.getBeltTestResults ? SB.getBeltTestResults() : Promise.resolve([])).catch(e=>{ console.error('belt results load err', e); return []; }),
+        (SB.getTransferRequests ? SB.getTransferRequests() : Promise.resolve([])).catch(e=>{ console.error('transfers load err', e); return []; }),
+        (SB.getObservations ? SB.getObservations() : Promise.resolve([])).catch(e=>{ console.error('observations load err', e); return []; }),
+        (SB.getObservationChecklists ? SB.getObservationChecklists() : Promise.resolve([])).catch(e=>{ console.error('obs checklists load err', e); return []; })
       ]),
       new Promise((_,rej)=>setTimeout(()=>rej(new Error('Initial data load timeout')), 20000))
     ]);
@@ -2098,6 +2099,7 @@ async function initAppData(){
     if(typeof mapFreeAgentFromBackend === 'function') window.DB.freeAgents = (freeAgents||[]).map(mapFreeAgentFromBackend); else window.DB.freeAgents = freeAgents||[];
     if(typeof mapPromotionApprovalFromBackend === 'function') window.DB.promotionApprovals = (promotions||[]).map(mapPromotionApprovalFromBackend); else window.DB.promotionApprovals = promotions||[];
     if(typeof mapOnboardingFromBackend === 'function') window.DB.onboarding = (onboarding||[]).map(mapOnboardingFromBackend); else window.DB.onboarding = onboarding||[];
+    if(typeof mapBeltTestResultFromBackend === 'function') window.DB.beltTestResults = (beltTestResults||[]).map(mapBeltTestResultFromBackend); else window.DB.beltTestResults = beltTestResults||[];
     // STAFF-F6: hydrate the dual-admin transfer verification queue from the DB so
     // any admin session sees pending release/assignment requests (was memory-only).
     if(typeof mapTransferFromBackend === 'function') window.DB.pendingTransfers = (transfers||[]).map(mapTransferFromBackend).filter(Boolean);

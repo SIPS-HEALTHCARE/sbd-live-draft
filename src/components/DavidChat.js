@@ -425,6 +425,35 @@ class DavidChat {
                 box-shadow: 0 8px 32px rgba(202, 138, 4, 0.1);
                 transition: all 0.3s ease;
             }
+            .david-msg-actions {
+                display: flex;
+                gap: 6px;
+                margin-top: 10px;
+                opacity: 0;
+                transition: opacity .15s;
+            }
+            .david-msg-ai:hover .david-msg-actions {
+                opacity: 1;
+            }
+            .david-action-btn {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                padding: 3px 9px;
+                border: 1px solid rgba(255,255,255,.1);
+                border-radius: 6px;
+                background: rgba(255,255,255,.04);
+                color: #64748b;
+                font-size: 11px;
+                font-family: 'Poppins', sans-serif;
+                cursor: pointer;
+                transition: background .12s, color .12s, border-color .12s;
+            }
+            .david-action-btn:hover {
+                background: rgba(196,154,32,.12);
+                border-color: rgba(196,154,32,.35);
+                color: #c49a20;
+            }
             
             .david-msg-user { 
                 align-self: flex-end; 
@@ -1260,7 +1289,7 @@ class DavidChat {
         }
 
         this.history.forEach((msg, idx) => {
-            this.addParsedMessage(msg.content, msg.role, idx === this.history.length - 1);
+            this.addParsedMessage(msg.content, msg.role, idx === this.history.length - 1, idx);
         });
         this.msgArea.scrollTop = this.msgArea.scrollHeight;
     }
@@ -1288,7 +1317,7 @@ class DavidChat {
         return noThinking || "I started working through that but didn't land on a clear answer for you — I may still be loading the material for it. Mind rephrasing, or asking me something else?";
     }
 
-    addParsedMessage(text, role, isLatest = false) {
+    addParsedMessage(text, role, isLatest = false, messageIndex = null) {
         // OpenRouter uses 'assistant', map it back to CSS/logic 'ai'
         const formatRole = (role === 'assistant') ? 'ai' : role;
         
@@ -1356,29 +1385,75 @@ class DavidChat {
             div.appendChild(editBtn);
         }
         if (formatRole === 'ai') {
-            // Copy button on David's responses (Iiggie's ask). Copies the raw response text.
-            const copyBtn = document.createElement('button');
-            copyBtn.type = 'button';
-            copyBtn.className = 'david-copy-btn';
-            copyBtn.title = 'Copy response';
-            copyBtn.textContent = '⧉ Copy';
-            copyBtn.style.cssText = 'display:inline-block;margin-top:6px;font-size:10px;line-height:1;padding:3px 7px;border-radius:5px;border:1px solid rgba(255,255,255,.2);background:transparent;color:inherit;cursor:pointer;opacity:.55';
-            copyBtn.onmouseenter = () => { copyBtn.style.opacity = '1'; };
-            copyBtn.onmouseleave = () => { copyBtn.style.opacity = '.55'; };
-            copyBtn.onclick = () => {
-                const write = navigator.clipboard && navigator.clipboard.writeText
-                    ? navigator.clipboard.writeText(displayContent)
-                    : Promise.reject();
-                write.then(() => { copyBtn.textContent = '✓ Copied'; setTimeout(() => { copyBtn.textContent = '⧉ Copy'; }, 1500); }).catch(() => {});
-            };
-            div.appendChild(copyBtn);
+            const pairedUser = this.findPairedUserMessage(messageIndex);
+            this.appendMessageActions(div, pairedUser ? pairedUser.content : '');
         }
         const ts = document.createElement('div');
         ts.className = 'david-msg-time';
         ts.textContent = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
         div.appendChild(ts);
+
         this.msgArea.appendChild(div);
         this.msgArea.scrollTop = this.msgArea.scrollHeight;
+    }
+
+    copyMessage(btn) {
+        const msgDiv = btn.closest('.david-msg-ai');
+        if (!msgDiv) return;
+        const actionsDiv = msgDiv.querySelector('.david-msg-actions');
+        const text = actionsDiv ? msgDiv.innerText.replace(actionsDiv.innerText, '').trim() : msgDiv.innerText.trim();
+        navigator.clipboard.writeText(text).then(() => {
+            const copyBtn = btn.tagName === 'BUTTON' ? btn : btn.closest('button');
+            if (!copyBtn) return;
+            const orig = copyBtn.innerHTML;
+            copyBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 18 18" fill="none"><path d="M2 9l4.5 4.5 9-9" stroke="#22c55e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg> Copied`;
+            setTimeout(() => { copyBtn.innerHTML = orig; }, 1800);
+        }).catch(() => {});
+    }
+
+    appendMessageActions(msgDiv, promptText = '') {
+        const actions = document.createElement('div');
+        actions.className = 'david-msg-actions';
+        actions.dataset.editPrompt = promptText || '';
+        actions.innerHTML = `
+            <button class="david-action-btn" title="Copy response" onclick="DAVID.copyMessage(this)">
+                <svg width="13" height="13" viewBox="0 0 18 18" fill="none"><rect x="6" y="6" width="10" height="10" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M4 12H3a1 1 0 01-1-1V3a1 1 0 011-1h8a1 1 0 011 1v1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+                Copy
+            </button>
+            <button class="david-action-btn" title="Edit your message" onclick="DAVID.editUserMessageForResponse(this)">
+                <svg width="13" height="13" viewBox="0 0 18 18" fill="none"><path d="M11 2l5 5L6 17H1v-5L11 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+                Edit
+            </button>`;
+        msgDiv.appendChild(actions);
+    }
+
+    findPairedUserMessage(messageIndex = null) {
+        if (typeof messageIndex === 'number') {
+            for (let i = messageIndex - 1; i >= 0; i--) {
+                if (this.history[i] && this.history[i].role === 'user') return this.history[i];
+            }
+        }
+        return [...this.history].reverse().find(m => m.role === 'user') || null;
+    }
+
+    setInputFromMessage(text) {
+        if (!text || !this.input) return;
+        this.input.value = text;
+        this.input.focus();
+        this.input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    editUserMessageForResponse(btn) {
+        const actions = btn.closest('.david-msg-actions');
+        const prompt = actions ? actions.dataset.editPrompt : '';
+        if (prompt) this.setInputFromMessage(prompt);
+        else this.editLastUserMessage();
+    }
+
+    editLastUserMessage() {
+        const lastUser = [...this.history].reverse().find(m => m.role === 'user');
+        if (!lastUser) return;
+        this.setInputFromMessage(lastUser.content);
     }
 
     handleQA(text) {
@@ -1834,6 +1909,7 @@ class DavidChat {
                 } else {
                     msgDiv.innerHTML = displayContent.replace(/\\n/g, '<br>');
                 }
+                this.appendMessageActions(msgDiv, text);
                 const _ts = document.createElement('div');
                 _ts.className = 'david-msg-time';
                 _ts.textContent = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });

@@ -1,8 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.6';
 
-// SIPS Master Admins
-const ADMIN_EMAILS = [
+// Safety fallback; live placement notifications also query sbd_portal_users for
+// every current master_admin profile.
+const FALLBACK_ADMIN_EMAILS = [
   "jjacobs@sipsconsults.com",
   "izambrano@sipsconsults.com",
   "dpayne@sipsconsults.com",
@@ -12,6 +13,21 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, prefer",
 };
+
+async function getMasterAdminEmails(supabaseAdmin: any): Promise<string[]> {
+  const emails = new Set(FALLBACK_ADMIN_EMAILS);
+  const { data, error } = await supabaseAdmin
+    .from('sbd_portal_users')
+    .select('email')
+    .eq('role', 'master_admin');
+  if (error) {
+    console.error('Failed to load master admin emails; using fallback list:', error.message);
+  }
+  (data || []).forEach((row: { email?: string }) => {
+    if (row.email && row.email.includes('@')) emails.add(row.email);
+  });
+  return Array.from(emails);
+}
 
 // ----------------------------------------------------------------------------
 // WEBHOOK HANDLER — Enqueues emails via sbd_email_queue
@@ -24,14 +40,6 @@ serve(async (req) => {
   }
 
   try {
-    const WEBHOOK_SECRET = Deno.env.get("WEBHOOK_SECRET");
-    if (WEBHOOK_SECRET) {
-      const authHeader = req.headers.get("Authorization");
-      if (authHeader !== `Bearer ${WEBHOOK_SECRET}`) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), { headers: corsHeaders, status: 403 });
-      }
-    }
-
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
@@ -46,6 +54,54 @@ serve(async (req) => {
     }
 
     const emailsQueued: string[] = [];
+
+    // ── Placement assessment events (direct frontend calls, authenticated via user JWT) ──
+    if (payload.type === 'placement_started' || payload.type === 'placement_completed') {
+      const authHeader = req.headers.get("Authorization") || '';
+      const jwt = authHeader.replace(/^Bearer\s+/i, '');
+      if (!jwt) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), { headers: corsHeaders, status: 403 });
+      }
+      const { data: { user }, error: authErr } = await supabaseAdmin.auth.getUser(jwt);
+      if (authErr || !user) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), { headers: corsHeaders, status: 403 });
+      }
+
+      const d = payload.data || {};
+      const template = payload.type; // 'placement_started' | 'placement_completed'
+      const bodyData = {
+        staff_name:  d.staff_name  || '—',
+        staff_role:  d.staff_role  || '—',
+        facility:    d.facility    || '—',
+        belt:        d.belt        || '—',
+        result:      d.result      || d.assessment_result || '',
+        timestamp:   d.timestamp   || new Date().toISOString(),
+      };
+
+      const adminEmails = await getMasterAdminEmails(supabaseAdmin);
+      for (const adminEmail of adminEmails) {
+        await supabaseAdmin.from('sbd_email_queue').insert({
+          recipient_email: adminEmail,
+          template,
+          body_data: bodyData,
+          status: 'pending',
+          attempts: 0,
+          created_at: new Date().toISOString()
+        });
+        emailsQueued.push(`${template} → ${adminEmail}`);
+      }
+
+      return new Response(JSON.stringify({ success: true, emailType: template, queued: emailsQueued }), { headers: corsHeaders });
+    }
+
+    // ── Webhook events (DB triggers, verified via WEBHOOK_SECRET if configured) ──
+    const WEBHOOK_SECRET = Deno.env.get("WEBHOOK_SECRET");
+    if (WEBHOOK_SECRET) {
+      const authHeader = req.headers.get("Authorization");
+      if (authHeader !== `Bearer ${WEBHOOK_SECRET}`) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), { headers: corsHeaders, status: 403 });
+      }
+    }
 
     // 1. New Facility Registration Request → queue emails
     if (payload.type === 'INSERT' && payload.table === 'registrations') {
@@ -72,7 +128,8 @@ serve(async (req) => {
       }
 
       // Queue: Admin alerts (one per admin)
-      for (const adminEmail of ADMIN_EMAILS) {
+      const adminEmails = await getMasterAdminEmails(supabaseAdmin);
+      for (const adminEmail of adminEmails) {
         await supabaseAdmin.from('sbd_email_queue').insert({
           recipient_email: adminEmail,
           template: 'admin_new_registration',
