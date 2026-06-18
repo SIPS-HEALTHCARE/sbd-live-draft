@@ -2732,7 +2732,15 @@ function ovsOpenCapture(obsId){
   const o = (DB.observations||[]).find(x => x.id === obsId);
   if(!o){ toast('Observation not found.','err'); return; }
   ovsCapture = { obsId, unlocked:false, observerStaffId:null, observerName:null };
+  // Resume: load the server-saved scores, then overlay any local crash-safety draft
+  // (written on every score) so an accidental close before an explicit save isn't lost.
   if(o.status === 'in_progress' && o.itemScores) ovsCapture.scores = { ...o.itemScores };
+  if(o.stopWork) ovsCapture.stopWork = { ...o.stopWork };
+  const draft = ovsLoadDraft(obsId);
+  if(draft){
+    ovsCapture.scores = { ...(ovsCapture.scores||{}), ...(draft.scores||{}) };
+    if(draft.stopWork) ovsCapture.stopWork = { ...draft.stopWork };
+  }
   renderAObservations();
 }
 
@@ -2760,6 +2768,7 @@ function ovsScore(itemId, value){
   if(!ovsCapture || !ovsCapture.unlocked) return;
   ovsCapture.scores = ovsCapture.scores || {};
   ovsCapture.scores[itemId] = value;
+  ovsSaveDraft();
   renderAObservations();
 }
 
@@ -2768,6 +2777,7 @@ function ovsToggleStopWork(){
   ovsCapture.stopWork = ovsCapture.stopWork || { active:false };
   ovsCapture.stopWork.active = !ovsCapture.stopWork.active;
   if(ovsCapture.stopWork.active) ovsCapture.stopWork.at = new Date().toISOString();
+  ovsSaveDraft();
   toast(ovsCapture.stopWork.active ? 'STOP-WORK active — this observation will be DO NOT ADVANCE.' : 'Stop-Work cleared.', ovsCapture.stopWork.active ? 'err' : 'ok');
   renderAObservations();
 }
@@ -2846,6 +2856,7 @@ function ovsRenderCapture(){
       <div style="font-size:12px;color:var(--txt2)">Observer: <strong>${ovsCapture.observerName}</strong> &middot; ${scored}/${units.length} scored</div>
       <div style="display:flex;align-items:center;gap:10px">
         ${ovsOutcomeChip(outcome.outcome)}
+        <button class="btn btn-ghost btn-sm" onclick="ovsSaveProgress()" title="Save your progress and finish later">Save &amp; resume later</button>
         <button class="btn btn-sm" onclick="ovsToggleStopWork()" style="border:1.5px solid #ef4444;color:${stop.active?'#0b0f17':'#ef4444'};background:${stop.active?'#ef4444':'transparent'};font-weight:800">${stop.active?'■ STOP-WORK ON':'⛔ Stop-Work'}</button>
       </div>
     </div></div>
@@ -2891,8 +2902,54 @@ function ovsSubmit(){
   if(IS_LIVE && typeof SB!=='undefined' && SB.updateObservation && !String(o.id).startsWith('obs-')){
     SB.updateObservation(o.id, backend).catch(e => handleSyncError(e,'Observation submit'));
   }
+  ovsClearDraft(o.id);
   ovsCapture = null;
   toast(`Observation submitted — ${outcome.outcome.replace(/_/g,' ')}. It's now in Observation Reviews.`,'ok');
+  renderAObservations();
+}
+
+// ── Save & resume (OVS-1) ────────────────────────────────────────────────────
+// An observation can be long; the observer must be able to stop and pick it up later.
+// Two layers: (1) an explicit "Save & resume later" writes the in-progress scores to the
+// observation row (status in_progress, resumable from the list); (2) every score is
+// mirrored to a local draft so an accidental close before an explicit save is never lost.
+// The local draft is kept until submit (covers a failed server save on the same device).
+function ovsDraftKey(id){ return 'sbd_ovs_draft_' + id; }
+function ovsSaveDraft(){
+  if(!ovsCapture || !ovsCapture.obsId) return;
+  try {
+    localStorage.setItem(ovsDraftKey(ovsCapture.obsId), JSON.stringify({
+      scores: ovsCapture.scores || {},
+      stopWork: ovsCapture.stopWork || { active:false },
+      ts: Date.now()
+    }));
+  } catch(e){}
+}
+function ovsLoadDraft(id){
+  try { const raw = localStorage.getItem(ovsDraftKey(id)); return raw ? JSON.parse(raw) : null; }
+  catch(e){ return null; }
+}
+function ovsClearDraft(id){ try { localStorage.removeItem(ovsDraftKey(id)); } catch(e){} }
+
+// Explicit save without submitting: persist the current scores so the observation can be
+// resumed later (status in_progress). Does NOT write the gate; the observer returns and
+// submits when finished.
+function ovsSaveProgress(){
+  if(!ovsCapture || !ovsCapture.unlocked) return;
+  const o = (DB.observations||[]).find(x => x.id === ovsCapture.obsId); if(!o) return;
+  const scores = ovsCapture.scores || {};
+  const stop = ovsCapture.stopWork || { active:false };
+  const now = new Date().toISOString();
+  o.status = 'in_progress'; o.itemScores = scores; o.stopWork = stop; o.lastActiveAt = now;
+  if(IS_LIVE && typeof SB!=='undefined' && SB.updateObservation && !String(o.id).startsWith('obs-')){
+    SB.updateObservation(o.id, { status:'in_progress', item_scores:scores, stop_work:stop, last_active_at:now })
+      .catch(e => handleSyncError(e,'Observation save'));
+  }
+  ovsSaveDraft();                 // keep the local draft as a same-device safety net
+  ovsCapture = null; ovsArmed = null;
+  const cl = ovsInstrument(o.checklistBelt || o.targetBelt);
+  const scored = cl ? ovsScorableUnits(cl).filter(u => scores[u.id] !== undefined && scores[u.id] !== null).length : Object.keys(scores).length;
+  toast(`Saved — ${scored} item${scored===1?'':'s'} recorded. Resume anytime from Observations.`,'ok');
   renderAObservations();
 }
 
