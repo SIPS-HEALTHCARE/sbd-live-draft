@@ -10,7 +10,7 @@ serve(async (req) => {
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders });
     }
-    
+
     try {
         const supabase = createClient(
             Deno.env.get('SUPABASE_URL') ?? '',
@@ -19,9 +19,9 @@ serve(async (req) => {
         );
 
         const data = await req.json();
-        
+
         let staffId, newFacilityId, claimedBy;
-        
+
         if (data && data.staffId && data.facilityId) {
             staffId = data.staffId;
             newFacilityId = data.facilityId;
@@ -37,24 +37,51 @@ serve(async (req) => {
         // Verify Caller Identity
         const authHeader = req.headers.get('Authorization');
         if (!authHeader) throw new Error('Missing Authorization header');
-        
+
         const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
         if (authError || !user) throw new Error('Unauthorized');
 
-        const { data: profile } = await supabase.from('sbd_portal_users').select('role, fid').eq('id', user.id).single();
-        const allowedRoles = ['master_admin', 'staff_admin', 'admin', 'master'];
-        if (!profile || !allowedRoles.includes(profile.role)) {
-            throw new Error('Only admins can claim free agents');
-        }
-
+        // Admin client (bypasses RLS) -- also used to resolve the caller's role.
         const supabaseAdmin = createClient(
             Deno.env.get('SUPABASE_URL') ?? '',
             Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
             { auth: { autoRefreshToken: false, persistSession: false } }
         );
 
+        // Resolve caller role -- mirrors sbd-release-to-free-agent. The prior version
+        // looked up sbd_portal_users by `id = auth uid`, but the auth UID lives in the
+        // `auth_uid` column, so it never matched and every assignment was rejected with
+        // "Only admins can claim free agents". Try auth_uid, then email, then auth
+        // metadata, then the known SIPS master-admin emails.
+        const allowedRoles = ['master_admin', 'staff_admin', 'admin', 'master'];
+        let callerRole: string | null = null;
+
+        const { data: profileByAuth } = await supabaseAdmin
+            .from('sbd_portal_users').select('role').eq('auth_uid', user.id).single();
+        if (profileByAuth && allowedRoles.includes(profileByAuth.role)) callerRole = profileByAuth.role;
+
+        if (!callerRole && user.email) {
+            const { data: profileByEmail } = await supabaseAdmin
+                .from('sbd_portal_users').select('role').eq('email', user.email).single();
+            if (profileByEmail && allowedRoles.includes(profileByEmail.role)) callerRole = profileByEmail.role;
+        }
+
+        if (!callerRole) {
+            const metaRole = user.app_metadata?.role || user.user_metadata?.role;
+            if (metaRole && allowedRoles.includes(metaRole)) callerRole = metaRole;
+        }
+
+        if (!callerRole && user.email) {
+            const sipsAdminEmails = ['jjacobs@sipsconsults.com', 'izambrano@sipsconsults.com', 'dpayne@sipsconsults.com'];
+            if (sipsAdminEmails.includes(user.email.toLowerCase())) callerRole = 'master_admin';
+        }
+
+        if (!callerRole) {
+            throw new Error('Only admins can claim free agents');
+        }
+
         // Re-attach the released staff row to the new facility.
-        // The live `staff` table is keyed on `fid` ONLY — it has no `facility_id`
+        // The live `staff` table is keyed on `fid` ONLY -- it has no `facility_id`
         // or `is_free_agent` column. Writing those caused PostgREST 42703 and the
         // whole update was rejected, so the member vanished from every facility.
         const { error: staffError } = await supabaseAdmin

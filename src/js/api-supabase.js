@@ -256,6 +256,12 @@ const SB = {
   },
   // ── Audit Log ──
   logReportDownload(fid, by){ return sbFetch('/rest/v1/sbd_report_audit_log', { method:'POST', prefer:'return=minimal', body:{facility_id:fid, generated_by:by, generated_at:new Date().toISOString()} }); },
+  // ── Practice attempts (P0.3 — append-only history + wrong-question log) ──
+  logPracticeAttempt(attempt){ return sbFetch('/rest/v1/sbd_practice_attempts', { method:'POST', prefer:'return=minimal', body:attempt }); },
+  getPracticeAttempts(staffId, limit=50){ return sbFetch(`/rest/v1/sbd_practice_attempts?staff_id=eq.${encodeURIComponent(staffId)}&select=*&order=created_at.desc&limit=${limit}`); },
+  // ── Activity log (P1 — engagement metrics; rows written by sbd-log-activity edge fn) ──
+  getStaffActivity(staffId, limit=1000){ return sbFetch(`/rest/v1/sbd_activity_log?staff_id=eq.${encodeURIComponent(staffId)}&select=event_type,event_meta,created_at&order=created_at.desc&limit=${limit}`); },
+  getFacilityActivity(fid, limit=2000){ return sbFetch(`/rest/v1/sbd_activity_log?facility_id=eq.${encodeURIComponent(fid)}&select=event_type,event_meta,created_at,staff_id&order=created_at.desc&limit=${limit}`); },
   // ── Placement Reviews ──
   getPlacementReviews(fid){ const f=fid?`&fid=eq.${encodeURIComponent(fid)}`:''; return sbFetch(`/rest/v1/placement_reviews?select=*&order=submitted_at.desc${f}`); },
   insertPlacementReview(data){ return sbFetch('/rest/v1/placement_reviews', { method:'POST', body:data }); },
