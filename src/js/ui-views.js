@@ -2857,7 +2857,7 @@ function ovsRenderCapture(){
     <div style="margin-bottom:14px">
       <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--txt3);font-weight:700;margin:6px 0 8px">${g}</div>
       ${gmap[g].map(u => `
-        <div style="padding:10px 12px;border:1px solid var(--bdr);border-radius:10px;margin-bottom:8px;background:var(--s1)">
+        <div style="padding:10px 12px;border:1px solid var(--bdr);border-left:3px solid ${(scores[u.id]!==undefined&&scores[u.id]!==null)?'#22c55e':'var(--bdr)'};border-radius:10px;margin-bottom:8px;background:var(--s1)">
           <div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:8px">
             <div style="font-size:13px;line-height:1.5">${u.n?`<span style="color:var(--txt3)">${u.n}.</span> `:''}${u.text}</div>
             ${u.meta?`<span style="font-size:10px;color:${u.meta==='Mandatory'?'#ef4444':'var(--txt3)'};font-weight:700;white-space:nowrap;align-self:flex-start">${u.meta}</span>`:''}
@@ -2870,12 +2870,17 @@ function ovsRenderCapture(){
   const canSubmit = outcome.outcome !== 'incomplete';
 
   return `<div style="max-width:760px">${header}
-    <div class="card" style="position:sticky;top:0;z-index:5"><div class="card-body" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-      <div style="font-size:12px;color:var(--txt2)">Observer: <strong>${ovsCapture.observerName}</strong> &middot; ${scored}/${units.length} scored</div>
-      <div style="display:flex;align-items:center;gap:10px">
-        ${ovsOutcomeChip(outcome.outcome)}
-        <button class="btn btn-ghost btn-sm" onclick="ovsSaveProgress()" title="Save your progress and finish later">Save &amp; resume later</button>
-        <button class="btn btn-sm" onclick="ovsToggleStopWork()" style="border:1.5px solid #ef4444;color:${stop.active?'#0b0f17':'#ef4444'};background:${stop.active?'#ef4444':'transparent'};font-weight:800">${stop.active?'■ STOP-WORK ON':'⛔ Stop-Work'}</button>
+    <div class="card" style="position:sticky;top:0;z-index:5"><div class="card-body">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div style="font-size:12px;color:var(--txt2)">Observer: <strong>${ovsCapture.observerName}</strong> &middot; ${scored}/${units.length} scored</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          ${ovsOutcomeChip(outcome.outcome)}
+          <button class="btn btn-ghost btn-sm" onclick="ovsSaveProgress()" title="Save your progress and finish later">Save &amp; resume later</button>
+          <button class="btn btn-sm" onclick="ovsToggleStopWork()" style="border:1.5px solid #ef4444;color:${stop.active?'#0b0f17':'#ef4444'};background:${stop.active?'#ef4444':'transparent'};font-weight:800">${stop.active?'■ STOP-WORK ON':'⛔ Stop-Work'}</button>
+        </div>
+      </div>
+      <div style="margin-top:10px;height:5px;border-radius:4px;background:rgba(148,163,184,.18);overflow:hidden" title="${scored} of ${units.length} items scored">
+        <div style="height:100%;width:${units.length?Math.round(scored/units.length*100):0}%;background:${(units.length&&scored>=units.length)?'#22c55e':'#0ea5e9'};transition:width .25s"></div>
       </div>
     </div></div>
     ${stop.active?`<div style="margin:10px 0;padding:10px 12px;background:#ef44441a;border:1px solid #ef444455;border-radius:8px;color:#ef4444;font-size:12px;font-weight:600">Stop-Work is active. On submit this observation records DO NOT ADVANCE regardless of item scores.</div>`:''}
