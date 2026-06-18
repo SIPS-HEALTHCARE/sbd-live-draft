@@ -179,6 +179,8 @@ const SB = {
   deleteStaff(id){ return sbFetch(`/rest/v1/staff?id=eq.${id}`, { method:'DELETE' }); },
   // ── Assessment Queue ──
   getPendingAssessments(fid){
+    // pending = staff-requested awaiting approval; approved = gate-approved, kept
+    // hydrated so the belt-test entry card and admin queue can see them (A4).
     const f = fid ? `&facility_id=eq.${encodeURIComponent(fid)}` : '';
     return sbFetch(`/rest/v1/sbd_assessment_queue?status=in.(pending,approved)${f}&select=*&order=requested_at.desc`);
   },
@@ -192,6 +194,13 @@ const SB = {
     if (resolved) body.resolved_at = new Date().toISOString();
     return sbFetch(`/rest/v1/sbd_assessment_queue?id=eq.${id}`, { method:'PATCH', body });
   },
+  // ── Dynamic Belt Test (A4) ──
+  generateBeltTest(staffId, targetBelt){ return sbFetch('/functions/v1/sbd-generate-belt-test', { method:'POST', body:{ staff_id:staffId, target_belt:targetBelt } }); },
+  getMyBeltTest(staffId, targetBelt){ return sbFetch(`/rest/v1/sbd_belt_tests?staff_id=eq.${staffId}&target_belt=eq.${encodeURIComponent(targetBelt)}&status=eq.active&select=*&limit=1`); },
+  insertBeltTestResult(data){ return sbFetch('/rest/v1/sbd_belt_test_results', { method:'POST', body:data }); },
+  getBeltTestResults(fid){ const f=fid?`&facility_id=eq.${encodeURIComponent(fid)}`:''; return sbFetch(`/rest/v1/sbd_belt_test_results?select=*&order=submitted_at.desc${f}`); },
+  updateBeltTestResult(id, data){ return sbFetch(`/rest/v1/sbd_belt_test_results?id=eq.${id}`, { method:'PATCH', body:data }); },
+  markBeltTestSubmitted(id){ return sbFetch(`/rest/v1/sbd_belt_tests?id=eq.${id}`, { method:'PATCH', body:{ status:'submitted', submitted_at:new Date().toISOString() } }); },
   // ── Assessments (via edge function for atomic RPC + audit) ──
   recordAssessment(staff, type, targetBelt, result, notes, assessorId, timestamp){
     return sbFetch('/functions/v1/sbd-record-assessment', {
@@ -302,7 +311,8 @@ const SB = {
   validateAssessmentPin(pin, staffId, assessmentType='placement'){ return sbFetch('/functions/v1/sbd-assessor-pin', { method:'POST', body:{ action:'validate_pin', pin, staff_id:staffId, assessment_type:assessmentType, device_info:{ userAgent:navigator.userAgent, screenWidth:screen.width, platform:navigator.platform } } }); },
   validateAssessmentSession(sessionToken){ return sbFetch('/functions/v1/sbd-assessor-pin', { method:'POST', body:{ action:'validate_session', session_token:sessionToken } }); },
   saveAssessmentProgress(sessionToken, progress){ return sbFetch('/functions/v1/sbd-assessor-pin', { method:'POST', body:{ action:'save_progress', session_token:sessionToken, progress } }); },
-  completeAssessmentSession(sessionToken){ return sbFetch('/functions/v1/sbd-assessor-pin', { method:'POST', body:{ action:'complete_session', session_token:sessionToken } }); }
+  completeAssessmentSession(sessionToken){ return sbFetch('/functions/v1/sbd-assessor-pin', { method:'POST', body:{ action:'complete_session', session_token:sessionToken } }); },
+  notifyPlacementEvent(type, data){ return sbFetch('/functions/v1/sbd-emails', { method:'POST', body:{ type, data } }); }
 };
 if (typeof window !== 'undefined') {
   window.SB = SB;
@@ -324,6 +334,7 @@ function resetDB(){
   DB.pendingTransfers = [];
   DB.pendingRegs = [];
   DB.placementReviews = [];
+  DB.beltTestResults = [];
   DB.observations = [];
   DB.observationChecklists = [];
   DB.schedule = [];
@@ -669,6 +680,97 @@ function mapPlacementReviewToBackend(pr){
   };
 }
 
+// ── Dynamic Belt Test (A4) ───────────────────────────────────────────────
+function mapBeltTestFromBackend(row){
+  if(!row) return null;
+  return {
+    id:            row.id,
+    staffId:       row.staff_id,
+    fid:           row.facility_id,
+    queueIds:      row.queue_ids || [],
+    targetBelt:    row.target_belt,
+    seed:          row.seed,
+    testDate:      row.test_date,
+    questions:     row.questions || { knowledge:[], simulation:[] },
+    variantStatus: row.variant_status,
+    status:        row.status,
+    createdAt:     row.created_at,
+    submittedAt:   row.submitted_at || null
+  };
+}
+function mapBeltTestResultFromBackend(row){
+  if(!row) return null;
+  return {
+    id:               row.id,
+    testId:           row.test_id,
+    staffId:          row.staff_id,
+    fid:              row.facility_id,
+    targetBelt:       row.target_belt,
+    submittedAt:      row.submitted_at,
+    scoredAt:         row.scored_at,
+    kLevelScores:     row.k_level_scores || {},
+    kOverall:         row.k_overall,
+    kFloorResults:    row.k_floor_results || [],
+    kOverallPassed:   row.k_overall_passed,
+    simResponses:     row.sim_responses || [],
+    simLevelAvgs:     row.sim_level_avgs || {},
+    simOverall:       row.sim_overall,
+    simFloorResults:  row.sim_floor_results || [],
+    simIndividualMin: row.sim_individual_min,
+    simOverallPassed: row.sim_overall_passed,
+    blendedScore:     row.blended_score,
+    blendedPassed:    row.blended_passed,
+    systemSuggestion: row.system_suggestion,
+    outcome:          row.outcome,
+    reasonCodes:      row.suggestion_reason_codes || [],
+    conditions:       row.conditions || [],
+    watchFlags:       row.watch_flags || [],
+    remediationFlags: row.remediation_flags || [],
+    finalBelt:        row.final_belt,
+    overrideApplied:  row.override_applied === true,
+    overrideBy:       row.override_by,
+    overrideJustification: row.override_justification,
+    overrideAt:       row.override_at,
+    status:           row.status,
+    createdAt:        row.created_at
+  };
+}
+// engineResult = output of BeltTestEngine.scoreBeltTest (snake-ish already).
+function mapBeltTestResultToBackend(engineResult, ctx){
+  ctx = ctx || {};
+  return {
+    test_id:                 ctx.testId || null,
+    staff_id:                ctx.staffId,
+    facility_id:             ctx.fid || null,
+    target_belt:             engineResult.target_belt || ctx.targetBelt,
+    submitted_at:            ctx.submittedAt || new Date().toISOString(),
+    scored_at:               engineResult._scored_at || new Date().toISOString(),
+    k_level_scores:          engineResult.k_level_scores || {},
+    k_overall:               engineResult.k_overall,
+    k_floor_results:         engineResult.k_floor_results || [],
+    k_overall_passed:        engineResult.k_overall_passed,
+    sim_responses:           engineResult.sim_responses || [],
+    sim_level_avgs:          engineResult.sim_level_avgs || {},
+    sim_overall:             engineResult.sim_overall,
+    sim_floor_results:       engineResult.sim_floor_results || [],
+    sim_individual_min:      engineResult.sim_individual_min,
+    sim_overall_passed:      engineResult.sim_overall_passed,
+    blended_score:           engineResult.blended_score,
+    blended_passed:          engineResult.blended_passed,
+    system_suggestion:       engineResult.system_suggestion,
+    outcome:                 engineResult.outcome,
+    suggestion_reason_codes: engineResult.suggestion_reason_codes || [],
+    conditions:              engineResult.conditions || [],
+    watch_flags:             engineResult.watch_flags || [],
+    remediation_flags:       engineResult.remediation_flags || [],
+    status:                  engineResult.status || 'PENDING_REVIEW'
+  };
+}
+if (typeof window !== 'undefined') {
+  window.mapBeltTestFromBackend = mapBeltTestFromBackend;
+  window.mapBeltTestResultFromBackend = mapBeltTestResultFromBackend;
+  window.mapBeltTestResultToBackend = mapBeltTestResultToBackend;
+}
 // ── Observations (observations table) ────────────────────────────────────────
 // One row per observation. The instrument snapshot, item scores, handshake PINs,
 // computed outcome, and the review decision all live on the row.

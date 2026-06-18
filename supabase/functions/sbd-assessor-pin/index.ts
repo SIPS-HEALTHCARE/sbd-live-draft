@@ -8,7 +8,11 @@ const corsHeaders = {
 };
 
 const PIN_TTL_MINUTES = 10;
-const SESSION_TTL_MINUTES = 90;
+const SESSION_TTL_MINUTES = 90;            // placement (30 questions)
+const BELT_SESSION_TTL_MINUTES = 120;      // belt test = 60 items, needs longer
+function sessionTtlFor(assessmentType: string): number {
+    return assessmentType === 'belt' ? BELT_SESSION_TTL_MINUTES : SESSION_TTL_MINUTES;
+}
 const MAX_FAILED_ATTEMPTS = 5;
 const RATE_LIMIT_WINDOW_HOURS = 1;
 const ASSESSOR_ROLES = ['master_admin', 'staff_admin', 'system_admin', 'admin', 'master', 'educator', 'preceptor'];
@@ -251,8 +255,8 @@ serve(async (req) => {
                 .update({ used: true, used_at: now })
                 .eq('id', pinRecord.id);
 
-            // 5. Create assessment session (90-min TTL)
-            const sessionExpiresAt = new Date(Date.now() + SESSION_TTL_MINUTES * 60 * 1000).toISOString();
+            // 5. Create assessment session (TTL varies by type: belt=120m, placement=90m)
+            const sessionExpiresAt = new Date(Date.now() + sessionTtlFor(assessment_type) * 60 * 1000).toISOString();
 
             const { data: session, error: sessError } = await supabaseAdmin
                 .from('sbd_assessment_sessions')
