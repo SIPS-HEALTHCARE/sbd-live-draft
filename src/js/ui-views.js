@@ -376,6 +376,7 @@ function enterPortal(type){
   const _navPlacement=document.getElementById('nav-placementreviews');
   if(_navPlacement) _navPlacement.style.display='flex';
   if(typeof updatePlacementBadge === 'function') updatePlacementBadge();
+  if(typeof updateObservationBadge === 'function') updateObservationBadge();
   // Observer module (shell) — visible to SIPS admins. Per-observer role gating
   // and the candidate request/PIN flow land in later Observer milestones.
   const _navObs=document.getElementById('nav-observations');
@@ -2414,6 +2415,23 @@ function updatePlacementBadge(){
   }
 }
 
+// Pending-observation-reviews count on the Observation Reviews nav item — mirrors
+// updatePlacementBadge. Counts submitted (awaiting-review) observations in scope.
+function updateObservationBadge(){
+  if(!DB.observations) return;
+  let pool = DB.observations.filter(o => o.status === 'submitted');
+  const u = ST.user;
+  if(u && u.role==='staff_admin' && u.assignedFids && u.assignedFids.length){
+    pool = pool.filter(o => u.assignedFids.includes(o.fid));
+  }
+  const pending = pool.length;
+  const badge = document.getElementById('badge-observation');
+  if(badge){
+    badge.textContent = pending;
+    badge.style.display = pending > 0 ? '' : 'none';
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════
 // ASSESSOR PLACEMENT REVIEWS PANEL
 // ═══════════════════════════════════════════════════════════════
@@ -3028,6 +3046,7 @@ function renderAObservationReviews(){
         <div style="color:var(--txt3);font-size:12.5px;line-height:1.6;max-width:460px;margin:0 auto">Submitted observations appear here. Confirming one writes that candidate's Observation gate.</div>
       </div>`}
     </div>`;
+  updateObservationBadge();
 }
 
 // Confirm a submission → write the Observation gate (nxt.o) via a targeted PATCH.
