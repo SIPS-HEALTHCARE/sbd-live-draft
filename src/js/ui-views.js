@@ -14330,6 +14330,12 @@ function renderAPromoQueue(){
 async function approvePromotion(apId, approved){
   const ap=DB.promotionApprovals.find(a=>a.id===apId);
   if(!ap){toast('Approval record not found.','err');return;}
+  // Second-admin check: a SIPS admin cannot approve a promotion request they
+  // submitted themselves; a different administrator must verify it (mirrors transfers).
+  if(approved && ap.submittedBy && ST.user?.name && String(ap.submittedBy).trim() === String(ST.user.name).trim()){
+    toast('You cannot approve your own promotion request. A different administrator must verify it.','err');
+    return;
+  }
   const prev={status:ap.status,decidedBy:ap.decidedBy,decidedAt:ap.decidedAt};
   ap.status=approved?'approved':'denied';
   ap.decidedBy=ST.user?.name||'Admin';
