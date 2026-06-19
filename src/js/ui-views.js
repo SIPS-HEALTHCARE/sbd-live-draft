@@ -2772,6 +2772,7 @@ function ovsUnlock(){
   const candPin = (document.getElementById('ovs-candidate-pin')||{}).value || '';
   const observer = (DB.staff||[]).find(s => s.observer && s.observationPin && String(s.observationPin) === obsPin.trim());
   if(!observer){ toast('Observer PIN not recognized. Only an authorized observer with a PIN can begin.','err'); return; }
+  if(String(observer.id) === String(o.staffId)){ toast('A candidate cannot observe their own assessment. A different authorized observer must score it.','err'); return; }
   if(!o.handshake || String(o.handshake.candidate_pin) !== candPin.trim()){ toast('Candidate PIN does not match this observation.','err'); return; }
   ovsCapture.unlocked = true;
   ovsCapture.observerStaffId = observer.id;
@@ -14365,6 +14366,12 @@ function renderAPromoQueue(){
 async function approvePromotion(apId, approved){
   const ap=DB.promotionApprovals.find(a=>a.id===apId);
   if(!ap){toast('Approval record not found.','err');return;}
+  // Second-admin check: a SIPS admin cannot approve a promotion request they
+  // submitted themselves; a different administrator must verify it (mirrors transfers).
+  if(approved && ap.submittedBy && ST.user?.name && String(ap.submittedBy).trim() === String(ST.user.name).trim()){
+    toast('You cannot approve your own promotion request. A different administrator must verify it.','err');
+    return;
+  }
   const prev={status:ap.status,decidedBy:ap.decidedBy,decidedAt:ap.decidedAt};
   ap.status=approved?'approved':'denied';
   ap.decidedBy=ST.user?.name||'Admin';

@@ -10,9 +10,16 @@ serve(async (req) => {
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders });
     }
-    
+
+    // Rollback tracking (function scope so the catch can undo a partial provision):
+    // if we create a facility and/or an auth user and a later step fails, we remove
+    // them so a failed approval never leaves an orphaned account or facility (AUTH-F1).
+    let supabaseAdmin: any = null;
+    let createdAuthUserId: string | null = null;
+    let createdFacilityId: string | null = null;
+
     try {
-        const supabaseAdmin = createClient(
+        supabaseAdmin = createClient(
             Deno.env.get('SUPABASE_URL') ?? '',
             Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
             { auth: { autoRefreshToken: false, persistSession: false } }
@@ -83,6 +90,7 @@ serve(async (req) => {
                 throw new Error('Failed to create facility');
             }
             facilityId = newFac.id;
+            createdFacilityId = newFac.id;
         }
 
         // CREATE OR FIND USER
@@ -131,6 +139,7 @@ serve(async (req) => {
             }
             newUserId = authUser.user.id;
             authCreated = true;
+            createdAuthUserId = authUser.user.id;
         }
 
         console.log("Upserting portal user profile for:", newUserId);
@@ -191,6 +200,7 @@ serve(async (req) => {
 
         if (staffError) {
             console.error("Staff Insert Error:", staffError);
+            throw new Error('Failed to create staff record: ' + staffError.message);
         }
 
         // 3. Update registration status
@@ -249,6 +259,16 @@ serve(async (req) => {
 
     } catch (err: any) {
         console.error('Approve Error:', err.message);
+        // Roll back anything we created on this call so a partial failure cannot leave
+        // an orphaned auth user or facility behind (closes the AUTH-F1 orphan path).
+        if (supabaseAdmin && createdAuthUserId) {
+            try { await supabaseAdmin.auth.admin.deleteUser(createdAuthUserId); console.log('Rolled back orphaned auth user', createdAuthUserId); }
+            catch (e: any) { console.error('Rollback (auth user) failed:', e?.message); }
+        }
+        if (supabaseAdmin && createdFacilityId) {
+            try { await supabaseAdmin.from('facilities').delete().eq('id', createdFacilityId); console.log('Rolled back created facility', createdFacilityId); }
+            catch (e: any) { console.error('Rollback (facility) failed:', e?.message); }
+        }
         return new Response(JSON.stringify({ error: err.message }), {
             status: 400,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
