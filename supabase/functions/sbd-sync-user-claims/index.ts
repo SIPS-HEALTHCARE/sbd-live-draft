@@ -15,6 +15,9 @@ serve(async (req) => {
     let supabaseAdmin: any = null;
     let authCreated = false;
     let createdAuthUid: string | null = null;
+    // STAFF-F1: roll back a profile we created if a later step fails — else its UNIQUE email is burned.
+    let profileCreated = false;
+    let createdProfileId: string | null = null;
 
     try {
         // Initialize Supabase Admin Client (service role - full access)
@@ -193,6 +196,13 @@ serve(async (req) => {
             throw new Error('Failed to sync profile: ' + upsertError.message);
         }
 
+        // Flag for rollback only for brand-new users (authCreated): finalUserId is the new
+        // auth uid, so the upsert INSERTED a new row — safe to delete, never an existing profile.
+        if (authCreated) {
+            profileCreated = true;
+            createdProfileId = finalUserId;
+        }
+
         // If Staff Member, ensure they exist in 'staff' table
         if (role === 'staff_member') {
             const nameParts = (name || '').split(' ');
@@ -279,6 +289,16 @@ serve(async (req) => {
 
     } catch (err: any) {
         console.error('Sync Error:', err);
+        // STAFF-F1: roll back the profile FIRST (reverse creation order) so a failed
+        // staff insert doesn't orphan it and burn its UNIQUE email.
+        if (authCreated && profileCreated && createdProfileId && supabaseAdmin) {
+            const { error: pErr } = await supabaseAdmin
+                .from('sbd_portal_users')
+                .delete()
+                .eq('id', createdProfileId);
+            if (pErr) console.error('STAFF-F1 rollback FAILED for orphaned portal profile', createdProfileId, pErr);
+            else console.log('STAFF-F1 rollback: deleted orphaned portal profile', createdProfileId);
+        }
         // AUTH-F1: if we created the auth user in THIS call but a later step failed,
         // delete it so we don't leave an orphaned auth.users row with no profile —
         // which would otherwise burn that email address for future re-registration.
