@@ -8110,7 +8110,9 @@ function renderSStudy() {
       const otherMode = ps.mode === 'knowledge' ? 'simulation' : 'knowledge';
       const scores = getPracticeScores(s.id, ps.belt) || {};
       const otherScore = scores[otherMode] || 0;
-      const bothPassed = pct >= 80 && otherScore >= 80;
+      const kScore = ps.mode === 'knowledge' ? pct : (scores.knowledge || 0);
+      const sScore = ps.mode === 'simulation' ? pct : (scores.simulation || 0);
+      const bothPassed = kScore >= 80 && sScore >= 80;
       const nxtBelt = nextBelt(ps.belt);
       el.innerHTML = `
         <div style="max-width:620px;margin:0 auto">
