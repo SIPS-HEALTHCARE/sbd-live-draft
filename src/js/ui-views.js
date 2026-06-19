@@ -4845,7 +4845,8 @@ function gateDots(g){
 }
 
 function isWhiteBaseline(s){
-  return s && s.belt === 'White';
+  const belt = String((s && s.belt) || '').trim().toLowerCase();
+  return belt === 'white' || belt === 'white belt';
 }
 
 function currentGateDots(s){
@@ -4859,6 +4860,14 @@ function currentGateCountLabel(s){
   return [cur.c, cur.s, cur.o].filter(g => g === 'pass').length + '/3 passed';
 }
 
+function currentGateCard(label, val){
+  const cls = val === 'pass' ? 'g-pass' : val === 'fail' ? 'g-fail' : '';
+  const icoCls = val === 'pass' ? 'pass-ico' : val === 'fail' ? 'fail-ico' : 'empty-ico';
+  const icoHtml = val === 'pass' ? ICO.check : val === 'fail' ? ICO.x : '<span style="width:10px;height:10px;border-radius:50%;border:1px solid var(--bdr2);display:inline-block"></span>';
+  const status = val === 'pass' ? '<span class="gate-status pass">Passed</span>' : val === 'fail' ? '<span class="gate-status fail">Failed</span>' : '<span class="gate-status empty">Not Started</span>';
+  return `<div class="gate ${cls}"><div class="gate-ico ${icoCls}">${icoHtml}</div><div class="gate-lbl">${label}</div>${status}</div>`;
+}
+
 function currentGateCards(s){
   if(isWhiteBaseline(s)){
     return `<div style="background:var(--s2);border:1px solid var(--bdr);border-radius:var(--rs);padding:14px 16px;font-size:12px;color:var(--txt2);line-height:1.6">
@@ -4866,7 +4875,7 @@ function currentGateCards(s){
       No current-belt gates are required for White. Use the next-belt gates to track progression toward Yellow.
     </div>`;
   }
-  return `<div class="gates">${gateCard('Competency','c',(s.cur||{}).c)}${gateCard('Simulation','s',(s.cur||{}).s)}${gateCard('Observation','o',(s.cur||{}).o)}</div>
+  return `<div class="gates">${currentGateCard('Competency',(s.cur||{}).c)}${currentGateCard('Simulation',(s.cur||{}).s)}${currentGateCard('Observation',(s.cur||{}).o)}</div>
     <div style="font-size:11.5px;color:var(--txt3);line-height:1.5">All three assessments required to certify current belt. Marked by SBD-certified assessors only.</div>`;
 }
 
