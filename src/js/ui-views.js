@@ -2772,6 +2772,7 @@ function ovsUnlock(){
   const candPin = (document.getElementById('ovs-candidate-pin')||{}).value || '';
   const observer = (DB.staff||[]).find(s => s.observer && s.observationPin && String(s.observationPin) === obsPin.trim());
   if(!observer){ toast('Observer PIN not recognized. Only an authorized observer with a PIN can begin.','err'); return; }
+  if(String(observer.id) === String(o.staffId)){ toast('A candidate cannot observe their own assessment. A different authorized observer must score it.','err'); return; }
   if(!o.handshake || String(o.handshake.candidate_pin) !== candPin.trim()){ toast('Candidate PIN does not match this observation.','err'); return; }
   ovsCapture.unlocked = true;
   ovsCapture.observerStaffId = observer.id;
