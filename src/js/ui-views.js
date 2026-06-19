@@ -4837,11 +4837,47 @@ function renderRoleDropdown(s) {
 
 // ============================================================ GATE DOTS
 function gateDots(g){
+  g = g || {};
   const dot=(v)=>{
     const cls=v==='pass'?'style="background:var(--ok)"':v==='fail'?'style="background:var(--err)"':'style="background:var(--s4);border:1px solid var(--bdr2)"';
     return `<span style="width:9px;height:9px;border-radius:50%;display:inline-block;${v==='pass'?'background:var(--ok)':v==='fail'?'background:var(--err)':'background:var(--s4);border:1px solid var(--bdr2)'}"></span>`;
   };
   return `<div style="display:flex;gap:4px;align-items:center">${dot(g.c)}${dot(g.s)}${dot(g.o)}</div>`;
+}
+
+function isWhiteBaseline(s){
+  const belt = String((s && s.belt) || '').trim().toLowerCase();
+  return belt === 'white' || belt === 'white belt';
+}
+
+function currentGateDots(s){
+  if(isWhiteBaseline(s)) return '<span class="pill p-muted" style="font-size:10px">Baseline</span>';
+  return gateDots(s && s.cur);
+}
+
+function currentGateCountLabel(s){
+  if(isWhiteBaseline(s)) return 'Baseline';
+  const cur = (s && s.cur) || {};
+  return [cur.c, cur.s, cur.o].filter(g => g === 'pass').length + '/3 passed';
+}
+
+function currentGateCard(label, val){
+  const cls = val === 'pass' ? 'g-pass' : val === 'fail' ? 'g-fail' : '';
+  const icoCls = val === 'pass' ? 'pass-ico' : val === 'fail' ? 'fail-ico' : 'empty-ico';
+  const icoHtml = val === 'pass' ? ICO.check : val === 'fail' ? ICO.x : '<span style="width:10px;height:10px;border-radius:50%;border:1px solid var(--bdr2);display:inline-block"></span>';
+  const status = val === 'pass' ? '<span class="gate-status pass">Passed</span>' : val === 'fail' ? '<span class="gate-status fail">Failed</span>' : '<span class="gate-status empty">Not Started</span>';
+  return `<div class="gate ${cls}"><div class="gate-ico ${icoCls}">${icoHtml}</div><div class="gate-lbl">${label}</div>${status}</div>`;
+}
+
+function currentGateCards(s){
+  if(isWhiteBaseline(s)){
+    return `<div style="background:var(--s2);border:1px solid var(--bdr);border-radius:var(--rs);padding:14px 16px;font-size:12px;color:var(--txt2);line-height:1.6">
+      <strong style="color:var(--txt1)">White Belt baseline</strong><br>
+      No current-belt gates are required for White. Use the next-belt gates to track progression toward Yellow.
+    </div>`;
+  }
+  return `<div class="gates">${currentGateCard('Competency',(s.cur||{}).c)}${currentGateCard('Simulation',(s.cur||{}).s)}${currentGateCard('Observation',(s.cur||{}).o)}</div>
+    <div style="font-size:11.5px;color:var(--txt3);line-height:1.5">All three assessments required to certify current belt. Marked by SBD-certified assessors only.</div>`;
 }
 
 
@@ -5584,7 +5620,7 @@ async function renderSReport(){
     <!-- Key Metrics Row -->
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;margin-bottom:16px">
       ${rptStat('Days at Belt', daysAtLabel(s.since,''), s.belt+' Belt', BELT_CLR[s.belt])}
-      ${rptStat('Current Gates', [s.cur?.c,s.cur?.s,s.cur?.o].filter(g=>g==='pass').length+'/3', 'Passed', 'var(--ok)')}
+      ${isWhiteBaseline(s) ? rptStat('Current Gates', 'Baseline', 'Starting belt', 'var(--txt3)') : rptStat('Current Gates', [s.cur?.c,s.cur?.s,s.cur?.o].filter(g=>g==='pass').length+'/3', 'Passed', 'var(--ok)')}
       ${rptStat('Adv. Gates', [s.nxt?.c,s.nxt?.s,s.nxt?.o].filter(g=>g==='pass').length+'/3', nextBelt(s.belt)||'Max', 'var(--blue)')}
       ${rptStat('PS Stars', psStars, psStars===0?'No tracks yet':psStars+' completed', 'var(--gold)')}
       ${rptStat('Pass Rate', passRate!==null?passRate+'%':'--', totalHistory+' assessments', passRate>=80?'var(--ok)':passRate>=60?'var(--warn)':'var(--err)')}
@@ -5595,11 +5631,9 @@ async function renderSReport(){
     ${rptSection('Assessment Progress')}
     <div class="g2 mb16">
       <div class="card">
-        <div class="card-hd"><div class="card-ttl">Current Belt Assessments</div><span style="font-size:11px;color:var(--txt3)">${s.belt} Belt</span></div>
+        <div class="card-hd"><div class="card-ttl">Current Belt Assessments</div><span style="font-size:11px;color:var(--txt3)">${isWhiteBaseline(s)?'Baseline':s.belt+' Belt'}</span></div>
         <div class="card-body">
-          <div style="display:flex;gap:10px;justify-content:space-around;padding:8px 0">
-            ${['Competency','Simulation','Observation'].map((name,i)=>{const keys=['c','s','o'];const v=s.cur[keys[i]];return`<div style="text-align:center"><div style="width:40px;height:40px;border-radius:10px;background:${v==='pass'?'rgba(34,197,94,.15)':v==='fail'?'rgba(239,68,68,.15)':'var(--s3)'};border:1.5px solid ${v==='pass'?'rgba(34,197,94,.4)':v==='fail'?'rgba(239,68,68,.4)':'var(--bdr)'};display:flex;align-items:center;justify-content:center;font-size:16px;margin:0 auto 6px">${v==='pass'?'✓':v==='fail'?'✗':'○'}</div><div style="font-size:10.5px;color:var(--txt2)">${name}</div><div style="font-size:10px;color:${v==='pass'?'var(--ok)':v==='fail'?'var(--err)':'var(--txt3)'}">${v||'Pending'}</div></div>`}).join('')}
-          </div>
+          ${currentGateCards(s)}
         </div>
       </div>
       <div class="card">
@@ -6675,7 +6709,7 @@ function renderSDashboard(){
             <div style="width:56px;height:56px;border-radius:12px;background:var(--s3);border:2px solid ${BELT_CLR[s.belt]};display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:${BELT_CLR[s.belt]};flex-shrink:0">${userInitials(s)}</div>
             <div><div style="font-size:17px;font-weight:800">${fullName(s)}</div><div style="font-size:12px;color:var(--txt2)">${s.role}</div><div style="font-size:11px;color:var(--txt3);margin-top:2px">${BELT_CERT[s.belt]}</div></div>
           </div>
-          <div class="irow"><div class="ilbl">Current Belt Gates</div><div class="ival">${gateDots(s.cur)}</div></div>
+          <div class="irow"><div class="ilbl">Current Belt Gates</div><div class="ival">${currentGateDots(s)}</div></div>
           ${nb?`<div class="irow"><div class="ilbl">Next Belt Gates (${nb})</div><div class="ival">${gateDots(s.nxt)} <span style="font-size:11px;color:var(--txt3)">${nxtSt.p}/3</span></div></div>`:''}
           ${(()=>{ const ob=(DB.observations||[]).find(o=>o.staffId===s.id && ['requested','in_progress'].includes(o.status)); const pin=ob&&ob.handshake&&ob.handshake.candidate_pin; return pin?`<div class="irow"><div class="ilbl">Observation PIN</div><div class="ival"><span class="pill" style="background:#0ea5e91a;color:#0ea5e9;border:1px solid #0ea5e955;font-weight:800;letter-spacing:3px;font-size:13px">${pin}</span> <span style="font-size:10px;color:var(--txt3)">give this to your observer</span></div></div>`:''; })()}
           <div class="irow"><div class="ilbl">Stars Earned</div><div class="ival tc-gold">${calcTotalPSStars(s)>0?Array(calcTotalPSStars(s)).fill('★').join(' '):'None yet'}&nbsp;<span style="font-size:10px;color:var(--txt3);font-style:italic">${calcTotalPSStars(s)>0?'('+calcTotalPSStars(s)+' PS track'+(calcTotalPSStars(s)>1?'s':'')+' completed)':''}</span></div></div>
@@ -6743,7 +6777,7 @@ function openApplyModal(sid){
       </div>
       <div style="font-size:13px;font-weight:600;margin-bottom:8px">Select the gate you want to apply for:</div>
       ${gatesNeeded.map(g=>`
-        <div style="padding:12px;background:var(--s2);border:1px solid var(--bdr2);border-radius:var(--rs);margin-bottom:8px;cursor:pointer;transition:.15s" onclick="${g.key==='o'?`requestObservation('${s.id}','${nb}')`:`submitApply(${sid},'${g.key}','${nb}')`}" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--bdr2)'">
+        <div style="padding:12px;background:var(--s2);border:1px solid var(--bdr2);border-radius:var(--rs);margin-bottom:8px;cursor:pointer;transition:.15s" onclick="${g.key==='o'?`requestObservation('${s.id}','${nb}')`:`submitApply('${s.id}','${g.key}','${nb}')`}" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--bdr2)'">
           <div style="font-weight:700;margin-bottom:3px">${g.label} Assessment</div>
           <div style="font-size:11.5px;color:var(--txt3)">${g.key==='o'?`On-the-floor observation for ${nb} Belt. You get a PIN to give your observer.`:`For ${nb} Belt certification. Conducted by an SBD-certified assessor.`}</div>
         </div>`).join('')}
@@ -8111,7 +8145,9 @@ function renderSStudy() {
       const otherMode = ps.mode === 'knowledge' ? 'simulation' : 'knowledge';
       const scores = getPracticeScores(s.id, ps.belt) || {};
       const otherScore = scores[otherMode] || 0;
-      const bothPassed = pct >= 80 && otherScore >= 80;
+      const kScore = ps.mode === 'knowledge' ? pct : (scores.knowledge || 0);
+      const sScore = ps.mode === 'simulation' ? pct : (scores.simulation || 0);
+      const bothPassed = kScore >= 80 && sScore >= 80;
       const nxtBelt = nextBelt(ps.belt);
       el.innerHTML = `
         <div style="max-width:620px;margin:0 auto">
@@ -8983,7 +9019,7 @@ function renderHStaff(){
         <td class="tc-dim" style="font-size:11.5px;white-space:nowrap">${renderRoleDropdown(s)}</td>
         <td style="white-space:nowrap">${beltBadge(s.belt)}</td>
         <td class="hide-sm" style="font-size:12px;color:var(--txt3)">${daysAtPhrase(s.since)}</td>
-        <td>${gateDots(s.cur)}</td>
+        <td>${currentGateDots(s)}</td>
         <td>${nb?gateDots(s.nxt):'<span style="font-size:10px;color:var(--txt3)">Max</span>'}</td>
         <td>${s.promo?'<span class="pill p-gold">Eligible</span>':[...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].some(t=>['active','testing'].includes(getTrackStatus(s,t)))?'<span class="pill p-warn">PS Active</span>':calcTotalPSStars(s)>0?'<span class="pill p-ok" style="font-size:9px">'+Array(calcTotalPSStars(s)).fill('★').join('')+'</span>':'<span style="font-size:10.5px;color:var(--txt3)">--</span>'}</td>
         ${facAdmin?`<td onclick="event.stopPropagation()" style="white-space:nowrap">
@@ -9209,8 +9245,8 @@ function renderHProfile(sid,context){
       </div>
     </div>
     <div class="g2 mb16">
-      <div class="card"><div class="card-hd"><div class="card-ttl">Current Belt Assessments</div><span style="font-size:11.5px;color:${curSt.p===3?'var(--ok)':'var(--warn)'}">${curSt.p}/3 passed</span></div>
-        <div class="card-body"><div class="gates">${gateCard('Competency','c',(s.cur||{}).c)}${gateCard('Simulation','s',(s.cur||{}).s)}${gateCard('Observation','o',(s.cur||{}).o)}</div><div style="font-size:11.5px;color:var(--txt3);line-height:1.5">All three assessments required to certify current belt. Marked by SBD-certified assessors only.</div></div>
+      <div class="card"><div class="card-hd"><div class="card-ttl">Current Belt Assessments</div><span style="font-size:11.5px;color:${isWhiteBaseline(s)?'var(--txt3)':curSt.p===3?'var(--ok)':'var(--warn)'}">${currentGateCountLabel(s)}</span></div>
+        <div class="card-body">${currentGateCards(s)}</div>
       </div>
       <div class="card"><div class="card-hd"><div class="card-ttl">Advancing to ${nb||'(Max Belt)'}</div>${nb?`<span style="font-size:11.5px;color:${nxtSt.p===3?'var(--ok)':'var(--txt3)'}">${nxtSt.p}/3 gates</span>`:''}</div>
         <div class="card-body">${nb?`<div class="gates">${gateCard('Competency','c',(s.nxt||{}).c)}${gateCard('Simulation','s',(s.nxt||{}).s)}${gateCard('Observation','o',(s.nxt||{}).o)}</div><div class="prog mt8 mb8" style="height:8px"><div class="prog-fill" style="width:${pctNxt}%;background:var(--gold)"></div></div><div style="font-size:11.5px;color:${nxtSt.rem===0?'var(--ok)':nxtSt.rem===1?'var(--warn)':'var(--txt3)'}"><strong>${nxtSt.p} of 3</strong> advancement gates cleared &bull; ${nxtSt.rem} remaining${nxtSt.rem===0?': Ready for belt review':''}</div>`:'<div class="tc-muted" style="font-size:12px;padding:20px 0;text-align:center">Black Belt is the highest level.</div>'}</div>
@@ -10945,7 +10981,7 @@ function renderHReports(){
           <td style="font-size:11.5px;color:var(--txt2)">${renderRoleDropdown(s)}</td>
           <td style="white-space:nowrap">${beltBadge(s.belt,s)}</td>
           <td style="font-size:11.5px;color:var(--txt3)">${daysAtLabel(s.since)}</td>
-          <td>${gateDots(s.cur)}</td>
+          <td>${currentGateDots(s)}</td>
           <td style="font-weight:700;color:var(--gold);font-size:12px">${calcPoints(s).toLocaleString()}</td>
           <td style="color:var(--gold)">${calcTotalPSStars(s)>0?Array(calcTotalPSStars(s)).fill('★').join(''):'--'}</td>
           <td>${(()=>{
@@ -11064,7 +11100,7 @@ function renderHAssessments(){
               return`<tr onclick="openHProfile('${s.id}')" style="cursor:pointer">
                 <td class="fw7" style="white-space:nowrap">${fullName(s)}</td>
                 <td style="white-space:nowrap">${beltBadge(s.belt)}</td>
-                <td>${gateDots(s.cur)}</td>
+                <td>${currentGateDots(s)}</td>
                 <td>${nb?gateDots(s.nxt):'<span style="font-size:10px;color:#64748b">Max</span>'}</td>
                 <td style="font-size:11.5px;font-weight:600;color:${winColor}">${winLabel}</td>
                 <td>${s.promo?'<span class="pill p-gold">Eligible</span>':'<span style="font-size:10.5px;color:#64748b">--</span>'}</td>
@@ -11119,7 +11155,7 @@ function renderHProgression(){
     const wb=win.status==='open'?`<span class="pill p-ok" style="font-size:9px">Open</span>`:`<span class="pill p-muted" style="font-size:9px">${win.status==='max'?'Max':'Closed'}</span>`;
     const proj=generateProjection(s);
     const pt=proj&&proj.nextBeltDate?`<span style="font-size:11px;color:var(--txt3)">${proj.nextBeltDate}</span>`:`<span style="color:var(--txt3);font-size:11px">--</span>`;
-    return `<tr onclick="openHStaffProfile('${s.id}')" style="cursor:pointer"><td><span style="font-weight:600">${fullName(s)}</span></td><td>${beltBadge(s.belt)}</td><td>${gc((s.cur||{}).c,(s.cur||{}).s,(s.cur||{}).o)}</td><td>${gc((s.nxt||{}).c,(s.nxt||{}).s,(s.nxt||{}).o)}</td><td>${wb}</td><td>${pt}</td><td>${s.promo?'<span class="pill p-gold" style="font-size:9px">Promo</span>':''}</td></tr>`;
+    return `<tr onclick="openHStaffProfile('${s.id}')" style="cursor:pointer"><td><span style="font-weight:600">${fullName(s)}</span></td><td>${beltBadge(s.belt)}</td><td>${currentGateDots(s)}</td><td>${gc((s.nxt||{}).c,(s.nxt||{}).s,(s.nxt||{}).o)}</td><td>${wb}</td><td>${pt}</td><td>${s.promo?'<span class="pill p-gold" style="font-size:9px">Promo</span>':''}</td></tr>`;
   }).join('');
   el.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><div style="font-size:17px;font-weight:800">${fac?fac.name:''} &bull; Staff Progression</div><div style="font-size:12px;color:var(--txt3);margin-top:2px">${staff.length} staff members &bull; C=Competency S=Simulation O=Observation</div></div><button class="btn btn-gold btn-sm" onclick="openAddStaffModal('${fid}')">${ICO.plus} Add Staff</button></div><div class="card"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Name</th><th>Belt</th><th>Current Gates</th><th>Next Belt</th><th>Window</th><th>Proj.</th><th>Flags</th></tr></thead><tbody>${rows||'<tr><td colspan="7" style="text-align:center;color:var(--txt3);padding:24px">No staff.</td></tr>'}</tbody></table></div></div>`;
   labelMobileTables(el);
@@ -11683,7 +11719,7 @@ function renderAAllStaff(){
             <td class="hide-sm tc-dim" style="font-size:11.5px">${renderRoleDropdown(s)}</td>
             <td style="white-space:nowrap">${beltBadge(s.belt)}</td>
             <td class="hide-sm" style="font-size:12px;color:var(--txt3)">${daysAtLabel(s.since)}</td>
-            <td>${gateDots(s.cur)}</td>
+            <td>${currentGateDots(s)}</td>
             <td>${nb?gateDots(s.nxt):'<span style="font-size:10px;color:var(--txt3)">Max</span>'}</td>
             <td style="font-weight:700;color:var(--gold);font-size:12px">${pts.toLocaleString()}</td>
             <td>${(()=>{
@@ -12286,7 +12322,7 @@ function renderFacStaff(el){
           <td class="tc-dim hide-sm" style="font-size:11.5px">${renderRoleDropdown(s)}</td>
           <td style="white-space:nowrap">${beltBadge(s.belt)}</td>
           <td class="hide-sm" style="font-size:12px;color:var(--txt3)">${daysAtLabel(s.since)}</td>
-          <td>${gateDots(s.cur)}</td>
+          <td>${currentGateDots(s)}</td>
           <td>${nb?gateDots(s.nxt):'<span style="font-size:10px;color:var(--txt3)">Max</span>'}</td>
           <td>${s.promo?'<span class="pill p-gold">Yes</span>':'<span style="font-size:10px;color:var(--txt3)">--</span>'}</td>
           <td onclick="event.stopPropagation()"><button class="btn btn-ghost btn-xs" onclick="openRecordModal('${s.id}')">${ICO.record}</button></td>
@@ -12389,7 +12425,7 @@ function renderFacReports(el){
           <td style="font-size:11.5px;color:var(--txt2)">${renderRoleDropdown(s)}</td>
           <td>${beltBadge(s.belt,s)}</td>
           <td style="font-size:11.5px;color:var(--txt3)">${daysAtLabel(s.since)}</td>
-          <td>${gateDots(s.cur)}</td>
+          <td>${currentGateDots(s)}</td>
           <td style="font-weight:700;color:var(--gold);font-size:12px">${calcPoints(s).toLocaleString()}</td>
           <td style="color:var(--gold)">${calcTotalPSStars(s)>0?Array(calcTotalPSStars(s)).fill('★').join(''):'--'}</td>
           <td>${(()=>{
@@ -14591,12 +14627,12 @@ function downloadFreeAgentReport(faId) {
     ])}
 
     ${pSection('Current Belt Gates')}
-    <table class="no-break"><thead><tr><th>Assessment</th><th>Result</th></tr></thead>
+    ${isWhiteBaseline(fa) ? `<div class="no-break" style="border:1px solid #d1d5db;border-radius:8px;padding:12px;color:#4b5563;font-size:12px"><strong style="color:#111827">White Belt baseline</strong><br>No current-belt gates are required for White. Next-belt gates track progression toward Yellow.</div>` : `<table class="no-break"><thead><tr><th>Assessment</th><th>Result</th></tr></thead>
     <tbody>${['Competency','Simulation','Observation'].map((a,i)=>{
       const key=['c','s','o'][i];
       const v=fa.cur&&fa.cur[key];
       return `<tr><td>${a}</td><td><span class="badge ${v==='pass'?'badge-green':v==='fail'?'badge-err':'badge-muted'}">${v?v.charAt(0).toUpperCase()+v.slice(1):'Not assessed'}</span></td></tr>`;
-    }).join('')}</tbody></table>
+    }).join('')}</tbody></table>`}
 
     ${gatesByBelt.length ? `${pSection('Assessment History by Belt')}
     <table class="no-break"><thead><tr><th>Belt</th><th>Taken</th><th>Passed</th><th>Failed</th><th>Pass Rate</th></tr></thead>
