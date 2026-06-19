@@ -6776,7 +6776,7 @@ function openApplyModal(sid){
       </div>
       <div style="font-size:13px;font-weight:600;margin-bottom:8px">Select the gate you want to apply for:</div>
       ${gatesNeeded.map(g=>`
-        <div style="padding:12px;background:var(--s2);border:1px solid var(--bdr2);border-radius:var(--rs);margin-bottom:8px;cursor:pointer;transition:.15s" onclick="${g.key==='o'?`requestObservation('${s.id}','${nb}')`:`submitApply(${sid},'${g.key}','${nb}')`}" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--bdr2)'">
+        <div style="padding:12px;background:var(--s2);border:1px solid var(--bdr2);border-radius:var(--rs);margin-bottom:8px;cursor:pointer;transition:.15s" onclick="${g.key==='o'?`requestObservation('${s.id}','${nb}')`:`submitApply('${s.id}','${g.key}','${nb}')`}" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--bdr2)'">
           <div style="font-weight:700;margin-bottom:3px">${g.label} Assessment</div>
           <div style="font-size:11.5px;color:var(--txt3)">${g.key==='o'?`On-the-floor observation for ${nb} Belt. You get a PIN to give your observer.`:`For ${nb} Belt certification. Conducted by an SBD-certified assessor.`}</div>
         </div>`).join('')}
