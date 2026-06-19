@@ -66,7 +66,7 @@ function getWindowStatus(staff){
   const cfg   = BELT_WINDOWS[belt];
   if(!cfg)     return {status:'open', label:'Window Open', pct:100};
   const cur = staff.cur || {};
-  const allPass = cur.c==='pass' && cur.s==='pass' && cur.o==='pass';
+  const allPass = belt === 'White' || (cur.c==='pass' && cur.s==='pass' && cur.o==='pass');
   if(!allPass) return {status:'locked', label:'Complete current belt assessments first', pct:0};
   // Calculate from belt earn date
   const earnDate = new Date(staff.since);
@@ -244,4 +244,3 @@ function facTypeLabel(fac) {
   if(!fac||!fac.type) return 'Community';
   return (FACILITY_TYPES[fac.type]||FACILITY_TYPES.community).label;
 }
-
