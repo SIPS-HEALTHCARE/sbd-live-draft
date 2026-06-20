@@ -7994,6 +7994,16 @@ function requestGateAssessment(belt, type) {
     toast('Complete both practice tests at 80% or above before requesting.', 'err');
     return;
   }
+  // Observation is its own on-the-floor gate: it must run through the observation
+  // module (candidate PIN + two-PIN observer handshake + checklist), NOT the plain
+  // Approve/Deny assessment-request queue. Competency and Simulation stay on the
+  // queue path below. Without this, an Observation request landed in "Staff
+  // Assessment Requests" with Approve/Deny and never created an observation record.
+  if (type === 'Observation') {
+    requestObservation(s.id, belt);
+    if (typeof logActivity === 'function') logActivity('assessment_request', { belt, type });
+    return;
+  }
   const scores = getPracticeScores(s.id, s.belt) || {};
   const existing = DB.queue.find(q => q.sid === s.id && q.targetBelt === belt && q.type === type && q.status === 'pending');
   if (existing) {
