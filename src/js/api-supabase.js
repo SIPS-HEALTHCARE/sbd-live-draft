@@ -60,7 +60,21 @@ async function sbFetch(path, opts={}, retryCount=0){
 
 // ── Auth layer ──
 const SB_AUTH = {
-  async refreshSession() {
+  _refreshInFlight: null,
+  // Single-flight refresh. A burst of parallel sbFetch calls (the placement submit
+  // fires every simulation AI score at once via Promise.allSettled) must NOT each
+  // POST the refresh token on their own. Supabase has refresh-token rotation with
+  // reuse detection enabled, so racing/replayed refreshes get flagged and the whole
+  // session is revoked -- a spurious hard logout, classically right at submit, which
+  // also drops the submission. Collapsing all concurrent callers onto one in-flight
+  // refresh promise removes the race. Return contract is unchanged (true/false).
+  refreshSession() {
+    if (this._refreshInFlight) return this._refreshInFlight;
+    this._refreshInFlight = this._doRefreshSession()
+      .finally(() => { this._refreshInFlight = null; });
+    return this._refreshInFlight;
+  },
+  async _doRefreshSession() {
     if (!SB_SESSION || !SB_SESSION.refresh_token) return false;
     try {
       const res = await fetch(`${SB_API_URL}/auth/v1/token?grant_type=refresh_token`, {
@@ -70,7 +84,7 @@ const SB_AUTH = {
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error_description || data.error);
-      
+
       SB_SESSION = data;
       localStorage.setItem('sbd_session', JSON.stringify({
         access_token: data.access_token,
