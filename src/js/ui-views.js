@@ -1306,6 +1306,29 @@ let ASSESSMENT_SESSION = {
   type: null  // 'placement' | 'belt'
 };
 
+// ── Assessment keep-alive ───────────────────────────────────────────────────
+// A placement (90 min) or belt (120 min) assessment can outlast the access
+// token, and answers only save locally between the every-5th-question autosave,
+// so the token can drift toward expiry with no activity to refresh it. If it
+// lapses, the final submit's burst of parallel calls all try to refresh at once.
+// The single-flight guard in SB_AUTH.refreshSession() already prevents that race
+// from revoking the session; this keep-alive is the belt-and-suspenders layer:
+// while an assessment is open we proactively refresh every 20 minutes so the
+// token never reaches the danger zone. Self-stops once the session is cleared.
+let _assessmentKeepAlive = null;
+function startAssessmentKeepAlive(){
+  if(_assessmentKeepAlive) return;
+  _assessmentKeepAlive = setInterval(() => {
+    if(!IS_LIVE || !ASSESSMENT_SESSION.token){ stopAssessmentKeepAlive(); return; }
+    if(typeof SB_AUTH !== 'undefined' && typeof SB_SESSION !== 'undefined' && SB_SESSION && SB_SESSION.refresh_token){
+      SB_AUTH.refreshSession(); // single-flight; safe to call concurrently
+    }
+  }, 20 * 60 * 1000);
+}
+function stopAssessmentKeepAlive(){
+  if(_assessmentKeepAlive){ clearInterval(_assessmentKeepAlive); _assessmentKeepAlive = null; }
+}
+
 function getPAQuestions(){
   if(PA.shuffledQuestions && PA.shuffledQuestions.length) return PA.shuffledQuestions;
   PA.shuffledQuestions = shuffleArray(PLACEMENT_QUESTIONS);
@@ -1571,6 +1594,7 @@ async function submitPinGate(staffId, assessmentType){
       expiresAt: res.expires_at,
       type: assessmentType
     };
+    startAssessmentKeepAlive(); // keep the auth token fresh for the length of the assessment
     // Resume support: if the server carried over saved progress for this re-PIN
     // (wifi drop / expiry / new device), stash it so the assessment restores the
     // candidate's answers instead of starting blank.
@@ -1669,6 +1693,7 @@ function showPlacementAssessment(s){
         _enterPlacementAssessment(s);
       } else {
         // Session expired — clear and re-gate
+        stopAssessmentKeepAlive();
         ASSESSMENT_SESSION = {token:null,sessionId:null,assessorName:null,facilityId:null,expiresAt:null,type:null};
         showAssessorPinGate(s.id, 'placement', function(){
           // Try to restore progress from server
@@ -2058,6 +2083,7 @@ async function submitPlacementAssessment(){
   // Clear the in-memory session only on a clean submit (mirrors prior behavior). On a
   // queued/pending sync we keep it so the durable flush can still complete the session.
   if(!pendingSync && ASSESSMENT_SESSION.token){
+    stopAssessmentKeepAlive();
     ASSESSMENT_SESSION = {token:null,sessionId:null,assessorName:null,facilityId:null,expiresAt:null,type:null};
   }
 

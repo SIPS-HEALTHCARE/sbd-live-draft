@@ -228,6 +228,7 @@ async function submitBeltTest(){
     await SB.markBeltTestSubmitted(BT.testId).catch(()=>{});
     if(ASSESSMENT_SESSION.token){
       SB.completeAssessmentSession(ASSESSMENT_SESSION.token).catch(()=>{});
+      if(typeof stopAssessmentKeepAlive === 'function') stopAssessmentKeepAlive();
       ASSESSMENT_SESSION = { token:null, sessionId:null, assessorName:null, facilityId:null, expiresAt:null, type:null };
     }
     // Keep a local mirror so the entry card hides immediately (PENDING_REVIEW).
