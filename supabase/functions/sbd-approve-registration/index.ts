@@ -201,8 +201,9 @@ serve(async (req) => {
         if (staffError) {
             // Non-fatal, as the original behavior: the auth user + profile are the account,
             // and a missing staff row is recoverable. We do not roll back a good account over it.
+            // (Throwing here would hit the catch and delete the just-created auth user +
+            // facility — the opposite of the intended narrow-to-orphan-path rollback.)
             console.error("Staff Insert Error:", staffError);
-            throw new Error('Failed to create staff record: ' + staffError.message);
         }
 
         // 3. Update registration status
