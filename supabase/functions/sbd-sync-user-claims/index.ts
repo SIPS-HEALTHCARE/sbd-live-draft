@@ -203,33 +203,41 @@ serve(async (req) => {
             createdProfileId = finalUserId;
         }
 
-        // If Staff Member, ensure they exist in 'staff' table
+        // If Staff Member, ensure they exist in 'staff' table.
+        // The staff record is keyed by auth_uid (matches sbd-approve-registration,
+        // which sets staff.id = the auth user id). On UPDATES the frontend sends
+        // sbd_portal_users.id as finalUserId, so we MUST key off the resolved authUid
+        // here. Keying off finalUserId found nothing and inserted a DUPLICATE blank
+        // "Staff Member" row every time an existing user was edited.
         if (role === 'staff_member') {
             const nameParts = (name || '').split(' ');
             const first = nameParts[0] || 'Unknown';
             const last = nameParts.slice(1).join(' ') || '-';
-            
-            const resolvedFid = fid || facilityId || null;
 
-            const { data: existingStaff } = await supabaseAdmin.from('staff').select('id').eq('id', finalUserId).maybeSingle();
+            const resolvedFid = fid || facilityId || null;
+            const staffKey = authUid || finalUserId;
+
+            const { data: existingStaff } = await supabaseAdmin.from('staff').select('id').eq('id', staffKey).maybeSingle();
 
             if (existingStaff) {
                 // Existing staff: targeted UPDATE of editable fields only. Do NOT use upsert here —
                 // an upsert re-inserts the row without `belt`, which trips the NOT NULL constraint on
                 // `belt` (the "Failed to sync staff record" error when changing a user's facility).
                 // Updating only these columns also preserves belt/oip/history/ps_tracks/gate data.
+                // Only write `role` when an explicit title was provided, so an edit can never
+                // downgrade a real position (e.g. Shift Supervisor) back to "Staff Member".
                 // Only write `fid` when a facility was actually provided, so we never null it out.
                 const staffUpdate: any = {
                     first: first,
-                    last: last,
-                    role: title || 'Staff Member'
+                    last: last
                 };
+                if (title) staffUpdate.role = title;
                 if (resolvedFid) staffUpdate.fid = resolvedFid;
 
                 const { error: staffUpdateErr } = await supabaseAdmin
                     .from('staff')
                     .update(staffUpdate)
-                    .eq('id', finalUserId);
+                    .eq('id', staffKey);
 
                 if (staffUpdateErr) {
                     console.error("staff update error:", staffUpdateErr);
@@ -238,7 +246,7 @@ serve(async (req) => {
             } else {
                 // New staff: insert with a default belt so the NOT NULL constraint is satisfied.
                 const staffInsert: any = {
-                    id: finalUserId,
+                    id: staffKey,
                     first: first,
                     last: last,
                     fid: resolvedFid,
