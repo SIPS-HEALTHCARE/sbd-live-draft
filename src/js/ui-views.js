@@ -75,6 +75,14 @@ async function doLogin(preAuthSession=null){
 
     if(!userProfile) throw new Error('Your user profile could not be found. Please contact support.');
 
+    // Deactivated accounts cannot enter the portal. The server-side ban is the
+    // real lock (their token won't refresh); this guard gives a clear message
+    // and signs the stale session out immediately rather than half-loading.
+    if(userProfile.active === false){
+      try { await SB_AUTH.signOut(); } catch(_){}
+      throw new Error('This account has been deactivated. Please contact your administrator.');
+    }
+
     if(btn){ btn.innerHTML = '<span class="spinner" style="border-width:2px;width:14px;height:14px;margin-right:6px;display:inline-block"></span> Signing in...'; }
     
     // Map user profile BEFORE hydration so ST.user is set when initAppData's
@@ -15490,7 +15498,7 @@ function renderAAdminUsers(){
           <tr>
             <td><div style="display:flex;align-items:center;gap:8px">
               <div style="width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#c49a20,#7a5c0d);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#000;flex-shrink:0">${u.initials}</div>
-              <div><div class="fw7">${u.name}</div><div style="font-size:10px;color:#64748b">${u.title}</div></div>
+              <div><div class="fw7">${u.name}${acctStatusPill(u)}</div><div style="font-size:10px;color:#64748b">${u.title}</div></div>
             </div></td>
             <td>
               <div style="font-size:11.5px;color:#64748b;margin-bottom:2px">${u.email}</div>
@@ -15521,7 +15529,7 @@ function renderAAdminUsers(){
           <tr>
             <td><div style="display:flex;align-items:center;gap:8px">
               <div class="uav" style="width:30px;height:30px;font-size:10px;background:rgba(196,154,32,.15);color:#c49a20">${u.initials}</div>
-              <div><div class="fw7">${u.name}</div><div style="font-size:10.5px;color:#64748b">${u.title||''}</div></div>
+              <div><div class="fw7">${u.name}${acctStatusPill(u)}</div><div style="font-size:10.5px;color:#64748b">${u.title||''}</div></div>
             </div></td>
             <td class="hide-sm" style="font-size:11.5px;color:#64748b">${u.email}</td>
             <td>${u.role==='master_admin'?'<span class="pill p-gold">Master Admin</span>':'<span class="pill p-blue">Assessor</span>'}</td>
@@ -15530,7 +15538,7 @@ function renderAAdminUsers(){
             <td style="white-space:nowrap">${u.id!==ST.user.id?`
               <button class="btn btn-ghost btn-xs" style="margin-right:4px" onclick="openAssignFacilitiesModal('${u.id}')">${ICO.edit} Assign</button>
               <button class="btn btn-ghost btn-xs" style="margin-right:4px" onclick="openEditUserModal('${u.id}')">${ICO.edit} Edit</button>
-              <button class="btn btn-err btn-xs" onclick="confirmRemoveUser('${u.id}')">${ICO.x}</button>
+              ${acctToggleBtn(u)}<button class="btn btn-err btn-xs" onclick="confirmRemoveUser('${u.id}')">${ICO.x}</button>
             `:'<span style="font-size:11px;color:#64748b">You</span>'}</td>
           </tr>`).join('') : `<tr><td colspan="5" style="text-align:center;padding:20px;color:#64748b;font-size:12px">No SIPS Admin accounts added yet. Click Add SIPS Admin to create one.</td></tr>`}
         </tbody>
@@ -15551,14 +15559,14 @@ function renderAAdminUsers(){
           <tr>
             <td><div style="display:flex;align-items:center;gap:8px">
               <div class="uav" style="width:30px;height:30px;font-size:10px;background:rgba(96,165,250,.15);color:#60a5fa">${u.initials}</div>
-              <div><div class="fw7">${u.name}</div></div>
+              <div><div class="fw7">${u.name}${acctStatusPill(u)}</div></div>
             </div></td>
             <td class="hide-sm" style="font-size:11.5px;color:#64748b">${u.email}</td>
             <td style="font-size:12px">${sys?sys.name:'<span style="color:#f59e0b">No system assigned</span>'}</td>
             <td style="font-size:11.5px;color:#94a3b8">${u.title||'--'}</td>
             <td style="white-space:nowrap">
               <button class="btn btn-ghost btn-xs" style="margin-right:4px" onclick="openEditUserModal('${u.id}')">${ICO.edit} Edit</button>
-              <button class="btn btn-err btn-xs" onclick="confirmRemoveUser('${u.id}')">${ICO.x}</button>
+              ${acctToggleBtn(u)}<button class="btn btn-err btn-xs" onclick="confirmRemoveUser('${u.id}')">${ICO.x}</button>
             </td>
           </tr>`;}).join(''):`<tr><td colspan="5" style="text-align:center;padding:20px;color:#64748b;font-size:12px">No system admins yet. Add one to give a hospital system their own multi-facility view.</td></tr>`}
         </tbody>
@@ -15579,14 +15587,14 @@ function renderAAdminUsers(){
           <tr>
             <td><div style="display:flex;align-items:center;gap:8px">
               <div class="uav" style="width:30px;height:30px;font-size:10px;background:rgba(96,165,250,.12);color:#60a5fa">${u.initials}</div>
-              <div><div class="fw7">${u.name}</div></div>
+              <div><div class="fw7">${u.name}${acctStatusPill(u)}</div></div>
             </div></td>
             <td class="hide-sm" style="font-size:11.5px;color:#64748b">${u.email}</td>
             <td style="font-size:12px">${fac?fac.name:'<span style="color:#f59e0b">No facility</span>'}</td>
             <td style="font-size:11.5px;color:#94a3b8">${u.title||'Facility Admin'}</td>
             <td style="white-space:nowrap">
               <button class="btn btn-ghost btn-xs" style="margin-right:4px" onclick="openEditUserModal('${u.id}')">${ICO.edit} Edit</button>
-              <button class="btn btn-err btn-xs" onclick="confirmRemoveUser('${u.id}')">${ICO.x}</button>
+              ${acctToggleBtn(u)}<button class="btn btn-err btn-xs" onclick="confirmRemoveUser('${u.id}')">${ICO.x}</button>
             </td>
           </tr>`;}).join(''):`<tr><td colspan="5" style="text-align:center;padding:20px;color:#64748b;font-size:12px">No facility admin accounts yet. Add one to give a facility manager full administrative access to their portal.</td></tr>`}
         </tbody>
@@ -15607,14 +15615,14 @@ function renderAAdminUsers(){
           <tr>
             <td><div style="display:flex;align-items:center;gap:8px">
               <div class="uav" style="width:30px;height:30px;font-size:10px;background:rgba(34,197,94,.15);color:#22c55e">${u.initials}</div>
-              <div><div class="fw7">${u.name}</div></div>
+              <div><div class="fw7">${u.name}${acctStatusPill(u)}</div></div>
             </div></td>
             <td class="hide-sm" style="font-size:11.5px;color:#64748b">${u.email}</td>
             <td style="font-size:12px">${fac?fac.name:'<span style="color:#f59e0b">No facility</span>'}</td>
             <td style="font-size:11.5px;color:#94a3b8">${u.title||'Dept. Manager'}</td>
             <td style="white-space:nowrap">
               <button class="btn btn-ghost btn-xs" style="margin-right:4px" onclick="openEditUserModal('${u.id}')">${ICO.edit} Edit</button>
-              <button class="btn btn-err btn-xs" onclick="confirmRemoveUser('${u.id}')">${ICO.x}</button>
+              ${acctToggleBtn(u)}<button class="btn btn-err btn-xs" onclick="confirmRemoveUser('${u.id}')">${ICO.x}</button>
             </td>
           </tr>`;}).join(''):`<tr><td colspan="5" style="text-align:center;padding:20px;color:#64748b;font-size:12px">No hospital manager accounts. Add one to give a facility their customer portal login.</td></tr>`}
         </tbody>
@@ -15638,14 +15646,14 @@ function renderAAdminUsers(){
           <tr>
             <td><div style="display:flex;align-items:center;gap:8px">
               <div class="uav" style="width:30px;height:30px;font-size:10px;background:rgba(245,158,11,.15);color:#f59e0b">${u.initials}</div>
-              <div><div class="fw7">${u.name}</div></div>
+              <div><div class="fw7">${u.name}${acctStatusPill(u)}</div></div>
             </div></td>
             <td class="hide-sm" style="font-size:11.5px;color:#64748b">${u.email}</td>
             <td style="font-size:12px">${fac?fac.name:'<span style="color:#f59e0b">No facility</span>'}</td>
             <td style="font-size:12px">${s?`${fullName(s)} \u2014 ${beltBadge(s.belt)}`:'<span style="color:#f59e0b">No record linked</span>'}</td>
             <td style="white-space:nowrap">
               <button class="btn btn-ghost btn-xs" style="margin-right:4px" onclick="openEditUserModal('${u.id}')">${ICO.edit} Edit</button>
-              <button class="btn btn-err btn-xs" onclick="confirmRemoveUser('${u.id}')">${ICO.x}</button>
+              ${acctToggleBtn(u)}<button class="btn btn-err btn-xs" onclick="confirmRemoveUser('${u.id}')">${ICO.x}</button>
             </td>
           </tr>`;}).join(''):`<tr><td colspan="5" style="text-align:center;padding:20px;color:#64748b;font-size:12px">No individual staff logins yet. Add staff member accounts so they can access their personal belt portal.</td></tr>`}
         </tbody>
@@ -15668,6 +15676,80 @@ function renderAAdminUsers(){
       </div>
       ${tableHTML}
     </div>`;
+}
+
+// ── Account deactivation (master admin only) ────────────────────────────────
+// Deactivate = the person can no longer log in, but their record and all their
+// data stay in the system. Reactivate brings the login back. Protected SIPS
+// master accounts and your own account are never deactivatable.
+function acctToggleBtn(u){
+  if(!u || u.protected) return '';
+  if(ST.user && u.id===ST.user.id) return '';
+  return u.active===false
+    ? `<button class="btn btn-ok btn-xs" style="margin-right:4px" onclick="confirmSetAccountActive('${u.id}',true)">${ICO.check} Reactivate</button>`
+    : `<button class="btn btn-xs" style="margin-right:4px;border:1px solid #f59e0b;color:#f59e0b;background:transparent" onclick="confirmSetAccountActive('${u.id}',false)">Deactivate</button>`;
+}
+// Small status pill shown next to a deactivated account's name.
+function acctStatusPill(u){
+  return (u && u.active===false)
+    ? ` <span class="pill p-err" style="font-size:9.5px;padding:1px 6px">Deactivated</span>`
+    : '';
+}
+
+function confirmSetAccountActive(uid, makeActive){
+  const u=DB.users.find(x=>x.id===uid);
+  if(!u) return;
+  if(u.protected){ toast('This is a protected system account and cannot be deactivated.','err'); return; }
+  if(ST.user && u.id===ST.user.id){ toast('You cannot deactivate your own account.','err'); return; }
+  const roleLabel={master_admin:'Master Admin',staff_admin:'Assessor',system_admin:'System Admin',hospital:'Hospital Manager',facility_admin:'Facility Admin',staff_member:'Staff Member'}[u.role]||u.role;
+  if(makeActive){
+    openModal('Reactivate Account',`
+      <div class="modal-body">
+        <div style="text-align:center;padding:8px 0 16px">
+          <div style="width:48px;height:48px;border-radius:50%;background:var(--ok-bg);border:2px solid var(--ok-bd);display:flex;align-items:center;justify-content:center;margin:0 auto 14px">
+            <svg width="20" height="20" viewBox="0 0 18 18" fill="none"><path d="M4 9.5l3 3 7-7" stroke="var(--ok)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <div style="font-size:15px;font-weight:700;margin-bottom:6px">Reactivate ${u.name}?</div>
+          <div style="font-size:12.5px;color:var(--txt2);line-height:1.6">This will restore login for the <strong>${roleLabel}</strong> account <strong>${u.email}</strong>. They will be able to sign in again right away.</div>
+        </div>
+      </div>
+      <div class="modal-ft"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-ok" onclick="executeSetAccountActive('${uid}',true)">${ICO.check} Reactivate</button></div>`,'modal-sm');
+  } else {
+    openModal('Deactivate Account',`
+      <div class="modal-body">
+        <div style="text-align:center;padding:8px 0 16px">
+          <div style="width:48px;height:48px;border-radius:50%;background:rgba(245,158,11,.12);border:2px solid rgba(245,158,11,.4);display:flex;align-items:center;justify-content:center;margin:0 auto 14px">
+            <svg width="20" height="20" viewBox="0 0 18 18" fill="none"><path d="M6 6l6 6M12 6l-6 6" stroke="#f59e0b" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </div>
+          <div style="font-size:15px;font-weight:700;margin-bottom:6px">Deactivate ${u.name}?</div>
+          <div style="font-size:12.5px;color:var(--txt2);line-height:1.6">The <strong>${roleLabel}</strong> account <strong>${u.email}</strong> will no longer be able to log in. <strong style="color:var(--txt)">All of their records stay in the system</strong> — nothing is deleted. You can reactivate this account at any time.</div>
+        </div>
+      </div>
+      <div class="modal-ft"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn" style="background:#f59e0b;color:#0b0f17" onclick="executeSetAccountActive('${uid}',false)">Deactivate</button></div>`,'modal-sm');
+  }
+}
+
+async function executeSetAccountActive(uid, makeActive){
+  const u=DB.users.find(x=>x.id===uid);
+  if(!u) return;
+  if(u.protected){ toast('This is a protected system account and cannot be deactivated.','err'); return; }
+  if(!u.authUid){ toast('This account has no login to lock — there is nothing to deactivate.','err'); closeModal(); return; }
+  const prev=u.active;
+  try{
+    if(IS_LIVE){
+      toast(`${makeActive?'Reactivating':'Deactivating'} ${u.name}...`,'info');
+      const res=await SB.setAccountActive(u.authUid, makeActive, null);
+      if(res && res.error) throw new Error(res.error);
+      if(res && !res.success) throw new Error('Unexpected response from the server.');
+    }
+    u.active=makeActive;
+    closeModal();
+    toast(`${u.name}'s account has been ${makeActive?'reactivated':'deactivated'}.`, makeActive?'ok':'warn');
+    renderAAdminUsers();
+  }catch(e){
+    u.active=prev;
+    toast('Account update failed: '+e.message,'err');
+  }
 }
 
 function confirmRemoveUser(uid){
