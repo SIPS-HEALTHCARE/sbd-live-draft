@@ -2569,6 +2569,7 @@ function applyReviewFilter(pool){
 // single-column PATCH — never wipes oip/history/ps_tracks).
 
 let ovsCapture = null;      // { obsId, unlocked, observerStaffId, observerName }
+let obsConsoleTab = 'queue';// Observations page tab: 'queue' | 'observers'
 let ovsArmed = null;        // { action, id } two-tap confirmation (sandbox-safe; no native confirm())
 
 // The active belt instrument for a given belt label (system of record; read-only).
@@ -2733,7 +2734,30 @@ function renderAObservations(){
 
   const requested = pool.filter(o => o.status === 'requested').length;
   const inProg    = pool.filter(o => o.status === 'in_progress').length;
-  const observers = (DB.staff || []).filter(s => s.observer).length;
+
+  // Authorized observers (people with observer access). Respect the same
+  // facility scoping the queue uses for staff_admins.
+  let observerList = (DB.staff || []).filter(s => s.observer);
+  if(u && u.role === 'staff_admin' && u.assignedFids && u.assignedFids.length)
+    observerList = observerList.filter(s => u.assignedFids.includes(s.fid));
+  const observers = observerList.length;
+
+  const observerRows = observerList
+    .slice()
+    .sort((a,b) => fullName(a).localeCompare(fullName(b)))
+    .map(s => {
+      const fac = getFac(s.fid);
+      const conducted = (DB.observations || []).filter(o => String(o.observerId) === String(s.id)).length;
+      const pinPill = s.observationPin
+        ? '<span class="pill" style="color:#0ea5e9;background:#0ea5e91a;border:1px solid #0ea5e955">PIN set</span>'
+        : '<span class="pill" style="color:#f59e0b;background:#f59e0b1a;border:1px solid #f59e0b55">No PIN yet</span>';
+      return `<tr style="border-top:1px solid var(--bdr)">
+        <td style="padding:10px 8px"><div style="font-weight:700">${fullName(s)}</div><div style="font-size:11px;color:var(--txt3)">${fac?fac.name:'—'} &middot; ${s.role||''}</div></td>
+        <td style="padding:10px 8px">${beltBadge(s.belt)}</td>
+        <td style="padding:10px 8px">${pinPill}</td>
+        <td style="padding:10px 8px;font-size:12px;color:var(--txt2);text-align:right">${conducted} conducted</td>
+      </tr>`;
+    }).join('');
 
   const rows = pool.map(o => {
     const s = getStaff(o.staffId); const fac = getFac(o.fid);
@@ -2762,7 +2786,25 @@ function renderAObservations(){
         <div class="stat-card"><div class="stat-accent" style="background:#0ea5e9"></div><div class="stat-lbl">In Progress</div><div class="stat-val">${inProg}</div><div class="stat-sub">being scored</div></div>
         <div class="stat-card"><div class="stat-accent" style="background:var(--gold)"></div><div class="stat-lbl">Authorized Observers</div><div class="stat-val">${observers}</div><div class="stat-sub">can conduct</div></div>
       </div>
-      ${pool.length ? `
+      <div class="tab-bar" style="margin-bottom:14px">
+        <div class="tab ${obsConsoleTab==='queue'?'on':''}" onclick="obsConsoleTab='queue';renderAObservations()">Queue <span class="pill p-muted" style="font-size:10px;padding:1px 7px">${pool.length}</span></div>
+        <div class="tab ${obsConsoleTab==='observers'?'on':''}" onclick="obsConsoleTab='observers';renderAObservations()">Active Observers <span class="pill p-muted" style="font-size:10px;padding:1px 7px">${observers}</span></div>
+      </div>
+      ${obsConsoleTab==='observers' ? (observerList.length ? `
+      <div class="card"><div class="card-body" style="padding:4px 8px">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead><tr style="text-align:left;color:var(--txt3);font-size:11px;text-transform:uppercase;letter-spacing:.4px">
+            <th style="padding:8px">Observer</th><th style="padding:8px">Belt</th><th style="padding:8px">PIN</th><th style="padding:8px;text-align:right">Observations</th>
+          </tr></thead>
+          <tbody>${observerRows}</tbody>
+        </table>
+      </div></div>
+      <p style="color:var(--txt3);font-size:11.5px;margin:10px 2px 0">Observer access is granted from a staff member's profile by a master admin.</p>` : `
+      <div style="border:1px dashed var(--bdr);border-radius:12px;padding:32px;text-align:center;background:var(--s1)">
+        <div style="font-size:28px;margin-bottom:10px">&#128065;</div>
+        <div style="font-weight:700;margin-bottom:6px">No active observers yet</div>
+        <div style="color:var(--txt3);font-size:12.5px;line-height:1.6;max-width:460px;margin:0 auto">Grant observer access from a staff member's profile (master admin only). They will appear here once enabled.</div>
+      </div>`) : (pool.length ? `
       <div class="card"><div class="card-body" style="padding:4px 8px">
         <table style="width:100%;border-collapse:collapse;font-size:13px">
           <thead><tr style="text-align:left;color:var(--txt3);font-size:11px;text-transform:uppercase;letter-spacing:.4px">
@@ -2775,7 +2817,7 @@ function renderAObservations(){
         <div style="font-size:28px;margin-bottom:10px">&#128065;</div>
         <div style="font-weight:700;margin-bottom:6px">No observations waiting</div>
         <div style="color:var(--txt3);font-size:12.5px;line-height:1.6;max-width:460px;margin:0 auto">When a candidate requests an observation from their portal, it appears here for an authorized observer to conduct.</div>
-      </div>`}
+      </div>`)}
     </div>`;
 }
 
