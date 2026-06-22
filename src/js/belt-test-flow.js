@@ -217,6 +217,17 @@ async function submitBeltTest(){
   catch(e){ simScores = {}; simItems.forEach(q => { simScores[q.id] = scoreByKeywords(BT.answers[q.id]||'', q.rubric||[]); }); }
 
   const result = BeltTestEngine.scoreBeltTest(BT.test, mcqAnswers, simScores);
+  // Enrich sim responses with the scenario text + the candidate's written answer so the
+  // assessor report can show them. The engine only carries {question_id, level, score};
+  // the scenario lives on BT.items and the answer in BT.answers — neither is otherwise
+  // persisted (BT.answers is device-local localStorage). sim_responses is JSONB, so these
+  // extra fields ride along with no migration and survive mapBeltTestResultFromBackend.
+  if(result && Array.isArray(result.sim_responses)){
+    result.sim_responses = result.sim_responses.map(function(sr){
+      var item = (BT.items||[]).find(function(it){ return it.id === sr.question_id; }) || {};
+      return Object.assign({}, sr, { question: item.q || '', answer: BT.answers[sr.question_id] || '' });
+    });
+  }
   const s = getStaff(BT.staffId);
   const submittedAt = new Date().toISOString();
 

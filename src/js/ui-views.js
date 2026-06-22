@@ -12757,7 +12757,7 @@ function adaptBeltResultToReview(r){
   else if (outcome === 'KNOWLEDGE FOUNDATION') timeframe = '30 days recommended';
   const levelScores = {};
   Object.keys(r.kLevelScores || {}).forEach(k => { const n = k.replace('L', ''); if (r.kLevelScores[k] != null) levelScores[n] = Math.round(r.kLevelScores[k]); });
-  const responses = (r.simResponses || []).map(sr => ({ qId: sr.question_id, level: sr.level, type: 'simulation', question: '', answer: '', aiScore: sr.score }));
+  const responses = (r.simResponses || []).map(sr => ({ qId: sr.question_id, level: sr.level, type: 'simulation', question: sr.question || '', answer: sr.answer || '', aiScore: sr.score }));
   const _precomputed = {
     outcome, classification, tone, conditions, timeframe,
     blended: r.blendedScore, knowledgeOverall: r.kOverall, simOverall: r.simOverall,
