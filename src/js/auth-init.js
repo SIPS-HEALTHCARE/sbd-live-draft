@@ -568,7 +568,16 @@ function onboardingLaunchTourFromReminder(){
 function tourStart(fromStep){
   const role = getTourRole();
   const prefix = getPortalPrefix();
-  OB.steps = (TOUR_STEPS[role] || []).slice();
+  // Drop steps whose nav target is missing or hidden (several nav items are
+  // conditionally shown, e.g. Observations is display:none until an admin
+  // portal reveals it). Spotlighting an invisible element would land the
+  // highlight at 0,0; filtering keeps the tour honest for the current user.
+  const portalEl = document.getElementById(prefix + '-portal');
+  OB.steps = (TOUR_STEPS[role] || []).filter(st => {
+    if(!st.target || !st.target.includes('data-view')) return true;
+    const el = portalEl ? portalEl.querySelector(st.target) : null;
+    return !!(el && el.offsetParent !== null);
+  });
   OB.portalPrefix = prefix;
   OB.step = fromStep || 0;
   OB.tourRunning = true;
@@ -734,10 +743,19 @@ function showPostTourPrompt(){
   html += '<div class="posttour-icon"><svg viewBox="0 0 24 24" fill="none" width="28" height="28"><path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5"/></svg></div>';
   html += '<div class="posttour-title">Tour Complete!</div>';
 
+  // How a candidate gets and uses their observation PIN (mirrors the obx-due
+  // pin card from the draft). Bound to production's real per-observation flow:
+  // request -> 4-digit candidate_pin -> two-PIN handshake with the observer.
+  const pinNote = '<div style="text-align:left;background:#0b1020;border-left:3px solid #c49a20;border-radius:0 8px 8px 0;padding:10px 12px;margin:2px 0 14px">'
+    + '<div style="font-size:12px;font-weight:700;color:#c49a20;margin-bottom:5px">Your observation PIN</div>'
+    + '<div style="font-size:11.5px;color:#cbd5e1;line-height:1.55">Once you pass Knowledge and Simulation for your next belt, request an observation from your <strong style="color:#f1f5f9">Belt Progress</strong> page. You\'ll get a 4-digit PIN — give it to your observer on the floor, and they enter it with their own PIN to start scoring. Your PIN also shows on your dashboard under <strong style="color:#f1f5f9">My Belt Profile</strong> while the observation is open.</div>'
+    + '</div>';
+
   if(role === 'staff_member'){
     const ob = getOnboardingState(ST.user?.authUid || ST.user?.id);
     if(ob && !ob.profileAssessmentPrompted){
       html += '<div class="posttour-desc">Great work. Your next step is to complete your Profile Assessment. This helps your facility understand your strengths and place you on the right belt track.</div>';
+      html += pinNote;
       html += '<div class="posttour-actions">';
       html += '<button class="btn btn-gold" onclick="closeModal();postTourGoTo(\'s-oip\',\'My Profile\')">Complete My Profile</button>';
       html += '<button class="btn btn-ghost" onclick="closeModal();postTourGoTo(\'s-study\',\'Study &amp; Practice\')">Start Practicing</button>';
@@ -746,13 +764,23 @@ function showPostTourPrompt(){
       if(ST.user) setOnboardingState(ST.user.authUid || ST.user.id, { profileAssessmentPrompted:true });
     } else {
       html += '<div class="posttour-desc">You are all set. Explore the platform at your own pace. You can relaunch this tour anytime from the Platform Guide tab.</div>';
+      html += pinNote;
       html += '<div class="posttour-actions"><button class="btn btn-gold" onclick="closeModal()">Got It</button></div>';
     }
   } else {
     html += '<div class="posttour-desc">You are ready to go. Here are some good first steps to take in your portal.</div>';
+    // Observers run observations from the admin portal — explain the handshake
+    // and offer a jump straight into the Observations queue.
+    if(role === 'admin'){
+      html += '<div style="text-align:left;background:#0b1020;border-left:3px solid #c49a20;border-radius:0 8px 8px 0;padding:10px 12px;margin:2px 0 14px">'
+        + '<div style="font-size:12px;font-weight:700;color:#c49a20;margin-bottom:5px">Conducting an observation</div>'
+        + '<div style="font-size:11.5px;color:#cbd5e1;line-height:1.55">Open <strong style="color:#f1f5f9">Observations</strong>, pick a candidate who has requested one, and choose Conduct. To unlock scoring you enter your <strong style="color:#f1f5f9">observer PIN</strong> plus the <strong style="color:#f1f5f9">candidate\'s PIN</strong> — the two-PIN handshake confirms who is being assessed.</div>'
+        + '</div>';
+    }
     html += '<div class="posttour-actions">';
     if(role === 'admin'){
       html += '<button class="btn btn-gold" onclick="closeModal();postTourGoTo(\'a-overview\',\'Network Overview\')">View Network Dashboard</button>';
+      html += '<button class="btn btn-ghost" onclick="closeModal();postTourGoTo(\'a-observations\',\'Observations\')">Go to Observations</button>';
       html += '<button class="btn btn-ghost" onclick="closeModal();postTourGoTo(\'a-registrations\',\'Registrations\')">Check Registrations</button>';
     } else if(role === 'hospital' || role === 'facility_admin'){
       html += '<button class="btn btn-gold" onclick="closeModal();postTourGoTo(\'h-dashboard\',\'Department Dashboard\')">View Dashboard</button>';
