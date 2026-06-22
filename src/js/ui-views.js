@@ -2792,7 +2792,7 @@ function renderAObservations(){
       </div>
       ${obsConsoleTab==='observers' ? (observerList.length ? `
       <div class="card"><div class="card-body" style="padding:4px 8px">
-        <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <table class="tbl tbl-static" style="width:100%;border-collapse:collapse;font-size:13px">
           <thead><tr style="text-align:left;color:var(--txt3);font-size:11px;text-transform:uppercase;letter-spacing:.4px">
             <th style="padding:8px">Observer</th><th style="padding:8px">Belt</th><th style="padding:8px">PIN</th><th style="padding:8px;text-align:right">Observations</th>
           </tr></thead>
@@ -2806,7 +2806,7 @@ function renderAObservations(){
         <div style="color:var(--txt3);font-size:12.5px;line-height:1.6;max-width:460px;margin:0 auto">Grant observer access from a staff member's profile (master admin only). They will appear here once enabled.</div>
       </div>`) : (pool.length ? `
       <div class="card"><div class="card-body" style="padding:4px 8px">
-        <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <table class="tbl tbl-static" style="width:100%;border-collapse:collapse;font-size:13px">
           <thead><tr style="text-align:left;color:var(--txt3);font-size:11px;text-transform:uppercase;letter-spacing:.4px">
             <th style="padding:8px">Candidate</th><th style="padding:8px">Target Belt</th><th style="padding:8px">Instrument</th><th style="padding:8px">Status</th><th style="padding:8px;text-align:right">Action</th>
           </tr></thead>
@@ -3138,7 +3138,7 @@ function renderAObservationReviews(){
         <input id="ovs-rev-search" class="form-input" style="max-width:260px;box-sizing:border-box" placeholder="Search candidate..." value="${(ovsReviewQ||'').replace(/"/g,'&quot;')}" oninput="ovsReviewSearch(this.value)">
       </div>
       ${view.length ? `<div class="card"><div class="card-body" style="padding:4px 8px">
-        <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <table class="tbl tbl-static" style="width:100%;border-collapse:collapse;font-size:13px">
           <thead><tr style="text-align:left;color:var(--txt3);font-size:11px;text-transform:uppercase;letter-spacing:.4px">
             <th style="padding:8px">Candidate</th><th style="padding:8px">Belt</th><th style="padding:8px">Outcome</th><th style="padding:8px">Observer / Basis</th><th style="padding:8px;text-align:right">Action</th>
           </tr></thead>
