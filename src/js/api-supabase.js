@@ -260,6 +260,9 @@ const SB = {
   getPendingRegistrations(){ return sbFetch('/rest/v1/registrations?status=eq.pending&select=*&order=requested_at.desc'); },
   submitRegistration(data){ return sbFetch('/rest/v1/registrations', { method:'POST', prefer:'return=minimal', body:data }); },
   approveRegistration(id, facilityName, systemId, assignRole){ return sbFetch('/functions/v1/sbd-approve-registration', { method:'POST', body:{registration_id:id, facility_name:facilityName, assign_system_id:systemId, assign_role:assignRole} }); },
+  // Deactivate (active=false) / reactivate (active=true) a portal account. Bans
+  // or unbans the auth user server-side so login truly stops; no data is deleted.
+  setAccountActive(authUid, active, reason){ return sbFetch('/functions/v1/sbd-set-account-active', { method:'POST', body:{ auth_uid:authUid, active:active, reason:reason||null } }); },
   denyRegistration(id, reviewedBy){ return sbFetch(`/rest/v1/registrations?id=eq.${id}`, { method:'PATCH', body:{status:'denied', reviewed_at:new Date().toISOString(), reviewed_by:reviewedBy} }); },
   // ── Analytics ──
   getFacilityTrends(fid){ return sbFetch(`/rest/v1/sbd_facility_trends?facility_id=eq.${encodeURIComponent(fid)}&select=*&order=year.asc,month_index.asc`); },
