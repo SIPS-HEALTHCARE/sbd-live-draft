@@ -2790,6 +2790,10 @@ function ovsOpenCapture(obsId){
 
 function ovsBack(){ ovsCapture = null; ovsArmed = null; renderAObservations(); }
 
+// Show/hide the per-item observer guidance on the capture screen. Sticky for the
+// session (default shown). Guidance content lives in OVS_GUIDE (ovs-guidance.js).
+function ovsToggleGuide(){ ST.ovsGuideHidden = (ST.ovsGuideHidden !== true); renderAObservations(); }
+
 // Two-PIN handshake: the observer proves identity with their reusable PIN, the
 // candidate consents with the PIN they were issued. Both must match to unlock.
 function ovsUnlock(){
@@ -2880,6 +2884,23 @@ function ovsRenderCapture(){
     return `<button onclick="ovsScore('${u.id}','${v}')" style="flex:1;padding:7px 4px;border-radius:8px;font-weight:800;font-size:12px;cursor:pointer;border:1.5px solid ${on?clr:'var(--bdr2)'};background:${on?clr:'transparent'};color:${on?'#0b0f17':'var(--txt2)'}">${v.toUpperCase()}</button>`;
   }).join('');
 
+  // Observer guidance (OVS): per-item coaching from OVS_GUIDE, keyed by the
+  // instrument belt + item id. Default shown; toggle is sticky on ST.ovsGuideHidden.
+  const guideOpen = ST.ovsGuideHidden !== true;
+  const guideMap = (typeof OVS_GUIDE !== 'undefined' && cl && OVS_GUIDE[cl.belt]) || {};
+  const guideRow = (k, v, clr) => v ? `<div style="display:flex;gap:8px;margin-top:5px"><span style="flex:0 0 92px;font-size:9px;text-transform:uppercase;letter-spacing:.4px;font-weight:700;color:${clr||'var(--txt3)'}">${k}</span><span style="font-size:11.5px;color:var(--txt2);line-height:1.5">${v}</span></div>` : '';
+  const guideBlock = (u) => {
+    if(!guideOpen) return '';
+    const gd = guideMap[u.id]; if(!gd) return '';
+    return `<div style="margin:4px 0 8px;padding:9px 11px;background:rgba(14,165,233,.05);border:1px solid rgba(14,165,233,.18);border-radius:8px">
+      ${guideRow('What this checks', gd.what)}
+      ${guideRow('A pass looks like', gd.pass, '#22c55e')}
+      ${guideRow('A miss looks like', gd.miss, '#ef4444')}
+      ${guideRow('How to see it', gd.surface)}
+      ${gd.drill ? guideRow('Run the drill', gd.drill, '#a78bfa') : ''}
+    </div>`;
+  };
+
   const body = groups.map(g => `
     <div style="margin-bottom:14px">
       <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--txt3);font-weight:700;margin:6px 0 8px">${g}</div>
@@ -2889,6 +2910,7 @@ function ovsRenderCapture(){
             <div style="font-size:13px;line-height:1.5">${u.n?`<span style="color:var(--txt3)">${u.n}.</span> `:''}${u.text}</div>
             ${u.meta?`<span style="font-size:10px;color:${u.meta==='Mandatory'?'#ef4444':'var(--txt3)'};font-weight:700;white-space:nowrap;align-self:flex-start">${u.meta}</span>`:''}
           </div>
+          ${guideBlock(u)}
           <div style="display:flex;gap:6px">${u.kind==='pf'?pfBtns(u):scaleBtns(u)}</div>
         </div>`).join('')}
     </div>`).join('');
@@ -2902,6 +2924,7 @@ function ovsRenderCapture(){
         <div style="font-size:12px;color:var(--txt2)">Observer: <strong>${ovsCapture.observerName}</strong> &middot; ${scored}/${units.length} scored</div>
         <div style="display:flex;align-items:center;gap:10px">
           ${ovsOutcomeChip(outcome.outcome)}
+          <button class="btn btn-ghost btn-sm" onclick="ovsToggleGuide()" title="Show or hide the per-item observer guidance">${guideOpen?'Hide guidance':'Show guidance'}</button>
           <button class="btn btn-ghost btn-sm" onclick="ovsSaveProgress()" title="Save your progress and finish later">Save &amp; resume later</button>
           <button class="btn btn-sm" onclick="ovsToggleStopWork()" style="border:1.5px solid #ef4444;color:${stop.active?'#0b0f17':'#ef4444'};background:${stop.active?'#ef4444':'transparent'};font-weight:800">${stop.active?'■ STOP-WORK ON':'⛔ Stop-Work'}</button>
         </div>
