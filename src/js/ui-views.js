@@ -15039,6 +15039,7 @@ function renderAFreeAgents(){
               <button class="btn btn-gold btn-sm" onclick="openAssignFreeAgentModal('${fa.id}')">${ICO.plus} Assign to Facility</button>
               <button class="btn btn-ghost btn-sm" onclick="openFreeAgentFullReport('${fa.id}')">${ICO.view} Full Record</button>
               <button class="btn btn-ghost btn-sm" onclick="downloadFreeAgentReport('${fa.id}')">${ICO.dl} Download</button>
+              ${faAcctToggleBtn(fa)}
               <button class="btn btn-err btn-xs" onclick="confirmPurgeFreeAgent('${fa.id}')">${ICO.x} Remove</button>
             </div>
           </div>
@@ -15696,7 +15697,8 @@ function acctStatusPill(u){
     : '';
 }
 
-function confirmSetAccountActive(uid, makeActive){
+function confirmSetAccountActive(uid, makeActive, rerender){
+  rerender = rerender || 'renderAAdminUsers';
   const u=DB.users.find(x=>x.id===uid);
   if(!u) return;
   if(u.protected){ toast('This is a protected system account and cannot be deactivated.','err'); return; }
@@ -15713,7 +15715,7 @@ function confirmSetAccountActive(uid, makeActive){
           <div style="font-size:12.5px;color:var(--txt2);line-height:1.6">This will restore login for the <strong>${roleLabel}</strong> account <strong>${u.email}</strong>. They will be able to sign in again right away.</div>
         </div>
       </div>
-      <div class="modal-ft"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-ok" onclick="executeSetAccountActive('${uid}',true)">${ICO.check} Reactivate</button></div>`,'modal-sm');
+      <div class="modal-ft"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-ok" onclick="executeSetAccountActive('${uid}',true,'${rerender}')">${ICO.check} Reactivate</button></div>`,'modal-sm');
   } else {
     openModal('Deactivate Account',`
       <div class="modal-body">
@@ -15725,11 +15727,11 @@ function confirmSetAccountActive(uid, makeActive){
           <div style="font-size:12.5px;color:var(--txt2);line-height:1.6">The <strong>${roleLabel}</strong> account <strong>${u.email}</strong> will no longer be able to log in. <strong style="color:var(--txt)">All of their records stay in the system</strong> — nothing is deleted. You can reactivate this account at any time.</div>
         </div>
       </div>
-      <div class="modal-ft"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn" style="background:#f59e0b;color:#0b0f17" onclick="executeSetAccountActive('${uid}',false)">Deactivate</button></div>`,'modal-sm');
+      <div class="modal-ft"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn" style="background:#f59e0b;color:#0b0f17" onclick="executeSetAccountActive('${uid}',false,'${rerender}')">Deactivate</button></div>`,'modal-sm');
   }
 }
 
-async function executeSetAccountActive(uid, makeActive){
+async function executeSetAccountActive(uid, makeActive, rerender){
   const u=DB.users.find(x=>x.id===uid);
   if(!u) return;
   if(u.protected){ toast('This is a protected system account and cannot be deactivated.','err'); return; }
@@ -15745,11 +15747,27 @@ async function executeSetAccountActive(uid, makeActive){
     u.active=makeActive;
     closeModal();
     toast(`${u.name}'s account has been ${makeActive?'reactivated':'deactivated'}.`, makeActive?'ok':'warn');
-    renderAAdminUsers();
+    const fn = (typeof window!=='undefined' && typeof window[rerender]==='function') ? window[rerender] : renderAAdminUsers;
+    fn();
   }catch(e){
     u.active=prev;
     toast('Account update failed: '+e.message,'err');
   }
+}
+
+// Free Agent card variant: a free agent's login still works after release (the
+// auth user + portal row are kept), so a master admin can lock/unlock it here.
+// fa.staffId equals the auth_uid; we resolve the linked portal account to read
+// its current active state and reuse the shared confirm flow. Shown only when a
+// login account actually exists for this person.
+function faAcctToggleBtn(fa){
+  if(!(ST.user && ST.user.role==='master_admin')) return '';
+  if(!fa || !fa.staffId) return '';
+  const acct=(DB.users||[]).find(u => u.authUid && String(u.authUid)===String(fa.staffId));
+  if(!acct || acct.protected) return '';
+  return acct.active===false
+    ? `<button class="btn btn-ok btn-sm" onclick="confirmSetAccountActive('${acct.id}',true,'renderAFreeAgents')">${ICO.check} Reactivate Login</button>`
+    : `<button class="btn btn-sm" style="border:1px solid #f59e0b;color:#f59e0b;background:transparent" onclick="confirmSetAccountActive('${acct.id}',false,'renderAFreeAgents')">Deactivate Login</button>`;
 }
 
 function confirmRemoveUser(uid){
