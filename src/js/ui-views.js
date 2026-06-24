@@ -1438,10 +1438,33 @@ async function paManualSave(){
 }
 
 let _paTimerInterval = null;
+let _paTenMinWarned = false; // one-time "10 minutes left" popup guard (#36)
+
+// One-time reminder popup when the candidate crosses the 10-minute mark. Their
+// answers autosave, so this is a heads-up to finish and submit, not a blocker.
+function showAssessmentTimeWarning(mins){
+  if(document.getElementById('pa-time-warning')) return;
+  const ov = document.createElement('div');
+  ov.id = 'pa-time-warning';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:10050;background:rgba(2,6,23,.55);display:flex;align-items:center;justify-content:center;padding:20px';
+  ov.innerHTML = `
+    <div role="alertdialog" aria-live="assertive" style="max-width:420px;width:100%;background:#0f172a;border:1px solid rgba(245,158,11,.5);border-radius:14px;padding:24px;color:#e2e8f0;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <div style="width:34px;height:34px;border-radius:50%;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.5);display:flex;align-items:center;justify-content:center;font-size:18px">&#9201;</div>
+        <div style="font-size:17px;font-weight:700">About ${mins} minutes left</div>
+      </div>
+      <div style="font-size:13px;line-height:1.6;color:#cbd5e1;margin-bottom:18px">Your time is almost up. Your answers are being saved automatically. Please finish and submit before the timer reaches zero. If time runs out, the test is submitted as-is and anything unanswered scores zero.</div>
+      <div style="display:flex;justify-content:flex-end">
+        <button onclick="this.closest('#pa-time-warning').remove()" style="padding:9px 18px;background:rgba(245,158,11,.15);color:#fbbf24;border:1px solid rgba(245,158,11,.5);border-radius:8px;font-weight:700;font-size:13px;cursor:pointer">Keep going</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+}
 
 function startAssessmentTimer(){
   // Defensive: clear any existing timer first to prevent duplicates on resume
   if(_paTimerInterval){ clearInterval(_paTimerInterval); _paTimerInterval = null; }
+  _paTenMinWarned = false; // reset the one-time warning for this run/resume
 
   const expiresAt = ASSESSMENT_SESSION.expiresAt
     ? new Date(ASSESSMENT_SESSION.expiresAt).getTime()
@@ -1477,6 +1500,12 @@ function startAssessmentTimer(){
         submitPlacementAssessment();
       }
       return;
+    }
+
+    // One-time popup the moment they cross the 10-minute mark (#36).
+    if(!_paTenMinWarned && remaining <= 10 * 60 * 1000 && remaining > 0){
+      _paTenMinWarned = true;
+      showAssessmentTimeWarning(Math.max(1, Math.round(remaining / 60000)));
     }
 
     const mins = Math.floor(remaining / 60000);
