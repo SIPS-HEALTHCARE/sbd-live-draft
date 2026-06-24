@@ -1,21 +1,25 @@
 // ============================================================
 // sbd-reset-test-assessment
 // ============================================================
-// Master-admin-only utility. Resets a staff member's placement
-// assessment state by:
-//   1. UPDATE staff: null belt/since/cur_*/nxt_*/oip, set placement_needed=true
-//   2. DELETE FROM placement_reviews WHERE staff_id = <resolved>
-//   3. DELETE FROM sbd_assessment_queue WHERE staff_id = <resolved>
+// Master-admin-only utility. Two capabilities:
+//
+//   RESET (mode 'execute') — wipes a staff member's placement state:
+//     1. UPDATE staff: null belt/since/cur_*/nxt_*/oip, set placement_needed=true
+//     2. DELETE FROM placement_reviews WHERE staff_id = <resolved>
+//     3. DELETE FROM sbd_assessment_queue WHERE staff_id = <resolved>
+//
+//   REOPEN (mode 'reopen') — for a timed-out / stuck test: finds the
+//     person's most recent INCOMPLETE assessment session and extends its
+//     expires_at by 90 minutes so they resume right where they left off
+//     (answers intact). No data is wiped. (Turns the Michael fix into a button.)
 //
 // staff is resolved via sbd_portal_users.auth_uid (NOT .id — that
 // path matches 0 rows for users created via sbd-sync-user-claims).
 //
 // Modes:
-//   - 'preview'  → resolves target + returns row counts. No writes.
-//   - 'execute'  → performs all 3 writes sequentially.
-//
-// See spec doc:
-//   /Users/depreshawn/Downloads/Work/SIPS_Report_2026-04-27/specs/reset-test-assessment-utility.md
+//   - 'preview'  → resolves target + returns row counts + any in-progress session. No writes.
+//   - 'execute'  → performs the 3 reset writes sequentially.
+//   - 'reopen'   → extends the in-progress session (resume). No wipe.
 // ============================================================
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
@@ -27,6 +31,24 @@ const corsHeaders = {
 };
 
 const MASTER_ADMIN_ROLES = ['master_admin'];
+
+// Summarise an in-progress assessment session for the UI (how far they got).
+function sessionSummary(s: any) {
+  if (!s) return null;
+  const prog = s.progress || {};
+  const total = Array.isArray(prog.shuffledQuestions) ? prog.shuffledQuestions.length : null;
+  const answered = prog.answers ? Object.keys(prog.answers).length : 0;
+  return {
+    id: s.id,
+    status: s.status,
+    assessment_type: s.assessment_type,
+    answered,
+    total_questions: total,
+    current_q: (prog.currentQ ?? null),
+    expires_at: s.expires_at,
+    expired: s.expires_at ? (new Date(s.expires_at).getTime() < Date.now()) : null
+  };
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -40,7 +62,6 @@ serve(async (req) => {
       { auth: { autoRefreshToken: false, persistSession: false } }
     );
 
-    // ── Parse body ──
     const body = await req.json().catch(() => ({}));
     const email = (body.email || '').toString().trim().toLowerCase();
     const mode = (body.mode || 'preview').toString();
@@ -50,14 +71,13 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
-    if (mode !== 'preview' && mode !== 'execute') {
-      return new Response(JSON.stringify({ error: `Invalid mode "${mode}". Use "preview" or "execute".` }), {
+    if (mode !== 'preview' && mode !== 'execute' && mode !== 'reopen') {
+      return new Response(JSON.stringify({ error: `Invalid mode "${mode}". Use "preview", "execute", or "reopen".` }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    // ── Verify caller JWT ──
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'Missing Authorization header' }), {
@@ -74,7 +94,6 @@ serve(async (req) => {
       });
     }
 
-    // ── Verify caller is master_admin ──
     const { data: callerProfile } = await supabaseAdmin
       .from('sbd_portal_users')
       .select('role, email, name')
@@ -89,7 +108,6 @@ serve(async (req) => {
       });
     }
 
-    // ── Resolve target portal user ──
     const { data: target, error: targetErr } = await supabaseAdmin
       .from('sbd_portal_users')
       .select('id, auth_uid, email, name, role')
@@ -108,7 +126,6 @@ serve(async (req) => {
       });
     }
 
-    // ── Resolve target staff record via auth_uid (the correct join) ──
     const { data: staff } = await supabaseAdmin
       .from('staff')
       .select('id, first, last, belt, placement_needed, fid')
@@ -124,7 +141,53 @@ serve(async (req) => {
       });
     }
 
-    // ── Count rows that would be / were deleted ──
+    // Most recent INCOMPLETE assessment session (drives the Reopen action + preview hint).
+    const { data: openSession } = await supabaseAdmin
+      .from('sbd_assessment_sessions')
+      .select('id, status, assessment_type, progress, expires_at, created_at, completed_at')
+      .eq('staff_id', staff.id)
+      .is('completed_at', null)
+      .neq('status', 'completed')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    // ── REOPEN mode: extend the in-progress session so they resume. No wipe. ──
+    if (mode === 'reopen') {
+      if (!openSession) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: `No in-progress assessment session found for ${`${staff.first || ''} ${staff.last || ''}`.trim() || 'this staff member'}. Nothing to reopen.`
+        }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      const newExpiry = new Date(Date.now() + 90 * 60 * 1000).toISOString();
+      const { error: reErr } = await supabaseAdmin
+        .from('sbd_assessment_sessions')
+        .update({ expires_at: newExpiry })
+        .eq('id', openSession.id)
+        .is('completed_at', null);
+      if (reErr) {
+        console.error('[reset-test-assessment] Reopen failed:', reErr);
+        return new Response(JSON.stringify({ error: `Reopen failed: ${reErr.message}` }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      return new Response(JSON.stringify({
+        success: true,
+        mode: 'reopen',
+        caller: { email: callerProfile.email, role: callerProfile.role },
+        target_staff: { id: staff.id, name: `${staff.first || ''} ${staff.last || ''}`.trim() || '(unnamed)' },
+        session: { ...sessionSummary(openSession), expires_at: newExpiry, expired: false },
+        reopened_at: new Date().toISOString()
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     const { count: prCount } = await supabaseAdmin
       .from('placement_reviews')
       .select('*', { count: 'exact', head: true })
@@ -134,7 +197,6 @@ serve(async (req) => {
       .select('*', { count: 'exact', head: true })
       .eq('staff_id', staff.id);
 
-    // ── Preview mode: return resolved info, no writes ──
     if (mode === 'preview') {
       return new Response(JSON.stringify({
         success: true,
@@ -143,15 +205,13 @@ serve(async (req) => {
         target_portal_user: target,
         target_staff: staff,
         placement_reviews_count: prCount || 0,
-        assessment_queue_count: aqCount || 0
+        assessment_queue_count: aqCount || 0,
+        in_progress_session: sessionSummary(openSession)
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    // ── Execute mode: three sequential writes ──
-
-    // Step 1: UPDATE staff
     const { error: e1 } = await supabaseAdmin
       .from('staff')
       .update({
@@ -176,7 +236,6 @@ serve(async (req) => {
       });
     }
 
-    // Step 2: DELETE placement_reviews
     const { error: e2 } = await supabaseAdmin
       .from('placement_reviews')
       .delete()
@@ -193,7 +252,6 @@ serve(async (req) => {
       });
     }
 
-    // Step 3: DELETE sbd_assessment_queue
     const { error: e3 } = await supabaseAdmin
       .from('sbd_assessment_queue')
       .delete()
@@ -210,7 +268,6 @@ serve(async (req) => {
       });
     }
 
-    // ── Success ──
     return new Response(JSON.stringify({
       success: true,
       mode: 'execute',

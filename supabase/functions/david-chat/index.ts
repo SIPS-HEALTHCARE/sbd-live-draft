@@ -136,6 +136,15 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
 
         let fullContent = '';
 
+        // ── Usage metering (additive) ──────────────────────────────────────────────
+        // Accumulate real token counts + the provider's reported generation cost across
+        // every engine call in this request (the autonomous loop can make several), then
+        // log one usage row after the answer completes. Fire-and-forget: it never blocks
+        // the stream or changes the answer the user sees.
+        let usagePromptTokens = 0;
+        let usageCompletionTokens = 0;
+        let usageCost = 0;
+
         async function runAutonomousLoop(messageChain: any[], depth: number = 0, modelOverride: string | null = null) {
             if (depth > 8) return;
 
@@ -156,6 +165,9 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
                     max_tokens: 4000,
                     temperature: 0.7,
                     stream: true,
+                    // Ask the provider to return token accounting + real generation cost in the
+                    // final stream chunk, so metering uses ground-truth cost (not a formula).
+                    usage: { include: true },
                 }),
             });
 
@@ -209,6 +221,12 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
                                     if (toolChunk.function?.arguments) currentToolCallArgs += toolChunk.function.arguments;
                                 }
                             }
+                            // Final chunk carries usage accounting (token counts + real cost).
+                            if (json.usage) {
+                                usagePromptTokens += json.usage.prompt_tokens || 0;
+                                usageCompletionTokens += json.usage.completion_tokens || 0;
+                                if (typeof json.usage.cost === 'number') usageCost += json.usage.cost;
+                            }
                         } catch (e) { /* partial */ }
                     }
                 }
@@ -237,7 +255,7 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
                             await writer.write(encoder.encode(`data: ${JSON.stringify({ text: `\n\n> Searching knowledge base...\n\n` })}\n\n`));
                             const pineconeKey = Deno.env.get('PINECONE_API_KEY');
                             if (!pineconeKey) throw new Error("PINECONE_API_KEY missing.");
-                            const r = await fetch('https://sbd-knowledge-ai-44928mo.svc.aped-4627-b74a.pinecone.io/records/namespaces/master-docs/search', {
+                            const r = await fetch('https://sbd-knowledge-ai-8al9o1g.svc.aped-4627-b74a.pinecone.io/records/namespaces/master-docs/search', {
                                 method: 'POST',
                                 headers: { 'Api-Key': pineconeKey, 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ query: { inputs: { text: parsedArgs.query }, top_k: 5 } })
@@ -274,7 +292,7 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
                     const forced = await fetch('https://openrouter.ai/api/v1/chat/completions', {
                         method: 'POST',
                         headers: { 'Authorization': `Bearer ${openRouterKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://belt.sterilebydesign.ai', 'X-Title': 'DAVID' },
-                        body: JSON.stringify({ model: DEFAULT_MODEL, messages, max_tokens: 3000, temperature: 0.7, stream: true }),
+                        body: JSON.stringify({ model: DEFAULT_MODEL, messages, max_tokens: 3000, temperature: 0.7, stream: true, usage: { include: true } }),
                     });
                     if (forced.ok && forced.body) {
                         const fReader = forced.body.getReader();
@@ -297,6 +315,11 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
                                         fullContent += fText;
                                         await writer.write(encoder.encode(`data: ${JSON.stringify({ text: fText })}\n\n`));
                                     }
+                                    if (fJson.usage) {
+                                        usagePromptTokens += fJson.usage.prompt_tokens || 0;
+                                        usageCompletionTokens += fJson.usage.completion_tokens || 0;
+                                        if (typeof fJson.usage.cost === 'number') usageCost += fJson.usage.cost;
+                                    }
                                 } catch (_e) { /* ignore */ }
                             }
                         }
@@ -314,6 +337,22 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
                     raw_interaction: { query: message, response: fullContent }
                 }).then(({ error }: { error: any }) => {
                     if (error) console.warn('[DAVID] Memory store skipped:', error.message);
+                });
+
+                // ── Usage metering (additive, restores logging + fixes cost & facility) ──
+                // Logging stopped on 2026-06-15; this restores it correctly. cost is the
+                // provider's ground-truth generation cost (not the old (prompt+completion)*$15/M
+                // formula that overstated input ~5x). facility_id is the caller's real facility;
+                // SIPS-internal master sessions (no facility) log as master-admin-global.
+                // Fire-and-forget — a logging failure never affects the user's answer.
+                supabase.from('david_usage_logs').insert({
+                    facility_id: profile?.facility_id || 'master-admin-global',
+                    user_id: userId,
+                    prompt_tokens: usagePromptTokens,
+                    completion_tokens: usageCompletionTokens,
+                    cost: usageCost
+                }).then(({ error }: { error: any }) => {
+                    if (error) console.warn('[DAVID] Usage log skipped:', error.message);
                 });
 
             } catch (err: any) {
