@@ -17826,7 +17826,17 @@ function _rtaRenderConfirm(email, preview){
         <div style="font-size:18px;font-weight:700">Confirm Reset</div>
         <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="closeResetTestOverlay()">Close</button>
       </div>
-      <div style="color:var(--txt2);font-size:12.5px;line-height:1.6;margin-bottom:18px">Review the resolved record below. Click <strong>Confirm Reset</strong> to wipe placement state for this user.</div>
+      <div style="color:var(--txt2);font-size:12.5px;line-height:1.6;margin-bottom:18px">Review the resolved record below. If they just ran out of time, use <strong>Reopen</strong> to let them resume. <strong>Confirm Reset</strong> wipes placement state and starts the test over.</div>
+
+      ${preview.in_progress_session ? `
+      <div style="background:rgba(196,154,32,.08);border:1px solid rgba(196,154,32,.35);border-radius:var(--rs);padding:14px 16px;margin-bottom:16px;font-size:12.5px;line-height:1.7">
+        <div style="font-weight:700;color:#c49a20;margin-bottom:4px">In-progress test found</div>
+        <div>Type: ${preview.in_progress_session.assessment_type || '—'} &middot; Answered ${preview.in_progress_session.answered}${preview.in_progress_session.total_questions ? (' of ' + preview.in_progress_session.total_questions) : ''}${preview.in_progress_session.current_q != null ? (' &middot; on Q' + preview.in_progress_session.current_q) : ''}</div>
+        <div style="color:var(--txt3);margin-top:2px">Session ${preview.in_progress_session.expired ? 'has expired (timed out)' : 'is still active'}.</div>
+        <button class="btn btn-gold btn-sm" style="margin-top:10px" id="rta-reopen-btn" onclick="resetTestReopen('${email.replace(/'/g, "\\'")}')">&#8635; Reopen so they finish</button>
+        <div style="color:var(--txt3);font-size:11px;margin-top:6px">Reopen gives them 90 more minutes and resumes where they left off, answers intact. It does not wipe anything.</div>
+      </div>` : `
+      <div style="background:var(--s2);border:1px solid var(--bdr);border-radius:var(--rs);padding:10px 14px;margin-bottom:16px;font-size:11.5px;color:var(--txt3)">No in-progress test session for this person, so there is nothing to reopen. Use Reset below if they need to start over.</div>`}
 
       <div style="background:var(--s2);border:1px solid var(--bdr);border-radius:var(--rs);padding:14px 16px;margin-bottom:16px;font-size:12.5px;line-height:1.8">
         <div><strong>Email entered:</strong> ${email}</div>
@@ -17869,6 +17879,46 @@ async function resetTestConfirm(email){
     _rtaShowError(err?.message || 'Network error.');
     if(btn){ btn.disabled = false; btn.textContent = 'Confirm Reset'; }
   }
+}
+
+// Reopen (resume) an in-progress / timed-out test — non-destructive (#19).
+async function resetTestReopen(email){
+  _rtaClearError();
+  const btn = document.getElementById('rta-reopen-btn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Reopening...'; }
+  try {
+    const res = await SB.resetTestAssessment(email, 'reopen');
+    if(res && res.success){
+      _rtaRenderReopenDone(email, res);
+    } else {
+      _rtaShowError(res?.error || 'Reopen failed.');
+      if(btn){ btn.disabled = false; btn.innerHTML = '&#8635; Reopen so they finish'; }
+    }
+  } catch(err){
+    _rtaShowError(err?.message || 'Network error.');
+    if(btn){ btn.disabled = false; btn.innerHTML = '&#8635; Reopen so they finish'; }
+  }
+}
+
+function _rtaRenderReopenDone(email, res){
+  const c = _rtaContent();
+  if(!c) return;
+  const s = res.session || {};
+  const name = (res.target_staff && res.target_staff.name) || email;
+  const where = s.current_q != null ? (' (around question ' + s.current_q + (s.total_questions ? (' of ' + s.total_questions) : '') + ')') : '';
+  c.innerHTML = `
+    <div style="background:var(--s1);border:1px solid var(--bdr2);border-radius:var(--r);padding:28px 24px;color:var(--txt1)">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <div style="width:36px;height:36px;border-radius:50%;background:var(--ok-bg);border:1px solid var(--ok-bd);display:flex;align-items:center;justify-content:center">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 12l5 5L20 7" stroke="var(--ok)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div style="font-size:18px;font-weight:700">Test reopened</div>
+      </div>
+      <div style="color:var(--txt2);font-size:12.5px;line-height:1.7;margin-bottom:16px"><strong>${name}</strong> can log back in and resume their test where they left off${where}. They have 90 minutes, their answers are intact, and nothing was wiped.</div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="closeResetTestOverlay()">Close</button>
+      </div>
+    </div>`;
 }
 
 function _rtaRenderDone(email, res){
