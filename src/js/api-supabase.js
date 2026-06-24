@@ -229,6 +229,15 @@ const SB = {
       body: { email, mode }
     });
   },
+  // Force-submit an in-progress / timed-out placement AS-IS (blanks score zero),
+  // scoring exactly like the candidate screen. mode 'preview' = score only,
+  // 'execute' = write the placement_reviews row + complete the session (#18/#35).
+  forceSubmitPlacement(email, mode){
+    return sbFetch('/functions/v1/sbd-force-submit-placement', {
+      method:'POST',
+      body: { email, mode }
+    });
+  },
   // ── User Profiles ──
   getUserProfile(userId){ return sbFetch(`/rest/v1/sbd_portal_users?auth_uid=eq.${userId}&select=*`); },
   getAllAdminProfiles(){ return sbFetch('/rest/v1/sbd_portal_users?select=*&order=name.asc'); },
