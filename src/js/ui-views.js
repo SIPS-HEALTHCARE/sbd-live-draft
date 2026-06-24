@@ -1438,10 +1438,33 @@ async function paManualSave(){
 }
 
 let _paTimerInterval = null;
+let _paTenMinWarned = false; // one-time "10 minutes left" popup guard (#36)
+
+// One-time reminder popup when the candidate crosses the 10-minute mark. Their
+// answers autosave, so this is a heads-up to finish and submit, not a blocker.
+function showAssessmentTimeWarning(mins){
+  if(document.getElementById('pa-time-warning')) return;
+  const ov = document.createElement('div');
+  ov.id = 'pa-time-warning';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:10050;background:rgba(2,6,23,.55);display:flex;align-items:center;justify-content:center;padding:20px';
+  ov.innerHTML = `
+    <div role="alertdialog" aria-live="assertive" style="max-width:420px;width:100%;background:#0f172a;border:1px solid rgba(245,158,11,.5);border-radius:14px;padding:24px;color:#e2e8f0;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <div style="width:34px;height:34px;border-radius:50%;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.5);display:flex;align-items:center;justify-content:center;font-size:18px">&#9201;</div>
+        <div style="font-size:17px;font-weight:700">About ${mins} minutes left</div>
+      </div>
+      <div style="font-size:13px;line-height:1.6;color:#cbd5e1;margin-bottom:18px">Your time is almost up. Your answers are being saved automatically. Please finish and submit before the timer reaches zero. If time runs out, the test is submitted as-is and anything unanswered scores zero.</div>
+      <div style="display:flex;justify-content:flex-end">
+        <button onclick="this.closest('#pa-time-warning').remove()" style="padding:9px 18px;background:rgba(245,158,11,.15);color:#fbbf24;border:1px solid rgba(245,158,11,.5);border-radius:8px;font-weight:700;font-size:13px;cursor:pointer">Keep going</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+}
 
 function startAssessmentTimer(){
   // Defensive: clear any existing timer first to prevent duplicates on resume
   if(_paTimerInterval){ clearInterval(_paTimerInterval); _paTimerInterval = null; }
+  _paTenMinWarned = false; // reset the one-time warning for this run/resume
 
   const expiresAt = ASSESSMENT_SESSION.expiresAt
     ? new Date(ASSESSMENT_SESSION.expiresAt).getTime()
@@ -1477,6 +1500,12 @@ function startAssessmentTimer(){
         submitPlacementAssessment();
       }
       return;
+    }
+
+    // One-time popup the moment they cross the 10-minute mark (#36).
+    if(!_paTenMinWarned && remaining <= 10 * 60 * 1000 && remaining > 0){
+      _paTenMinWarned = true;
+      showAssessmentTimeWarning(Math.max(1, Math.round(remaining / 60000)));
     }
 
     const mins = Math.floor(remaining / 60000);
@@ -17835,6 +17864,10 @@ function _rtaRenderConfirm(email, preview){
         <div style="color:var(--txt3);margin-top:2px">Session ${preview.in_progress_session.expired ? 'has expired (timed out)' : 'is still active'}.</div>
         <button class="btn btn-gold btn-sm" style="margin-top:10px" id="rta-reopen-btn" onclick="resetTestReopen('${email.replace(/'/g, "\\'")}')">&#8635; Reopen so they finish</button>
         <div style="color:var(--txt3);font-size:11px;margin-top:6px">Reopen gives them 90 more minutes and resumes where they left off, answers intact. It does not wipe anything.</div>
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(196,154,32,.25)">
+          <button class="btn btn-ghost btn-sm" id="rta-force-btn" onclick="resetTestForceSubmitPreview('${email.replace(/'/g, "\\'")}')">&#10003; Submit as-is (score blanks 0)</button>
+          <div style="color:var(--txt3);font-size:11px;margin-top:6px">Scores and submits what they have right now, with any unanswered questions counted as zero. No retake. Lands in the assessor queue for belt confirmation.</div>
+        </div>
       </div>` : `
       <div style="background:var(--s2);border:1px solid var(--bdr);border-radius:var(--rs);padding:10px 14px;margin-bottom:16px;font-size:11.5px;color:var(--txt3)">No in-progress test session for this person, so there is nothing to reopen. Use Reset below if they need to start over.</div>`}
 
@@ -17915,6 +17948,90 @@ function _rtaRenderReopenDone(email, res){
         <div style="font-size:18px;font-weight:700">Test reopened</div>
       </div>
       <div style="color:var(--txt2);font-size:12.5px;line-height:1.7;margin-bottom:16px"><strong>${name}</strong> can log back in and resume their test where they left off${where}. They have 90 minutes, their answers are intact, and nothing was wiped.</div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="closeResetTestOverlay()">Close</button>
+      </div>
+    </div>`;
+}
+
+// Force-submit as-is (#18/#35): preview the scores, then execute on confirm.
+async function resetTestForceSubmitPreview(email){
+  _rtaClearError();
+  const btn = document.getElementById('rta-force-btn');
+  if(btn){ btn.disabled = true; btn.innerHTML = 'Scoring...'; }
+  try {
+    const res = await SB.forceSubmitPlacement(email, 'preview');
+    if(res && res.success && res.summary){
+      _rtaRenderForcePreview(email, res.summary);
+    } else {
+      _rtaShowError(res?.error || 'Could not score this session.');
+      if(btn){ btn.disabled = false; btn.innerHTML = '&#10003; Submit as-is (score blanks 0)'; }
+    }
+  } catch(err){
+    _rtaShowError(err?.message || 'Network error.');
+    if(btn){ btn.disabled = false; btn.innerHTML = '&#10003; Submit as-is (score blanks 0)'; }
+  }
+}
+
+function _rtaRenderForcePreview(email, sm){
+  const c = _rtaContent();
+  if(!c) return;
+  const belt = sm.engine_determination || sm.tentative_belt || '—';
+  c.innerHTML = `
+    <div style="background:var(--s1);border:1px solid var(--bdr2);border-radius:var(--r);padding:28px 24px;color:var(--txt1)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div style="font-size:18px;font-weight:700">Submit as-is &mdash; review the score</div>
+        <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="closeResetTestOverlay()">Close</button>
+      </div>
+      <div style="color:var(--txt2);font-size:12.5px;line-height:1.6;margin-bottom:16px">This scores what <strong>${sm.candidate || email}</strong> has now, with unanswered questions counted as zero. Nothing is written until you press <strong>Submit it</strong>.</div>
+      <div style="background:var(--s2);border:1px solid var(--bdr);border-radius:var(--rs);padding:14px 16px;margin-bottom:16px;font-size:12.5px;line-height:1.85">
+        <div><strong>Answered:</strong> ${sm.answered} of ${sm.total_questions} &middot; <strong>Blank (scored 0):</strong> ${sm.blank_scored_zero}</div>
+        <div><strong>Knowledge:</strong> ${sm.knowledge_overall}% &middot; <strong>Level 1:</strong> ${sm.knowledge_l1}%</div>
+        <div><strong>Simulation:</strong> ${sm.simulation_overall}% &middot; <strong>Blended:</strong> ${sm.blended}%</div>
+        ${sm.dangerous_block ? '<div style="color:var(--err)"><strong>Dangerous answer block: belt withheld</strong></div>' : ''}
+        <div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--bdr2)"><strong>Engine determination:</strong> ${belt}</div>
+        <div style="color:var(--txt3);font-size:11px;margin-top:4px">This is the system suggestion. The final belt is yours to confirm from the placement queue.</div>
+      </div>
+      <div id="rta-error" style="display:none;background:rgba(239,68,68,.10);border:1px solid var(--err-bd);color:var(--err);border-radius:var(--rs);padding:10px 12px;font-size:12px;line-height:1.5;margin-bottom:14px"></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="renderResetTestOverlay()">Back</button>
+        <button class="btn btn-gold" id="rta-force-exec-btn" onclick="resetTestForceSubmitExecute('${email.replace(/'/g, "\\'")}')">Submit it</button>
+      </div>
+    </div>`;
+}
+
+async function resetTestForceSubmitExecute(email){
+  _rtaClearError();
+  const btn = document.getElementById('rta-force-exec-btn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Submitting...'; }
+  try {
+    const res = await SB.forceSubmitPlacement(email, 'execute');
+    if(res && res.success){
+      _rtaRenderForceDone(email, res);
+    } else {
+      _rtaShowError(res?.error || 'Submit failed.');
+      if(btn){ btn.disabled = false; btn.textContent = 'Submit it'; }
+    }
+  } catch(err){
+    _rtaShowError(err?.message || 'Network error.');
+    if(btn){ btn.disabled = false; btn.textContent = 'Submit it'; }
+  }
+}
+
+function _rtaRenderForceDone(email, res){
+  const c = _rtaContent();
+  if(!c) return;
+  const sm = res.summary || {};
+  const belt = sm.engine_determination || sm.tentative_belt || '—';
+  c.innerHTML = `
+    <div style="background:var(--s1);border:1px solid var(--bdr2);border-radius:var(--r);padding:28px 24px;color:var(--txt1)">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <div style="width:36px;height:36px;border-radius:50%;background:var(--ok-bg);border:1px solid var(--ok-bd);display:flex;align-items:center;justify-content:center">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 12l5 5L20 7" stroke="var(--ok)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div style="font-size:18px;font-weight:700">Submitted</div>
+      </div>
+      <div style="color:var(--txt2);font-size:12.5px;line-height:1.7;margin-bottom:16px"><strong>${sm.candidate || email}</strong> is in the placement queue. Engine determination: <strong>${belt}</strong> (knowledge ${sm.knowledge_overall}%, simulation ${sm.simulation_overall}%, blended ${sm.blended}%). Confirm the final belt from Placement Reviews. No retake needed.</div>
       <div style="display:flex;gap:10px;justify-content:flex-end">
         <button class="btn btn-ghost" onclick="closeResetTestOverlay()">Close</button>
       </div>
