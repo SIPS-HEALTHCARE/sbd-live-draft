@@ -158,6 +158,63 @@ serve(async (req) => {
       });
     }
 
+    if (action === 'UPDATE_USAGE_TIER') {
+      // #9 — SIPS billing/volume tier (separate from the capability `tier`).
+      // Sets usage_tier + the matching monthly question allowance.
+      const { facilityId, usageTier } = payload;
+      const ALLOWANCE: Record<string, number> = {
+        included: 250,
+        starter: 750,
+        standard: 2500,
+        power: 7500,
+      };
+      if (!ALLOWANCE.hasOwnProperty(usageTier)) {
+        return new Response(JSON.stringify({ error: `Invalid usage tier: ${usageTier}` }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const allowance = ALLOWANCE[usageTier];
+      console.log(`[DAVID_ADMIN_API] UPDATE_USAGE_TIER: ${facilityId} → ${usageTier} (${allowance})`);
+
+      // Check if row exists first
+      const { data: existing } = await adminSupabase
+        .from('david_facility_access')
+        .select('*')
+        .eq('facility_id', facilityId)
+        .maybeSingle();
+
+      let data, error;
+      if (existing) {
+        // Update only usage_tier + questions_allowance, preserve everything else
+        ({ data, error } = await adminSupabase
+          .from('david_facility_access')
+          .update({ usage_tier: usageTier, questions_allowance: allowance, updated_at: new Date().toISOString() })
+          .eq('facility_id', facilityId)
+          .select()
+          .single());
+      } else {
+        // Insert new row with safe defaults (locked, base capability)
+        ({ data, error } = await adminSupabase
+          .from('david_facility_access')
+          .insert({ facility_id: facilityId, is_active: false, tier: 'base', usage_tier: usageTier, questions_allowance: allowance, updated_at: new Date().toISOString() })
+          .select()
+          .single());
+      }
+
+      if (error) {
+        console.error('[DAVID_ADMIN_API] USAGE_TIER error:', JSON.stringify(error));
+        throw error;
+      }
+
+      await logAudit('SET_FACILITY_USAGE_TIER', facilityId, null, { usage_tier: usageTier, questions_allowance: allowance });
+
+      console.log('[DAVID_ADMIN_API] USAGE_TIER success:', JSON.stringify(data));
+      return new Response(JSON.stringify({ success: true, data }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     if (action === 'GET_METRICS') {
       const { data: analytics, error: aErr } = await adminSupabase
         .from('david_analytics_summary')

@@ -78,15 +78,17 @@ class DavidAdminDashboard {
                     name: fac.name || 'Unnamed Facility',
                     is_active: accessRecord ? accessRecord.is_active : false,
                     tier: accessRecord ? accessRecord.tier : 'base',
+                    usage_tier: accessRecord && accessRecord.usage_tier ? accessRecord.usage_tier : 'included',
+                    questions_allowance: accessRecord && accessRecord.questions_allowance ? accessRecord.questions_allowance : 250,
                     tokens_used: analyticsRecord ? (analyticsRecord.total_tokens || 0) : 0
                 };
             });
         } else {
             this.facilities = [
-                { id: 'fac_1', name: 'Alta Bates Summit Medical Center', is_active: true, tier: 'premium', tokens_used: 14500 },
-                { id: 'fac_2', name: 'Mercy Hospital Group', is_active: false, tier: 'base', tokens_used: 0 },
-                { id: 'fac_3', name: 'Sutter Health Main Campus', is_active: true, tier: 'supreme', tokens_used: 82000 },
-                { id: 'fac_4', name: 'Kaiser Permanente Oakland', is_active: false, tier: 'base', tokens_used: 1200 }
+                { id: 'fac_1', name: 'Alta Bates Summit Medical Center', is_active: true, tier: 'premium', usage_tier: 'standard', questions_allowance: 2500, tokens_used: 14500 },
+                { id: 'fac_2', name: 'Mercy Hospital Group', is_active: false, tier: 'base', usage_tier: 'included', questions_allowance: 250, tokens_used: 0 },
+                { id: 'fac_3', name: 'Sutter Health Main Campus', is_active: true, tier: 'supreme', usage_tier: 'power', questions_allowance: 7500, tokens_used: 82000 },
+                { id: 'fac_4', name: 'Kaiser Permanente Oakland', is_active: false, tier: 'base', usage_tier: 'included', questions_allowance: 250, tokens_used: 1200 }
             ];
         }
         
@@ -176,6 +178,58 @@ class DavidAdminDashboard {
             console.error('[DAVID Dashboard] Tier update failed:', e);
             fac.is_loading = false;
             this.showToast(`Tier update failed: ${e.message}`, 'error');
+        }
+
+        this.renderMetrics();
+        this.renderTable();
+    }
+
+    async updateUsageTier(facilityId, newUsageTier) {
+        const token = this.getAuthToken();
+        if (!token) {
+            this.showToast('Authentication error. Please log in again.', 'error');
+            return;
+        }
+
+        const fac = this.facilities.find(f => f.id === facilityId);
+        if (!fac) return;
+        if (fac.is_loading) return;
+
+        const ALLOWANCE = { included: 250, starter: 750, standard: 2500, power: 7500 };
+        const prevUsageTier = fac.usage_tier;
+        const prevAllowance = fac.questions_allowance;
+
+        fac.is_loading = true;
+        this.renderTable(); // Show loading state
+
+        try {
+            console.log(`[DAVID Dashboard] UPDATE_USAGE_TIER: ${facilityId} → ${newUsageTier}`);
+            const res = await fetch(this.apiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ action: 'UPDATE_USAGE_TIER', payload: { facilityId, usageTier: newUsageTier } })
+            });
+
+            const json = await res.json();
+            console.log('[DAVID Dashboard] USAGE_TIER response:', json);
+
+            if (!res.ok || !json.success) {
+                throw new Error(json.error || 'Usage tier update failed on server');
+            }
+
+            fac.usage_tier = newUsageTier;
+            fac.questions_allowance = (json.data && json.data.questions_allowance) || ALLOWANCE[newUsageTier] || prevAllowance;
+            fac.is_loading = false;
+            this.showToast(`Plan set to ${newUsageTier.toUpperCase()} (${fac.questions_allowance.toLocaleString()} questions/mo) for ${fac.name}`, 'success');
+        } catch (e) {
+            console.error('[DAVID Dashboard] Usage tier update failed:', e);
+            fac.usage_tier = prevUsageTier;
+            fac.questions_allowance = prevAllowance;
+            fac.is_loading = false;
+            this.showToast(`Plan update failed: ${e.message}`, 'error');
         }
 
         this.renderMetrics();
@@ -287,12 +341,13 @@ class DavidAdminDashboard {
                 border-radius: 12px;
                 box-shadow: 0 4px 20px rgba(0,0,0,0.3);
                 border: 1px solid var(--bdr);
-                overflow: hidden;
+                overflow-x: auto;
             }
             .dad-table {
                 width: 100%;
                 border-collapse: collapse;
                 text-align: left;
+                min-width: 760px;
             }
             .dad-table th {
                 background: rgba(0,0,0,0.2);
@@ -326,6 +381,12 @@ class DavidAdminDashboard {
             .dad-tier-base { background: rgba(148, 163, 184, 0.1); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.2); }
             .dad-tier-premium { background: rgba(59, 130, 246, 0.1); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.2); }
             .dad-tier-supreme { background: rgba(196, 154, 32, 0.15); color: var(--gold); border: 1px solid rgba(196, 154, 32, 0.3); box-shadow: 0 0 10px rgba(196, 154, 32, 0.2); }
+
+            /* #9 SIPS plan (billing/volume) colors — distinct from capability tier */
+            .dad-plan-included { background: rgba(148, 163, 184, 0.1); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.2); }
+            .dad-plan-starter  { background: rgba(45, 212, 191, 0.1); color: #2dd4bf; border: 1px solid rgba(45, 212, 191, 0.25); }
+            .dad-plan-standard { background: rgba(59, 130, 246, 0.1); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.2); }
+            .dad-plan-power    { background: rgba(196, 154, 32, 0.15); color: var(--gold); border: 1px solid rgba(196, 154, 32, 0.3); box-shadow: 0 0 10px rgba(196, 154, 32, 0.2); }
 
             .dad-tier-select {
                 appearance: none;
@@ -445,6 +506,7 @@ class DavidAdminDashboard {
                             <tr>
                                 <th>Facility Name</th>
                                 <th>Intelligence Tier</th>
+                                <th>SIPS Plan</th>
                                 <th>Monthly Tokens Used</th>
                                 <th>Status</th>
                                 <th>Toggle Access</th>
@@ -488,12 +550,22 @@ class DavidAdminDashboard {
             <tr>
                 <td style="font-weight: 500;">${f.name}</td>
                 <td>
-                    <select class="dad-tier-select dad-tier-${f.tier}" 
+                    <select class="dad-tier-select dad-tier-${f.tier}"
                             style="${f.is_loading ? 'opacity: 0.5; pointer-events: none; cursor: wait;' : ''}"
                             onchange="window.DAVID_DASHBOARD.updateTier('${f.id}', this.value)">
                         <option value="base" ${f.tier === 'base' ? 'selected' : ''}>BASE</option>
                         <option value="premium" ${f.tier === 'premium' ? 'selected' : ''}>PREMIUM</option>
                         <option value="supreme" ${f.tier === 'supreme' ? 'selected' : ''}>SUPREME</option>
+                    </select>
+                </td>
+                <td>
+                    <select class="dad-tier-select dad-plan-${f.usage_tier}"
+                            style="${f.is_loading ? 'opacity: 0.5; pointer-events: none; cursor: wait;' : ''}"
+                            onchange="window.DAVID_DASHBOARD.updateUsageTier('${f.id}', this.value)">
+                        <option value="included" ${f.usage_tier === 'included' ? 'selected' : ''}>INCLUDED · 250</option>
+                        <option value="starter" ${f.usage_tier === 'starter' ? 'selected' : ''}>STARTER · 750</option>
+                        <option value="standard" ${f.usage_tier === 'standard' ? 'selected' : ''}>STANDARD · 2,500</option>
+                        <option value="power" ${f.usage_tier === 'power' ? 'selected' : ''}>POWER · 7,500</option>
                     </select>
                 </td>
                 <td style="font-family: 'Fira Code', monospace;">${f.tokens_used.toLocaleString()}</td>
