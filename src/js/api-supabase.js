@@ -245,6 +245,12 @@ const SB = {
   // Upsert keyed on (staff_id, module_id) so a gate update overwrites the row.
   upsertFoundationsProgress(row){ return sbFetch('/rest/v1/foundations_progress?on_conflict=staff_id,module_id', { method:'POST', prefer:'resolution=merge-duplicates,return=minimal', body:row }); },
   updateFoundationsAssignmentStatus(staffId, moduleId, status){ return sbFetch(`/rest/v1/foundations_assignments?staff_id=eq.${staffId}&module_id=eq.${encodeURIComponent(moduleId)}`, { method:'PATCH', prefer:'return=minimal', body:{ status } }); },
+  // ── SBD Instruments (#22) ──
+  getInstrumentAssignments(){ return sbFetch('/rest/v1/instrument_assignments?select=*'); },
+  getInstrumentProgress(){ return sbFetch('/rest/v1/instrument_progress?select=*'); },
+  createInstrumentAssignment(data){ return sbFetch('/rest/v1/instrument_assignments', { method:'POST', prefer:'return=minimal', body:data }); },
+  upsertInstrumentProgress(row){ return sbFetch('/rest/v1/instrument_progress?on_conflict=staff_id,module_id', { method:'POST', prefer:'resolution=merge-duplicates,return=minimal', body:row }); },
+  updateInstrumentAssignmentStatus(staffId, moduleId, status){ return sbFetch(`/rest/v1/instrument_assignments?staff_id=eq.${staffId}&module_id=eq.${encodeURIComponent(moduleId)}`, { method:'PATCH', prefer:'return=minimal', body:{ status } }); },
   // ── User Profiles ──
   getUserProfile(userId){ return sbFetch(`/rest/v1/sbd_portal_users?auth_uid=eq.${userId}&select=*`); },
   getAllAdminProfiles(){ return sbFetch('/rest/v1/sbd_portal_users?select=*&order=name.asc'); },

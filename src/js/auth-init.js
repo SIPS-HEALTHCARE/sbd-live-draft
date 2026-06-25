@@ -2032,7 +2032,7 @@ async function initAppData(){
   window.SBD_INITIALIZING = true;
   console.log('SBD Platform: Multi-table data hydration started...');
   try {
-    const [facs, staff, systems, users, reviews, queue, registrations, freeAgents, promotions, onboarding, beltTestResults, transfers, observations, obsChecklists, fndAssignments, fndProgress] = await Promise.race([
+    const [facs, staff, systems, users, reviews, queue, registrations, freeAgents, promotions, onboarding, beltTestResults, transfers, observations, obsChecklists, fndAssignments, fndProgress, instAssignments, instProgress] = await Promise.race([
       Promise.all([
         SB.getFacilities().catch(e=>{ console.error('facs load err', e); return []; }),
         SB.getAllStaff().catch(e=>{ console.error('staff load err', e); return []; }),
@@ -2049,7 +2049,9 @@ async function initAppData(){
         (SB.getObservations ? SB.getObservations() : Promise.resolve([])).catch(e=>{ console.error('observations load err', e); return []; }),
         (SB.getObservationChecklists ? SB.getObservationChecklists() : Promise.resolve([])).catch(e=>{ console.error('obs checklists load err', e); return []; }),
         (SB.getFoundationsAssignments ? SB.getFoundationsAssignments() : Promise.resolve([])).catch(e=>{ console.error('fnd assignments load err', e); return []; }),
-        (SB.getFoundationsProgress ? SB.getFoundationsProgress() : Promise.resolve([])).catch(e=>{ console.error('fnd progress load err', e); return []; })
+        (SB.getFoundationsProgress ? SB.getFoundationsProgress() : Promise.resolve([])).catch(e=>{ console.error('fnd progress load err', e); return []; }),
+        (SB.getInstrumentAssignments ? SB.getInstrumentAssignments() : Promise.resolve([])).catch(e=>{ console.error('inst assignments load err', e); return []; }),
+        (SB.getInstrumentProgress ? SB.getInstrumentProgress() : Promise.resolve([])).catch(e=>{ console.error('inst progress load err', e); return []; })
       ]),
       new Promise((_,rej)=>setTimeout(()=>rej(new Error('Initial data load timeout')), 20000))
     ]);
@@ -2061,6 +2063,8 @@ async function initAppData(){
     // SBD Foundations (#22): hydrate per-staff assignments + 3-gate progress from Supabase.
     window.DB.foundationsAssignments = (fndAssignments||[]).map(a=>({ id:a.id, staffId:a.staff_id, moduleId:a.module_id, assignedBy:a.assigned_by, type:a.type, trigger:a.trigger, assignedDate:a.assigned_date, status:a.status }));
     window.DB.foundationsProgress = (fndProgress||[]).map(p=>({ staffId:p.staff_id, moduleId:p.module_id, g1:p.g1, g2:p.g2, g3:p.g3, complete:p.complete }));
+    window.DB.instrumentAssignments = (instAssignments||[]).map(a=>({ id:a.id, staffId:a.staff_id, moduleId:a.module_id, assignedBy:a.assigned_by, type:a.type, trigger:a.trigger, assignedDate:a.assigned_date, status:a.status }));
+    window.DB.instrumentProgress = (instProgress||[]).map(p=>({ staffId:p.staff_id, moduleId:p.module_id, g1:p.g1, g2:p.g2, g3:p.g3, complete:p.complete }));
     const currentSystems = window.DB.hospitalSystems || [];
     const memoryOptimistic = currentSystems.filter(s => s.id && String(s.id).startsWith('sys-'));
     const storageOptimistic = JSON.parse(localStorage.getItem('sbd_optimistic_systems') || '[]');
