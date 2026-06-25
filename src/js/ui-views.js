@@ -10935,7 +10935,7 @@ function renderHReports(){
   const psTestQueue = [];
   st.forEach(s=>{ [...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].forEach(tid=>{ if(getTrackStatus(s,tid)==='testing') psTestQueue.push({s,tid}); }); });
 
-  const tr=DB.trends[fid];
+  const tr=DB.trends&&DB.trends[fid];
   const yrs=tr?Object.keys(tr).sort():[];
   const latestYr=yrs.length?yrs[yrs.length-1]:'--';
   const prevYr=yrs.length>=2?yrs[yrs.length-2]:null;
@@ -12505,7 +12505,7 @@ function renderFacReports(el){
   const facRanked = [...activeFacs].sort((a,b)=>facStats(b.id).greenPct-facStats(a.id).greenPct);
   const networkRank = facRanked.findIndex(f=>f.id===fid)+1;
   const networkAvgPct = Math.round(activeFacs.reduce((s,f)=>s+facStats(f.id).greenPct,0)/Math.max(activeFacs.length,1));
-  const tr=DB.trends[fid];
+  const tr=DB.trends&&DB.trends[fid];
   const yrs=tr?Object.keys(tr).sort():[];
   const latestYr=yrs.length?yrs[yrs.length-1]:'--';
   const prevYr=yrs.length>=2?yrs[yrs.length-2]:null;
@@ -13707,7 +13707,7 @@ function renderAReports(){
 }
 
 function renderReportCharts(fid){
-  const tr=DB.trends[fid];if(!tr)return;
+  const tr=DB.trends&&DB.trends[fid];if(!tr)return;
   const yrs=Object.keys(tr).sort();
   const latest=tr[yrs[yrs.length-1]];
   if(latest){
