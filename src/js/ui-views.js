@@ -495,7 +495,7 @@ function renderSView(view){
     toast('RBAC Guard: Unauthorized access to Staff Portal', 'err');
     return;
   }
-  ['s-dashboard','s-belt','s-window','s-scoreboard','s-posschool','s-report','s-oip','s-schedule','s-history','s-study','s-foundations','s-guide','s-settings','s-david'].forEach(v=>{
+  ['s-dashboard','s-belt','s-window','s-scoreboard','s-posschool','s-report','s-oip','s-schedule','s-history','s-study','s-foundations','s-instruments','s-guide','s-settings','s-david'].forEach(v=>{
     const el=document.getElementById(v);
     if(el){el.classList.add('hidden');el.classList.remove('fade-in');}
   });
@@ -515,6 +515,7 @@ function renderSView(view){
     's-history':renderSHistory,
     's-study':renderSStudy,
     's-foundations':()=>{ if(typeof renderSFoundations==='function') renderSFoundations(); },
+    's-instruments':()=>{ if(typeof renderSInstruments==='function') renderSInstruments(); },
     's-guide':()=>renderGuideView('s'),
     's-settings':renderSettingsView,
     's-david':()=>renderDavidView('s-david'),
@@ -576,7 +577,7 @@ function renderHView(view){
     toast('RBAC Guard: Unauthorized access to Facility Portal', 'err');
     return;
   }
-  ['h-dashboard','h-staff','h-profile','h-milestones','h-posschool','h-training','h-scoreboard','h-schedule','h-attendance','h-reports','h-assessments','h-progression','h-guide','h-settings','h-david'].forEach(v=>{
+  ['h-dashboard','h-staff','h-profile','h-milestones','h-posschool','h-training','h-instruments','h-scoreboard','h-schedule','h-attendance','h-reports','h-assessments','h-progression','h-guide','h-settings','h-david'].forEach(v=>{
     const el=document.getElementById(v);
     if(el){ el.classList.add('hidden'); el.classList.remove('fade-in'); }
   });
@@ -596,6 +597,7 @@ function renderHView(view){
     'h-milestones':()=>renderHMilestones(),
     'h-posschool':()=>renderHPosSchool(),
     'h-training':()=>{ if(typeof renderHTraining==='function') renderHTraining(); },
+    'h-instruments':()=>{ if(typeof renderHInstruments==='function') renderHInstruments(); },
     'h-scoreboard':()=>renderHScoreboard(),
     'h-schedule':()=>renderHSchedule(),
     'h-attendance':()=>renderHAttendance(),
