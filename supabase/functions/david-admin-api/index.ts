@@ -226,7 +226,27 @@ serve(async (req) => {
         .select('*');
       if (accErr) throw accErr;
 
-      return new Response(JSON.stringify({ success: true, data: { analytics, access } }), {
+      // Month-to-date per-facility tokens + ground-truth cost for the Command Center tiles.
+      // The analytics view is all-time; the tiles must be month-scoped. Cost is summed from
+      // the stored `cost` column (Gap 1 fix — provider's real generation cost), never recomputed.
+      const monthStart = new Date();
+      monthStart.setUTCDate(1);
+      monthStart.setUTCHours(0, 0, 0, 0);
+      const { data: mtdRows, error: mtdErr } = await adminSupabase
+        .from('david_usage_logs')
+        .select('facility_id, prompt_tokens, completion_tokens, cost')
+        .gte('created_at', monthStart.toISOString());
+      if (mtdErr) throw mtdErr;
+
+      const mtd: Record<string, { tokens: number; cost: number }> = {};
+      (mtdRows || []).forEach((r: any) => {
+        const k = r.facility_id;
+        if (!mtd[k]) mtd[k] = { tokens: 0, cost: 0 };
+        mtd[k].tokens += (r.prompt_tokens || 0) + (r.completion_tokens || 0);
+        mtd[k].cost += Number(r.cost || 0);
+      });
+
+      return new Response(JSON.stringify({ success: true, data: { analytics, access, mtd } }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }

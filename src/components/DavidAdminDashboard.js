@@ -17,6 +17,7 @@ class DavidAdminDashboard {
         await this.fetchData();
         this.renderMetrics();
         this.renderTable();
+        this.renderTelemetry();
         
         // Expose globally for inline event handlers
         window.DAVID_DASHBOARD = this;
@@ -42,7 +43,7 @@ class DavidAdminDashboard {
     async fetchData() {
         const token = this.getAuthToken();
         
-        let apiData = { analytics: [], access: [] };
+        let apiData = { analytics: [], access: [], mtd: {} };
         if (token) {
             try {
                 const res = await fetch(this.apiUrl, {
@@ -72,7 +73,7 @@ class DavidAdminDashboard {
         if (dbFacilities.length > 0) {
             this.facilities = dbFacilities.map(fac => {
                 const accessRecord = apiData.access.find(a => a.facility_id === fac.id);
-                const analyticsRecord = apiData.analytics.find(a => a.facility_id === fac.id);
+                const mtdRecord = (apiData.mtd && apiData.mtd[fac.id]) ? apiData.mtd[fac.id] : { tokens: 0, cost: 0 };
                 return {
                     id: fac.id,
                     name: fac.name || 'Unnamed Facility',
@@ -80,7 +81,12 @@ class DavidAdminDashboard {
                     tier: accessRecord ? accessRecord.tier : 'base',
                     usage_tier: accessRecord && accessRecord.usage_tier ? accessRecord.usage_tier : 'included',
                     questions_allowance: accessRecord && accessRecord.questions_allowance ? accessRecord.questions_allowance : 250,
-                    tokens_used: analyticsRecord ? (analyticsRecord.total_tokens || 0) : 0
+                    questions_consumed: accessRecord && accessRecord.questions_consumed ? accessRecord.questions_consumed : 0,
+                    reserve_consumed: accessRecord && accessRecord.reserve_consumed ? accessRecord.reserve_consumed : 0,
+                    period_start: accessRecord ? accessRecord.period_start : null,
+                    // MTD figures (month-scoped) for the cost/token tiles — questions drive the throttle.
+                    tokens_used: mtdRecord.tokens || 0,
+                    cost_mtd: mtdRecord.cost || 0
                 };
             });
         } else {
@@ -138,6 +144,7 @@ class DavidAdminDashboard {
 
         this.renderMetrics();
         this.renderTable();
+        this.renderTelemetry();
     }
 
     async updateTier(facilityId, newTier) {
@@ -182,6 +189,7 @@ class DavidAdminDashboard {
 
         this.renderMetrics();
         this.renderTable();
+        this.renderTelemetry();
     }
 
     async updateUsageTier(facilityId, newUsageTier) {
@@ -234,6 +242,7 @@ class DavidAdminDashboard {
 
         this.renderMetrics();
         this.renderTable();
+        this.renderTelemetry();
     }
 
     showToast(message, type = 'success') {
@@ -335,6 +344,25 @@ class DavidAdminDashboard {
                 color: var(--txt);
                 margin-top: 8px;
                 font-family: 'Fira Code', monospace;
+            }
+            .dad-kpi-sub {
+                font-size: 11px;
+                color: var(--txt2);
+                margin-top: 6px;
+                font-family: 'Fira Code', monospace;
+            }
+            .dad-telemetry-row {
+                display: flex;
+                align-items: center;
+                gap: 16px;
+                padding: 12px 0;
+                border-bottom: 1px solid rgba(255,255,255,0.05);
+            }
+            .dad-section-title {
+                font-size: 16px;
+                font-weight: 700;
+                color: var(--gold);
+                margin: 32px 0 16px;
             }
             .dad-table-wrapper {
                 background: var(--s1);
@@ -507,13 +535,17 @@ class DavidAdminDashboard {
                                 <th>Facility Name</th>
                                 <th>Intelligence Tier</th>
                                 <th>SIPS Plan</th>
-                                <th>Monthly Tokens Used</th>
+                                <th>Questions Used (MTD)</th>
                                 <th>Status</th>
                                 <th>Toggle Access</th>
                             </tr>
                         </thead>
                         <tbody id="dad-table-body"></tbody>
                     </table>
+                </div>
+                <h2 class="dad-section-title">Live Telemetry · Per-Facility Question Burn</h2>
+                <div class="dad-table-wrapper" style="padding: 8px 24px;">
+                    <div id="dad-telemetry"></div>
                 </div>
             </div>
         `;
@@ -522,24 +554,91 @@ class DavidAdminDashboard {
     renderMetrics() {
         const kpiArea = document.getElementById('dad-kpi-area');
         if (!kpiArea) return;
-        
-        const activeCount = this.facilities.filter(f => f.is_active).length;
-        const totalTokens = this.facilities.reduce((acc, f) => acc + f.tokens_used, 0);
+
+        const activeFacs = this.facilities.filter(f => f.is_active);
+        const activeCount = activeFacs.length;
+        const totalTokens = this.facilities.reduce((acc, f) => acc + (f.tokens_used || 0), 0);
+        const totalCost = this.facilities.reduce((acc, f) => acc + (f.cost_mtd || 0), 0);
+
+        // Network question-burn ring = Σ consumed / Σ allowance across ACTIVE facilities (§5).
+        const sumConsumed = activeFacs.reduce((a, f) => a + (f.questions_consumed || 0), 0);
+        const sumAllowance = activeFacs.reduce((a, f) => a + (f.questions_allowance || 0), 0);
+        const ringPct = sumAllowance > 0 ? Math.min(100, Math.round((sumConsumed / sumAllowance) * 100)) : 0;
 
         kpiArea.innerHTML = `
             <div class="dad-kpi-card">
                 <div class="dad-kpi-label">Active Deployments</div>
-                <div class="dad-kpi-value">${activeCount} <span style="font-size: 16px; color: var(--txt2);">/ ${this.facilities.length}</span></div>
+                <div class="dad-kpi-value" style="display:flex; align-items:center; gap:14px;">
+                    <span>${activeCount} <span style="font-size: 16px; color: var(--txt2);">/ ${this.facilities.length}</span></span>
+                    ${this.ringSvg(ringPct)}
+                </div>
+                <div class="dad-kpi-sub">${sumConsumed.toLocaleString()} / ${sumAllowance.toLocaleString()} questions used</div>
             </div>
             <div class="dad-kpi-card">
-                <div class="dad-kpi-label">Network Token Usage</div>
+                <div class="dad-kpi-label">Network Token Usage <span style="opacity:0.6;">· MTD</span></div>
                 <div class="dad-kpi-value">${totalTokens.toLocaleString()}</div>
             </div>
             <div class="dad-kpi-card">
-                <div class="dad-kpi-label">Estimated AI Cost</div>
-                <div class="dad-kpi-value">$${((totalTokens / 1000) * 0.015).toFixed(2)}</div>
+                <div class="dad-kpi-label">Estimated AI Cost <span style="opacity:0.6;">· MTD</span></div>
+                <div class="dad-kpi-value">$${totalCost.toFixed(2)}</div>
             </div>
         `;
+    }
+
+    // Donut ring for the Active Deployments tile (network question burn %).
+    ringSvg(pct) {
+        const r = 16, c = 2 * Math.PI * r;
+        const off = c * (1 - Math.max(0, Math.min(100, pct)) / 100);
+        const color = pct >= 90 ? '#ef4444' : pct >= 75 ? '#f59e0b' : 'var(--gold)';
+        return `<svg width="44" height="44" viewBox="0 0 44 44" style="flex:none;">
+            <circle cx="22" cy="22" r="${r}" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="4"></circle>
+            <circle cx="22" cy="22" r="${r}" fill="none" stroke="${color}" stroke-width="4"
+                stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"
+                stroke-linecap="round" transform="rotate(-90 22 22)"></circle>
+            <text x="22" y="26" text-anchor="middle" font-size="11" fill="var(--txt)" font-family="monospace">${pct}%</text>
+        </svg>`;
+    }
+
+    // Per-facility question burn bar. Color states per §5: green <75, amber 75–90,
+    // red 90–100, distinct (pulsing) at ≥100. Shows manager reserve draw when over allowance.
+    burnBar(consumed, allowance, reserveConsumed) {
+        const a = allowance || 0;
+        const used = consumed || 0;
+        const pct = a > 0 ? (used / a) * 100 : 0;
+        const width = Math.min(100, pct);
+        let color, label;
+        if (pct >= 100) { color = '#ef4444'; label = 'AT LIMIT'; }
+        else if (pct >= 90) { color = '#ef4444'; label = `${Math.round(pct)}%`; }
+        else if (pct >= 75) { color = '#f59e0b'; label = `${Math.round(pct)}%`; }
+        else { color = '#10b981'; label = `${Math.round(pct)}%`; }
+        const reserveNote = (reserveConsumed > 0) ? ` <span style="color:#f59e0b;">+${reserveConsumed} reserve</span>` : '';
+        return `<div style="min-width:160px;">
+            <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px; font-family:'Fira Code',monospace;">
+                <span>${used.toLocaleString()} / ${a.toLocaleString()}</span>
+                <span style="color:${color}; font-weight:600;">${label}${reserveNote}</span>
+            </div>
+            <div style="height:6px; background:rgba(255,255,255,0.08); border-radius:3px; overflow:hidden;">
+                <div style="height:100%; width:${width}%; background:${color}; border-radius:3px; transition:width .3s;${pct >= 100 ? 'animation:pulse 1s infinite alternate;' : ''}"></div>
+            </div>
+        </div>`;
+    }
+
+    renderTelemetry() {
+        const el = document.getElementById('dad-telemetry');
+        if (!el) return;
+        const active = this.facilities.filter(f => f.is_active);
+        if (active.length === 0) {
+            el.innerHTML = `<div style="color:var(--txt2); font-size:13px; padding:12px 0;">No active facilities to monitor.</div>`;
+            return;
+        }
+        el.innerHTML = active.map(f => `
+            <div class="dad-telemetry-row">
+                <div style="flex:1; font-size:13px; font-weight:500;">${f.name}
+                    <span class="dad-tier-badge dad-plan-${f.usage_tier}" style="margin-left:8px;">${(f.usage_tier || 'included').toUpperCase()}</span>
+                </div>
+                <div style="flex:2;">${this.burnBar(f.questions_consumed, f.questions_allowance, f.reserve_consumed)}</div>
+            </div>
+        `).join('');
     }
 
     renderTable() {
@@ -568,7 +667,7 @@ class DavidAdminDashboard {
                         <option value="power" ${f.usage_tier === 'power' ? 'selected' : ''}>POWER · 7,500</option>
                     </select>
                 </td>
-                <td style="font-family: 'Fira Code', monospace;">${f.tokens_used.toLocaleString()}</td>
+                <td>${this.burnBar(f.questions_consumed, f.questions_allowance, f.reserve_consumed)}</td>
                 <td>
                     <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: ${f.is_active ? 'var(--gold)' : 'var(--txt2)'};">
                         <span style="width: 8px; height: 8px; border-radius: 50%; background: ${f.is_active ? 'var(--gold)' : 'var(--txt2)'}; display: inline-block; ${f.is_active ? 'box-shadow: 0 0 8px rgba(196,154,32,0.6);' : ''}"></span>
