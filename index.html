@@ -21,6 +21,7 @@
 
   <!-- MODULAR CSS -->
   <link rel="stylesheet" href="src/css/index.css?v=25">
+  <link rel="stylesheet" href="src/css/foundations.css?v=1">
 </head>
 <body>
   <!-- MAIN APP CONTAINER -->
@@ -267,6 +268,9 @@
       <div class="nav-item" data-view="h-posschool" onclick="hNav(this,'h-posschool','Position School')">
         <span class="ico"><svg viewBox="0 0 18 18" fill="none"><path d="M9 2L3 5.5v3C3 12 5.7 14.5 9 16c3.3-1.5 6-4 6-7.5v-3L9 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M6 9l2.5 2.5L13 7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Position School
       </div>
+      <div class="nav-item" data-view="h-training" onclick="hNav(this,'h-training','SBD Foundations')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><path d="M9 2l6 3v4c0 3.5-2.5 6-6 7-3.5-1-6-3.5-6-7V5l6-3z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M6.5 9l1.7 1.7L12 7.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>SBD Foundations
+      </div>
       <div class="nav-item" data-view="h-scoreboard" onclick="hNav(this,'h-scoreboard','Staff Scoreboard')">
         <span class="ico"><svg viewBox="0 0 18 18" fill="none"><path d="M9 2l2.1 4.3 4.7.7-3.4 3.3.8 4.7L9 12.8l-4.2 2.2.8-4.7L2.2 7l4.7-.7z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></span>Scoreboard
       </div>
@@ -322,6 +326,7 @@
       <div id="h-profile" class="hidden"></div>
       <div id="h-milestones" class="hidden"></div>
       <div id="h-posschool" class="hidden"></div>
+      <div id="h-training" class="hidden"></div>
       <div id="h-scoreboard" class="hidden"></div>
       <div id="h-schedule" class="hidden"></div>
       <div id="h-attendance" class="hidden"></div>
@@ -519,6 +524,9 @@
       <div class="nav-item" data-view="s-study" onclick="sNav(this,'s-study','Study &amp; Practice')">
         <span class="ico"><svg viewBox="0 0 18 18" fill="none"><rect x="2" y="2" width="14" height="14" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M6 6h6M6 9h4M6 12h5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>Study &amp; Practice
       </div>
+      <div class="nav-item" data-view="s-foundations" onclick="sNav(this,'s-foundations','SBD Foundations')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><path d="M9 2l6 3v4c0 3.5-2.5 6-6 7-3.5-1-6-3.5-6-7V5l6-3z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M6.5 9l1.7 1.7L12 7.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>SBD Foundations
+      </div>
       <div class="nav-lbl" style="margin-top:6px">Support</div>
       <div class="nav-item" data-view="s-settings" onclick="sNav(this,'s-settings','Account &amp; Settings')">
         <span class="ico"><svg viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="2.5" stroke="currentColor" stroke-width="1.3"/><path d="M9 2v2M9 14v2M2 9h2M14 9h2M4.1 4.1l1.4 1.4M12.5 12.5l1.4 1.4M12.5 5.5l1.4-1.4M4.1 13.9l1.4-1.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>Account &amp; Settings
@@ -559,6 +567,7 @@
       <div id="s-posschool" class="hidden"></div>
       <div id="s-history" class="hidden"></div>
       <div id="s-study" class="hidden"></div>
+      <div id="s-foundations" class="hidden"></div>
       <div id="s-guide" class="hidden"></div>
       <div id="s-settings" class="hidden"></div>
       <div id="s-david" class="hidden"></div>
@@ -690,16 +699,17 @@
 
   <script src="src/js/logic.js?v=25"></script>
   <script src="src/js/utils.js?v=27"></script>
-  <script src="src/js/api-supabase.js?v=39"></script>
+  <script src="src/js/api-supabase.js?v=40"></script>
   <script src="src/js/auth-password.js?v=20"></script>
   <script src="src/js/activity.js?v=1"></script>
   <script src="src/js/ovs-guidance.js?v=1"></script>
-  <script src="src/js/ui-views.js?v=132"></script>
+  <script src="src/js/foundations.js?v=1"></script>
+  <script src="src/js/ui-views.js?v=133"></script>
   <script src="src/js/belt-test-engine.js?v=1"></script>
   <script src="src/js/belt-test-flow.js?v=3"></script>
   <script src="src/js/settings.js?v=19"></script>
   <script src="src/js/onboarding.js?v=20"></script>
-  <script src="src/js/auth-init.js?v=29"></script>
+  <script src="src/js/auth-init.js?v=30"></script>
   <script src="src/js/david-serializers.js?v=4"></script>
   <script src="src/js/david-alerts.js?v=1"></script>
   <script src="src/components/DavidChat.js?v=20"></script>
