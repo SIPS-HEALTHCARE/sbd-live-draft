@@ -1783,6 +1783,24 @@ class DavidChat {
                     errorJson = await res.json();
                 } catch(e) {}
                 
+                if (res.status === 403 && errorJson.action === 'ACTION_QUOTA_EXHAUSTED') {
+                    const isStaff = errorJson.role === 'staff';
+                    contentTarget.innerHTML = `
+                        <div class="david-upsell-card" style="padding: 16px; border-radius: 8px; background: rgba(239,68,68,0.08); border: 1px solid #ef4444; text-align: center; margin-top: 8px;">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" style="margin-bottom: 8px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                            <h3 style="color: #ef4444; margin-top: 0; font-family: 'Fira Code', monospace; font-size: 15px;">Monthly Question Limit Reached</h3>
+                            <p style="font-size: 13px; color: var(--txt); opacity: 0.85; line-height: 1.4;">${isStaff
+                                ? "Your facility has used all of this month's David questions. A manager or administrator can still ask from the reserve, or upgrade the facility's SIPS plan."
+                                : "This facility's monthly David questions — including the manager reserve — are used up. Questions reset on the 1st, or upgrade the SIPS plan to add capacity now."}</p>
+                        </div>
+                    `;
+                    const cursor = msgDiv.querySelector('.david-cursor');
+                    if (cursor) cursor.style.display = 'none';
+                    this.isThinking = false;
+                    this.btn.disabled = false;
+                    return;
+                }
+
                 if (res.status === 403 && errorJson.action === 'ACTION_UPSELL') {
                     contentTarget.innerHTML = `
                         <div class="david-upsell-card" style="padding: 16px; border-radius: 8px; background: rgba(196,154,32,0.1); border: 1px solid var(--gold); text-align: center; margin-top: 8px;">
@@ -1861,6 +1879,9 @@ class DavidChat {
                                         contentTarget.innerHTML = displayContent.replace(/\n/g, '<br>');
                                     }
                                     this.msgArea.scrollTop = this.msgArea.scrollHeight;
+                                } else if (json.meta && json.meta.quota) {
+                                    // Gap 2 — non-blocking heads-up at 75% (NOTICE) / 90% (UPGRADE).
+                                    this.renderQuotaNotice(msgDiv, json.meta.quota);
                                 } else if (json.error) {
                                     contentTarget.innerHTML += `<span style="color:var(--err)">Error: ${json.error}</span>`;
                                 }
@@ -1970,6 +1991,26 @@ class DavidChat {
         `;
         this.msgArea.appendChild(card);
         this.msgArea.scrollTop = this.msgArea.scrollHeight;
+    }
+
+    // Gap 2 — non-blocking quota heads-up banner (75% NOTICE / 90% UPGRADE). Inserted once
+    // per message, above the streamed answer. Questions/plan language only — never cost.
+    renderQuotaNotice(msgDiv, quota) {
+        if (!msgDiv || !quota) return;
+        if (msgDiv.querySelector('.david-quota-notice')) return; // one banner per message
+        const isUpgrade = quota.state === 'UPGRADE';
+        const color = isUpgrade ? '#ef4444' : '#f59e0b';
+        const title = isUpgrade
+            ? `Approaching your monthly question limit (${quota.percent}% used)`
+            : `Heads up — ${quota.percent}% of this month's questions used`;
+        const body = isUpgrade
+            ? "Your facility is close to its monthly David question allowance. Consider upgrading your SIPS plan to avoid interruption."
+            : "You're past 75% of your facility's monthly David questions for this period.";
+        const banner = document.createElement('div');
+        banner.className = 'david-quota-notice';
+        banner.style.cssText = `margin: 0 0 10px; padding: 10px 14px; border-radius: 8px; background: ${color}1a; border: 1px solid ${color}; font-size: 12px; line-height: 1.4; color: var(--txt);`;
+        banner.innerHTML = `<strong style="color: ${color};">${title}</strong><br>${body}`;
+        msgDiv.insertBefore(banner, msgDiv.firstChild);
     }
 
     // --- Internal Formatters ---

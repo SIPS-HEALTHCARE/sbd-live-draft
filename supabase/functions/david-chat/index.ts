@@ -130,6 +130,52 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
         if (canSql) tools.push(SQL_TOOL);
         if (canWiki) tools.push(WIKI_TOOL);
 
+        // ── Gap 2 throttle (§7.2) — question-count metering pre-flight ──────────────
+        // Guarded to real facility traffic: master/global sessions and facilities with no
+        // access row are never metered (david_get_quota returns null → skip). FAIL-OPEN:
+        // any quota-read error allows the request — a metering bug must never deny a paying
+        // facility. The role class comes from the portal profile: line staff vs everyone else.
+        const facilityId = profile?.facility_id;
+        const throttleRole = (profile?.role === 'staff_member') ? 'staff' : 'manager';
+        let drawingReserve = false;
+        let softNotice: { state: string; percent: number } | null = null;
+        if (!isMaster && facilityId) {
+            try {
+                const { data: q } = await supabase.rpc('david_get_quota', { p_facility_id: facilityId });
+                if (q) {
+                    const allowance = q.questions_allowance || 0;
+                    const reserve = Math.round(allowance * 0.10);
+                    const consumed = q.questions_consumed || 0;
+                    const pct = allowance > 0 ? (consumed / allowance) * 100 : 0;
+
+                    let allow = true;
+                    if (pct >= 100) {                                  // AT_LIMIT
+                        if (throttleRole === 'staff') {
+                            allow = false;                             // staff paused at 100%
+                        } else if (consumed < allowance + reserve) {
+                            allow = true; drawingReserve = true;       // manager/admin draws reserve
+                        } else {
+                            allow = false;                             // reserve exhausted → all paused
+                        }
+                    }
+
+                    if (!allow) {
+                        return new Response(JSON.stringify({
+                            error: 'Monthly question limit reached for this facility.',
+                            action: 'ACTION_QUOTA_EXHAUSTED',
+                            state: 'AT_LIMIT',
+                            role: throttleRole,
+                            percent: Math.round(pct),
+                        }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+                    }
+                    if (pct >= 90) softNotice = { state: 'UPGRADE', percent: Math.round(pct) };
+                    else if (pct >= 75) softNotice = { state: 'NOTICE', percent: Math.round(pct) };
+                }
+            } catch (e: any) {
+                console.warn('[DAVID] Quota pre-flight failed (fail-open):', e?.message);
+            }
+        }
+
         const { readable, writable } = new TransformStream();
         const writer = writable.getWriter();
         const encoder = new TextEncoder();
@@ -275,6 +321,12 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
 
         (async () => {
             try {
+                // Gap 2 — non-blocking heads-up banner at 75% (NOTICE) / 90% (UPGRADE).
+                // Streamed as a meta line so the UI can render it without altering the answer.
+                if (softNotice) {
+                    await writer.write(encoder.encode(`data: ${JSON.stringify({ meta: { quota: softNotice } })}\n\n`));
+                }
+
                 await runAutonomousLoop(messages);
 
                 const visibleAnswer = fullContent
@@ -354,6 +406,18 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
                 }).then(({ error }: { error: any }) => {
                     if (error) console.warn('[DAVID] Usage log skipped:', error.message);
                 });
+
+                // ── Gap 2 — count one completed chat request against the facility's monthly
+                // question allowance (§6 Fix 2). Fires exactly once per user request here,
+                // AFTER the full autonomous loop (incl. any tool round-trips and the forced-
+                // completion retry) — never once per internal model call. Skipped for master/
+                // global sessions and facilities with no access row. Fire-and-forget.
+                if (!isMaster && facilityId) {
+                    supabase.rpc('david_consume_question', { p_facility_id: facilityId, p_is_reserve: drawingReserve })
+                        .then(({ error }: { error: any }) => {
+                            if (error) console.warn('[DAVID] Question count skipped:', error.message);
+                        });
+                }
 
             } catch (err: any) {
                 console.error('[DAVID] Run Loop error:', err);
