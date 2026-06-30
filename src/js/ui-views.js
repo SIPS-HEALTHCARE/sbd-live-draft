@@ -1501,7 +1501,7 @@ function startAssessmentTimer(){
           submitBeltTest();
         }
       } else if(!PA.submitting && !PA.submitted){
-        submitPlacementAssessment();
+        submitPlacementAssessment('timer');
       }
       return;
     }
@@ -2118,15 +2118,23 @@ function prSuggestionLabel(pr){
   return 'No Belt';
 }
 
-async function submitPlacementAssessment(){
+async function submitPlacementAssessment(trigger){
   // [CRITICAL GUARDRAIL - DO NOT REMOVE OR BREAK]
   // This function relies on a globally defined `sbFetch` to persist data to Supabase.
-  // Before making any refactors to this method or `api-supabase.js`, 100% verity that 
+  // Before making any refactors to this method or `api-supabase.js`, 100% verity that
   // `sbFetch` is seamlessly connected to POST to `placement_reviews`.
   // Do NOT change the payload object keys unless the backend schema explicitly changes.
-  
+
   if(PA.submitting) return;
   PA.submitting = true;
+  // Submit-lifecycle telemetry (server-side, via the existing activity log). Lets us
+  // reconstruct exactly what happened on a candidate's submit -- did it fire, by button
+  // or timer, and did it succeed or queue offline -- so a "report didn't come through"
+  // is diagnosable from logs instead of guesswork. Best-effort; never throws into submit.
+  try { if(typeof logActivity==='function') logActivity('placement_submit_start', {
+    staffId: PA.staffId, sessionId: ASSESSMENT_SESSION.sessionId || null,
+    trigger: trigger || 'button', currentQ: PA.currentQ, totalQ: getPAQuestions().length
+  }); } catch(_){}
   document.getElementById('placement-content').innerHTML = `
     <div style="text-align:center;padding:60px 0">
       <div style="width:56px;height:56px;border:3px solid rgba(139,92,246,.2);border-top:3px solid #8b5cf6;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 24px"></div>
@@ -2151,6 +2159,10 @@ async function submitPlacementAssessment(){
   PA.submitting = false;
   PA.submitted = true;
   savePAState();
+  try { if(typeof logActivity==='function') logActivity('placement_submit_done', {
+    staffId: PA.staffId, sessionId: ASSESSMENT_SESSION.sessionId || null,
+    pendingSync: !!pendingSync, reviewCreated: !pendingSync
+  }); } catch(_){}
   renderPAComplete(pendingSync);
 }
 
@@ -2289,6 +2301,9 @@ async function paPersistSubmission({ staffId, answers, questions, sessionId, ses
       // do not need a new PIN or to retake anything.
       queuePendingPlacement({ body: prBody, staffId: pr.staffId, token: sessionToken });
       pendingSync = true;
+      try { if(typeof logActivity==='function') logActivity('placement_submit_queued', {
+        staffId: pr.staffId, sessionId: sessionId || null, reason: 'network_retries_exhausted'
+      }); } catch(_){}
     }
   } else {
     /* saveDemoData() removed */
