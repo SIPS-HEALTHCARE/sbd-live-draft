@@ -2090,12 +2090,32 @@ function prSuggestion(pr){
   const simR = (pr && pr.responses || []).filter(r => r.type === 'simulation');
   if(!kR.length && !simR.length) return null;
   const avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
-  const kOverall = Math.round(avg(kR.map(r => r.score)));
+  // Blend the RAW averages, then round once — same as rptComputeModel(). Rounding the
+  // component scores BEFORE blending (e.g. 87.5 -> 88) used to flip belts at a threshold
+  // boundary (Bond: 77.5 read as 78 = Yellow), which made the card disagree with the report.
+  const kRaw = avg(kR.map(r => r.score));
+  const simRaw = avg(simR.map(r => r.aiScore));
+  const kOverall = Math.round(kRaw);
   const kL1 = Math.round(avg(kR.filter(r => r.level === 1).map(r => r.score)));
-  const simOverall = Math.round(avg(simR.map(r => r.aiScore)));
-  const blended = Math.round(kOverall * 0.6 + simOverall * 0.4);
+  const simOverall = Math.round(simRaw);
+  const blended = Math.round(kRaw * 0.6 + simRaw * 0.4);
   const dangerous = kR.some(r => r.isDangerous && !r.correct);
   return sbdSuggestBelt(kOverall, kL1, simOverall, blended, dangerous);
+}
+
+// The label shown on the placement-review CARD. It is derived from rptComputeModel() — the
+// SAME engine that produces the downloadable assessment report — so the card's SUGGESTED
+// chip can never disagree with the report's BELT RECOMMENDED / FINAL DETERMINATION. (Earlier
+// the card used sbdSuggestBelt with a different blend + dangerous policy, so the same
+// candidate showed e.g. "Yellow" on the card and "No Belt" on the report.)
+function prSuggestionLabel(pr){
+  const has = (pr && pr.responses || []).some(r => r.type === 'knowledge' || r.type === 'simulation');
+  if(!has) return null;
+  const m = rptComputeModel(pr);
+  if(m.outcome === 'CLEAN') return `${m.belt} Belt`;
+  if(m.outcome === 'CONDITIONAL') return `${m.belt} Belt Conditional`;
+  if(m.outcome === 'KNOWLEDGE_FOUNDATION') return 'Knowledge Foundation';
+  return 'No Belt';
 }
 
 async function submitPlacementAssessment(){
@@ -2190,10 +2210,14 @@ async function paPersistSubmission({ staffId, answers, questions, sessionId, ses
   const _kResp = responses.filter(r => r.type === 'knowledge');
   const _simResp = responses.filter(r => r.type === 'simulation');
   const _avg = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
-  const kOverall = Math.round(_avg(_kResp.map(r => r.score)));
+  // Blend the RAW averages, then round once (matches rptComputeModel + prSuggestion). Do NOT
+  // round the component scores before blending -- that flips belts at threshold boundaries.
+  const _kRaw = _avg(_kResp.map(r => r.score));
+  const _simRaw = _avg(_simResp.map(r => r.aiScore));
+  const kOverall = Math.round(_kRaw);
   const kL1 = Math.round(_avg(_kResp.filter(r => r.level === 1).map(r => r.score)));
-  const simOverall = Math.round(_avg(_simResp.map(r => r.aiScore)));
-  const blended = Math.round(kOverall * 0.6 + simOverall * 0.4);
+  const simOverall = Math.round(_simRaw);
+  const blended = Math.round(_kRaw * 0.6 + _simRaw * 0.4);
   // Dangerous-answer block is wired but stays inert until SIPS supplies the per-question
   // dangerous-answer list (Governing Standards) and questions carry q.isDangerous.
   const hasDangerousKAnswer = _kResp.some(r => r.isDangerous && !r.correct);
@@ -3288,7 +3312,7 @@ function renderAPlacementReviews(){
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                 <span style="font-size:14px;font-weight:700;color:#f1f5f9">${displayName}</span>
                 ${belt?beltBadge(belt):''}
-                ${(()=>{ if(!isPending) return ''; const sug=prSuggestion(pr); return sug?`<span title="Belt engine suggestion (blended + K + simulation floors, dangerous-answer block)" style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:rgba(196,154,32,.12);color:#eab308">SUGGESTED: ${sug.toUpperCase()}</span>`:''; })()}
+                ${(()=>{ if(!isPending) return ''; const sug=prSuggestionLabel(pr); return sug?`<span title="Belt engine suggestion — matches the assessment report determination" style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:rgba(196,154,32,.12);color:#eab308">SUGGESTED: ${sug.toUpperCase()}</span>`:''; })()}
                 ${pr._blended!=null?`<span style="font-size:11px;font-weight:800;color:${pr._blended>=75?'#22c55e':pr._blended>=65?'#f59e0b':'#ef4444'}" title="Blended score (60% knowledge / 40% simulation)">${pr._blended}%</span>`:''}
                 <span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:${isPending?'rgba(167,139,250,.15)':'rgba(34,197,94,.12)'};color:${statusClr}">${statusLabel.toUpperCase()}</span>
               </div>
@@ -3979,13 +4003,15 @@ function rptHandoffStatus(staffArr){
 // ============================================================ ASSESSMENT REPORT GENERATOR
 
 // Belt scoring thresholds — White Belt values from SBD OS Governing Standards §2
+// Single source of truth: these MUST match SBD_BELT_THRESHOLDS / RPT_STANDARDS so the
+// confirmed-report engine (deriveOutcome) agrees with the card + the draft report.
 const BELT_THRESHOLDS = {
   White:  { blended: 75, sim: 72, knowledge: 80 },
-  Yellow: { blended: 78, sim: 74, knowledge: 82 },
-  Green:  { blended: 80, sim: 76, knowledge: 83 },
-  Blue:   { blended: 82, sim: 78, knowledge: 84 },
-  Brown:  { blended: 85, sim: 80, knowledge: 85 },
-  Black:  { blended: 88, sim: 83, knowledge: 88 },
+  Yellow: { blended: 78, sim: 75, knowledge: 83 },
+  Green:  { blended: 81, sim: 78, knowledge: 86 },
+  Blue:   { blended: 85, sim: 82, knowledge: 89 },
+  Brown:  { blended: 87, sim: 84, knowledge: 91 },
+  Black:  { blended: 90, sim: 87, knowledge: 92 },
 };
 
 const LEVEL_LABELS = { '1':'Foundational','2':'Operational','3':'Applied','4':'Advanced','5':'Systems' };
@@ -4044,7 +4070,9 @@ function deriveOutcome(pr) {
   const knowledgeOverall = kTotal ? (kCorrect / kTotal) * 100 : 0;
   const simScored = simulation.filter(r => r.aiScore != null);
   const simOverall = simScored.length ? simScored.reduce((a, r) => a + r.aiScore, 0) / simScored.length : 0;
-  const blended = (knowledgeOverall + simOverall) / 2;
+  // 60% knowledge / 40% simulation -- the governed blend (matches rptComputeModel + the
+  // card). This was a 50/50 average, which made the confirmed report disagree with the card.
+  const blended = (knowledgeOverall * 0.6) + (simOverall * 0.4);
 
   const dangerousIds = detectDangerousAnswers(responses);
   const dangerousKnowledge = knowledge.filter(r => dangerousIds.includes(r.qId || r.id));
