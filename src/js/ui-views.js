@@ -3311,8 +3311,17 @@ function renderAPlacementReviews(){
             <div style="min-width:0;flex:1">
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                 <span style="font-size:14px;font-weight:700;color:#f1f5f9">${displayName}</span>
-                ${belt?beltBadge(belt):''}
-                ${(()=>{ if(!isPending) return ''; const sug=prSuggestionLabel(pr); return sug?`<span title="Belt engine suggestion — matches the assessment report determination" style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:rgba(196,154,32,.12);color:#eab308">SUGGESTED: ${sug.toUpperCase()}</span>`:''; })()}
+                ${(()=>{
+                  const sug = isPending ? prSuggestionLabel(pr) : null;
+                  // On a PENDING card the belt chip is just a placeholder tentative; when the
+                  // engine suggests No Belt / Knowledge Foundation, a "White" chip next to
+                  // "SUGGESTED: NO BELT" reads as a contradiction. Hide the placeholder chip in
+                  // that case so the chip + the suggestion + the report all read the same.
+                  const noBeltSuggest = isPending && (!sug || sug === 'No Belt' || sug === 'Knowledge Foundation');
+                  const badge = (belt && !noBeltSuggest) ? beltBadge(belt) : '';
+                  const sugChip = (isPending && sug) ? `<span title="Belt engine suggestion — matches the assessment report determination" style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:rgba(196,154,32,.12);color:#eab308">SUGGESTED: ${sug.toUpperCase()}</span>` : '';
+                  return badge + sugChip;
+                })()}
                 ${pr._blended!=null?`<span style="font-size:11px;font-weight:800;color:${pr._blended>=75?'#22c55e':pr._blended>=65?'#f59e0b':'#ef4444'}" title="Blended score (60% knowledge / 40% simulation)">${pr._blended}%</span>`:''}
                 <span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:${isPending?'rgba(167,139,250,.15)':'rgba(34,197,94,.12)'};color:${statusClr}">${statusLabel.toUpperCase()}</span>
               </div>
