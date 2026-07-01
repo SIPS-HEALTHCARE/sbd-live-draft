@@ -773,9 +773,9 @@ function renderHTraining(){
    html+='<td><span class="bb bb-'+r.s.belt+'">'+r.s.belt+'</span></td>';
    html+='<td>'+(r.assigned>0?'<span class="'+(r.pct===100?'tc-ok':r.pct>0?'tc-warn':'tc-muted')+'">'+r.done+'/'+r.assigned+'</span>':'<span class="tc-muted">None</span>')+'</td>';
    html+='<td style="white-space:nowrap">';
-   if(r.assigned>0) html+='<button class="btn btn-ghost btn-xs" onclick="hFndStaffDetail('+r.s.id+')">View</button> ';
-   if(r.assigned<10) html+='<button class="btn btn-gold btn-xs" onclick="hAssignFndModal('+r.s.id+')">Assign</button> ';
-   if(r.assigned===0) html+='<button class="btn btn-blue btn-xs" onclick="hAssignAllFnd('+r.s.id+')">All 10</button>';
+   if(r.assigned>0) html+='<button class="btn btn-ghost btn-xs" onclick="hFndStaffDetail(\''+r.s.id+'\')">View</button> ';
+   if(r.assigned<10) html+='<button class="btn btn-gold btn-xs" onclick="hAssignFndModal(\''+r.s.id+'\')">Assign</button> ';
+   if(r.assigned===0) html+='<button class="btn btn-blue btn-xs" onclick="hAssignAllFnd(\''+r.s.id+'\')">All 10</button>';
    html+='</td></tr>';
  });
  html+='</tbody></table></div></div></div>';
@@ -843,7 +843,7 @@ function hAssignFndModal(staffId){
  });
  html+='</div><div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">';
  html+='<button class="btn btn-ghost btn-sm" onclick="closeModal()">Cancel</button>';
- html+='<button class="btn btn-gold btn-sm" onclick="hDoAssignFnd('+s.id+')">Assign</button></div>';
+ html+='<button class="btn btn-gold btn-sm" onclick="hDoAssignFnd(\''+s.id+'\')">Assign</button></div>';
  openModal('Assign Foundations',html,'modal-sm');
 }
 function hDoAssignFnd(staffId){

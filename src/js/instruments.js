@@ -351,9 +351,9 @@ function renderHInstruments(){
  html+='<div class="card mb16"><div class="card-hd"><div class="card-ttl">Staff Instrument Training</div></div><div class="card-body" style="padding:0"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Name</th><th>Belt</th><th>Modules</th><th>Actions</th></tr></thead><tbody>';
  rows.sort((a,b)=>fullName(a.s).localeCompare(fullName(b.s)));
  rows.forEach(r=>{html+='<tr><td style="font-weight:600">'+fullName(r.s)+'</td><td><span class="bb bb-'+r.s.belt+'">'+r.s.belt+'</span></td><td>'+(r.assigned>0?'<span class="'+(r.pct===100?'tc-ok':r.pct>0?'tc-warn':'tc-muted')+'">'+r.done+'/'+r.assigned+'</span>':'<span class="tc-muted">None</span>')+'</td><td style="white-space:nowrap">';
- if(r.assigned>0) html+='<button class="btn btn-ghost btn-xs" onclick="hInstStaffDetail('+r.s.id+')">View</button> ';
- if(r.assigned<4) html+='<button class="btn btn-gold btn-xs" onclick="hAssignInstModal('+r.s.id+')">Assign</button> ';
- if(r.assigned===0) html+='<button class="btn btn-blue btn-xs" onclick="hAssignAllInst('+r.s.id+')">All 4</button>';
+ if(r.assigned>0) html+='<button class="btn btn-ghost btn-xs" onclick="hInstStaffDetail(\''+r.s.id+'\')">View</button> ';
+ if(r.assigned<4) html+='<button class="btn btn-gold btn-xs" onclick="hAssignInstModal(\''+r.s.id+'\')">Assign</button> ';
+ if(r.assigned===0) html+='<button class="btn btn-blue btn-xs" onclick="hAssignAllInst(\''+r.s.id+'\')">All 4</button>';
  html+='</td></tr>';});
  html+='</tbody></table></div></div></div>';el.innerHTML=html;
 }
@@ -376,7 +376,7 @@ function hAssignInstModal(sid){
  if(!unassigned.length){showToast('All modules assigned','info');return;}
  let html='<div style="margin-bottom:12px;font-size:13px;color:#94a3b8">Assign to <strong style="color:#e2e8f0">'+fullName(s)+'</strong>:</div><div style="max-height:300px;overflow-y:auto">';
  unassigned.forEach(m=>{html+='<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer;font-size:13px;color:#cbd5e1"><input type="checkbox" class="inst-assign-cb" value="'+m.id+'" style="accent-color:#c49a20"><span><strong>'+m.num+'.</strong> '+m.title+'</span></label>';});
- html+='</div><div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-ghost btn-sm" onclick="closeModal()">Cancel</button><button class="btn btn-gold btn-sm" onclick="hDoAssignInst('+s.id+')">Assign</button></div>';
+ html+='</div><div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-ghost btn-sm" onclick="closeModal()">Cancel</button><button class="btn btn-gold btn-sm" onclick="hDoAssignInst(\''+s.id+'\')">Assign</button></div>';
  openModal('Assign Instrument Modules',html,'modal-sm');
 }
 function hDoAssignInst(sid){const cbs=document.querySelectorAll('.inst-assign-cb:checked');if(!cbs.length){showToast('Select at least one','err');return;}const nm=ST.user?ST.user.name:'Manager';cbs.forEach(cb=>assignInstModule(sid,cb.value,nm,'remediation',null));closeModal();showToast(cbs.length+' module'+(cbs.length>1?'s':'')+' assigned','ok');renderHInstruments();}
