@@ -1,4 +1,4 @@
-SBD_Foundations_Code.js
+// SBD_Foundations_Code.js
 // ============================================================
 // SBD FOUNDATIONS - STANDALONE CODE EXTRACTION
 // ============================================================
@@ -29,7 +29,7 @@ SBD_Foundations_Code.js
 //    to the stylesheet before </style>
 //
 // 7. DEPENDENCIES: This code uses these existing platform functions:
-//    getStaff(), fullName(), saveDemoData(), showToast(),
+//    getStaff(), fullName(), saveDemoData(), toast(),
 //    openModal(), closeModal(), fndGateBadge() (defined in this file)
 //
 // ============================================================
@@ -485,9 +485,9 @@ const FOUNDATIONS_MODULES = [
 // Optimistic: the UI updates from the in-memory DB immediately; the row syncs
 // in the background. Replaces the old demo saveDemoData() path.
 function _fndProgToBackend(p){return {staff_id:p.staffId,module_id:p.moduleId,g1:p.g1,g2:p.g2,g3:p.g3,complete:p.complete,updated_at:new Date().toISOString()};}
-function _fndSaveProgress(p){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.upsertFoundationsProgress){SB.upsertFoundationsProgress(_fndProgToBackend(p)).catch(e=>console.warn('[fnd] progress sync',e&&e.message));}}catch(e){console.warn('[fnd] progress sync',e);}}
-function _fndSaveAssignment(a){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.createFoundationsAssignment){SB.createFoundationsAssignment({staff_id:a.staffId,module_id:a.moduleId,assigned_by:a.assignedBy||null,type:a.type,trigger:a.trigger,assigned_date:a.assignedDate,status:a.status}).catch(e=>console.warn('[fnd] assignment sync',e&&e.message));}}catch(e){console.warn('[fnd] assignment sync',e);}}
-function _fndSaveAssignmentStatus(staffId,moduleId,status){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.updateFoundationsAssignmentStatus){SB.updateFoundationsAssignmentStatus(staffId,moduleId,status).catch(e=>console.warn('[fnd] status sync',e&&e.message));}}catch(e){}}
+function _fndSaveProgress(p){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.upsertFoundationsProgress){SB.upsertFoundationsProgress(_fndProgToBackend(p)).catch(e=>{if(typeof handleSyncError==='function')handleSyncError(e,'Foundations progress');else console.warn('[fnd] progress sync',e&&e.message);});}}catch(e){console.warn('[fnd] progress sync',e);}}
+function _fndSaveAssignment(a){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.createFoundationsAssignment){SB.createFoundationsAssignment({staff_id:a.staffId,module_id:a.moduleId,assigned_by:a.assignedBy||null,type:a.type,trigger:a.trigger,assigned_date:a.assignedDate,status:a.status}).catch(e=>{if(typeof handleSyncError==='function')handleSyncError(e,'Foundations assignment');else console.warn('[fnd] assignment sync',e&&e.message);});}}catch(e){console.warn('[fnd] assignment sync',e);}}
+function _fndSaveAssignmentStatus(staffId,moduleId,status){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.updateFoundationsAssignmentStatus){SB.updateFoundationsAssignmentStatus(staffId,moduleId,status).catch(e=>{if(typeof handleSyncError==='function')handleSyncError(e,'Foundations status');else console.warn('[fnd] status sync',e&&e.message);});}}catch(e){}}
 
 // ── Foundations 3-Gate Data Helpers ──
 function getFoundationsAssignments(staffId){return (DB.foundationsAssignments||[]).filter(a=>a.staffId===staffId);}
@@ -534,10 +534,22 @@ function markG3Item(staffId,moduleId,itemId,confirmed,confirmedBy){
  const existing=p.g3.items.find(i=>i.id===itemId);
  if(existing){existing.confirmed=confirmed;existing.confirmedBy=confirmedBy;existing.date=new Date().toISOString().slice(0,10);}
  else{p.g3.items.push({id:itemId,confirmed,confirmedBy,date:new Date().toISOString().slice(0,10)});}
- // Check if all G3 items confirmed
+ // Check if all G3 items confirmed. Unchecking cascades (RLS Addendum 8.2): a
+ // revoked confirmation reverts G3 pass -> open, and a previously complete
+ // module reverts to in-progress (assignment back to 'assigned').
  const m=FOUNDATIONS_MODULES.find(x=>x.id===moduleId);
- if(m){const allDone=m.observations.every(o=>p.g3.items.some(i=>i.id===o.id&&i.confirmed));if(allDone){p.g3.status='pass';p.g3.score=100;}}
- if(p.g1.status==='pass'&&p.g2.status==='pass'&&p.g3.status==='pass'){p.complete=true;const a=(DB.foundationsAssignments||[]).find(x=>x.staffId===staffId&&x.moduleId===moduleId);if(a)a.status='completed';}
+ if(m){
+   const allDone=m.observations.every(o=>p.g3.items.some(i=>i.id===o.id&&i.confirmed));
+   if(allDone){p.g3.status='pass';p.g3.score=100;}
+   else if(p.g3.status==='pass'){p.g3.status='open';p.g3.score=0;}
+ }
+ const a=(DB.foundationsAssignments||[]).find(x=>x.staffId===staffId&&x.moduleId===moduleId);
+ if(p.g1.status==='pass'&&p.g2.status==='pass'&&p.g3.status==='pass'){
+   p.complete=true; if(a)a.status='completed';
+ } else if(p.complete){
+   p.complete=false; if(a)a.status='assigned';
+   _fndSaveAssignmentStatus(staffId,moduleId,'assigned');
+ }
  _fndSaveProgress(p);
  if(p.complete) _fndSaveAssignmentStatus(staffId,moduleId,'completed');
 }
@@ -734,18 +746,35 @@ function submitFndGate(moduleId,gateKey){
  if(rEl){
    if(passed){
      rEl.innerHTML='<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--r);padding:14px 16px;text-align:center;margin-top:12px"><div style="font-size:24px;font-weight:700;color:#4ade80">'+score+'%</div><div style="font-size:13px;color:#4ade80;font-weight:600;margin:4px 0">'+gateLabel+' Gate Passed</div><div style="font-size:12px;color:#94a3b8">'+correct+' of '+items.length+' correct.</div></div>';
-     showToast(gateLabel+' gate passed: '+score+'%','ok');
+     toast(gateLabel+' gate passed: '+score+'%','ok');
    } else {
      rEl.innerHTML='<div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:var(--r);padding:14px 16px;text-align:center;margin-top:12px"><div style="font-size:24px;font-weight:700;color:#f87171">'+score+'%</div><div style="font-size:13px;color:#f87171;font-weight:600;margin:4px 0">Not Yet Passing</div><div style="font-size:12px;color:#94a3b8">'+correct+' of '+items.length+' correct. 80% required.</div><button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="openFndModule(\''+moduleId+'\')">Try Again</button></div>';
-     showToast('Score: '+score+'%. 80% required.','err');
+     toast('Score: '+score+'%. 80% required.','err');
    }
  }
 }
  
 // ── Hospital Portal: Render Training ──
 function renderHTraining(){
- const el=document.getElementById('h-training');if(!el)return;
- const fid=ST.hFid;const staff=DB.staff.filter(s=>s.fid===fid);
+ // Renders in the Hospital Portal (h-training) or, for master/staff admins, the
+ // Network Admin portal (a-foundations) — same view, container picked by portal.
+ const el=document.getElementById(ST.portal==='admin'?'a-foundations':'h-training');if(!el)return;
+ // Role scope (RLS Addendum v1.1 section 6): master_admin/admin/staff_admin/assessor see
+ // ALL facilities (system-wide); educator/manager/facility_admin/hospital see their own only.
+ // Mirrors the Staff Directory / Belt Progress role-filter pattern already in the app.
+ const _u=ST.user;
+ const isSystemWide=!!(_u&&['master_admin','admin','staff_admin','assessor'].includes(_u.role));
+ const isAssessor=!!(_u&&_u.role==='assessor');
+ let scopeFacs=DB.facilities.filter(f=>f.active!==false);
+ if(isSystemWide&&_u.role==='staff_admin'&&(_u.assignedFids||[]).length) scopeFacs=scopeFacs.filter(f=>_u.assignedFids.includes(f.id));
+ let staff;
+ if(isSystemWide){
+   staff=DB.staff.filter(s=>scopeFacs.some(f=>f.id===s.fid));
+   const ff=ST._fndFacFilter||'all';
+   if(ff!=='all') staff=staff.filter(s=>s.fid===ff);
+ } else {
+   staff=DB.staff.filter(s=>s.fid===ST.hFid);
+ }
  let totalA=0,totalC=0,staffWith=0;
  const rows=[];
  staff.forEach(s=>{
@@ -757,6 +786,9 @@ function renderHTraining(){
  
  let html='<div class="card mb16"><div class="card-hd"><div class="card-ttl">SBD Foundations</div></div><div class="card-body">';
  html+='<p style="font-size:13px;color:#94a3b8;line-height:1.6;margin:0 0 16px">Assign training modules for onboarding or targeted remediation. Each module requires three gates: Knowledge, Simulation, and Observed Demonstration.</p>';
+ if(isSystemWide){
+   html+='<div style="margin-bottom:14px"><select class="form-select" style="max-width:280px" onchange="ST._fndFacFilter=this.value;renderHTraining()"><option value="all"'+((ST._fndFacFilter||"all")==="all"?" selected":"")+'>All Facilities</option>'+scopeFacs.slice().sort((a,b)=>(a.name||"").localeCompare(b.name||"")).map(f=>'<option value="'+f.id+'"'+(ST._fndFacFilter===f.id?" selected":"")+'>'+f.name+'</option>').join("")+'</select></div>';
+ }
  html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:8px">';
  html+='<div class="stat-card-mini"><div class="stat-lbl">Enrolled</div><div class="stat-val">'+staffWith+'</div></div>';
  html+='<div class="stat-card-mini"><div class="stat-lbl">Assigned</div><div class="stat-val">'+totalA+'</div></div>';
@@ -766,16 +798,19 @@ function renderHTraining(){
  
  // Staff table
  html+='<div class="card mb16"><div class="card-hd"><div class="card-ttl">Staff Training</div></div>';
- html+='<div class="card-body" style="padding:0"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Name</th><th>Belt</th><th>Modules</th><th>Actions</th></tr></thead><tbody>';
+ html+='<div class="card-body" style="padding:0"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Name</th>'+(isSystemWide?'<th>Facility</th>':'')+'<th>Belt</th><th>Modules</th><th>Actions</th></tr></thead><tbody>';
  rows.sort((a,b)=>fullName(a.s).localeCompare(fullName(b.s)));
  rows.forEach(r=>{
    html+='<tr><td style="font-weight:600">'+fullName(r.s)+'</td>';
+   if(isSystemWide){const _fn=(DB.facilities.find(f=>f.id===r.s.fid)||{}).name||'—';html+='<td style="font-size:12px;color:#94a3b8">'+_fn+'</td>';}
    html+='<td><span class="bb bb-'+r.s.belt+'">'+r.s.belt+'</span></td>';
    html+='<td>'+(r.assigned>0?'<span class="'+(r.pct===100?'tc-ok':r.pct>0?'tc-warn':'tc-muted')+'">'+r.done+'/'+r.assigned+'</span>':'<span class="tc-muted">None</span>')+'</td>';
    html+='<td style="white-space:nowrap">';
-   if(r.assigned>0) html+='<button class="btn btn-ghost btn-xs" onclick="hFndStaffDetail('+r.s.id+')">View</button> ';
-   if(r.assigned<10) html+='<button class="btn btn-gold btn-xs" onclick="hAssignFndModal('+r.s.id+')">Assign</button> ';
-   if(r.assigned===0) html+='<button class="btn btn-blue btn-xs" onclick="hAssignAllFnd('+r.s.id+')">All 10</button>';
+   if(r.assigned>0) html+='<button class="btn btn-ghost btn-xs" onclick="hFndStaffDetail(\''+r.s.id+'\')">View</button> ';
+   if(!isAssessor){
+     if(r.assigned<10) html+='<button class="btn btn-gold btn-xs" onclick="hAssignFndModal(\''+r.s.id+'\')">Assign</button> ';
+     if(r.assigned===0) html+='<button class="btn btn-blue btn-xs" onclick="hAssignAllFnd(\''+r.s.id+'\')">All 10</button>';
+   }
    html+='</td></tr>';
  });
  html+='</tbody></table></div></div></div>';
@@ -785,7 +820,7 @@ function renderHTraining(){
 // ── Hospital: Staff Detail with Gate 3 Marking ──
 function hFndStaffDetail(staffId){
  const s=getStaff(staffId);if(!s) return;
- const el=document.getElementById('h-training');if(!el) return;
+ const el=document.getElementById(ST.portal==='admin'?'a-foundations':'h-training');if(!el) return;
  const assignments=getFoundationsAssignments(s.id);
  const assignerName=ST.user?ST.user.name:'Manager';
  
@@ -799,7 +834,10 @@ function hFndStaffDetail(staffId){
    html+='<div class="card mb16"><div class="card-hd" style="flex-wrap:wrap;gap:8px">';
    html+='<div style="display:flex;align-items:center;gap:8px"><div class="fnd-num'+(gates.complete?' fnd-num-done':'')+'">'+m.num+'</div>';
    html+='<div class="card-ttl" style="font-size:14px;margin:0">'+m.title+'</div></div>';
-   html+='<div style="display:flex;gap:4px">'+fndGateBadge(gates.g1.status)+fndGateBadge(gates.g2.status)+fndGateBadge(gates.g3.status)+'</div>';
+   html+='<div style="display:flex;gap:4px;align-items:center">'+fndGateBadge(gates.g1.status)+fndGateBadge(gates.g2.status)+fndGateBadge(gates.g3.status);
+   // Unassign: RLS Addendum matrix -- delete assignments is Master Admin ONLY.
+   if(ST.user&&ST.user.role==='master_admin') html+='<button class="btn btn-ghost btn-xs" style="margin-left:8px;border-color:rgba(239,68,68,.4);color:#f87171" onclick="hUnassignFnd(\''+s.id+'\',\''+m.id+'\')">Unassign</button>';
+   html+='</div>';
    html+='</div><div class="card-body" style="padding-top:0">';
    // Gate status
    html+='<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;font-size:12px;color:#94a3b8">';
@@ -813,7 +851,7 @@ function hFndStaffDetail(staffId){
      m.observations.forEach(obs=>{
        const confirmed=gates.g3.items.find(i=>i.id===obs.id&&i.confirmed);
        html+='<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06)">';
-       html+='<input type="checkbox" style="accent-color:#4ade80;flex-shrink:0" '+(confirmed?'checked':'')+' onchange="markFndG3('+s.id+',\''+m.id+'\',\''+obs.id+'\',this.checked)">';
+       html+='<input type="checkbox" style="accent-color:#4ade80;flex-shrink:0" '+(confirmed?'checked':'')+' onchange="markFndG3(\''+s.id+'\',\''+m.id+'\',\''+obs.id+'\',this.checked)">';
        html+='<span style="font-size:12.5px;color:'+(confirmed?'#4ade80':'#94a3b8')+'">'+obs.text+'</span>';
        html+='</div>';
      });
@@ -827,13 +865,25 @@ function markFndG3(staffId,moduleId,itemId,checked){
  markG3Item(staffId,moduleId,itemId,checked,assignerName);
  hFndStaffDetail(staffId);
 }
+
+// Unassign a module (Master Admin only, per the RLS Addendum matrix). The
+// assignment row is removed; the progress row is KEPT as the historical
+// attempt record (Addendum 8.4), so re-assigning later resumes the history.
+function hUnassignFnd(staffId,moduleId){
+ if(!(ST.user&&ST.user.role==='master_admin')){toast('Only the Master Admin can unassign modules','err');return;}
+ if(!confirm('Unassign this module? The staff member loses access; progress history is kept.'))return;
+ DB.foundationsAssignments=(DB.foundationsAssignments||[]).filter(a=>!(a.staffId===staffId&&a.moduleId===moduleId));
+ try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.deleteFoundationsAssignment){SB.deleteFoundationsAssignment(staffId,moduleId).catch(e=>{if(typeof handleSyncError==='function')handleSyncError(e,'Foundations unassign');});}}catch(e){}
+ toast('Module unassigned','info');
+ if(getFoundationsAssignments(staffId).length>0) hFndStaffDetail(staffId); else renderHTraining();
+}
  
 // ── Hospital: Assignment Modal ──
 function hAssignFndModal(staffId){
  const s=getStaff(staffId);if(!s) return;
  const existing=getFoundationsAssignments(s.id);
  const unassigned=FOUNDATIONS_MODULES.filter(m=>!existing.some(a=>a.moduleId===m.id));
- if(!unassigned.length){showToast('All modules assigned','info');return;}
+ if(!unassigned.length){toast('All modules assigned','info');return;}
  let html='<div style="margin-bottom:12px;font-size:13px;color:#94a3b8">Assign to <strong style="color:#e2e8f0">'+fullName(s)+'</strong>:</div>';
  html+='<div style="max-height:300px;overflow-y:auto">';
  unassigned.forEach(m=>{
@@ -843,17 +893,17 @@ function hAssignFndModal(staffId){
  });
  html+='</div><div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">';
  html+='<button class="btn btn-ghost btn-sm" onclick="closeModal()">Cancel</button>';
- html+='<button class="btn btn-gold btn-sm" onclick="hDoAssignFnd('+s.id+')">Assign</button></div>';
+ html+='<button class="btn btn-gold btn-sm" onclick="hDoAssignFnd(\''+s.id+'\')">Assign</button></div>';
  openModal('Assign Foundations',html,'modal-sm');
 }
 function hDoAssignFnd(staffId){
  const cbs=document.querySelectorAll('.fnd-assign-cb:checked');
- if(!cbs.length){showToast('Select at least one','err');return;}
+ if(!cbs.length){toast('Select at least one','err');return;}
  const nm=ST.user?ST.user.name:'Manager';
  cbs.forEach(cb=>assignModule(staffId,cb.value,nm,'remediation',null));
- closeModal();showToast(cbs.length+' module'+(cbs.length>1?'s':'')+' assigned','ok');renderHTraining();
+ closeModal();toast(cbs.length+' module'+(cbs.length>1?'s':'')+' assigned','ok');renderHTraining();
 }
 function hAssignAllFnd(staffId){
  assignAllModules(staffId,ST.user?ST.user.name:'Manager');
- showToast('All 10 modules assigned','ok');renderHTraining();
+ toast('All 10 modules assigned','ok');renderHTraining();
 }

@@ -1,4 +1,4 @@
-SBD_Instruments_Code.js
+// SBD_Instruments_Code.js
 // ============================================================
 // SBD INSTRUMENTS - STANDALONE CODE EXTRACTION
 // ============================================================
@@ -29,7 +29,7 @@ SBD_Instruments_Code.js
 //    No additional CSS needed if Foundations CSS is already added.
 //
 // 7. DEPENDENCIES: This code uses these existing platform functions:
-//    getStaff(), fullName(), saveDemoData(), showToast(),
+//    getStaff(), fullName(), saveDemoData(), toast(),
 //    openModal(), closeModal(), fndGateBadge() (defined in Foundations code)
 //
 // IMPORTANT: Foundations code MUST be loaded before Instruments code
@@ -232,9 +232,9 @@ function getInstModuleGates(sid,mid){
 }
 // ── Live persistence (#22/#26): mirror each in-memory write to Supabase ──
 function _instProgToBackend(p){return {staff_id:p.staffId,module_id:p.moduleId,g1:p.g1,g2:p.g2,g3:p.g3,complete:p.complete,updated_at:new Date().toISOString()};}
-function _instSaveProgress(p){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.upsertInstrumentProgress){SB.upsertInstrumentProgress(_instProgToBackend(p)).catch(e=>console.warn('[inst] progress sync',e&&e.message));}}catch(e){console.warn('[inst] progress sync',e);}}
-function _instSaveAssignment(a){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.createInstrumentAssignment){SB.createInstrumentAssignment({staff_id:a.staffId,module_id:a.moduleId,assigned_by:a.assignedBy||null,type:a.type,trigger:a.trigger,assigned_date:a.assignedDate,status:a.status}).catch(e=>console.warn('[inst] assignment sync',e&&e.message));}}catch(e){console.warn('[inst] assignment sync',e);}}
-function _instSaveAssignmentStatus(sid,mid,status){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.updateInstrumentAssignmentStatus){SB.updateInstrumentAssignmentStatus(sid,mid,status).catch(e=>console.warn('[inst] status sync',e&&e.message));}}catch(e){}}
+function _instSaveProgress(p){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.upsertInstrumentProgress){SB.upsertInstrumentProgress(_instProgToBackend(p)).catch(e=>{if(typeof handleSyncError==='function')handleSyncError(e,'Instruments progress');else console.warn('[inst] progress sync',e&&e.message);});}}catch(e){console.warn('[inst] progress sync',e);}}
+function _instSaveAssignment(a){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.createInstrumentAssignment){SB.createInstrumentAssignment({staff_id:a.staffId,module_id:a.moduleId,assigned_by:a.assignedBy||null,type:a.type,trigger:a.trigger,assigned_date:a.assignedDate,status:a.status}).catch(e=>{if(typeof handleSyncError==='function')handleSyncError(e,'Instruments assignment');else console.warn('[inst] assignment sync',e&&e.message);});}}catch(e){console.warn('[inst] assignment sync',e);}}
+function _instSaveAssignmentStatus(sid,mid,status){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.updateInstrumentAssignmentStatus){SB.updateInstrumentAssignmentStatus(sid,mid,status).catch(e=>{if(typeof handleSyncError==='function')handleSyncError(e,'Instruments status');else console.warn('[inst] status sync',e&&e.message);});}}catch(e){}}
 
 function assignInstModule(sid,mid,by,type,trigger){
  if(!DB.instrumentAssignments) DB.instrumentAssignments=[];
@@ -262,9 +262,21 @@ function markInstG3Item(sid,mid,itemId,confirmed,by){
  const ex=p.g3.items.find(i=>i.id===itemId);
  if(ex){ex.confirmed=confirmed;ex.confirmedBy=by;ex.date=new Date().toISOString().slice(0,10);}
  else{p.g3.items.push({id:itemId,confirmed,confirmedBy:by,date:new Date().toISOString().slice(0,10)});}
+ // Unchecking cascades (RLS Addendum 8.2): revoked confirmation reverts G3
+ // pass -> open; a previously complete module reverts to in-progress.
  const m=INSTRUMENT_MODULES.find(x=>x.id===mid);
- if(m){const allDone=m.observations.every(o=>p.g3.items.some(i=>i.id===o.id&&i.confirmed));if(allDone){p.g3.status='pass';p.g3.score=100;}}
- if(p.g1.status==='pass'&&p.g2.status==='pass'&&p.g3.status==='pass'){p.complete=true;const a=(DB.instrumentAssignments||[]).find(x=>x.staffId===sid&&x.moduleId===mid);if(a)a.status='completed';}
+ if(m){
+   const allDone=m.observations.every(o=>p.g3.items.some(i=>i.id===o.id&&i.confirmed));
+   if(allDone){p.g3.status='pass';p.g3.score=100;}
+   else if(p.g3.status==='pass'){p.g3.status='open';p.g3.score=0;}
+ }
+ const a=(DB.instrumentAssignments||[]).find(x=>x.staffId===sid&&x.moduleId===mid);
+ if(p.g1.status==='pass'&&p.g2.status==='pass'&&p.g3.status==='pass'){
+   p.complete=true; if(a)a.status='completed';
+ } else if(p.complete){
+   p.complete=false; if(a)a.status='assigned';
+   _instSaveAssignmentStatus(sid,mid,'assigned');
+ }
  _instSaveProgress(p);
  if(p.complete) _instSaveAssignmentStatus(sid,mid,'completed');
 }
@@ -336,50 +348,78 @@ function submitInstGate(mid,gk){
  const score=Math.round((correct/items.length)*100);saveInstGateScore(s.id,m.id,gk,score);
  items.forEach((item,qi)=>{const opts=document.querySelectorAll('input[name="inst-'+gk+'-'+m.id+'-'+qi+'"]');opts.forEach((opt,oi)=>{const lbl=opt.closest('.fnd-q-opt');if(!lbl)return;opt.disabled=true;if(oi===item.ans)lbl.classList.add('fnd-q-correct');else if(opt.checked&&oi!==item.ans)lbl.classList.add('fnd-q-wrong');});});
  const rEl=document.getElementById('inst-gate-result');const gateLabel=gk==='g1'?'Knowledge':'Simulation';
- if(rEl){if(score>=80){rEl.innerHTML='<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--r);padding:14px 16px;text-align:center;margin-top:12px"><div style="font-size:24px;font-weight:700;color:#4ade80">'+score+'%</div><div style="font-size:13px;color:#4ade80;font-weight:600;margin:4px 0">'+gateLabel+' Gate Passed</div><div style="font-size:12px;color:#94a3b8">'+correct+' of '+items.length+' correct.</div></div>';showToast(gateLabel+' passed: '+score+'%','ok');}
- else{rEl.innerHTML='<div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:var(--r);padding:14px 16px;text-align:center;margin-top:12px"><div style="font-size:24px;font-weight:700;color:#f87171">'+score+'%</div><div style="font-size:13px;color:#f87171;font-weight:600;margin:4px 0">Not Yet Passing</div><div style="font-size:12px;color:#94a3b8">'+correct+' of '+items.length+' correct. 80% required.</div><button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="openInstModule(\''+mid+'\')">Try Again</button></div>';showToast('Score: '+score+'%. 80% required.','err');}}
+ if(rEl){if(score>=80){rEl.innerHTML='<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--r);padding:14px 16px;text-align:center;margin-top:12px"><div style="font-size:24px;font-weight:700;color:#4ade80">'+score+'%</div><div style="font-size:13px;color:#4ade80;font-weight:600;margin:4px 0">'+gateLabel+' Gate Passed</div><div style="font-size:12px;color:#94a3b8">'+correct+' of '+items.length+' correct.</div></div>';toast(gateLabel+' passed: '+score+'%','ok');}
+ else{rEl.innerHTML='<div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:var(--r);padding:14px 16px;text-align:center;margin-top:12px"><div style="font-size:24px;font-weight:700;color:#f87171">'+score+'%</div><div style="font-size:13px;color:#f87171;font-weight:600;margin:4px 0">Not Yet Passing</div><div style="font-size:12px;color:#94a3b8">'+correct+' of '+items.length+' correct. 80% required.</div><button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="openInstModule(\''+mid+'\')">Try Again</button></div>';toast('Score: '+score+'%. 80% required.','err');}}
 }
  
 // ── Hospital Portal: Render Instruments ──
 function renderHInstruments(){
- const el=document.getElementById('h-instruments');if(!el)return;
- const fid=ST.hFid;const staff=DB.staff.filter(s=>s.fid===fid);
+ // Renders in the Hospital Portal (h-instruments) or, for master/staff admins, the
+ // Network Admin portal (a-instruments) — same view, container picked by portal.
+ const el=document.getElementById(ST.portal==='admin'?'a-instruments':'h-instruments');if(!el)return;
+ // Role scope (RLS Addendum v1.1 section 6): master_admin/admin/staff_admin/assessor see ALL
+ // facilities; educator/manager/facility_admin/hospital see their own. Same pattern as Foundations.
+ const _u=ST.user;
+ const isSystemWide=!!(_u&&['master_admin','admin','staff_admin','assessor'].includes(_u.role));
+ const isAssessor=!!(_u&&_u.role==='assessor');
+ let scopeFacs=DB.facilities.filter(f=>f.active!==false);
+ if(isSystemWide&&_u.role==='staff_admin'&&(_u.assignedFids||[]).length) scopeFacs=scopeFacs.filter(f=>_u.assignedFids.includes(f.id));
+ let staff;
+ if(isSystemWide){
+   staff=DB.staff.filter(s=>scopeFacs.some(f=>f.id===s.fid));
+   const ff=ST._instFacFilter||'all';
+   if(ff!=='all') staff=staff.filter(s=>s.fid===ff);
+ } else {
+   staff=DB.staff.filter(s=>s.fid===ST.hFid);
+ }
  let totalA=0,totalC=0,staffWith=0;const rows=[];
  staff.forEach(s=>{const asgns=getInstrumentAssignments(s.id);const done=asgns.filter(a=>a.status==='completed').length;if(asgns.length>0){staffWith++;totalA+=asgns.length;totalC+=done;}rows.push({s,assigned:asgns.length,done,pct:asgns.length>0?Math.round(done/asgns.length*100):0});});
- let html='<div class="card mb16"><div class="card-hd"><div class="card-ttl">Instruments</div></div><div class="card-body"><p style="font-size:13px;color:#94a3b8;line-height:1.6;margin:0 0 16px">Assign instrument training by belt level for onboarding or targeted remediation. Each module requires three gates.</p>';
+ let html='<div class="card mb16"><div class="card-hd"><div class="card-ttl">Instruments'+(isSystemWide?' <span style="font-size:11px;color:#64748b;font-weight:500">(all facilities)</span>':'')+'</div></div><div class="card-body"><p style="font-size:13px;color:#94a3b8;line-height:1.6;margin:0 0 16px">Assign instrument training by belt level for onboarding or targeted remediation. Each module requires three gates.</p>';
+ if(isSystemWide){html+='<div style="margin-bottom:14px"><select class="form-select" style="max-width:280px" onchange="ST._instFacFilter=this.value;renderHInstruments()"><option value="all"'+((ST._instFacFilter||"all")==="all"?" selected":"")+'>All Facilities</option>'+scopeFacs.slice().sort((a,b)=>(a.name||"").localeCompare(b.name||"")).map(f=>'<option value="'+f.id+'"'+(ST._instFacFilter===f.id?" selected":"")+'>'+f.name+'</option>').join("")+'</select></div>';}
  html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:8px"><div class="stat-card-mini"><div class="stat-lbl">Enrolled</div><div class="stat-val">'+staffWith+'</div></div><div class="stat-card-mini"><div class="stat-lbl">Assigned</div><div class="stat-val">'+totalA+'</div></div><div class="stat-card-mini"><div class="stat-lbl">Completed</div><div class="stat-val" style="color:#4ade80">'+totalC+'</div></div><div class="stat-card-mini"><div class="stat-lbl">Rate</div><div class="stat-val">'+(totalA>0?Math.round(totalC/totalA*100):0)+'%</div></div></div></div></div>';
- html+='<div class="card mb16"><div class="card-hd"><div class="card-ttl">Staff Instrument Training</div></div><div class="card-body" style="padding:0"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Name</th><th>Belt</th><th>Modules</th><th>Actions</th></tr></thead><tbody>';
+ html+='<div class="card mb16"><div class="card-hd"><div class="card-ttl">Staff Instrument Training</div></div><div class="card-body" style="padding:0"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Name</th>'+(isSystemWide?'<th>Facility</th>':'')+'<th>Belt</th><th>Modules</th><th>Actions</th></tr></thead><tbody>';
  rows.sort((a,b)=>fullName(a.s).localeCompare(fullName(b.s)));
- rows.forEach(r=>{html+='<tr><td style="font-weight:600">'+fullName(r.s)+'</td><td><span class="bb bb-'+r.s.belt+'">'+r.s.belt+'</span></td><td>'+(r.assigned>0?'<span class="'+(r.pct===100?'tc-ok':r.pct>0?'tc-warn':'tc-muted')+'">'+r.done+'/'+r.assigned+'</span>':'<span class="tc-muted">None</span>')+'</td><td style="white-space:nowrap">';
- if(r.assigned>0) html+='<button class="btn btn-ghost btn-xs" onclick="hInstStaffDetail('+r.s.id+')">View</button> ';
- if(r.assigned<4) html+='<button class="btn btn-gold btn-xs" onclick="hAssignInstModal('+r.s.id+')">Assign</button> ';
- if(r.assigned===0) html+='<button class="btn btn-blue btn-xs" onclick="hAssignAllInst('+r.s.id+')">All 4</button>';
+ rows.forEach(r=>{html+='<tr><td style="font-weight:600">'+fullName(r.s)+'</td>'+(isSystemWide?'<td style="font-size:12px;color:#94a3b8">'+((DB.facilities.find(f=>f.id===r.s.fid)||{}).name||'—')+'</td>':'')+'<td><span class="bb bb-'+r.s.belt+'">'+r.s.belt+'</span></td><td>'+(r.assigned>0?'<span class="'+(r.pct===100?'tc-ok':r.pct>0?'tc-warn':'tc-muted')+'">'+r.done+'/'+r.assigned+'</span>':'<span class="tc-muted">None</span>')+'</td><td style="white-space:nowrap">';
+ if(r.assigned>0) html+='<button class="btn btn-ghost btn-xs" onclick="hInstStaffDetail(\''+r.s.id+'\')">View</button> ';
+ if(!isAssessor){
+ if(r.assigned<4) html+='<button class="btn btn-gold btn-xs" onclick="hAssignInstModal(\''+r.s.id+'\')">Assign</button> ';
+ if(r.assigned===0) html+='<button class="btn btn-blue btn-xs" onclick="hAssignAllInst(\''+r.s.id+'\')">All 4</button>';
+ }
  html+='</td></tr>';});
  html+='</tbody></table></div></div></div>';el.innerHTML=html;
 }
 function hInstStaffDetail(sid){
- const s=getStaff(sid);if(!s)return;const el=document.getElementById('h-instruments');if(!el)return;
+ const s=getStaff(sid);if(!s)return;const el=document.getElementById(ST.portal==='admin'?'a-instruments':'h-instruments');if(!el)return;
  let html='<button class="btn btn-ghost btn-sm" onclick="renderHInstruments()" style="margin-bottom:12px">&larr; Back</button>';
  html+='<div class="card mb16"><div class="card-hd"><div class="card-ttl">'+fullName(s)+'</div><span class="bb bb-'+s.belt+'">'+s.belt+'</span></div><div class="card-body"><div style="font-size:13px;color:#94a3b8">'+s.role+'</div></div></div>';
  INSTRUMENT_MODULES.forEach(m=>{
    if(!isInstModuleAssigned(s.id,m.id)) return;const gates=getInstModuleGates(s.id,m.id);
-   html+='<div class="card mb16"><div class="card-hd" style="flex-wrap:wrap;gap:8px"><div style="display:flex;align-items:center;gap:8px"><div class="fnd-num'+(gates.complete?' fnd-num-done':'')+'">'+m.num+'</div><div class="card-ttl" style="font-size:14px;margin:0">'+m.title+'</div></div><div style="display:flex;gap:4px">'+fndGateBadge(gates.g1.status)+fndGateBadge(gates.g2.status)+fndGateBadge(gates.g3.status)+'</div></div><div class="card-body" style="padding-top:0">';
+   html+='<div class="card mb16"><div class="card-hd" style="flex-wrap:wrap;gap:8px"><div style="display:flex;align-items:center;gap:8px"><div class="fnd-num'+(gates.complete?' fnd-num-done':'')+'">'+m.num+'</div><div class="card-ttl" style="font-size:14px;margin:0">'+m.title+'</div></div><div style="display:flex;gap:4px;align-items:center">'+fndGateBadge(gates.g1.status)+fndGateBadge(gates.g2.status)+fndGateBadge(gates.g3.status)+((ST.user&&ST.user.role==='master_admin')?'<button class="btn btn-ghost btn-xs" style="margin-left:8px;border-color:rgba(239,68,68,.4);color:#f87171" onclick="hUnassignInst(\''+s.id+'\',\''+m.id+'\')">Unassign</button>':'')+'</div></div><div class="card-body" style="padding-top:0">';
    html+='<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;font-size:12px;color:#94a3b8"><span>G1: '+(gates.g1.status==='pass'?'<span class="tc-ok">'+gates.g1.score+'%</span>':'<span class="tc-muted">'+gates.g1.status+'</span>')+'</span><span>G2: '+(gates.g2.status==='pass'?'<span class="tc-ok">'+gates.g2.score+'%</span>':'<span class="tc-muted">'+gates.g2.status+'</span>')+'</span><span>G3: '+(gates.g3.status==='pass'?'<span class="tc-ok">Confirmed</span>':'<span class="tc-warn">Pending</span>')+'</span></div>';
    if(gates.g3.status!=='pass'){html+='<div style="font-size:12px;font-weight:600;color:#c49a20;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Gate 3: Confirm Observations</div>';
-   m.observations.forEach(obs=>{const conf=gates.g3.items.find(i=>i.id===obs.id&&i.confirmed);html+='<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06)"><input type="checkbox" style="accent-color:#4ade80;flex-shrink:0" '+(conf?'checked':'')+' onchange="markInstG3Wrap('+s.id+',\''+m.id+'\',\''+obs.id+'\',this.checked)"><span style="font-size:12.5px;color:'+(conf?'#4ade80':'#94a3b8')+'">'+obs.text+'</span></div>';});}
+   m.observations.forEach(obs=>{const conf=gates.g3.items.find(i=>i.id===obs.id&&i.confirmed);html+='<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06)"><input type="checkbox" style="accent-color:#4ade80;flex-shrink:0" '+(conf?'checked':'')+' onchange="markInstG3Wrap(\''+s.id+'\',\''+m.id+'\',\''+obs.id+'\',this.checked)"><span style="font-size:12.5px;color:'+(conf?'#4ade80':'#94a3b8')+'">'+obs.text+'</span></div>';});}
    html+='</div></div>';
  });el.innerHTML=html;
 }
 function markInstG3Wrap(sid,mid,itemId,checked){const by=ST.user?ST.user.name:'Manager';markInstG3Item(sid,mid,itemId,checked,by);hInstStaffDetail(sid);}
+// Unassign (Master Admin only, RLS Addendum matrix). Progress kept as history (8.4).
+function hUnassignInst(sid,mid){
+ if(!(ST.user&&ST.user.role==='master_admin')){toast('Only the Master Admin can unassign modules','err');return;}
+ if(!confirm('Unassign this module? The staff member loses access; progress history is kept.'))return;
+ DB.instrumentAssignments=(DB.instrumentAssignments||[]).filter(a=>!(a.staffId===sid&&a.moduleId===mid));
+ try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.deleteInstrumentAssignment){SB.deleteInstrumentAssignment(sid,mid).catch(e=>{if(typeof handleSyncError==='function')handleSyncError(e,'Instruments unassign');});}}catch(e){}
+ toast('Module unassigned','info');
+ if(getInstrumentAssignments(sid).length>0) hInstStaffDetail(sid); else renderHInstruments();
+}
 function hAssignInstModal(sid){
  const s=getStaff(sid);if(!s)return;const existing=getInstrumentAssignments(s.id);const unassigned=INSTRUMENT_MODULES.filter(m=>!existing.some(a=>a.moduleId===m.id));
- if(!unassigned.length){showToast('All modules assigned','info');return;}
+ if(!unassigned.length){toast('All modules assigned','info');return;}
  let html='<div style="margin-bottom:12px;font-size:13px;color:#94a3b8">Assign to <strong style="color:#e2e8f0">'+fullName(s)+'</strong>:</div><div style="max-height:300px;overflow-y:auto">';
  unassigned.forEach(m=>{html+='<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer;font-size:13px;color:#cbd5e1"><input type="checkbox" class="inst-assign-cb" value="'+m.id+'" style="accent-color:#c49a20"><span><strong>'+m.num+'.</strong> '+m.title+'</span></label>';});
- html+='</div><div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-ghost btn-sm" onclick="closeModal()">Cancel</button><button class="btn btn-gold btn-sm" onclick="hDoAssignInst('+s.id+')">Assign</button></div>';
+ html+='</div><div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-ghost btn-sm" onclick="closeModal()">Cancel</button><button class="btn btn-gold btn-sm" onclick="hDoAssignInst(\''+s.id+'\')">Assign</button></div>';
  openModal('Assign Instrument Modules',html,'modal-sm');
 }
-function hDoAssignInst(sid){const cbs=document.querySelectorAll('.inst-assign-cb:checked');if(!cbs.length){showToast('Select at least one','err');return;}const nm=ST.user?ST.user.name:'Manager';cbs.forEach(cb=>assignInstModule(sid,cb.value,nm,'remediation',null));closeModal();showToast(cbs.length+' module'+(cbs.length>1?'s':'')+' assigned','ok');renderHInstruments();}
-function hAssignAllInst(sid){assignAllInstModules(sid,ST.user?ST.user.name:'Manager');showToast('All 4 instrument modules assigned','ok');renderHInstruments();}
+function hDoAssignInst(sid){const cbs=document.querySelectorAll('.inst-assign-cb:checked');if(!cbs.length){toast('Select at least one','err');return;}const nm=ST.user?ST.user.name:'Manager';cbs.forEach(cb=>assignInstModule(sid,cb.value,nm,'remediation',null));closeModal();toast(cbs.length+' module'+(cbs.length>1?'s':'')+' assigned','ok');renderHInstruments();}
+function hAssignAllInst(sid){assignAllInstModules(sid,ST.user?ST.user.name:'Manager');toast('All 4 instrument modules assigned','ok');renderHInstruments();}
 
 
