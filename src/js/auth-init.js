@@ -2061,10 +2061,12 @@ async function initAppData(){
     if(typeof mapFacilityFromBackend === 'function') window.DB.facilities = (facs||[]).map(mapFacilityFromBackend); else window.DB.facilities = facs||[];
     if(typeof mapStaffFromBackend === 'function') window.DB.staff = (staff||[]).map(mapStaffFromBackend); else window.DB.staff = staff||[];
     // SBD Foundations (#22): hydrate per-staff assignments + 3-gate progress from Supabase.
-    window.DB.foundationsAssignments = (fndAssignments||[]).map(a=>({ id:a.id, staffId:a.staff_id, moduleId:a.module_id, assignedBy:a.assigned_by, type:a.type, trigger:a.trigger, assignedDate:a.assigned_date, status:a.status }));
-    window.DB.foundationsProgress = (fndProgress||[]).map(p=>({ staffId:p.staff_id, moduleId:p.module_id, g1:p.g1, g2:p.g2, g3:p.g3, complete:p.complete }));
-    window.DB.instrumentAssignments = (instAssignments||[]).map(a=>({ id:a.id, staffId:a.staff_id, moduleId:a.module_id, assignedBy:a.assigned_by, type:a.type, trigger:a.trigger, assignedDate:a.assigned_date, status:a.status }));
-    window.DB.instrumentProgress = (instProgress||[]).map(p=>({ staffId:p.staff_id, moduleId:p.module_id, g1:p.g1, g2:p.g2, g3:p.g3, complete:p.complete }));
+    // Audit columns (assignment_type/trigger_event, dual-written with legacy type/trigger)
+    // map onto the internal names; facility_id -> facilityId (server auto-fills it).
+    window.DB.foundationsAssignments = (fndAssignments||[]).map(a=>({ id:a.id, staffId:a.staff_id, moduleId:a.module_id, assignedBy:a.assigned_by, type:a.assignment_type||a.type, trigger:(a.trigger_event!=null?a.trigger_event:a.trigger), facilityId:a.facility_id||null, assignedDate:a.assigned_date, status:a.status }));
+    window.DB.foundationsProgress = (fndProgress||[]).map(p=>({ staffId:p.staff_id, moduleId:p.module_id, g1:p.g1, g2:p.g2, g3:p.g3, complete:p.complete, facilityId:p.facility_id||null }));
+    window.DB.instrumentAssignments = (instAssignments||[]).map(a=>({ id:a.id, staffId:a.staff_id, moduleId:a.module_id, assignedBy:a.assigned_by, type:a.assignment_type||a.type, trigger:(a.trigger_event!=null?a.trigger_event:a.trigger), facilityId:a.facility_id||null, assignedDate:a.assigned_date, status:a.status }));
+    window.DB.instrumentProgress = (instProgress||[]).map(p=>({ staffId:p.staff_id, moduleId:p.module_id, g1:p.g1, g2:p.g2, g3:p.g3, complete:p.complete, facilityId:p.facility_id||null }));
     const currentSystems = window.DB.hospitalSystems || [];
     const memoryOptimistic = currentSystems.filter(s => s.id && String(s.id).startsWith('sys-'));
     const storageOptimistic = JSON.parse(localStorage.getItem('sbd_optimistic_systems') || '[]');
