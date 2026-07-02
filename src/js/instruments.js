@@ -1,4 +1,4 @@
-SBD_Instruments_Code.js
+// SBD_Instruments_Code.js
 // ============================================================
 // SBD INSTRUMENTS - STANDALONE CODE EXTRACTION
 // ============================================================
@@ -343,23 +343,25 @@ function submitInstGate(mid,gk){
  
 // ── Hospital Portal: Render Instruments ──
 function renderHInstruments(){
- const el=document.getElementById('h-instruments');if(!el)return;
- const fid=ST.hFid;const staff=DB.staff.filter(s=>s.fid===fid);
+ const el=fndContainer('a-instruments','h-instruments');if(!el)return;
+ const sys=fndIsSystemWide(),canAssign=fndCanAssign();
+ const staff=getFoundationsVisibleStaff();
  let totalA=0,totalC=0,staffWith=0;const rows=[];
  staff.forEach(s=>{const asgns=getInstrumentAssignments(s.id);const done=asgns.filter(a=>a.status==='completed').length;if(asgns.length>0){staffWith++;totalA+=asgns.length;totalC+=done;}rows.push({s,assigned:asgns.length,done,pct:asgns.length>0?Math.round(done/asgns.length*100):0});});
  let html='<div class="card mb16"><div class="card-hd"><div class="card-ttl">Instruments</div></div><div class="card-body"><p style="font-size:13px;color:#94a3b8;line-height:1.6;margin:0 0 16px">Assign instrument training by belt level for onboarding or targeted remediation. Each module requires three gates.</p>';
  html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:8px"><div class="stat-card-mini"><div class="stat-lbl">Enrolled</div><div class="stat-val">'+staffWith+'</div></div><div class="stat-card-mini"><div class="stat-lbl">Assigned</div><div class="stat-val">'+totalA+'</div></div><div class="stat-card-mini"><div class="stat-lbl">Completed</div><div class="stat-val" style="color:#4ade80">'+totalC+'</div></div><div class="stat-card-mini"><div class="stat-lbl">Rate</div><div class="stat-val">'+(totalA>0?Math.round(totalC/totalA*100):0)+'%</div></div></div></div></div>';
- html+='<div class="card mb16"><div class="card-hd"><div class="card-ttl">Staff Instrument Training</div></div><div class="card-body" style="padding:0"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Name</th><th>Belt</th><th>Modules</th><th>Actions</th></tr></thead><tbody>';
+ if(sys&&typeof adminFilterBar==='function') html+=adminFilterBar(true,fndVisibleFacs(),'renderHInstruments');
+ html+='<div class="card mb16"><div class="card-hd"><div class="card-ttl">Staff Instrument Training</div></div><div class="card-body" style="padding:0"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Name</th><th>Belt</th>'+(sys?'<th>Facility</th>':'')+'<th>Modules</th><th>Actions</th></tr></thead><tbody>';
  rows.sort((a,b)=>fullName(a.s).localeCompare(fullName(b.s)));
- rows.forEach(r=>{html+='<tr><td style="font-weight:600">'+fullName(r.s)+'</td><td><span class="bb bb-'+r.s.belt+'">'+r.s.belt+'</span></td><td>'+(r.assigned>0?'<span class="'+(r.pct===100?'tc-ok':r.pct>0?'tc-warn':'tc-muted')+'">'+r.done+'/'+r.assigned+'</span>':'<span class="tc-muted">None</span>')+'</td><td style="white-space:nowrap">';
- if(r.assigned>0) html+='<button class="btn btn-ghost btn-xs" onclick="hInstStaffDetail('+r.s.id+')">View</button> ';
- if(r.assigned<4) html+='<button class="btn btn-gold btn-xs" onclick="hAssignInstModal('+r.s.id+')">Assign</button> ';
- if(r.assigned===0) html+='<button class="btn btn-blue btn-xs" onclick="hAssignAllInst('+r.s.id+')">All 4</button>';
+ rows.forEach(r=>{html+='<tr><td style="font-weight:600">'+fullName(r.s)+'</td><td><span class="bb bb-'+r.s.belt+'">'+r.s.belt+'</span></td>'+(sys?'<td style="font-size:12px;color:#94a3b8">'+((getFac(r.s.fid)||{}).name||'&mdash;')+'</td>':'')+'<td>'+(r.assigned>0?'<span class="'+(r.pct===100?'tc-ok':r.pct>0?'tc-warn':'tc-muted')+'">'+r.done+'/'+r.assigned+'</span>':'<span class="tc-muted">None</span>')+'</td><td style="white-space:nowrap">';
+ if(r.assigned>0) html+='<button class="btn btn-ghost btn-xs" onclick="hInstStaffDetail(\''+r.s.id+'\')">View</button> ';
+ if(canAssign&&r.assigned<4) html+='<button class="btn btn-gold btn-xs" onclick="hAssignInstModal(\''+r.s.id+'\')">Assign</button> ';
+ if(canAssign&&r.assigned===0) html+='<button class="btn btn-blue btn-xs" onclick="hAssignAllInst(\''+r.s.id+'\')">All 4</button>';
  html+='</td></tr>';});
  html+='</tbody></table></div></div></div>';el.innerHTML=html;
 }
 function hInstStaffDetail(sid){
- const s=getStaff(sid);if(!s)return;const el=document.getElementById('h-instruments');if(!el)return;
+ const s=getStaff(sid);if(!s)return;const el=fndContainer('a-instruments','h-instruments');if(!el)return;
  let html='<button class="btn btn-ghost btn-sm" onclick="renderHInstruments()" style="margin-bottom:12px">&larr; Back</button>';
  html+='<div class="card mb16"><div class="card-hd"><div class="card-ttl">'+fullName(s)+'</div><span class="bb bb-'+s.belt+'">'+s.belt+'</span></div><div class="card-body"><div style="font-size:13px;color:#94a3b8">'+s.role+'</div></div></div>';
  INSTRUMENT_MODULES.forEach(m=>{
@@ -367,20 +369,21 @@ function hInstStaffDetail(sid){
    html+='<div class="card mb16"><div class="card-hd" style="flex-wrap:wrap;gap:8px"><div style="display:flex;align-items:center;gap:8px"><div class="fnd-num'+(gates.complete?' fnd-num-done':'')+'">'+m.num+'</div><div class="card-ttl" style="font-size:14px;margin:0">'+m.title+'</div></div><div style="display:flex;gap:4px">'+fndGateBadge(gates.g1.status)+fndGateBadge(gates.g2.status)+fndGateBadge(gates.g3.status)+'</div></div><div class="card-body" style="padding-top:0">';
    html+='<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;font-size:12px;color:#94a3b8"><span>G1: '+(gates.g1.status==='pass'?'<span class="tc-ok">'+gates.g1.score+'%</span>':'<span class="tc-muted">'+gates.g1.status+'</span>')+'</span><span>G2: '+(gates.g2.status==='pass'?'<span class="tc-ok">'+gates.g2.score+'%</span>':'<span class="tc-muted">'+gates.g2.status+'</span>')+'</span><span>G3: '+(gates.g3.status==='pass'?'<span class="tc-ok">Confirmed</span>':'<span class="tc-warn">Pending</span>')+'</span></div>';
    if(gates.g3.status!=='pass'){html+='<div style="font-size:12px;font-weight:600;color:#c49a20;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Gate 3: Confirm Observations</div>';
-   m.observations.forEach(obs=>{const conf=gates.g3.items.find(i=>i.id===obs.id&&i.confirmed);html+='<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06)"><input type="checkbox" style="accent-color:#4ade80;flex-shrink:0" '+(conf?'checked':'')+' onchange="markInstG3Wrap('+s.id+',\''+m.id+'\',\''+obs.id+'\',this.checked)"><span style="font-size:12.5px;color:'+(conf?'#4ade80':'#94a3b8')+'">'+obs.text+'</span></div>';});}
+   m.observations.forEach(obs=>{const conf=gates.g3.items.find(i=>i.id===obs.id&&i.confirmed);html+='<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06)"><input type="checkbox" style="accent-color:#4ade80;flex-shrink:0" '+(conf?'checked':'')+' onchange="markInstG3Wrap(\''+s.id+'\',\''+m.id+'\',\''+obs.id+'\',this.checked)"><span style="font-size:12.5px;color:'+(conf?'#4ade80':'#94a3b8')+'">'+obs.text+'</span></div>';});}
    html+='</div></div>';
  });el.innerHTML=html;
 }
 function markInstG3Wrap(sid,mid,itemId,checked){const by=ST.user?ST.user.name:'Manager';markInstG3Item(sid,mid,itemId,checked,by);hInstStaffDetail(sid);}
 function hAssignInstModal(sid){
+ if(!fndCanAssign()){showToast('Assessors cannot assign modules','err');return;}
  const s=getStaff(sid);if(!s)return;const existing=getInstrumentAssignments(s.id);const unassigned=INSTRUMENT_MODULES.filter(m=>!existing.some(a=>a.moduleId===m.id));
  if(!unassigned.length){showToast('All modules assigned','info');return;}
  let html='<div style="margin-bottom:12px;font-size:13px;color:#94a3b8">Assign to <strong style="color:#e2e8f0">'+fullName(s)+'</strong>:</div><div style="max-height:300px;overflow-y:auto">';
  unassigned.forEach(m=>{html+='<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer;font-size:13px;color:#cbd5e1"><input type="checkbox" class="inst-assign-cb" value="'+m.id+'" style="accent-color:#c49a20"><span><strong>'+m.num+'.</strong> '+m.title+'</span></label>';});
- html+='</div><div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-ghost btn-sm" onclick="closeModal()">Cancel</button><button class="btn btn-gold btn-sm" onclick="hDoAssignInst('+s.id+')">Assign</button></div>';
+ html+='</div><div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-ghost btn-sm" onclick="closeModal()">Cancel</button><button class="btn btn-gold btn-sm" onclick="hDoAssignInst(\''+s.id+'\')">Assign</button></div>';
  openModal('Assign Instrument Modules',html,'modal-sm');
 }
-function hDoAssignInst(sid){const cbs=document.querySelectorAll('.inst-assign-cb:checked');if(!cbs.length){showToast('Select at least one','err');return;}const nm=ST.user?ST.user.name:'Manager';cbs.forEach(cb=>assignInstModule(sid,cb.value,nm,'remediation',null));closeModal();showToast(cbs.length+' module'+(cbs.length>1?'s':'')+' assigned','ok');renderHInstruments();}
-function hAssignAllInst(sid){assignAllInstModules(sid,ST.user?ST.user.name:'Manager');showToast('All 4 instrument modules assigned','ok');renderHInstruments();}
+function hDoAssignInst(sid){if(!fndCanAssign()){showToast('Assessors cannot assign modules','err');return;}const cbs=document.querySelectorAll('.inst-assign-cb:checked');if(!cbs.length){showToast('Select at least one','err');return;}const nm=ST.user?ST.user.name:'Manager';cbs.forEach(cb=>assignInstModule(sid,cb.value,nm,'remediation',null));closeModal();showToast(cbs.length+' module'+(cbs.length>1?'s':'')+' assigned','ok');renderHInstruments();}
+function hAssignAllInst(sid){if(!fndCanAssign()){showToast('Assessors cannot assign modules','err');return;}assignAllInstModules(sid,ST.user?ST.user.name:'Manager');showToast('All 4 instrument modules assigned','ok');renderHInstruments();}
 
 
