@@ -486,7 +486,7 @@ const FOUNDATIONS_MODULES = [
 // in the background. Replaces the old demo saveDemoData() path.
 function _fndProgToBackend(p){return {staff_id:p.staffId,module_id:p.moduleId,g1:p.g1,g2:p.g2,g3:p.g3,complete:p.complete,updated_at:new Date().toISOString()};}
 function _fndSaveProgress(p){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.upsertFoundationsProgress){SB.upsertFoundationsProgress(_fndProgToBackend(p)).catch(e=>console.warn('[fnd] progress sync',e&&e.message));}}catch(e){console.warn('[fnd] progress sync',e);}}
-function _fndSaveAssignment(a){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.createFoundationsAssignment){SB.createFoundationsAssignment({staff_id:a.staffId,module_id:a.moduleId,assigned_by:a.assignedBy||null,type:a.type,trigger:a.trigger,assigned_date:a.assignedDate,status:a.status}).catch(e=>console.warn('[fnd] assignment sync',e&&e.message));}}catch(e){console.warn('[fnd] assignment sync',e);}}
+function _fndSaveAssignment(a){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.createFoundationsAssignment){SB.createFoundationsAssignment({staff_id:a.staffId,module_id:a.moduleId,assigned_by:a.assignedBy||null,type:a.type,trigger:a.trigger,assignment_type:a.type,trigger_event:a.trigger,facility_id:a.facilityId||null,assigned_date:a.assignedDate,status:a.status}).catch(e=>console.warn('[fnd] assignment sync',e&&e.message));}}catch(e){console.warn('[fnd] assignment sync',e);}}
 function _fndSaveAssignmentStatus(staffId,moduleId,status){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.updateFoundationsAssignmentStatus){SB.updateFoundationsAssignmentStatus(staffId,moduleId,status).catch(e=>console.warn('[fnd] status sync',e&&e.message));}}catch(e){}}
 
 // ── Foundations 3-Gate Data Helpers ──
@@ -500,7 +500,8 @@ function isModuleComplete(staffId,moduleId){const p=getModuleGates(staffId,modul
 function assignModule(staffId,moduleId,assignedBy,type,trigger){
  if(!DB.foundationsAssignments) DB.foundationsAssignments=[];
  if(DB.foundationsAssignments.find(a=>a.staffId===staffId&&a.moduleId===moduleId)) return;
- const _a={id:'fa-'+Date.now()+'-'+Math.random().toString(36).slice(2,6),staffId,moduleId,assignedBy,type:type||'remediation',trigger:trigger||null,assignedDate:new Date().toISOString().slice(0,10),status:'assigned'};
+ const _s=(typeof getStaff==='function')?getStaff(staffId):(DB.staff||[]).find(x=>x.id===staffId);
+ const _a={id:'fa-'+Date.now()+'-'+Math.random().toString(36).slice(2,6),staffId,moduleId,assignedBy,type:type||'remediation',trigger:trigger||null,facilityId:_s?_s.fid:null,assignedDate:new Date().toISOString().slice(0,10),status:'assigned'};
  DB.foundationsAssignments.push(_a);
  // Init progress with 3 gates
  if(!DB.foundationsProgress) DB.foundationsProgress=[];

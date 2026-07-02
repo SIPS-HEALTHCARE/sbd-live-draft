@@ -233,13 +233,14 @@ function getInstModuleGates(sid,mid){
 // ── Live persistence (#22/#26): mirror each in-memory write to Supabase ──
 function _instProgToBackend(p){return {staff_id:p.staffId,module_id:p.moduleId,g1:p.g1,g2:p.g2,g3:p.g3,complete:p.complete,updated_at:new Date().toISOString()};}
 function _instSaveProgress(p){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.upsertInstrumentProgress){SB.upsertInstrumentProgress(_instProgToBackend(p)).catch(e=>console.warn('[inst] progress sync',e&&e.message));}}catch(e){console.warn('[inst] progress sync',e);}}
-function _instSaveAssignment(a){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.createInstrumentAssignment){SB.createInstrumentAssignment({staff_id:a.staffId,module_id:a.moduleId,assigned_by:a.assignedBy||null,type:a.type,trigger:a.trigger,assigned_date:a.assignedDate,status:a.status}).catch(e=>console.warn('[inst] assignment sync',e&&e.message));}}catch(e){console.warn('[inst] assignment sync',e);}}
+function _instSaveAssignment(a){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.createInstrumentAssignment){SB.createInstrumentAssignment({staff_id:a.staffId,module_id:a.moduleId,assigned_by:a.assignedBy||null,type:a.type,trigger:a.trigger,assignment_type:a.type,trigger_event:a.trigger,facility_id:a.facilityId||null,assigned_date:a.assignedDate,status:a.status}).catch(e=>console.warn('[inst] assignment sync',e&&e.message));}}catch(e){console.warn('[inst] assignment sync',e);}}
 function _instSaveAssignmentStatus(sid,mid,status){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.updateInstrumentAssignmentStatus){SB.updateInstrumentAssignmentStatus(sid,mid,status).catch(e=>console.warn('[inst] status sync',e&&e.message));}}catch(e){}}
 
 function assignInstModule(sid,mid,by,type,trigger){
  if(!DB.instrumentAssignments) DB.instrumentAssignments=[];
  if(DB.instrumentAssignments.find(a=>a.staffId===sid&&a.moduleId===mid)) return;
- const _a={id:'ia-'+Date.now()+'-'+Math.random().toString(36).slice(2,6),staffId:sid,moduleId:mid,assignedBy:by,type:type||'remediation',trigger:trigger||null,assignedDate:new Date().toISOString().slice(0,10),status:'assigned'};
+ const _s=(typeof getStaff==='function')?getStaff(sid):(DB.staff||[]).find(x=>x.id===sid);
+ const _a={id:'ia-'+Date.now()+'-'+Math.random().toString(36).slice(2,6),staffId:sid,moduleId:mid,assignedBy:by,type:type||'remediation',trigger:trigger||null,facilityId:_s?_s.fid:null,assignedDate:new Date().toISOString().slice(0,10),status:'assigned'};
  DB.instrumentAssignments.push(_a);
  if(!DB.instrumentProgress) DB.instrumentProgress=[];
  let _p=DB.instrumentProgress.find(x=>x.staffId===sid&&x.moduleId===mid);
