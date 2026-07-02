@@ -744,7 +744,9 @@ function submitFndGate(moduleId,gateKey){
  
 // ── Hospital Portal: Render Training ──
 function renderHTraining(){
- const el=document.getElementById('h-training');if(!el)return;
+ // Renders in the Hospital Portal (h-training) or, for master/staff admins, the
+ // Network Admin portal (a-foundations) — same view, container picked by portal.
+ const el=document.getElementById(ST.portal==='admin'?'a-foundations':'h-training');if(!el)return;
  // Role scope (RLS Addendum v1.1 section 6): master_admin/admin/staff_admin/assessor see
  // ALL facilities (system-wide); educator/manager/facility_admin/hospital see their own only.
  // Mirrors the Staff Directory / Belt Progress role-filter pattern already in the app.
@@ -806,7 +808,7 @@ function renderHTraining(){
 // ── Hospital: Staff Detail with Gate 3 Marking ──
 function hFndStaffDetail(staffId){
  const s=getStaff(staffId);if(!s) return;
- const el=document.getElementById('h-training');if(!el) return;
+ const el=document.getElementById(ST.portal==='admin'?'a-foundations':'h-training');if(!el) return;
  const assignments=getFoundationsAssignments(s.id);
  const assignerName=ST.user?ST.user.name:'Manager';
  

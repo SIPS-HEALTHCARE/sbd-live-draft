@@ -342,7 +342,9 @@ function submitInstGate(mid,gk){
  
 // ── Hospital Portal: Render Instruments ──
 function renderHInstruments(){
- const el=document.getElementById('h-instruments');if(!el)return;
+ // Renders in the Hospital Portal (h-instruments) or, for master/staff admins, the
+ // Network Admin portal (a-instruments) — same view, container picked by portal.
+ const el=document.getElementById(ST.portal==='admin'?'a-instruments':'h-instruments');if(!el)return;
  // Role scope (RLS Addendum v1.1 section 6): master_admin/admin/staff_admin/assessor see ALL
  // facilities; educator/manager/facility_admin/hospital see their own. Same pattern as Foundations.
  const _u=ST.user;
@@ -375,7 +377,7 @@ function renderHInstruments(){
  html+='</tbody></table></div></div></div>';el.innerHTML=html;
 }
 function hInstStaffDetail(sid){
- const s=getStaff(sid);if(!s)return;const el=document.getElementById('h-instruments');if(!el)return;
+ const s=getStaff(sid);if(!s)return;const el=document.getElementById(ST.portal==='admin'?'a-instruments':'h-instruments');if(!el)return;
  let html='<button class="btn btn-ghost btn-sm" onclick="renderHInstruments()" style="margin-bottom:12px">&larr; Back</button>';
  html+='<div class="card mb16"><div class="card-hd"><div class="card-ttl">'+fullName(s)+'</div><span class="bb bb-'+s.belt+'">'+s.belt+'</span></div><div class="card-body"><div style="font-size:13px;color:#94a3b8">'+s.role+'</div></div></div>';
  INSTRUMENT_MODULES.forEach(m=>{

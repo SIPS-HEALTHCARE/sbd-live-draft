@@ -618,7 +618,7 @@ function renderAView(view){
     toast('RBAC Guard: Unauthorized access to Network Portal', 'err');
     return;
   }
-  ['a-overview','a-leaderboard','a-allstaff','a-scoreboard','a-facilities','a-facility','a-registrations','a-assessments','a-progression','a-upload','a-reports','a-david','a-daviddashboard','a-adminusers','a-promoqueue','a-freeagents','a-placementreviews','a-observations','a-observationreviews','a-guide','a-settings','a-systems','a-systems-dashboard'].forEach(v=>{
+  ['a-overview','a-leaderboard','a-allstaff','a-scoreboard','a-facilities','a-facility','a-registrations','a-assessments','a-progression','a-foundations','a-instruments','a-upload','a-reports','a-david','a-daviddashboard','a-adminusers','a-promoqueue','a-freeagents','a-placementreviews','a-observations','a-observationreviews','a-guide','a-settings','a-systems','a-systems-dashboard'].forEach(v=>{
     const el=document.getElementById(v);
     if(el){ el.classList.add('hidden'); el.classList.remove('fade-in'); }
   });
@@ -631,6 +631,8 @@ function renderAView(view){
     'a-facilities':renderAFacilities,'a-facility':renderAFacility,
     'a-registrations':renderARegistrations,
     'a-assessments':renderAAssessments,'a-progression':renderAProgression,'a-upload':renderAUpload,
+    'a-foundations':()=>{ if(typeof renderHTraining==='function') renderHTraining(); },
+    'a-instruments':()=>{ if(typeof renderHInstruments==='function') renderHInstruments(); },
     'a-reports':renderAReports,
     'a-david':renderADavidView,
     'a-daviddashboard':renderADavidDashboardView,
