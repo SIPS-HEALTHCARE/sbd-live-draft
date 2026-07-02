@@ -14272,6 +14272,8 @@ async function openApproveRegModal(rid){
       <select id="approve-role-select" class="form-input" style="width:100%;margin-bottom:16px;">
         <option value="staff_member" ${r.requested_role==='staff_member'?'selected':''}>Staff Member (Tech/Free Agent)</option>
         <option value="hospital" ${(r.requested_role==='hospital' || !r.requested_role)?'selected':''}>Facility Admin (Manager/Leader)</option>
+        <option value="educator" ${r.requested_role==='educator'?'selected':''}>Educator / Preceptor (Facility)</option>
+        <option value="assessor" ${r.requested_role==='assessor'?'selected':''}>SBD Assessor (System-wide, observe/confirm)</option>
         <option value="system_admin" ${r.requested_role==='system_admin'?'selected':''}>System Admin (Executive)</option>
         <option value="staff_admin">Staff Admin (SIPS Internal)</option>
 
@@ -14361,6 +14363,8 @@ async function approveReg(rid){
     else if(assignRole === 'system_admin') { assignTitle = 'System Executive'; staffRole = 'executive'; }
     else if(assignRole === 'staff_admin') { assignTitle = 'SIPS Internal'; staffRole = 'admin'; }
     else if(assignRole === 'master_admin') { assignTitle = 'SIPS Leader'; staffRole = 'admin'; }
+    else if(assignRole === 'educator') { assignTitle = 'Educator / Preceptor'; staffRole = 'educator'; }
+    else if(assignRole === 'assessor') { assignTitle = 'SBD Assessor'; staffRole = 'assessor'; }
 
     const regUser={id:'u'+Date.now(),email:r.email,password:r.password,role:assignRole,name:contactName,title:assignTitle,initials,fid:finalFacilityId};
     DB.users.push(regUser);
