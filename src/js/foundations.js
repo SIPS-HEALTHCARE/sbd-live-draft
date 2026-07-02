@@ -720,7 +720,7 @@ function renderFndG3View(m,s,gates){
    if(confirmed){
      h+='<svg viewBox="0 0 18 18" width="16" height="16" fill="none" style="flex-shrink:0;margin-top:2px"><circle cx="9" cy="9" r="8" fill="rgba(74,222,128,.15)" stroke="#4ade80" stroke-width="1.3"/><path d="M5.5 9.5l2.5 2.5L13 7" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
      h+='<div><div style="font-size:13px;color:#4ade80">'+obs.text+'</div>';
-     h+='<div style="font-size:11px;color:#64748b;margin-top:2px">Confirmed by '+confirmed.confirmedBy+' on '+confirmed.date+'</div></div>';
+     h+='<div style="font-size:11px;color:#64748b;margin-top:2px">Confirmed by '+Security.sanitize(confirmed.confirmedBy||'—')+' on '+Security.sanitize(confirmed.date||'')+'</div></div>';
    } else {
      h+='<svg viewBox="0 0 18 18" width="16" height="16" fill="none" style="flex-shrink:0;margin-top:2px"><circle cx="9" cy="9" r="8" stroke="#475569" stroke-width="1.3"/></svg>';
      h+='<div style="font-size:13px;color:#94a3b8">'+obs.text+'</div>';
@@ -794,7 +794,7 @@ function renderHTraining(){
    rows.push({s,assigned:asgns.length,done,pct:asgns.length>0?Math.round(done/asgns.length*100):0});
  });
  
- let html='<div class="card mb16"><div class="card-hd"><div class="card-ttl">SBD Foundations</div></div><div class="card-body">';
+ let html='<div class="card mb16"><div class="card-hd"><div class="card-ttl">SBD Foundations'+(isSystemWide?' <span style="font-size:11px;color:#64748b;font-weight:500">(all facilities)</span>':'')+'</div></div><div class="card-body">';
  html+='<p style="font-size:13px;color:#94a3b8;line-height:1.6;margin:0 0 16px">Assign training modules for onboarding or targeted remediation. Each module requires three gates: Knowledge, Simulation, and Observed Demonstration.</p>';
  if(isSystemWide){
    html+='<div style="margin-bottom:14px"><select class="form-select" style="max-width:280px" onchange="ST._fndFacFilter=this.value;renderHTraining()"><option value="all"'+((ST._fndFacFilter||"all")==="all"?" selected":"")+'>All Facilities</option>'+scopeFacs.slice().sort((a,b)=>(a.name||"").localeCompare(b.name||"")).map(f=>'<option value="'+f.id+'"'+(ST._fndFacFilter===f.id?" selected":"")+'>'+f.name+'</option>').join("")+'</select></div>';
@@ -861,17 +861,17 @@ function hFndStaffDetail(staffId){
      const _typeLbl=a.type==='onboarding'?'Onboarding':'Remediation';
      html+='<div style="font-size:11px;color:#64748b;margin-bottom:12px">Assigned by '+Security.sanitize(a.assignedBy||'—')+(a.assignedDate?' · '+Security.sanitize(a.assignedDate):'')+' · '+_typeLbl+(a.trigger?' · Trigger: '+Security.sanitize(a.trigger):'')+'</div>';
    }
-   // Gate 3 observation items (editable by manager)
-   if(gates.g3.status!=='pass'){
-     html+='<div style="font-size:12px;font-weight:600;color:#c49a20;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Gate 3: Confirm Observed Demonstrations</div>';
-     m.observations.forEach(obs=>{
-       const confirmed=gates.g3.items.find(i=>i.id===obs.id&&i.confirmed);
-       html+='<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06)">';
-       html+='<input type="checkbox" style="accent-color:#4ade80;flex-shrink:0" '+(confirmed?'checked':'')+' onchange="markFndG3(\''+s.id+'\',\''+m.id+'\',\''+obs.id+'\',this.checked)">';
-       html+='<span style="font-size:12.5px;color:'+(confirmed?'#4ade80':'#94a3b8')+'">'+obs.text+'</span>';
-       html+='</div>';
-     });
-   }
+   // Gate 3 observation items (editable by manager). Rendered even after G3
+   // passes so a mis-click can be un-confirmed — the revoke cascade (Addendum
+   // 8.2) in markG3Item + the server trigger handle the revert.
+   html+='<div style="font-size:12px;font-weight:600;color:#c49a20;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Gate 3: Confirm Observed Demonstrations</div>';
+   m.observations.forEach(obs=>{
+     const confirmed=gates.g3.items.find(i=>i.id===obs.id&&i.confirmed);
+     html+='<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06)">';
+     html+='<input type="checkbox" style="accent-color:#4ade80;flex-shrink:0" '+(confirmed?'checked':'')+' onchange="markFndG3(\''+s.id+'\',\''+m.id+'\',\''+obs.id+'\',this.checked)">';
+     html+='<span style="font-size:12.5px;color:'+(confirmed?'#4ade80':'#94a3b8')+'">'+obs.text+'</span>';
+     html+='</div>';
+   });
    html+='</div></div>';
  });
  el.innerHTML=html;
