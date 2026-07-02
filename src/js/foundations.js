@@ -534,10 +534,22 @@ function markG3Item(staffId,moduleId,itemId,confirmed,confirmedBy){
  const existing=p.g3.items.find(i=>i.id===itemId);
  if(existing){existing.confirmed=confirmed;existing.confirmedBy=confirmedBy;existing.date=new Date().toISOString().slice(0,10);}
  else{p.g3.items.push({id:itemId,confirmed,confirmedBy,date:new Date().toISOString().slice(0,10)});}
- // Check if all G3 items confirmed
+ // Check if all G3 items confirmed. Unchecking cascades (RLS Addendum 8.2): a
+ // revoked confirmation reverts G3 pass -> open, and a previously complete
+ // module reverts to in-progress (assignment back to 'assigned').
  const m=FOUNDATIONS_MODULES.find(x=>x.id===moduleId);
- if(m){const allDone=m.observations.every(o=>p.g3.items.some(i=>i.id===o.id&&i.confirmed));if(allDone){p.g3.status='pass';p.g3.score=100;}}
- if(p.g1.status==='pass'&&p.g2.status==='pass'&&p.g3.status==='pass'){p.complete=true;const a=(DB.foundationsAssignments||[]).find(x=>x.staffId===staffId&&x.moduleId===moduleId);if(a)a.status='completed';}
+ if(m){
+   const allDone=m.observations.every(o=>p.g3.items.some(i=>i.id===o.id&&i.confirmed));
+   if(allDone){p.g3.status='pass';p.g3.score=100;}
+   else if(p.g3.status==='pass'){p.g3.status='open';p.g3.score=0;}
+ }
+ const a=(DB.foundationsAssignments||[]).find(x=>x.staffId===staffId&&x.moduleId===moduleId);
+ if(p.g1.status==='pass'&&p.g2.status==='pass'&&p.g3.status==='pass'){
+   p.complete=true; if(a)a.status='completed';
+ } else if(p.complete){
+   p.complete=false; if(a)a.status='assigned';
+   _fndSaveAssignmentStatus(staffId,moduleId,'assigned');
+ }
  _fndSaveProgress(p);
  if(p.complete) _fndSaveAssignmentStatus(staffId,moduleId,'completed');
 }
@@ -822,7 +834,10 @@ function hFndStaffDetail(staffId){
    html+='<div class="card mb16"><div class="card-hd" style="flex-wrap:wrap;gap:8px">';
    html+='<div style="display:flex;align-items:center;gap:8px"><div class="fnd-num'+(gates.complete?' fnd-num-done':'')+'">'+m.num+'</div>';
    html+='<div class="card-ttl" style="font-size:14px;margin:0">'+m.title+'</div></div>';
-   html+='<div style="display:flex;gap:4px">'+fndGateBadge(gates.g1.status)+fndGateBadge(gates.g2.status)+fndGateBadge(gates.g3.status)+'</div>';
+   html+='<div style="display:flex;gap:4px;align-items:center">'+fndGateBadge(gates.g1.status)+fndGateBadge(gates.g2.status)+fndGateBadge(gates.g3.status);
+   // Unassign: RLS Addendum matrix -- delete assignments is Master Admin ONLY.
+   if(ST.user&&ST.user.role==='master_admin') html+='<button class="btn btn-ghost btn-xs" style="margin-left:8px;border-color:rgba(239,68,68,.4);color:#f87171" onclick="hUnassignFnd(\''+s.id+'\',\''+m.id+'\')">Unassign</button>';
+   html+='</div>';
    html+='</div><div class="card-body" style="padding-top:0">';
    // Gate status
    html+='<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;font-size:12px;color:#94a3b8">';
@@ -836,7 +851,7 @@ function hFndStaffDetail(staffId){
      m.observations.forEach(obs=>{
        const confirmed=gates.g3.items.find(i=>i.id===obs.id&&i.confirmed);
        html+='<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06)">';
-       html+='<input type="checkbox" style="accent-color:#4ade80;flex-shrink:0" '+(confirmed?'checked':'')+' onchange="markFndG3('+s.id+',\''+m.id+'\',\''+obs.id+'\',this.checked)">';
+       html+='<input type="checkbox" style="accent-color:#4ade80;flex-shrink:0" '+(confirmed?'checked':'')+' onchange="markFndG3(\''+s.id+'\',\''+m.id+'\',\''+obs.id+'\',this.checked)">';
        html+='<span style="font-size:12.5px;color:'+(confirmed?'#4ade80':'#94a3b8')+'">'+obs.text+'</span>';
        html+='</div>';
      });
@@ -849,6 +864,18 @@ function markFndG3(staffId,moduleId,itemId,checked){
  const assignerName=ST.user?ST.user.name:'Manager';
  markG3Item(staffId,moduleId,itemId,checked,assignerName);
  hFndStaffDetail(staffId);
+}
+
+// Unassign a module (Master Admin only, per the RLS Addendum matrix). The
+// assignment row is removed; the progress row is KEPT as the historical
+// attempt record (Addendum 8.4), so re-assigning later resumes the history.
+function hUnassignFnd(staffId,moduleId){
+ if(!(ST.user&&ST.user.role==='master_admin')){toast('Only the Master Admin can unassign modules','err');return;}
+ if(!confirm('Unassign this module? The staff member loses access; progress history is kept.'))return;
+ DB.foundationsAssignments=(DB.foundationsAssignments||[]).filter(a=>!(a.staffId===staffId&&a.moduleId===moduleId));
+ try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.deleteFoundationsAssignment){SB.deleteFoundationsAssignment(staffId,moduleId).catch(e=>{if(typeof handleSyncError==='function')handleSyncError(e,'Foundations unassign');});}}catch(e){}
+ toast('Module unassigned','info');
+ if(getFoundationsAssignments(staffId).length>0) hFndStaffDetail(staffId); else renderHTraining();
 }
  
 // ── Hospital: Assignment Modal ──

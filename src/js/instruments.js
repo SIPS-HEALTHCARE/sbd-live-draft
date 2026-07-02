@@ -262,9 +262,21 @@ function markInstG3Item(sid,mid,itemId,confirmed,by){
  const ex=p.g3.items.find(i=>i.id===itemId);
  if(ex){ex.confirmed=confirmed;ex.confirmedBy=by;ex.date=new Date().toISOString().slice(0,10);}
  else{p.g3.items.push({id:itemId,confirmed,confirmedBy:by,date:new Date().toISOString().slice(0,10)});}
+ // Unchecking cascades (RLS Addendum 8.2): revoked confirmation reverts G3
+ // pass -> open; a previously complete module reverts to in-progress.
  const m=INSTRUMENT_MODULES.find(x=>x.id===mid);
- if(m){const allDone=m.observations.every(o=>p.g3.items.some(i=>i.id===o.id&&i.confirmed));if(allDone){p.g3.status='pass';p.g3.score=100;}}
- if(p.g1.status==='pass'&&p.g2.status==='pass'&&p.g3.status==='pass'){p.complete=true;const a=(DB.instrumentAssignments||[]).find(x=>x.staffId===sid&&x.moduleId===mid);if(a)a.status='completed';}
+ if(m){
+   const allDone=m.observations.every(o=>p.g3.items.some(i=>i.id===o.id&&i.confirmed));
+   if(allDone){p.g3.status='pass';p.g3.score=100;}
+   else if(p.g3.status==='pass'){p.g3.status='open';p.g3.score=0;}
+ }
+ const a=(DB.instrumentAssignments||[]).find(x=>x.staffId===sid&&x.moduleId===mid);
+ if(p.g1.status==='pass'&&p.g2.status==='pass'&&p.g3.status==='pass'){
+   p.complete=true; if(a)a.status='completed';
+ } else if(p.complete){
+   p.complete=false; if(a)a.status='assigned';
+   _instSaveAssignmentStatus(sid,mid,'assigned');
+ }
  _instSaveProgress(p);
  if(p.complete) _instSaveAssignmentStatus(sid,mid,'completed');
 }
@@ -382,14 +394,23 @@ function hInstStaffDetail(sid){
  html+='<div class="card mb16"><div class="card-hd"><div class="card-ttl">'+fullName(s)+'</div><span class="bb bb-'+s.belt+'">'+s.belt+'</span></div><div class="card-body"><div style="font-size:13px;color:#94a3b8">'+s.role+'</div></div></div>';
  INSTRUMENT_MODULES.forEach(m=>{
    if(!isInstModuleAssigned(s.id,m.id)) return;const gates=getInstModuleGates(s.id,m.id);
-   html+='<div class="card mb16"><div class="card-hd" style="flex-wrap:wrap;gap:8px"><div style="display:flex;align-items:center;gap:8px"><div class="fnd-num'+(gates.complete?' fnd-num-done':'')+'">'+m.num+'</div><div class="card-ttl" style="font-size:14px;margin:0">'+m.title+'</div></div><div style="display:flex;gap:4px">'+fndGateBadge(gates.g1.status)+fndGateBadge(gates.g2.status)+fndGateBadge(gates.g3.status)+'</div></div><div class="card-body" style="padding-top:0">';
+   html+='<div class="card mb16"><div class="card-hd" style="flex-wrap:wrap;gap:8px"><div style="display:flex;align-items:center;gap:8px"><div class="fnd-num'+(gates.complete?' fnd-num-done':'')+'">'+m.num+'</div><div class="card-ttl" style="font-size:14px;margin:0">'+m.title+'</div></div><div style="display:flex;gap:4px;align-items:center">'+fndGateBadge(gates.g1.status)+fndGateBadge(gates.g2.status)+fndGateBadge(gates.g3.status)+((ST.user&&ST.user.role==='master_admin')?'<button class="btn btn-ghost btn-xs" style="margin-left:8px;border-color:rgba(239,68,68,.4);color:#f87171" onclick="hUnassignInst(\''+s.id+'\',\''+m.id+'\')">Unassign</button>':'')+'</div></div><div class="card-body" style="padding-top:0">';
    html+='<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;font-size:12px;color:#94a3b8"><span>G1: '+(gates.g1.status==='pass'?'<span class="tc-ok">'+gates.g1.score+'%</span>':'<span class="tc-muted">'+gates.g1.status+'</span>')+'</span><span>G2: '+(gates.g2.status==='pass'?'<span class="tc-ok">'+gates.g2.score+'%</span>':'<span class="tc-muted">'+gates.g2.status+'</span>')+'</span><span>G3: '+(gates.g3.status==='pass'?'<span class="tc-ok">Confirmed</span>':'<span class="tc-warn">Pending</span>')+'</span></div>';
    if(gates.g3.status!=='pass'){html+='<div style="font-size:12px;font-weight:600;color:#c49a20;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Gate 3: Confirm Observations</div>';
-   m.observations.forEach(obs=>{const conf=gates.g3.items.find(i=>i.id===obs.id&&i.confirmed);html+='<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06)"><input type="checkbox" style="accent-color:#4ade80;flex-shrink:0" '+(conf?'checked':'')+' onchange="markInstG3Wrap('+s.id+',\''+m.id+'\',\''+obs.id+'\',this.checked)"><span style="font-size:12.5px;color:'+(conf?'#4ade80':'#94a3b8')+'">'+obs.text+'</span></div>';});}
+   m.observations.forEach(obs=>{const conf=gates.g3.items.find(i=>i.id===obs.id&&i.confirmed);html+='<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06)"><input type="checkbox" style="accent-color:#4ade80;flex-shrink:0" '+(conf?'checked':'')+' onchange="markInstG3Wrap(\''+s.id+'\',\''+m.id+'\',\''+obs.id+'\',this.checked)"><span style="font-size:12.5px;color:'+(conf?'#4ade80':'#94a3b8')+'">'+obs.text+'</span></div>';});}
    html+='</div></div>';
  });el.innerHTML=html;
 }
 function markInstG3Wrap(sid,mid,itemId,checked){const by=ST.user?ST.user.name:'Manager';markInstG3Item(sid,mid,itemId,checked,by);hInstStaffDetail(sid);}
+// Unassign (Master Admin only, RLS Addendum matrix). Progress kept as history (8.4).
+function hUnassignInst(sid,mid){
+ if(!(ST.user&&ST.user.role==='master_admin')){toast('Only the Master Admin can unassign modules','err');return;}
+ if(!confirm('Unassign this module? The staff member loses access; progress history is kept.'))return;
+ DB.instrumentAssignments=(DB.instrumentAssignments||[]).filter(a=>!(a.staffId===sid&&a.moduleId===mid));
+ try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.deleteInstrumentAssignment){SB.deleteInstrumentAssignment(sid,mid).catch(e=>{if(typeof handleSyncError==='function')handleSyncError(e,'Instruments unassign');});}}catch(e){}
+ toast('Module unassigned','info');
+ if(getInstrumentAssignments(sid).length>0) hInstStaffDetail(sid); else renderHInstruments();
+}
 function hAssignInstModal(sid){
  const s=getStaff(sid);if(!s)return;const existing=getInstrumentAssignments(s.id);const unassigned=INSTRUMENT_MODULES.filter(m=>!existing.some(a=>a.moduleId===m.id));
  if(!unassigned.length){toast('All modules assigned','info');return;}
