@@ -1,4 +1,4 @@
-SBD_Instruments_Code.js
+// SBD_Instruments_Code.js
 // ============================================================
 // SBD INSTRUMENTS - STANDALONE CODE EXTRACTION
 // ============================================================
@@ -29,7 +29,7 @@ SBD_Instruments_Code.js
 //    No additional CSS needed if Foundations CSS is already added.
 //
 // 7. DEPENDENCIES: This code uses these existing platform functions:
-//    getStaff(), fullName(), saveDemoData(), showToast(),
+//    getStaff(), fullName(), saveDemoData(), toast(),
 //    openModal(), closeModal(), fndGateBadge() (defined in Foundations code)
 //
 // IMPORTANT: Foundations code MUST be loaded before Instruments code
@@ -336,8 +336,8 @@ function submitInstGate(mid,gk){
  const score=Math.round((correct/items.length)*100);saveInstGateScore(s.id,m.id,gk,score);
  items.forEach((item,qi)=>{const opts=document.querySelectorAll('input[name="inst-'+gk+'-'+m.id+'-'+qi+'"]');opts.forEach((opt,oi)=>{const lbl=opt.closest('.fnd-q-opt');if(!lbl)return;opt.disabled=true;if(oi===item.ans)lbl.classList.add('fnd-q-correct');else if(opt.checked&&oi!==item.ans)lbl.classList.add('fnd-q-wrong');});});
  const rEl=document.getElementById('inst-gate-result');const gateLabel=gk==='g1'?'Knowledge':'Simulation';
- if(rEl){if(score>=80){rEl.innerHTML='<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--r);padding:14px 16px;text-align:center;margin-top:12px"><div style="font-size:24px;font-weight:700;color:#4ade80">'+score+'%</div><div style="font-size:13px;color:#4ade80;font-weight:600;margin:4px 0">'+gateLabel+' Gate Passed</div><div style="font-size:12px;color:#94a3b8">'+correct+' of '+items.length+' correct.</div></div>';showToast(gateLabel+' passed: '+score+'%','ok');}
- else{rEl.innerHTML='<div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:var(--r);padding:14px 16px;text-align:center;margin-top:12px"><div style="font-size:24px;font-weight:700;color:#f87171">'+score+'%</div><div style="font-size:13px;color:#f87171;font-weight:600;margin:4px 0">Not Yet Passing</div><div style="font-size:12px;color:#94a3b8">'+correct+' of '+items.length+' correct. 80% required.</div><button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="openInstModule(\''+mid+'\')">Try Again</button></div>';showToast('Score: '+score+'%. 80% required.','err');}}
+ if(rEl){if(score>=80){rEl.innerHTML='<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--r);padding:14px 16px;text-align:center;margin-top:12px"><div style="font-size:24px;font-weight:700;color:#4ade80">'+score+'%</div><div style="font-size:13px;color:#4ade80;font-weight:600;margin:4px 0">'+gateLabel+' Gate Passed</div><div style="font-size:12px;color:#94a3b8">'+correct+' of '+items.length+' correct.</div></div>';toast(gateLabel+' passed: '+score+'%','ok');}
+ else{rEl.innerHTML='<div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:var(--r);padding:14px 16px;text-align:center;margin-top:12px"><div style="font-size:24px;font-weight:700;color:#f87171">'+score+'%</div><div style="font-size:13px;color:#f87171;font-weight:600;margin:4px 0">Not Yet Passing</div><div style="font-size:12px;color:#94a3b8">'+correct+' of '+items.length+' correct. 80% required.</div><button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="openInstModule(\''+mid+'\')">Try Again</button></div>';toast('Score: '+score+'%. 80% required.','err');}}
 }
  
 // ── Hospital Portal: Render Instruments ──
@@ -392,13 +392,13 @@ function hInstStaffDetail(sid){
 function markInstG3Wrap(sid,mid,itemId,checked){const by=ST.user?ST.user.name:'Manager';markInstG3Item(sid,mid,itemId,checked,by);hInstStaffDetail(sid);}
 function hAssignInstModal(sid){
  const s=getStaff(sid);if(!s)return;const existing=getInstrumentAssignments(s.id);const unassigned=INSTRUMENT_MODULES.filter(m=>!existing.some(a=>a.moduleId===m.id));
- if(!unassigned.length){showToast('All modules assigned','info');return;}
+ if(!unassigned.length){toast('All modules assigned','info');return;}
  let html='<div style="margin-bottom:12px;font-size:13px;color:#94a3b8">Assign to <strong style="color:#e2e8f0">'+fullName(s)+'</strong>:</div><div style="max-height:300px;overflow-y:auto">';
  unassigned.forEach(m=>{html+='<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer;font-size:13px;color:#cbd5e1"><input type="checkbox" class="inst-assign-cb" value="'+m.id+'" style="accent-color:#c49a20"><span><strong>'+m.num+'.</strong> '+m.title+'</span></label>';});
  html+='</div><div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-ghost btn-sm" onclick="closeModal()">Cancel</button><button class="btn btn-gold btn-sm" onclick="hDoAssignInst(\''+s.id+'\')">Assign</button></div>';
  openModal('Assign Instrument Modules',html,'modal-sm');
 }
-function hDoAssignInst(sid){const cbs=document.querySelectorAll('.inst-assign-cb:checked');if(!cbs.length){showToast('Select at least one','err');return;}const nm=ST.user?ST.user.name:'Manager';cbs.forEach(cb=>assignInstModule(sid,cb.value,nm,'remediation',null));closeModal();showToast(cbs.length+' module'+(cbs.length>1?'s':'')+' assigned','ok');renderHInstruments();}
-function hAssignAllInst(sid){assignAllInstModules(sid,ST.user?ST.user.name:'Manager');showToast('All 4 instrument modules assigned','ok');renderHInstruments();}
+function hDoAssignInst(sid){const cbs=document.querySelectorAll('.inst-assign-cb:checked');if(!cbs.length){toast('Select at least one','err');return;}const nm=ST.user?ST.user.name:'Manager';cbs.forEach(cb=>assignInstModule(sid,cb.value,nm,'remediation',null));closeModal();toast(cbs.length+' module'+(cbs.length>1?'s':'')+' assigned','ok');renderHInstruments();}
+function hAssignAllInst(sid){assignAllInstModules(sid,ST.user?ST.user.name:'Manager');toast('All 4 instrument modules assigned','ok');renderHInstruments();}
 
 

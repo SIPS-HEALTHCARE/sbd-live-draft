@@ -1,4 +1,4 @@
-SBD_Foundations_Code.js
+// SBD_Foundations_Code.js
 // ============================================================
 // SBD FOUNDATIONS - STANDALONE CODE EXTRACTION
 // ============================================================
@@ -29,7 +29,7 @@ SBD_Foundations_Code.js
 //    to the stylesheet before </style>
 //
 // 7. DEPENDENCIES: This code uses these existing platform functions:
-//    getStaff(), fullName(), saveDemoData(), showToast(),
+//    getStaff(), fullName(), saveDemoData(), toast(),
 //    openModal(), closeModal(), fndGateBadge() (defined in this file)
 //
 // ============================================================
@@ -734,10 +734,10 @@ function submitFndGate(moduleId,gateKey){
  if(rEl){
    if(passed){
      rEl.innerHTML='<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--r);padding:14px 16px;text-align:center;margin-top:12px"><div style="font-size:24px;font-weight:700;color:#4ade80">'+score+'%</div><div style="font-size:13px;color:#4ade80;font-weight:600;margin:4px 0">'+gateLabel+' Gate Passed</div><div style="font-size:12px;color:#94a3b8">'+correct+' of '+items.length+' correct.</div></div>';
-     showToast(gateLabel+' gate passed: '+score+'%','ok');
+     toast(gateLabel+' gate passed: '+score+'%','ok');
    } else {
      rEl.innerHTML='<div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:var(--r);padding:14px 16px;text-align:center;margin-top:12px"><div style="font-size:24px;font-weight:700;color:#f87171">'+score+'%</div><div style="font-size:13px;color:#f87171;font-weight:600;margin:4px 0">Not Yet Passing</div><div style="font-size:12px;color:#94a3b8">'+correct+' of '+items.length+' correct. 80% required.</div><button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="openFndModule(\''+moduleId+'\')">Try Again</button></div>';
-     showToast('Score: '+score+'%. 80% required.','err');
+     toast('Score: '+score+'%. 80% required.','err');
    }
  }
 }
@@ -856,7 +856,7 @@ function hAssignFndModal(staffId){
  const s=getStaff(staffId);if(!s) return;
  const existing=getFoundationsAssignments(s.id);
  const unassigned=FOUNDATIONS_MODULES.filter(m=>!existing.some(a=>a.moduleId===m.id));
- if(!unassigned.length){showToast('All modules assigned','info');return;}
+ if(!unassigned.length){toast('All modules assigned','info');return;}
  let html='<div style="margin-bottom:12px;font-size:13px;color:#94a3b8">Assign to <strong style="color:#e2e8f0">'+fullName(s)+'</strong>:</div>';
  html+='<div style="max-height:300px;overflow-y:auto">';
  unassigned.forEach(m=>{
@@ -871,12 +871,12 @@ function hAssignFndModal(staffId){
 }
 function hDoAssignFnd(staffId){
  const cbs=document.querySelectorAll('.fnd-assign-cb:checked');
- if(!cbs.length){showToast('Select at least one','err');return;}
+ if(!cbs.length){toast('Select at least one','err');return;}
  const nm=ST.user?ST.user.name:'Manager';
  cbs.forEach(cb=>assignModule(staffId,cb.value,nm,'remediation',null));
- closeModal();showToast(cbs.length+' module'+(cbs.length>1?'s':'')+' assigned','ok');renderHTraining();
+ closeModal();toast(cbs.length+' module'+(cbs.length>1?'s':'')+' assigned','ok');renderHTraining();
 }
 function hAssignAllFnd(staffId){
  assignAllModules(staffId,ST.user?ST.user.name:'Manager');
- showToast('All 10 modules assigned','ok');renderHTraining();
+ toast('All 10 modules assigned','ok');renderHTraining();
 }
