@@ -343,17 +343,34 @@ function submitInstGate(mid,gk){
 // ── Hospital Portal: Render Instruments ──
 function renderHInstruments(){
  const el=document.getElementById('h-instruments');if(!el)return;
- const fid=ST.hFid;const staff=DB.staff.filter(s=>s.fid===fid);
+ // Role scope (RLS Addendum v1.1 section 6): master_admin/admin/staff_admin/assessor see ALL
+ // facilities; educator/manager/facility_admin/hospital see their own. Same pattern as Foundations.
+ const _u=ST.user;
+ const isSystemWide=!!(_u&&['master_admin','admin','staff_admin','assessor'].includes(_u.role));
+ const isAssessor=!!(_u&&_u.role==='assessor');
+ let scopeFacs=DB.facilities.filter(f=>f.active!==false);
+ if(isSystemWide&&_u.role==='staff_admin'&&(_u.assignedFids||[]).length) scopeFacs=scopeFacs.filter(f=>_u.assignedFids.includes(f.id));
+ let staff;
+ if(isSystemWide){
+   staff=DB.staff.filter(s=>scopeFacs.some(f=>f.id===s.fid));
+   const ff=ST._instFacFilter||'all';
+   if(ff!=='all') staff=staff.filter(s=>s.fid===ff);
+ } else {
+   staff=DB.staff.filter(s=>s.fid===ST.hFid);
+ }
  let totalA=0,totalC=0,staffWith=0;const rows=[];
  staff.forEach(s=>{const asgns=getInstrumentAssignments(s.id);const done=asgns.filter(a=>a.status==='completed').length;if(asgns.length>0){staffWith++;totalA+=asgns.length;totalC+=done;}rows.push({s,assigned:asgns.length,done,pct:asgns.length>0?Math.round(done/asgns.length*100):0});});
- let html='<div class="card mb16"><div class="card-hd"><div class="card-ttl">Instruments</div></div><div class="card-body"><p style="font-size:13px;color:#94a3b8;line-height:1.6;margin:0 0 16px">Assign instrument training by belt level for onboarding or targeted remediation. Each module requires three gates.</p>';
+ let html='<div class="card mb16"><div class="card-hd"><div class="card-ttl">Instruments'+(isSystemWide?' <span style="font-size:11px;color:#64748b;font-weight:500">(all facilities)</span>':'')+'</div></div><div class="card-body"><p style="font-size:13px;color:#94a3b8;line-height:1.6;margin:0 0 16px">Assign instrument training by belt level for onboarding or targeted remediation. Each module requires three gates.</p>';
+ if(isSystemWide){html+='<div style="margin-bottom:14px"><select class="form-select" style="max-width:280px" onchange="ST._instFacFilter=this.value;renderHInstruments()"><option value="all"'+((ST._instFacFilter||"all")==="all"?" selected":"")+'>All Facilities</option>'+scopeFacs.slice().sort((a,b)=>(a.name||"").localeCompare(b.name||"")).map(f=>'<option value="'+f.id+'"'+(ST._instFacFilter===f.id?" selected":"")+'>'+f.name+'</option>').join("")+'</select></div>';}
  html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:8px"><div class="stat-card-mini"><div class="stat-lbl">Enrolled</div><div class="stat-val">'+staffWith+'</div></div><div class="stat-card-mini"><div class="stat-lbl">Assigned</div><div class="stat-val">'+totalA+'</div></div><div class="stat-card-mini"><div class="stat-lbl">Completed</div><div class="stat-val" style="color:#4ade80">'+totalC+'</div></div><div class="stat-card-mini"><div class="stat-lbl">Rate</div><div class="stat-val">'+(totalA>0?Math.round(totalC/totalA*100):0)+'%</div></div></div></div></div>';
- html+='<div class="card mb16"><div class="card-hd"><div class="card-ttl">Staff Instrument Training</div></div><div class="card-body" style="padding:0"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Name</th><th>Belt</th><th>Modules</th><th>Actions</th></tr></thead><tbody>';
+ html+='<div class="card mb16"><div class="card-hd"><div class="card-ttl">Staff Instrument Training</div></div><div class="card-body" style="padding:0"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Name</th>'+(isSystemWide?'<th>Facility</th>':'')+'<th>Belt</th><th>Modules</th><th>Actions</th></tr></thead><tbody>';
  rows.sort((a,b)=>fullName(a.s).localeCompare(fullName(b.s)));
- rows.forEach(r=>{html+='<tr><td style="font-weight:600">'+fullName(r.s)+'</td><td><span class="bb bb-'+r.s.belt+'">'+r.s.belt+'</span></td><td>'+(r.assigned>0?'<span class="'+(r.pct===100?'tc-ok':r.pct>0?'tc-warn':'tc-muted')+'">'+r.done+'/'+r.assigned+'</span>':'<span class="tc-muted">None</span>')+'</td><td style="white-space:nowrap">';
+ rows.forEach(r=>{html+='<tr><td style="font-weight:600">'+fullName(r.s)+'</td>'+(isSystemWide?'<td style="font-size:12px;color:#94a3b8">'+((DB.facilities.find(f=>f.id===r.s.fid)||{}).name||'—')+'</td>':'')+'<td><span class="bb bb-'+r.s.belt+'">'+r.s.belt+'</span></td><td>'+(r.assigned>0?'<span class="'+(r.pct===100?'tc-ok':r.pct>0?'tc-warn':'tc-muted')+'">'+r.done+'/'+r.assigned+'</span>':'<span class="tc-muted">None</span>')+'</td><td style="white-space:nowrap">';
  if(r.assigned>0) html+='<button class="btn btn-ghost btn-xs" onclick="hInstStaffDetail(\''+r.s.id+'\')">View</button> ';
+ if(!isAssessor){
  if(r.assigned<4) html+='<button class="btn btn-gold btn-xs" onclick="hAssignInstModal(\''+r.s.id+'\')">Assign</button> ';
  if(r.assigned===0) html+='<button class="btn btn-blue btn-xs" onclick="hAssignAllInst(\''+r.s.id+'\')">All 4</button>';
+ }
  html+='</td></tr>';});
  html+='</tbody></table></div></div></div>';el.innerHTML=html;
 }

@@ -745,7 +745,22 @@ function submitFndGate(moduleId,gateKey){
 // ── Hospital Portal: Render Training ──
 function renderHTraining(){
  const el=document.getElementById('h-training');if(!el)return;
- const fid=ST.hFid;const staff=DB.staff.filter(s=>s.fid===fid);
+ // Role scope (RLS Addendum v1.1 section 6): master_admin/admin/staff_admin/assessor see
+ // ALL facilities (system-wide); educator/manager/facility_admin/hospital see their own only.
+ // Mirrors the Staff Directory / Belt Progress role-filter pattern already in the app.
+ const _u=ST.user;
+ const isSystemWide=!!(_u&&['master_admin','admin','staff_admin','assessor'].includes(_u.role));
+ const isAssessor=!!(_u&&_u.role==='assessor');
+ let scopeFacs=DB.facilities.filter(f=>f.active!==false);
+ if(isSystemWide&&_u.role==='staff_admin'&&(_u.assignedFids||[]).length) scopeFacs=scopeFacs.filter(f=>_u.assignedFids.includes(f.id));
+ let staff;
+ if(isSystemWide){
+   staff=DB.staff.filter(s=>scopeFacs.some(f=>f.id===s.fid));
+   const ff=ST._fndFacFilter||'all';
+   if(ff!=='all') staff=staff.filter(s=>s.fid===ff);
+ } else {
+   staff=DB.staff.filter(s=>s.fid===ST.hFid);
+ }
  let totalA=0,totalC=0,staffWith=0;
  const rows=[];
  staff.forEach(s=>{
@@ -757,6 +772,9 @@ function renderHTraining(){
  
  let html='<div class="card mb16"><div class="card-hd"><div class="card-ttl">SBD Foundations</div></div><div class="card-body">';
  html+='<p style="font-size:13px;color:#94a3b8;line-height:1.6;margin:0 0 16px">Assign training modules for onboarding or targeted remediation. Each module requires three gates: Knowledge, Simulation, and Observed Demonstration.</p>';
+ if(isSystemWide){
+   html+='<div style="margin-bottom:14px"><select class="form-select" style="max-width:280px" onchange="ST._fndFacFilter=this.value;renderHTraining()"><option value="all"'+((ST._fndFacFilter||"all")==="all"?" selected":"")+'>All Facilities</option>'+scopeFacs.slice().sort((a,b)=>(a.name||"").localeCompare(b.name||"")).map(f=>'<option value="'+f.id+'"'+(ST._fndFacFilter===f.id?" selected":"")+'>'+f.name+'</option>').join("")+'</select></div>';
+ }
  html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:8px">';
  html+='<div class="stat-card-mini"><div class="stat-lbl">Enrolled</div><div class="stat-val">'+staffWith+'</div></div>';
  html+='<div class="stat-card-mini"><div class="stat-lbl">Assigned</div><div class="stat-val">'+totalA+'</div></div>';
@@ -766,16 +784,19 @@ function renderHTraining(){
  
  // Staff table
  html+='<div class="card mb16"><div class="card-hd"><div class="card-ttl">Staff Training</div></div>';
- html+='<div class="card-body" style="padding:0"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Name</th><th>Belt</th><th>Modules</th><th>Actions</th></tr></thead><tbody>';
+ html+='<div class="card-body" style="padding:0"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Name</th>'+(isSystemWide?'<th>Facility</th>':'')+'<th>Belt</th><th>Modules</th><th>Actions</th></tr></thead><tbody>';
  rows.sort((a,b)=>fullName(a.s).localeCompare(fullName(b.s)));
  rows.forEach(r=>{
    html+='<tr><td style="font-weight:600">'+fullName(r.s)+'</td>';
+   if(isSystemWide){const _fn=(DB.facilities.find(f=>f.id===r.s.fid)||{}).name||'—';html+='<td style="font-size:12px;color:#94a3b8">'+_fn+'</td>';}
    html+='<td><span class="bb bb-'+r.s.belt+'">'+r.s.belt+'</span></td>';
    html+='<td>'+(r.assigned>0?'<span class="'+(r.pct===100?'tc-ok':r.pct>0?'tc-warn':'tc-muted')+'">'+r.done+'/'+r.assigned+'</span>':'<span class="tc-muted">None</span>')+'</td>';
    html+='<td style="white-space:nowrap">';
    if(r.assigned>0) html+='<button class="btn btn-ghost btn-xs" onclick="hFndStaffDetail(\''+r.s.id+'\')">View</button> ';
-   if(r.assigned<10) html+='<button class="btn btn-gold btn-xs" onclick="hAssignFndModal(\''+r.s.id+'\')">Assign</button> ';
-   if(r.assigned===0) html+='<button class="btn btn-blue btn-xs" onclick="hAssignAllFnd(\''+r.s.id+'\')">All 10</button>';
+   if(!isAssessor){
+     if(r.assigned<10) html+='<button class="btn btn-gold btn-xs" onclick="hAssignFndModal(\''+r.s.id+'\')">Assign</button> ';
+     if(r.assigned===0) html+='<button class="btn btn-blue btn-xs" onclick="hAssignAllFnd(\''+r.s.id+'\')">All 10</button>';
+   }
    html+='</td></tr>';
  });
  html+='</tbody></table></div></div></div>';

@@ -572,7 +572,7 @@ function goXFacility(fid){
 
 function renderHView(view){
   if(!ST.user) return logout();
-  const allowed = ['hospital','facility_admin','master_admin','staff_admin','system_admin'];
+  const allowed = ['hospital','facility_admin','master_admin','staff_admin','system_admin','assessor'];
   if(!allowed.includes(ST.user.role) && !allowed.includes(ST.portal)) {
     toast('RBAC Guard: Unauthorized access to Facility Portal', 'err');
     return;
