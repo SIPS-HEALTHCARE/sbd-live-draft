@@ -123,7 +123,9 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
 .platform-rows{display:flex;flex-direction:column;gap:4px;margin-top:4px}
 .platform-row{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .platform-name{font-size:11px;font-weight:600;color:var(--txt2)}
-.platform-val{font-size:11px;color:var(--txt3);font-weight:500}
+.platform-val{font-size:11px;color:var(--txt3);font-weight:500;display:flex;gap:12px;flex-wrap:wrap;justify-content:flex-end;text-align:right}
+.platform-win{white-space:nowrap}
+.platform-win-lbl{font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--txt3);opacity:.7;margin-right:3px}
 
 /* ── Tier Selector Modal ── */
 .tier-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);z-index:100;display:none;align-items:center;justify-content:center}
@@ -213,6 +215,14 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
   .cards-grid{grid-template-columns:1fr}
   .toolbar{flex-direction:column}
   .user-panel{width:100vw;max-width:100vw}
+  /* Stack the card meta strip vertically on phones so nothing gets shoved off
+     the card edge. .card-meta is display:flex (not grid), so grid-column on
+     .platform-split is a no-op — each item must become its own full-width row
+     and the platform values must wrap under the platform name. */
+  .card-meta{flex-direction:column;align-items:stretch;gap:12px}
+  .token-bar{flex:none}
+  .platform-row{flex-direction:column;align-items:flex-start;gap:2px}
+  .platform-val{justify-content:flex-start;text-align:left}
 }
 </style>
 </head>
@@ -498,7 +508,10 @@ async function loadFacilities(){
       const rows = await uaRes.json();
       (Array.isArray(rows)?rows:[]).forEach(r => {
         if(!byAppMap[r.facility_id]) byAppMap[r.facility_id] = {};
-        byAppMap[r.facility_id][r.app] = { questions:+r.questions||0, tokens:+r.tokens||0, cost:+r.cost||0 };
+        byAppMap[r.facility_id][r.app] = {
+          q_mtd:+r.questions_mtd||0, tok_mtd:+r.tokens_mtd||0, cost_mtd:+r.cost_mtd||0,
+          q_all:+r.questions_all||0, tok_all:+r.tokens_all||0, cost_all:+r.cost_all||0
+        };
       });
     }
   } catch(e){ console.warn('Per-platform usage load:', e.message); }
@@ -567,13 +580,14 @@ function renderCards(list){
         </div>
         ${(() => {
           const pa = f.byApp || {};
-          const belt = pa.sbd || {questions:0,tokens:0,cost:0};
-          const sop  = pa.psop || {questions:0,tokens:0,cost:0};
+          const belt = pa.sbd || {};
+          const sop  = pa.psop || {};
+          const line = o => `<span class="platform-win"><span class="platform-win-lbl">This month</span> ${(o.q_mtd||0).toLocaleString()} Q &middot; ${(o.tok_mtd||0).toLocaleString()} tok</span><span class="platform-win"><span class="platform-win-lbl">To date</span> ${(o.q_all||0).toLocaleString()} Q &middot; ${(o.tok_all||0).toLocaleString()} tok</span>`;
           return `<div class="meta-item platform-split">
-            <span class="meta-lbl">This month by platform</span>
+            <span class="meta-lbl">Usage by platform</span>
             <div class="platform-rows">
-              <div class="platform-row"><span class="platform-name">Belt app</span><span class="platform-val">${belt.questions.toLocaleString()} Q &middot; ${belt.tokens.toLocaleString()} tok</span></div>
-              <div class="platform-row"><span class="platform-name">SOP tool</span><span class="platform-val">${sop.questions.toLocaleString()} Q &middot; ${sop.tokens.toLocaleString()} tok</span></div>
+              <div class="platform-row"><span class="platform-name">Belt app</span><span class="platform-val">${line(belt)}</span></div>
+              <div class="platform-row"><span class="platform-name">SOP tool</span><span class="platform-val">${line(sop)}</span></div>
             </div>
           </div>`;
         })()}

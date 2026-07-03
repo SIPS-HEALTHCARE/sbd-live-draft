@@ -687,7 +687,7 @@ function renderADavidDashboardView() {
   const container = document.getElementById('a-daviddashboard');
   if (!container) return;
   // Load the premium Command Center UI directly
-  container.innerHTML = `<iframe src="/david-command-center.html?v=3" style="width:100%;height:calc(100vh - 64px);border:none;border-radius:12px;background:var(--bg);" allowfullscreen></iframe>`;
+  container.innerHTML = `<iframe src="/david-command-center.html?v=6" style="width:100%;height:calc(100vh - 64px);border:none;border-radius:12px;background:var(--bg);" allowfullscreen></iframe>`;
 }
 
 window.refreshDashboard = function() {
@@ -2812,17 +2812,28 @@ function renderAObservations(){
 
   const u = ST.user;
   let pool = (DB.observations || []).filter(o => ['requested','in_progress','returned'].includes(o.status));
-  if(u && u.role === 'staff_admin' && u.assignedFids && u.assignedFids.length)
+  // Role scope (RLS Addendum v1.1) — mirror the Foundations/Instruments model:
+  // system-wide admins (master/admin/staff_admin/assessor/system_admin) see all
+  // facilities and get a Facility filter to narrow the queue; staff_admin stays
+  // limited to its assigned facilities.
+  const isSystemWide = !!(u && ['master_admin','admin','staff_admin','assessor','system_admin'].includes(u.role));
+  let scopeFacs = (DB.facilities || []).filter(f => f.active !== false);
+  if(u && u.role === 'staff_admin' && u.assignedFids && u.assignedFids.length){
+    scopeFacs = scopeFacs.filter(f => u.assignedFids.includes(f.id));
     pool = pool.filter(o => u.assignedFids.includes(o.fid));
+  }
+  const obsFac = ST._obsFacFilter || 'all';
+  if(isSystemWide && obsFac !== 'all') pool = pool.filter(o => o.fid === obsFac);
 
   const requested = pool.filter(o => o.status === 'requested').length;
   const inProg    = pool.filter(o => o.status === 'in_progress').length;
 
   // Authorized observers (people with observer access). Respect the same
-  // facility scoping the queue uses for staff_admins.
+  // facility scoping the queue uses (assigned facilities + the Facility filter).
   let observerList = (DB.staff || []).filter(s => s.observer);
   if(u && u.role === 'staff_admin' && u.assignedFids && u.assignedFids.length)
     observerList = observerList.filter(s => u.assignedFids.includes(s.fid));
+  if(isSystemWide && obsFac !== 'all') observerList = observerList.filter(s => s.fid === obsFac);
   const observers = observerList.length;
 
   const observerRows = observerList
@@ -2862,8 +2873,9 @@ function renderAObservations(){
 
   el.innerHTML = `
     <div>
-      <h2 style="margin:0 0 6px">Observations</h2>
+      <h2 style="margin:0 0 6px">Observations${isSystemWide?' <span style="font-size:11px;color:#64748b;font-weight:500">(all facilities)</span>':''}</h2>
       <p style="color:var(--txt2);font-size:13px;margin:0 0 16px">On-the-floor performance checks &mdash; the third assessment gate, alongside Competency and Simulation.</p>
+      ${isSystemWide && scopeFacs.length>1 ? `<div style="margin-bottom:14px"><select class="form-select" style="max-width:280px" onchange="ST._obsFacFilter=this.value;renderAObservations()"><option value="all"${obsFac==='all'?' selected':''}>All Facilities</option>${scopeFacs.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(f=>`<option value="${f.id}"${obsFac===f.id?' selected':''}>${f.name}</option>`).join('')}</select></div>` : ''}
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px">
         <div class="stat-card"><div class="stat-accent" style="background:#94a3b8"></div><div class="stat-lbl">Awaiting Observer</div><div class="stat-val">${requested}</div><div class="stat-sub">candidate requested</div></div>
         <div class="stat-card"><div class="stat-accent" style="background:#0ea5e9"></div><div class="stat-lbl">In Progress</div><div class="stat-val">${inProg}</div><div class="stat-sub">being scored</div></div>
