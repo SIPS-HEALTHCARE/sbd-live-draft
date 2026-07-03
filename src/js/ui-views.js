@@ -687,7 +687,7 @@ function renderADavidDashboardView() {
   const container = document.getElementById('a-daviddashboard');
   if (!container) return;
   // Load the premium Command Center UI directly
-  container.innerHTML = `<iframe src="/david-command-center.html?v=2" style="width:100%;height:calc(100vh - 64px);border:none;border-radius:12px;background:var(--bg);" allowfullscreen></iframe>`;
+  container.innerHTML = `<iframe src="/david-command-center.html?v=3" style="width:100%;height:calc(100vh - 64px);border:none;border-radius:12px;background:var(--bg);" allowfullscreen></iframe>`;
 }
 
 window.refreshDashboard = function() {
@@ -1517,6 +1517,15 @@ function startAssessmentTimer(){
     const mins = Math.floor(remaining / 60000);
     const secs = Math.floor((remaining % 60000) / 1000);
     el.textContent = `Time remaining: ${mins}:${String(secs).padStart(2,'0')}`;
+
+    // Under 10 minutes: enlarge the countdown so it is unmissable on any device.
+    // Responsive font via clamp(); the chip becomes a centered top bar (left+right
+    // pinned) instead of a small corner chip, so it reads on phones/tablets too.
+    const _warn = remaining <= 10 * 60 * 1000;
+    el.style.fontSize = _warn ? 'clamp(20px, 6vw, 30px)' : '14px';
+    el.style.padding  = _warn ? '10px 18px' : '8px 14px';
+    if(_warn){ el.style.left = '12px'; el.style.right = '12px'; el.style.textAlign = 'center'; }
+    else { el.style.left = 'auto'; el.style.right = '12px'; el.style.textAlign = 'left'; }
 
     if(remaining < 5 * 60 * 1000){
       el.style.background = 'rgba(239,68,68,.15)';

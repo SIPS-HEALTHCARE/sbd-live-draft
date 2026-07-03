@@ -119,6 +119,11 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
 .token-bar-fill{height:6px;border-radius:3px;background:linear-gradient(90deg,var(--blue),var(--purple));transition:width 1s ease-out}
 .token-label{display:flex;justify-content:space-between;margin-top:4px}
 .token-label span{font-size:10px;color:var(--txt3);font-weight:500}
+.platform-split{grid-column:1/-1}
+.platform-rows{display:flex;flex-direction:column;gap:4px;margin-top:4px}
+.platform-row{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.platform-name{font-size:11px;font-weight:600;color:var(--txt2)}
+.platform-val{font-size:11px;color:var(--txt3);font-weight:500}
 
 /* ── Tier Selector Modal ── */
 .tier-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);z-index:100;display:none;align-items:center;justify-content:center}
@@ -479,6 +484,25 @@ async function loadFacilities(){
     (metrics.analytics||[]).forEach(a => analyticsMap[a.facility_id] = a);
   } catch(e){ console.warn('Metrics load:', e.message); }
 
+  // Month-to-date usage split by platform (sbd = belt app, psop = SOP tool), per
+  // facility. Ignacio 2026-07-02: usage must be visible per platform while still
+  // tracked by facility on both. Master-admin-gated RPC (david_usage_by_app_mtd).
+  let byAppMap = {};
+  try {
+    const uaRes = await fetch(SB_URL+'/rest/v1/rpc/david_usage_by_app_mtd', {
+      method:'POST',
+      headers:{ 'apikey':SB_KEY, 'Authorization':'Bearer '+token, 'Content-Type':'application/json' },
+      body:'{}'
+    });
+    if(uaRes.ok){
+      const rows = await uaRes.json();
+      (Array.isArray(rows)?rows:[]).forEach(r => {
+        if(!byAppMap[r.facility_id]) byAppMap[r.facility_id] = {};
+        byAppMap[r.facility_id][r.app] = { questions:+r.questions||0, tokens:+r.tokens||0, cost:+r.cost||0 };
+      });
+    }
+  } catch(e){ console.warn('Per-platform usage load:', e.message); }
+
   FACILITIES = rawFacs.map(f => {
     const acc = accessMap[f.id] || {};
     const ana = analyticsMap[f.id] || {};
@@ -491,7 +515,8 @@ async function loadFacilities(){
       questions_allowance: acc.questions_allowance || 250,
       active: acc.is_active || false,
       tokens: ana.total_tokens || 0,
-      maxTokens: acc.max_monthly_tokens || MAX_TOKENS
+      maxTokens: acc.max_monthly_tokens || MAX_TOKENS,
+      byApp: byAppMap[f.id] || {}
     };
   });
 
@@ -540,6 +565,18 @@ function renderCards(list){
           <div class="token-bar-bg"><div class="token-bar-fill" style="width:${pct}%"></div></div>
           <div class="token-label"><span>${f.tokens.toLocaleString()} used</span><span>${f.maxTokens.toLocaleString()} limit</span></div>
         </div>
+        ${(() => {
+          const pa = f.byApp || {};
+          const belt = pa.sbd || {questions:0,tokens:0,cost:0};
+          const sop  = pa.psop || {questions:0,tokens:0,cost:0};
+          return `<div class="meta-item platform-split">
+            <span class="meta-lbl">This month by platform</span>
+            <div class="platform-rows">
+              <div class="platform-row"><span class="platform-name">Belt app</span><span class="platform-val">${belt.questions.toLocaleString()} Q &middot; ${belt.tokens.toLocaleString()} tok</span></div>
+              <div class="platform-row"><span class="platform-name">SOP tool</span><span class="platform-val">${sop.questions.toLocaleString()} Q &middot; ${sop.tokens.toLocaleString()} tok</span></div>
+            </div>
+          </div>`;
+        })()}
         <div class="meta-item" style="align-items:flex-end">
           <span class="meta-lbl">Status</span>
           <div class="status-dot">${f.archived?'<div class="dot" style="background:#555"></div><span style="color:#888">Archived</span>':(f.active?'<div class="dot dot-green"></div><span style="color:var(--green)">Active</span>':'<div class="dot dot-red"></div><span style="color:var(--red)">Locked</span>')}</div>
