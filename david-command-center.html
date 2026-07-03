@@ -574,7 +574,7 @@ function renderCards(list){
           const pa = f.byApp || {};
           const belt = pa.sbd || {};
           const sop  = pa.psop || {};
-          const line = o => `<span class="platform-win"><span class="platform-win-lbl">This month</span> ${(o.q_mtd||0).toLocaleString()} Q &middot; ${(o.tok_mtd||0).toLocaleString()} tok</span><span class="platform-win"><span class="platform-win-lbl">All time</span> ${(o.q_all||0).toLocaleString()} Q &middot; ${(o.tok_all||0).toLocaleString()} tok</span>`;
+          const line = o => `<span class="platform-win"><span class="platform-win-lbl">This month</span> ${(o.q_mtd||0).toLocaleString()} Q &middot; ${(o.tok_mtd||0).toLocaleString()} tok</span><span class="platform-win"><span class="platform-win-lbl">To date</span> ${(o.q_all||0).toLocaleString()} Q &middot; ${(o.tok_all||0).toLocaleString()} tok</span>`;
           return `<div class="meta-item platform-split">
             <span class="meta-lbl">Usage by platform</span>
             <div class="platform-rows">
