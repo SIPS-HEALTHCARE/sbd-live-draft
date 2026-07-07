@@ -5246,7 +5246,6 @@ function oipSubmitFromOverlay(){
 }
 
 // Legacy wrapper  --  now routes to overlay
-function renderOIPModal(){ /* no-op – replaced by overlay */ }
 // Keep oipSelect alias for any older call sites
 function oipSelect(idx){ oipSelectOverlay(idx); }
 
@@ -15891,12 +15890,28 @@ async function executeSetAccountActive(uid, makeActive, rerender){
   if(u.protected){ toast('This is a protected system account and cannot be deactivated.','err'); return; }
   if(!u.authUid){ toast('This account has no login to lock — there is nothing to deactivate.','err'); closeModal(); return; }
   const prev=u.active;
+  const _once=async()=>{
+    const res=await SB.setAccountActive(u.authUid, makeActive, null);
+    if(res && res.error) throw new Error(res.error);
+    if(res && !res.success) throw new Error('Unexpected response from the server.');
+  };
   try{
     if(IS_LIVE){
       toast(`${makeActive?'Reactivating':'Deactivating'} ${u.name}...`,'info');
-      const res=await SB.setAccountActive(u.authUid, makeActive, null);
-      if(res && res.error) throw new Error(res.error);
-      if(res && !res.success) throw new Error('Unexpected response from the server.');
+      try{ await _once(); }
+      catch(e){
+        if(!/timed out/i.test(e.message)) throw e;
+        // The function can exceed the 12s client budget on a cold start, while the
+        // server still completes (the operation is idempotent). Retry once on a
+        // warm instance; if that also times out, trust a fresh state read over the
+        // race before declaring failure.
+        try{ await _once(); }
+        catch(e2){
+          if(!/timed out/i.test(e2.message)) throw e2;
+          const rows=await sbFetch(`/rest/v1/sbd_portal_users?auth_uid=eq.${encodeURIComponent(u.authUid)}&select=active`);
+          if(!(rows && rows[0] && rows[0].active===makeActive)) throw e2;
+        }
+      }
     }
     u.active=makeActive;
     closeModal();
