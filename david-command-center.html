@@ -110,7 +110,7 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
 .dot-amber{background:var(--amber);box-shadow:0 0 8px var(--amber-glow)}
 
 /* ── Card Body ── */
-.card-meta{display:flex;align-items:center;gap:16px;position:relative;z-index:1}
+.card-meta{display:flex;flex-wrap:wrap;align-items:flex-start;gap:16px;position:relative;z-index:1}
 .meta-item{display:flex;flex-direction:column;gap:2px}
 .meta-lbl{font-size:10px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--txt3)}
 .meta-val{font-size:14px;font-weight:600}
@@ -119,7 +119,7 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
 .token-bar-fill{height:6px;border-radius:3px;background:linear-gradient(90deg,var(--blue),var(--purple));transition:width 1s ease-out}
 .token-label{display:flex;justify-content:space-between;margin-top:4px}
 .token-label span{font-size:10px;color:var(--txt3);font-weight:500}
-.platform-split{grid-column:1/-1}
+.platform-split{flex:1 1 100%}
 .platform-rows{display:flex;flex-direction:column;gap:4px;margin-top:4px}
 .platform-row{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .platform-name{font-size:11px;font-weight:600;color:var(--txt2)}
