@@ -96,6 +96,10 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
 .tier-enhanced{background:var(--yellow-glow);color:var(--yellow);border:1px solid rgba(234,179,8,.25)}
 .tier-premium{background:var(--green-glow);color:var(--green);border:1px solid rgba(34,197,94,.25)}
 .tier-enterprise{background:var(--purple-glow);color:#c084fc;border:1px solid rgba(139,92,246,.2)}
+.plan-included{background:rgba(255,255,255,.06);color:var(--txt3);border:1px solid rgba(255,255,255,.08)}
+.plan-starter{background:var(--blue-glow);color:#60a5fa;border:1px solid rgba(59,130,246,.25)}
+.plan-standard{background:var(--green-glow);color:var(--green);border:1px solid rgba(34,197,94,.25)}
+.plan-power{background:var(--gold-glow);color:var(--gold);border:1px solid rgba(196,154,32,.3)}
 .tier-chip:hover{transform:scale(1.05)}
 
 /* ── Status Dot ── */
@@ -115,6 +119,13 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
 .token-bar-fill{height:6px;border-radius:3px;background:linear-gradient(90deg,var(--blue),var(--purple));transition:width 1s ease-out}
 .token-label{display:flex;justify-content:space-between;margin-top:4px}
 .token-label span{font-size:10px;color:var(--txt3);font-weight:500}
+.platform-split{grid-column:1/-1}
+.platform-rows{display:flex;flex-direction:column;gap:4px;margin-top:4px}
+.platform-row{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.platform-name{font-size:11px;font-weight:600;color:var(--txt2)}
+.platform-val{font-size:11px;color:var(--txt3);font-weight:500;display:flex;gap:12px;flex-wrap:wrap;justify-content:flex-end;text-align:right}
+.platform-win{white-space:nowrap}
+.platform-win-lbl{font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--txt3);opacity:.7;margin-right:3px}
 
 /* ── Tier Selector Modal ── */
 .tier-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);z-index:100;display:none;align-items:center;justify-content:center}
@@ -204,6 +215,14 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
   .cards-grid{grid-template-columns:1fr}
   .toolbar{flex-direction:column}
   .user-panel{width:100vw;max-width:100vw}
+  /* Stack the card meta strip vertically on phones so nothing gets shoved off
+     the card edge. .card-meta is display:flex (not grid), so grid-column on
+     .platform-split is a no-op — each item must become its own full-width row
+     and the platform values must wrap under the platform name. */
+  .card-meta{flex-direction:column;align-items:stretch;gap:12px}
+  .token-bar{flex:none}
+  .platform-row{flex-direction:column;align-items:flex-start;gap:2px}
+  .platform-val{justify-content:flex-start;text-align:left}
 }
 </style>
 </head>
@@ -309,6 +328,36 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
   </div>
 </div>
 
+<!-- SIPS Plan Selector Modal -->
+<div class="tier-modal-overlay" id="plan-modal" onclick="if(event.target===this)closePlanModal()">
+  <div class="tier-modal">
+    <h3>SIPS Plan</h3>
+    <div class="modal-sub" id="plan-modal-fac-name">Set the monthly question plan</div>
+    <div class="tier-options">
+      <div class="tier-opt" onclick="selectPlan(this,'included')">
+        <div class="tier-icon t-base">📦</div>
+        <div class="tier-info"><h4>Included</h4><p>250 questions per month. Free in base SBD.</p></div>
+      </div>
+      <div class="tier-opt" onclick="selectPlan(this,'starter')">
+        <div class="tier-icon t-enh">🚀</div>
+        <div class="tier-info"><h4>Starter</h4><p>750 questions per month.</p></div>
+      </div>
+      <div class="tier-opt" onclick="selectPlan(this,'standard')">
+        <div class="tier-icon t-prem">⭐</div>
+        <div class="tier-info"><h4>Standard</h4><p>2,500 questions per month.</p></div>
+      </div>
+      <div class="tier-opt" onclick="selectPlan(this,'power')">
+        <div class="tier-icon t-ent">⚡</div>
+        <div class="tier-info"><h4>Power</h4><p>7,500 questions per month.</p></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closePlanModal()">Cancel</button>
+      <button class="btn btn-gold" onclick="applyPlan()">Apply Plan</button>
+    </div>
+  </div>
+</div>
+
 <!-- Toast -->
 <!-- User Access Panel Drawer -->
 <div class="user-panel-overlay" id="user-panel-overlay" onclick="closeUserPanel()"></div>
@@ -359,6 +408,8 @@ const MAX_TOKENS = 500000;
 
 let FACILITIES = [];
 let modalFacId = null, selectedTier = null;
+let planFacId = null, selectedPlan = null;
+const PLAN_ALLOWANCE = { included:250, starter:750, standard:2500, power:7500 };
 
 // ── Auth ──
 function getToken(){
@@ -443,6 +494,28 @@ async function loadFacilities(){
     (metrics.analytics||[]).forEach(a => analyticsMap[a.facility_id] = a);
   } catch(e){ console.warn('Metrics load:', e.message); }
 
+  // Month-to-date usage split by platform (sbd = belt app, psop = SOP tool), per
+  // facility. Ignacio 2026-07-02: usage must be visible per platform while still
+  // tracked by facility on both. Master-admin-gated RPC (david_usage_by_app_mtd).
+  let byAppMap = {};
+  try {
+    const uaRes = await fetch(SB_URL+'/rest/v1/rpc/david_usage_by_app_mtd', {
+      method:'POST',
+      headers:{ 'apikey':SB_KEY, 'Authorization':'Bearer '+token, 'Content-Type':'application/json' },
+      body:'{}'
+    });
+    if(uaRes.ok){
+      const rows = await uaRes.json();
+      (Array.isArray(rows)?rows:[]).forEach(r => {
+        if(!byAppMap[r.facility_id]) byAppMap[r.facility_id] = {};
+        byAppMap[r.facility_id][r.app] = {
+          q_mtd:+r.questions_mtd||0, tok_mtd:+r.tokens_mtd||0, cost_mtd:+r.cost_mtd||0,
+          q_all:+r.questions_all||0, tok_all:+r.tokens_all||0, cost_all:+r.cost_all||0
+        };
+      });
+    }
+  } catch(e){ console.warn('Per-platform usage load:', e.message); }
+
   FACILITIES = rawFacs.map(f => {
     const acc = accessMap[f.id] || {};
     const ana = analyticsMap[f.id] || {};
@@ -451,9 +524,12 @@ async function loadFacilities(){
       name: f.name || 'Unnamed',
       archived: f.active === false,
       tier: acc.tier || 'base',
+      usage_tier: acc.usage_tier || 'included',
+      questions_allowance: acc.questions_allowance || 250,
       active: acc.is_active || false,
       tokens: ana.total_tokens || 0,
-      maxTokens: acc.max_monthly_tokens || MAX_TOKENS
+      maxTokens: acc.max_monthly_tokens || MAX_TOKENS,
+      byApp: byAppMap[f.id] || {}
     };
   });
 
@@ -471,6 +547,9 @@ async function loadFacilities(){
 // ── Tier styling ──
 function tierClass(t){return({base:'tier-base',premium:'tier-premium',supreme:'tier-enterprise'})[t]||'tier-base'}
 function tierLabel(t){return({base:'Base',premium:'Premium',supreme:'Supreme'})[t]||'Base'}
+// ── SIPS Plan (billing/volume) styling — separate from the capability tier ──
+function planClass(p){return({included:'plan-included',starter:'plan-starter',standard:'plan-standard',power:'plan-power'})[p]||'plan-included'}
+function planLabel(p){return({included:'Included',starter:'Starter',standard:'Standard',power:'Power'})[p]||'Included'}
 
 // ── Render ──
 function renderCards(list){
@@ -490,11 +569,28 @@ function renderCards(list){
           <span class="meta-lbl">Tier</span>
           <span class="tier-chip ${tierClass(f.tier)}" ${f.archived ? '' : `onclick="openTierModal('${f.id}')"`}>${tierLabel(f.tier)}</span>
         </div>
+        <div class="meta-item">
+          <span class="meta-lbl">SIPS Plan</span>
+          <span class="tier-chip ${planClass(f.usage_tier)}" ${f.archived ? '' : `onclick="openPlanModal('${f.id}')"`}>${planLabel(f.usage_tier)} &middot; ${(f.questions_allowance||0).toLocaleString()}</span>
+        </div>
         <div class="token-bar">
           <span class="meta-lbl">Token Usage</span>
           <div class="token-bar-bg"><div class="token-bar-fill" style="width:${pct}%"></div></div>
           <div class="token-label"><span>${f.tokens.toLocaleString()} used</span><span>${f.maxTokens.toLocaleString()} limit</span></div>
         </div>
+        ${(() => {
+          const pa = f.byApp || {};
+          const belt = pa.sbd || {};
+          const sop  = pa.psop || {};
+          const line = o => `<span class="platform-win"><span class="platform-win-lbl">This month</span> ${(o.q_mtd||0).toLocaleString()} Q &middot; ${(o.tok_mtd||0).toLocaleString()} tok</span><span class="platform-win"><span class="platform-win-lbl">To date</span> ${(o.q_all||0).toLocaleString()} Q &middot; ${(o.tok_all||0).toLocaleString()} tok</span>`;
+          return `<div class="meta-item platform-split">
+            <span class="meta-lbl">Usage by platform</span>
+            <div class="platform-rows">
+              <div class="platform-row"><span class="platform-name">Belt app</span><span class="platform-val">${line(belt)}</span></div>
+              <div class="platform-row"><span class="platform-name">SOP tool</span><span class="platform-val">${line(sop)}</span></div>
+            </div>
+          </div>`;
+        })()}
         <div class="meta-item" style="align-items:flex-end">
           <span class="meta-lbl">Status</span>
           <div class="status-dot">${f.archived?'<div class="dot" style="background:#555"></div><span style="color:#888">Archived</span>':(f.active?'<div class="dot dot-green"></div><span style="color:var(--green)">Active</span>':'<div class="dot dot-red"></div><span style="color:var(--red)">Locked</span>')}</div>
@@ -555,6 +651,37 @@ async function applyTier(){
     showToast('⚡',`${f.name} upgraded to ${tierLabel(selectedTier)} tier`);
   } catch(e){
     showToast('❌','Tier update failed: '+e.message);
+  }
+}
+
+// ── SIPS Plan Modal (sets usage_tier + questions_allowance via UPDATE_USAGE_TIER) ──
+function openPlanModal(id){
+  planFacId=id;
+  const f=FACILITIES.find(x=>x.id===id);
+  document.getElementById('plan-modal-fac-name').textContent=f.name;
+  const plans=['included','starter','standard','power'];
+  document.querySelectorAll('#plan-modal .tier-opt').forEach((o,i)=>o.classList.toggle('selected', plans[i]===f.usage_tier));
+  selectedPlan=f.usage_tier;
+  document.getElementById('plan-modal').classList.add('show');
+}
+function closePlanModal(){document.getElementById('plan-modal').classList.remove('show');planFacId=null}
+function selectPlan(el,p){
+  document.querySelectorAll('#plan-modal .tier-opt').forEach(o=>o.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedPlan=p;
+}
+async function applyPlan(){
+  if(!planFacId||!selectedPlan)return;
+  const f=FACILITIES.find(x=>x.id===planFacId);
+  try {
+    const res = await adminAPI('UPDATE_USAGE_TIER', { facilityId:planFacId, usageTier:selectedPlan });
+    f.usage_tier = selectedPlan;
+    f.questions_allowance = (res && res.questions_allowance) || PLAN_ALLOWANCE[selectedPlan] || f.questions_allowance;
+    renderCards(FACILITIES);
+    closePlanModal();
+    showToast('⚡',`${f.name} set to ${planLabel(selectedPlan)} (${f.questions_allowance.toLocaleString()} questions/mo)`);
+  } catch(e){
+    showToast('❌','Plan update failed: '+e.message);
   }
 }
 

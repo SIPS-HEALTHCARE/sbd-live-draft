@@ -238,6 +238,24 @@ const SB = {
       body: { email, mode }
     });
   },
+  // ── SBD Foundations (#22) ──
+  getFoundationsAssignments(){ return sbFetch('/rest/v1/foundations_assignments?select=*'); },
+  getFoundationsProgress(){ return sbFetch('/rest/v1/foundations_progress?select=*'); },
+  // ignore-duplicates: a cross-session double-assign (unique staff_id,module_id)
+  // is a benign no-op, not a 409 error toast (Addendum 8.3).
+  createFoundationsAssignment(data){ return sbFetch('/rest/v1/foundations_assignments?on_conflict=staff_id,module_id', { method:'POST', prefer:'resolution=ignore-duplicates,return=minimal', body:data }); },
+  // Upsert keyed on (staff_id, module_id) so a gate update overwrites the row.
+  upsertFoundationsProgress(row){ return sbFetch('/rest/v1/foundations_progress?on_conflict=staff_id,module_id', { method:'POST', prefer:'resolution=merge-duplicates,return=minimal', body:row }); },
+  updateFoundationsAssignmentStatus(staffId, moduleId, status){ return sbFetch(`/rest/v1/foundations_assignments?staff_id=eq.${staffId}&module_id=eq.${encodeURIComponent(moduleId)}`, { method:'PATCH', prefer:'return=minimal', body:{ status } }); },
+  // Unassign (RLS: DELETE is master admin only). Progress rows stay as history (Addendum 8.4).
+  deleteFoundationsAssignment(staffId, moduleId){ return sbFetch(`/rest/v1/foundations_assignments?staff_id=eq.${staffId}&module_id=eq.${encodeURIComponent(moduleId)}`, { method:'DELETE', prefer:'return=minimal' }); },
+  // ── SBD Instruments (#22) ──
+  getInstrumentAssignments(){ return sbFetch('/rest/v1/instrument_assignments?select=*'); },
+  getInstrumentProgress(){ return sbFetch('/rest/v1/instrument_progress?select=*'); },
+  createInstrumentAssignment(data){ return sbFetch('/rest/v1/instrument_assignments?on_conflict=staff_id,module_id', { method:'POST', prefer:'resolution=ignore-duplicates,return=minimal', body:data }); },
+  upsertInstrumentProgress(row){ return sbFetch('/rest/v1/instrument_progress?on_conflict=staff_id,module_id', { method:'POST', prefer:'resolution=merge-duplicates,return=minimal', body:row }); },
+  updateInstrumentAssignmentStatus(staffId, moduleId, status){ return sbFetch(`/rest/v1/instrument_assignments?staff_id=eq.${staffId}&module_id=eq.${encodeURIComponent(moduleId)}`, { method:'PATCH', prefer:'return=minimal', body:{ status } }); },
+  deleteInstrumentAssignment(staffId, moduleId){ return sbFetch(`/rest/v1/instrument_assignments?staff_id=eq.${staffId}&module_id=eq.${encodeURIComponent(moduleId)}`, { method:'DELETE', prefer:'return=minimal' }); },
   // ── User Profiles ──
   getUserProfile(userId){ return sbFetch(`/rest/v1/sbd_portal_users?auth_uid=eq.${userId}&select=*`); },
   getAllAdminProfiles(){ return sbFetch('/rest/v1/sbd_portal_users?select=*&order=name.asc'); },
@@ -365,6 +383,10 @@ function resetDB(){
   DB.observationChecklists = [];
   DB.schedule = [];
   DB.attendance = [];
+  DB.foundationsAssignments = [];
+  DB.foundationsProgress = [];
+  DB.instrumentAssignments = [];
+  DB.instrumentProgress = [];
   console.log('SBD Platform: Global state reset.');
 }
 

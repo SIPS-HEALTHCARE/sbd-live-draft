@@ -78,747 +78,783 @@ class DavidChat {
         const style = document.createElement('style');
         style.id = 'david-styles';
         style.textContent = `
-            @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap');
+            /* ============================================================
+               DAVID OG — Intelligence Console
+               Uses the platform tokens (--bg/--s1/--s2/--gold/--txt…).
+               AI replies render as open "briefing" blocks on the canvas;
+               the operator's messages are compact gold bubbles.
+            ============================================================ */
+
+            /* The mount must fill the view area in EVERY portal, otherwise David
+               grows to content height and the composer gets pushed below the fold.
+               (Previously only #a-david had this, so staff/hospital/system portals
+               required page-scrolling to reach the input.) */
+            #a-david, #s-david, #h-david, #x-david { height: 100%; min-height: 0; }
 
             .david-container {
+                --dv-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+                --dv-col: 840px;
                 display: flex;
                 height: 100%;
                 min-height: 0;
                 width: 100%;
                 color: var(--txt);
-                font-family: var(--font);
+                font-family: 'Poppins', sans-serif;
                 background: var(--bg);
+                border: 1px solid var(--bdr2);
+                border-radius: var(--r, 10px);
+                overflow: hidden;
                 position: relative;
             }
+            .david-layout { display: flex; height: 100%; width: 100%; min-height: 0; }
+            .david-container button { font-family: inherit; }
+            .david-container button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 
-            /* The mount must fill the admin view area, otherwise David grows to
-               content height and the input gets pushed below the fold (you had to
-               scroll the page to reach it). With a real height, the messages area
-               scrolls internally and the input + New Chat stay in place. */
-            #a-david { height: 100%; min-height: 0; }
-
-            /* Per-message timestamp */
-            .david-msg-time {
-                font-size: 10px;
-                color: var(--txt3);
-                opacity: .6;
-                margin-top: 6px;
-                text-align: right;
-                font-family: var(--font);
-            }
-            .david-msg-user .david-msg-time { text-align: left; }
-
-            .david-layout {
-                display: flex;
-                height: 100%;
-                width: 100%;
-            }
-
+            /* ── Sessions sidebar ── */
             .david-sessions-sidebar {
-                width: 260px;
+                width: 250px;
                 background: var(--s1);
                 border-right: 1px solid var(--bdr);
                 display: flex;
                 flex-direction: column;
                 flex-shrink: 0;
+                min-height: 0;
             }
-
             .david-new-chat-btn {
-                margin: 20px 16px;
-                padding: 12px;
+                margin: 14px 14px 10px;
+                padding: 10px 12px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 7px;
                 background: var(--gold);
-                color: #000;
+                color: #141005;
                 border: none;
                 border-radius: 8px;
                 font-weight: 600;
-                font-size: 14px;
+                font-size: 12.5px;
                 cursor: pointer;
-                transition: transform 0.2s, background 0.2s;
+                transition: filter .15s;
             }
-            .david-new-chat-btn:hover {
-                transform: scale(1.02);
-                background: #d4a72d;
+            .david-new-chat-btn:hover { filter: brightness(1.12); }
+            .david-sidebar-label {
+                font-size: 9.5px;
+                letter-spacing: .14em;
+                text-transform: uppercase;
+                color: var(--txt3);
+                font-weight: 600;
+                padding: 8px 18px 6px;
             }
-
             .david-session-list {
                 flex: 1;
+                min-height: 0;
                 overflow-y: auto;
-                padding: 0 12px 20px 12px;
+                padding: 0 10px 16px;
                 display: flex;
                 flex-direction: column;
-                gap: 6px;
+                gap: 3px;
             }
-
             .david-session-item {
-                padding: 12px 14px;
-                border-radius: 6px;
+                padding: 9px 11px;
+                border-radius: 8px;
                 cursor: pointer;
-                font-size: 13px;
-                color: var(--txt);
-                background: transparent;
-                transition: background 0.2s, color 0.2s;
+                font-size: 12.5px;
+                color: var(--txt2);
                 border: 1px solid transparent;
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
                 gap: 8px;
+                transition: background .15s, color .15s;
             }
-            .david-session-item-content {
-                flex: 1;
+            .david-session-item:hover { background: var(--s2); color: var(--txt); }
+            .david-session-item.active {
+                background: var(--gold-bg);
+                border-color: var(--gold-bd);
+                color: var(--gold);
+            }
+            .david-session-item-content { flex: 1; min-width: 0; }
+            .david-session-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+            .david-session-date { font-size: 10px; color: var(--txt3); margin-top: 2px; }
+            .david-session-delete {
+                opacity: 0;
+                color: var(--txt3);
+                display: inline-flex;
+                align-items: center;
+                padding: 4px;
+                border-radius: 5px;
+                flex-shrink: 0;
+                transition: opacity .15s, color .15s;
+            }
+            .david-session-item:hover .david-session-delete { opacity: .6; }
+            .david-session-delete:hover { opacity: 1 !important; color: var(--err); }
+            @media (hover: none) { .david-session-delete { opacity: .45; } }
+            .david-session-confirm-wrapper { display: none; gap: 6px; align-items: center; margin-left: auto; flex-shrink: 0; }
+            .david-session-item.confirming .david-session-delete { display: none; }
+            .david-session-item.confirming .david-session-confirm-wrapper { display: flex; }
+            .david-session-action {
+                font-size: 10.5px;
+                padding: 4px 8px;
+                border-radius: 5px;
+                cursor: pointer;
+                font-weight: 600;
+                user-select: none;
+                transition: background .15s;
+            }
+            .david-session-confirm { color: var(--err); background: var(--err-bg); border: 1px solid var(--err-bd); }
+            .david-session-confirm:hover { background: rgba(239,68,68,.2); }
+            .david-session-cancel { color: var(--txt2); background: rgba(255,255,255,.05); border: 1px solid var(--bdr2); }
+            .david-session-cancel:hover { color: var(--txt); }
+
+            /* ── Main column ── */
+            .david-main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+
+            .david-chat-header {
+                display: flex;
+                align-items: center;
+                gap: 11px;
+                padding: 12px 16px;
+                border-bottom: 1px solid var(--bdr);
+                background: var(--s1);
+                flex-shrink: 0;
+            }
+            .david-avatar {
+                width: 34px;
+                height: 34px;
+                border-radius: 10px;
+                background: linear-gradient(135deg, #d8b23c, #7a5c0d);
+                color: #0a0700;
+                font-weight: 800;
+                font-size: 14px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+            }
+            .david-head-id { flex: 1; min-width: 0; }
+            .david-head-id h2 { margin: 0; font-size: 14.5px; font-weight: 700; color: var(--txt); line-height: 1.2; }
+            .david-head-id p {
+                margin: 2px 0 0;
+                font-size: 10.5px;
+                color: var(--txt3);
+                display: flex;
+                align-items: center;
+                gap: 5px;
                 white-space: nowrap;
                 overflow: hidden;
                 text-overflow: ellipsis;
             }
-            .david-session-delete {
-                opacity: 0;
-                transition: opacity 0.2s, color 0.2s;
-                font-size: 14px;
-                padding: 4px;
-            }
-            .david-session-item:hover .david-session-delete {
-                opacity: 0.5;
-            }
-            .david-session-delete:hover {
-                opacity: 1 !important;
-                color: #ff4444;
-            }
-            .david-session-item:hover {
-                background: rgba(255,255,255,0.03);
-            }
-            .david-session-item.active {
-                background: rgba(196,154,32,0.1);
-                color: var(--gold);
-                font-weight: 500;
-                border-color: rgba(196,154,32,0.3);
-            }
-            .david-session-confirm-wrapper {
-                display: none;
-                gap: 8px;
-                align-items: center;
-                margin-left: auto;
-            }
-            .david-session-item.confirming .david-session-delete {
-                display: none;
-            }
-            .david-session-item.confirming .david-session-confirm-wrapper {
-                display: flex;
-            }
-            .david-session-action {
-                font-size: 11px;
-                padding: 4px 8px;
-                border-radius: 4px;
-                cursor: pointer;
-                transition: background 0.2s;
-                font-weight: 600;
-                user-select: none;
-            }
-            .david-session-confirm {
-                color: #ff4444;
-                background: rgba(255, 68, 68, 0.1);
-                border: 1px solid rgba(255, 68, 68, 0.3);
-            }
-            .david-session-confirm:hover {
-                background: rgba(255, 68, 68, 0.2);
-            }
-            .david-session-cancel {
-                color: var(--txt2);
-                background: rgba(255, 255, 255, 0.05);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-            }
-            .david-session-cancel:hover {
-                background: rgba(255, 255, 255, 0.1);
-                color: var(--txt);
-            }
-
-            .david-main {
-                flex: 1;
-                display: flex;
-                flex-direction: column;
-                min-width: 0;
-            }
-
-            .david-chat-header {
-                padding: 24px 30px;
-                border-bottom: 1px solid var(--bdr);
-                background: var(--bg);
+            .david-status-dot {
+                width: 6px;
+                height: 6px;
+                border-radius: 50%;
+                background: var(--ok);
                 flex-shrink: 0;
+                animation: david-status 2.8s ease-in-out infinite;
             }
-            .david-chat-header h2 { 
-                margin: 0; 
-                font-size: 20px; 
-                color: var(--gold); 
-                display: flex;
+            @keyframes david-status {
+                0%, 100% { box-shadow: 0 0 0 0 rgba(34,197,94,.35); }
+                50% { box-shadow: 0 0 0 4px rgba(34,197,94,0); }
+            }
+            .david-icon-btn {
+                width: 32px;
+                height: 32px;
+                display: inline-flex;
                 align-items: center;
-                gap: 10px;
+                justify-content: center;
+                background: transparent;
+                border: 1px solid var(--bdr2);
+                border-radius: 8px;
+                color: var(--txt3);
+                cursor: pointer;
+                flex-shrink: 0;
+                transition: color .15s, background .15s;
             }
-            .david-chat-header p { margin: 4px 0 0; font-size: 13px; color: var(--txt2); }
+            .david-icon-btn:hover { color: var(--gold); background: var(--s2); }
+            .david-mobile-toggle {
+                display: none;
+                width: 34px;
+                height: 34px;
+                align-items: center;
+                justify-content: center;
+                background: transparent;
+                border: 1px solid var(--bdr2);
+                border-radius: 8px;
+                color: var(--txt);
+                cursor: pointer;
+                flex-shrink: 0;
+                -webkit-tap-highlight-color: transparent;
+            }
+            .david-mobile-toggle:hover { background: var(--s2); }
 
+            /* ── Mode rail ── */
+            .david-mode-tabs {
+                display: flex;
+                gap: 6px;
+                align-items: center;
+                padding: 8px 16px;
+                border-bottom: 1px solid var(--bdr);
+                overflow-x: auto;
+                flex-shrink: 0;
+                scrollbar-width: none;
+            }
+            .david-mode-tabs::-webkit-scrollbar { display: none; }
+            .david-mode-tab {
+                font-size: 11px;
+                padding: 5px 12px;
+                border-radius: 14px;
+                border: 1px solid var(--bdr2);
+                background: transparent;
+                color: var(--txt2);
+                cursor: pointer;
+                font-weight: 600;
+                white-space: nowrap;
+                flex-shrink: 0;
+                transition: all .15s;
+            }
+            .david-mode-tab:hover { color: var(--txt); border-color: var(--bdr3); }
+            .david-mode-tab.active { background: var(--gold); border-color: var(--gold); color: #141005; }
+
+            /* ── Messages ── */
+            .david-msgs-wrap { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; }
             .david-messages-area {
                 flex: 1;
+                min-height: 0;
                 overflow-y: auto;
-                padding: 30px;
+                padding: 26px 20px 18px;
+                padding-left: max(20px, calc((100% - var(--dv-col)) / 2));
+                padding-right: max(20px, calc((100% - var(--dv-col)) / 2));
                 display: flex;
                 flex-direction: column;
                 gap: 24px;
-                background: var(--bg);
+                background-image:
+                    linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+                background-size: 44px 44px;
+                -webkit-overflow-scrolling: touch;
             }
 
             @keyframes david-slide-up {
-                0% { opacity: 0; transform: translateY(15px); }
+                0% { opacity: 0; transform: translateY(12px); }
                 100% { opacity: 1; transform: translateY(0); }
-            }
-            
-            @keyframes border-glow-pulse {
-                0% { box-shadow: 0 0 5px rgba(202, 138, 4, 0.2); border-color: rgba(202, 138, 4, 0.3); }
-                50% { box-shadow: 0 0 15px rgba(202, 138, 4, 0.4); border-color: rgba(202, 138, 4, 0.6); }
-                100% { box-shadow: 0 0 5px rgba(202, 138, 4, 0.2); border-color: rgba(202, 138, 4, 0.3); }
-            }
-
-            /* --- Citation Badges & Evidence Tables --- */
-            .david-citation-badge {
-                display: inline-flex;
-                align-items: center;
-                gap: 4px;
-                background: rgba(196, 154, 32, 0.1);
-                color: var(--gold);
-                border: 1px solid rgba(196, 154, 32, 0.3);
-                padding: 2px 8px;
-                border-radius: 12px;
-                font-size: 11px;
-                font-weight: 600;
-                cursor: pointer;
-                margin-left: 6px;
-                transition: all 0.2s;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-                vertical-align: middle;
-            }
-            .david-citation-badge:hover {
-                background: rgba(196, 154, 32, 0.2);
-                transform: translateY(-1px);
-                box-shadow: 0 2px 8px rgba(196, 154, 32, 0.2);
-            }
-            .david-evidence-table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-top: 10px;
-                font-size: 12.5px;
-                background: rgba(0,0,0,0.2);
-                border-radius: 8px;
-                overflow: hidden;
-            }
-            .david-evidence-table th {
-                background: rgba(255,255,255,0.05);
-                padding: 8px 12px;
-                text-align: left;
-                color: var(--gold);
-                font-weight: 600;
-            }
-            .david-evidence-table td {
-                padding: 8px 12px;
-                border-top: 1px solid rgba(255,255,255,0.05);
-                color: var(--txt);
-            }
-            
-            /* --- Embedded CSS Charts --- */
-            .david-chart-container {
-                background: rgba(0, 0, 0, 0.2);
-                border: 1px solid rgba(255, 255, 255, 0.05);
-                border-radius: 8px;
-                padding: 16px;
-                margin-top: 12px;
-                margin-bottom: 12px;
-            }
-            .david-chart-title {
-                color: var(--gold);
-                font-weight: 600;
-                font-size: 13px;
-                margin-bottom: 12px;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-            }
-            .david-chart-bar-wrap {
-                display: flex;
-                align-items: center;
-                margin-bottom: 8px;
-            }
-            .david-chart-label {
-                width: 90px;
-                font-size: 11px;
-                color: var(--txt2);
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                margin-right: 10px;
-            }
-            .david-chart-bar-track {
-                flex: 1;
-                background: rgba(255, 255, 255, 0.05);
-                height: 12px;
-                border-radius: 6px;
-                overflow: hidden;
-                position: relative;
-            }
-            .david-chart-bar-fill {
-                height: 100%;
-                background: linear-gradient(90deg, rgba(202, 138, 4, 0.7), rgba(234, 179, 8, 1));
-                border-radius: 6px;
-                transition: width 1s ease-out;
-            }
-            .david-chart-value {
-                width: 40px;
-                font-size: 11px;
-                color: var(--txt);
-                text-align: right;
-                font-family: 'Fira Code', monospace;
-                margin-left: 10px;
-            }
-            .david-chips-container {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 8px;
-                margin-top: 16px;
-                padding-top: 12px;
-                border-top: 1px dashed rgba(255, 255, 255, 0.1);
-            }
-
-            .david-meta-btn {
-                position: absolute;
-                bottom: 20px;
-                left: 20px;
-                background: transparent;
-                border: none;
-                color: var(--txt2);
-                cursor: pointer;
-                font-size: 16px;
-                transition: color 0.2s, transform 0.2s;
-            }
-            .david-meta-btn:hover {
-                color: var(--gold);
-                transform: rotate(45deg);
             }
 
             .david-msg {
-                max-width: 85%;
-                padding: 16px 20px;
-                border-radius: 12px;
-                font-size: 14.5px;
-                line-height: 1.6;
                 position: relative;
-                font-family: var(--font), sans-serif !important;
-                animation: david-slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+                font-size: 13.5px;
+                line-height: 1.65;
+                overflow-wrap: anywhere;
+                animation: david-slide-up .3s cubic-bezier(.16, 1, .3, 1);
+            }
+            /* David: open briefing block on the canvas — tables and charts get full width */
+            .david-msg-ai { align-self: stretch; max-width: 100%; color: var(--txt); }
+            .david-msg-ai::before {
+                content: 'DAVID';
+                display: block;
+                font-size: 9px;
+                font-weight: 700;
+                letter-spacing: .22em;
+                color: var(--gold);
+                margin-bottom: 7px;
+            }
+            /* Operator: compact gold bubble */
+            .david-msg-user {
+                align-self: flex-end;
+                max-width: min(560px, 85%);
+                background: linear-gradient(135deg, #d8b23c, var(--gold));
+                color: #171204;
+                font-weight: 500;
+                padding: 11px 15px;
+                border-radius: 14px 14px 4px 14px;
+                box-shadow: 0 3px 14px rgba(196,154,32,.18);
             }
 
-            .david-msg-ai { 
-                align-self: flex-start; 
-                background: rgba(28, 25, 23, 0.85); /* #1C1917 Cyberpunk dark */
-                backdrop-filter: blur(12px);
-                -webkit-backdrop-filter: blur(12px);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                color: var(--txt);
-                border-bottom-left-radius: 2px;
-                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            .david-msg-time { font-size: 9.5px; margin-top: 7px; font-weight: 500; letter-spacing: .02em; }
+            .david-msg-ai .david-msg-time { color: var(--txt3); opacity: .7; }
+            .david-msg-user .david-msg-time { color: rgba(23,18,4,.55); text-align: right; }
+
+            /* Markdown inside briefings */
+            .david-msg-ai h1, .david-msg-ai h2, .david-msg-ai h3 {
+                margin: 14px 0 8px;
+                color: var(--gold);
+                font-weight: 600;
             }
-            
-            .david-msg-ai:hover {
-                border-color: rgba(202, 138, 4, 0.4);
-                box-shadow: 0 8px 32px rgba(202, 138, 4, 0.1);
-                transition: all 0.3s ease;
+            .david-msg-ai h1:first-child, .david-msg-ai h2:first-child, .david-msg-ai h3:first-child { margin-top: 0; }
+            .david-msg-ai h1 { font-size: 1.18em; }
+            .david-msg-ai h2 { font-size: 1.1em; }
+            .david-msg-ai h3 { font-size: 1.02em; }
+            .david-msg-ai p { margin: 0 0 10px; }
+            .david-msg-ai p:last-child { margin-bottom: 0; }
+            .david-msg-ai ul, .david-msg-ai ol { margin: 0 0 12px; padding-left: 20px; }
+            .david-msg-ai li { margin-bottom: 5px; }
+            .david-msg-ai li::marker { color: var(--gold); }
+            .david-msg-ai strong { color: #fff; font-weight: 600; }
+            .david-msg-ai a { color: var(--gold); }
+            .david-msg-ai img { max-width: 100%; border-radius: 8px; }
+            .david-msg-ai hr { border: none; border-top: 1px solid var(--bdr2); margin: 14px 0; }
+            .david-msg-ai blockquote {
+                margin: 0 0 12px;
+                padding: 8px 14px;
+                border-left: 2px solid var(--gold-bd);
+                background: var(--s1);
+                border-radius: 0 8px 8px 0;
+                color: var(--txt2);
             }
-            .david-msg-actions {
-                display: flex;
-                gap: 6px;
-                margin-top: 10px;
-                opacity: 0;
-                transition: opacity .15s;
+            .david-msg-ai code {
+                font-family: var(--dv-mono);
+                font-size: .88em;
+                background: var(--s2);
+                border: 1px solid var(--bdr);
+                padding: 1px 5px;
+                border-radius: 5px;
             }
-            .david-msg-ai:hover .david-msg-actions {
-                opacity: 1;
+            .david-msg-ai pre {
+                background: #0a0e20;
+                border: 1px solid var(--bdr);
+                border-radius: 8px;
+                padding: 12px 14px;
+                overflow-x: auto;
+                margin: 0 0 12px;
+            }
+            .david-msg-ai pre code { background: none; border: none; padding: 0; font-size: 12px; }
+            /* display:block + overflow lets wide tables scroll inside the message
+               instead of blowing out the layout on small screens */
+            .david-msg-ai table {
+                display: block;
+                max-width: max-content;
+                width: fit-content;
+                overflow-x: auto;
+                border-collapse: collapse;
+                margin: 12px 0;
+                font-size: 12.5px;
+                border: 1px solid var(--bdr2);
+                border-radius: 8px;
+                background: rgba(0,0,0,.15);
+            }
+            .david-msg-ai th {
+                background: var(--s2);
+                color: var(--gold);
+                font-weight: 600;
+                text-transform: uppercase;
+                font-size: 10px;
+                letter-spacing: .08em;
+                padding: 8px 12px;
+                text-align: left;
+                border-bottom: 1px solid var(--bdr2);
+                white-space: nowrap;
+            }
+            .david-msg-ai td { padding: 8px 12px; border-bottom: 1px solid var(--bdr); vertical-align: top; }
+            .david-msg-ai tr:last-child td { border-bottom: none; }
+            /* tables scroll sideways instead of breaking words mid-cell */
+            .david-msg-ai table, .david-msg-ai th, .david-msg-ai td { overflow-wrap: normal; word-break: normal; }
+
+            /* Message tools (copy / edit) */
+            .david-msg-actions { display: flex; gap: 6px; margin-top: 8px; }
+            @media (hover: hover) {
+                .david-msg-actions { opacity: 0; transition: opacity .15s; }
+                .david-msg-ai:hover .david-msg-actions, .david-msg-ai:focus-within .david-msg-actions { opacity: 1; }
             }
             .david-action-btn {
                 display: inline-flex;
                 align-items: center;
-                gap: 4px;
-                padding: 3px 9px;
-                border: 1px solid rgba(255,255,255,.1);
-                border-radius: 6px;
-                background: rgba(255,255,255,.04);
-                color: #64748b;
-                font-size: 11px;
-                font-family: 'Poppins', sans-serif;
+                gap: 5px;
+                padding: 4px 10px;
+                border: 1px solid var(--bdr2);
+                border-radius: 7px;
+                background: transparent;
+                color: var(--txt3);
+                font-size: 10.5px;
+                font-weight: 600;
                 cursor: pointer;
-                transition: background .12s, color .12s, border-color .12s;
+                transition: all .15s;
             }
-            .david-action-btn:hover {
-                background: rgba(196,154,32,.12);
-                border-color: rgba(196,154,32,.35);
-                color: #c49a20;
+            .david-action-btn:hover { background: var(--gold-bg); border-color: var(--gold-bd); color: var(--gold); }
+            .david-edit-btn {
+                margin-left: 8px;
+                font-size: 10px;
+                line-height: 1;
+                padding: 3px 8px;
+                border-radius: 6px;
+                border: 1px solid rgba(23,18,4,.25);
+                background: rgba(255,255,255,.16);
+                color: #171204;
+                cursor: pointer;
+                opacity: .75;
+                vertical-align: middle;
+                transition: opacity .15s;
             }
-            
-            .david-msg-user { 
-                align-self: flex-end; 
-                background: linear-gradient(135deg, var(--gold) 0%, #D4AF37 100%);
-                color: #000; 
-                font-weight: 500;
-                border-bottom-right-radius: 2px;
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                box-shadow: 0 4px 15px var(--gold-glow);
-            }
+            .david-edit-btn:hover { opacity: 1; }
 
-            .david-msg-ai h1, .david-msg-ai h2, .david-msg-ai h3 {
-                margin-top: 0;
-                margin-bottom: 12px;
+            /* Streaming: inherit the body face — no font flash, no pre-wrap gaps */
+            .david-streaming-content { display: inline; }
+            .david-cursor {
+                display: inline-block;
+                width: 7px;
+                height: 15px;
+                background: var(--gold);
+                margin-left: 3px;
+                border-radius: 2px;
+                animation: david-blink .8s infinite;
+                vertical-align: text-bottom;
+            }
+            @keyframes david-blink { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
+
+            /* Empty state */
+            .david-hero { margin: auto; text-align: center; max-width: 420px; padding: 20px; }
+            .david-hero-seal {
+                width: 52px;
+                height: 52px;
+                border-radius: 14px;
+                margin: 0 auto 16px;
+                background: linear-gradient(135deg, #d8b23c, #7a5c0d);
+                color: #0a0700;
+                font-weight: 800;
+                font-size: 20px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                box-shadow: 0 6px 24px rgba(196,154,32,.25);
+            }
+            .david-hero h3 { margin: 0 0 8px; font-size: 19px; font-weight: 700; color: var(--txt); }
+            .david-hero p { margin: 0; font-size: 12.5px; color: var(--txt2); line-height: 1.6; }
+
+            /* Jump to latest */
+            .david-jump-latest {
+                position: absolute;
+                right: 18px;
+                bottom: 14px;
+                width: 34px;
+                height: 34px;
+                border-radius: 50%;
+                border: 1px solid var(--gold-bd);
+                background: var(--s2);
                 color: var(--gold);
-                font-weight: 600;
-                font-family: inherit;
+                cursor: pointer;
+                display: none;
+                align-items: center;
+                justify-content: center;
+                z-index: 5;
+                box-shadow: 0 4px 14px rgba(0,0,0,.45);
             }
-            .david-msg-ai h1 { font-size: 1.25em; }
-            .david-msg-ai h2 { font-size: 1.15em; }
-            .david-msg-ai h3 { font-size: 1.05em; }
-            
-            .david-msg-ai p {
-                margin: 0 0 12px 0;
-                font-family: inherit;
-            }
-            .david-msg-ai p:last-child {
-                margin-bottom: 0;
-            }
+            .david-jump-latest:hover { background: var(--s3); }
 
-            .david-msg-ai ul, .david-msg-ai ol {
-                margin: 0 0 16px 0;
-                padding-left: 20px;
-            }
-            .david-msg-ai li {
-                margin-bottom: 6px;
-                font-family: inherit;
-            }
-
-            .david-msg-ai table {
-                width: 100%;
-                border-collapse: collapse;
-                margin: 16px 0;
-                background: rgba(0,0,0,0.1);
-                border-radius: 8px;
-                overflow: hidden;
-            }
-            .david-msg-ai th, .david-msg-ai td {
-                padding: 10px 14px;
-                text-align: left;
-                border-bottom: 1px solid var(--bdr);
-                font-family: inherit;
-            }
-            .david-msg-ai th {
-                background: rgba(255, 215, 0, 0.05); /* very subtle gold hint */
-                color: var(--txt);
-                font-weight: 600;
-                text-transform: uppercase;
-                font-size: 0.85em;
-                letter-spacing: 0.5px;
-            }
-            .david-msg-ai tr:last-child td {
-                border-bottom: none;
-            }
-
-            .david-footer {
-                padding: 24px 30px;
-                background: var(--s1);
-                border-top: 1px solid var(--bdr);
+            /* ── Bottom dock: chips + composer ── */
+            .david-dock {
                 flex-shrink: 0;
+                border-top: 1px solid var(--bdr);
+                background: var(--s1);
+                padding: 10px 16px calc(12px + env(safe-area-inset-bottom));
+                padding-left: max(16px, calc((100% - var(--dv-col)) / 2));
+                padding-right: max(16px, calc((100% - var(--dv-col)) / 2));
+            }
+            .david-chips-row {
+                display: flex;
+                gap: 7px;
+                overflow-x: auto;
+                padding: 2px 0 8px;
+                scrollbar-width: none;
+            }
+            .david-chips-row::-webkit-scrollbar { display: none; }
+            .david-qa-btn {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                background: var(--s2);
+                border: 1px solid var(--bdr2);
+                color: var(--txt2);
+                padding: 6px 13px;
+                border-radius: 16px;
+                font-size: 11.5px;
+                font-weight: 500;
+                cursor: pointer;
+                white-space: nowrap;
+                flex-shrink: 0;
+                transition: all .15s;
+            }
+            .david-qa-btn:hover { border-color: var(--gold-bd); color: var(--gold); background: var(--gold-bg); }
+            .david-chips-container {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+                margin-top: 14px;
+                padding-top: 12px;
+                border-top: 1px dashed var(--bdr2);
             }
 
             .david-input-wrapper {
                 display: flex;
-                gap: 12px;
-                max-width: 1000px;
-                margin: 0 auto;
-                background: rgba(28, 25, 23, 0.6);
-                backdrop-filter: blur(16px);
-                -webkit-backdrop-filter: blur(16px);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                border-radius: 16px;
-                padding: 10px 18px;
-                box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
-                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                align-items: flex-end;
+                gap: 10px;
+                background: var(--s2);
+                border: 1px solid var(--bdr2);
+                border-radius: 14px;
+                padding: 8px 8px 8px 16px;
+                transition: border-color .2s, box-shadow .2s;
             }
-
             .david-input-wrapper:focus-within {
-                border-color: rgba(202, 138, 4, 0.5);
-                box-shadow: 0 0 20px rgba(202, 138, 4, 0.2), 0 4px 30px rgba(0,0,0,0.5);
-                transform: translateY(-2px);
+                border-color: var(--gold-bd);
+                box-shadow: 0 0 0 3px rgba(196,154,32,.12);
             }
-
             .david-input-wrapper textarea {
                 flex: 1;
                 background: transparent;
                 border: none;
                 color: var(--txt);
-                padding: 12px 0;
-                font-size: 15px;
+                padding: 9px 0;
+                font-size: 14.5px;
+                line-height: 1.5;
                 outline: none;
                 resize: none;
                 min-height: 24px;
-                max-height: 200px;
+                max-height: 160px;
                 overflow-y: auto;
-                font-family: var(--font), sans-serif !important;
+                font-family: inherit;
             }
-            .david-input-wrapper textarea::placeholder {
-                color: rgba(255, 255, 255, 0.3);
-            }
-
+            .david-input-wrapper textarea::placeholder { color: var(--txt3); }
             .david-send-btn {
-                background: linear-gradient(135deg, var(--gold) 0%, #D4AF37 100%);
-                color: #000;
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                box-shadow: 0 0 10px rgba(202, 138, 4, 0.3);
-                transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+                background: linear-gradient(135deg, #d8b23c, var(--gold));
+                color: #141005;
+                border: none;
                 border-radius: 10px;
-                width: 44px;
-                height: 44px;
+                width: 40px;
+                height: 40px;
                 display: flex;
                 align-items: center;
                 justify-content: center;
                 cursor: pointer;
-                transition: transform 0.2s, background 0.2s;
-                align-self: flex-end;
-                margin-bottom: 4px;
+                flex-shrink: 0;
+                transition: filter .15s, transform .15s;
             }
-            .david-send-btn:hover { 
-                transform: scale(1.05);
-                background: #d4a72d;
-            }
-            .david-send-btn:disabled {
-                background: var(--bdr);
-                cursor: not-allowed;
-                opacity: 0.6;
-            }
+            .david-send-btn:hover { filter: brightness(1.08); }
+            .david-send-btn:active { transform: scale(.94); }
+            .david-send-btn:disabled { background: var(--s3); color: var(--txt3); cursor: not-allowed; filter: none; }
 
-            .david-typing {
-                font-style: italic;
-                color: var(--txt2);
-                font-size: 12px;
-                margin-top: -15px;
-                margin-left: 5px;
-            }
-
-            .david-quick-actions {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 8px;
-                margin-top: 15px;
-                padding: 0 30px;
-            }
-
-            .david-qa-btn {
-                background: rgba(196,154,32,0.1);
-                border: 1px solid rgba(196,154,32,0.3);
-                color: var(--gold);
-                padding: 6px 14px;
-                border-radius: 20px;
-                font-size: 12px;
-                cursor: pointer;
-                transition: all 0.2s;
-                display: flex;
+            /* ── Citations, evidence, charts ── */
+            .david-citation-badge {
+                display: inline-flex;
                 align-items: center;
-                gap: 6px;
-            }
-
-            .david-qa-btn:hover {
-                background: var(--gold);
-                color: #000;
-                transform: translateY(-1px);
-            }
-
-            /* --- Streaming Styles --- */
-            .david-cursor {
-                display: inline-block;
-                width: 2px;
-                height: 15px;
-                background: var(--gold);
-                margin-left: 4px;
-                animation: david-blink 0.8s infinite;
+                gap: 4px;
+                background: var(--gold-bg);
+                color: var(--gold);
+                border: 1px solid var(--gold-bd);
+                padding: 2px 9px;
+                border-radius: 11px;
+                font-size: 10px;
+                font-weight: 600;
+                cursor: pointer;
+                margin-left: 6px;
+                text-transform: uppercase;
+                letter-spacing: .05em;
                 vertical-align: middle;
+                transition: background .15s;
             }
-            @keyframes david-blink {
-                0%, 100% { opacity: 0; }
-                50% { opacity: 1; }
+            .david-citation-badge:hover { background: rgba(196,154,32,.2); }
+            .david-evidence-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 10px;
+                font-size: 12px;
+                background: var(--s2);
+                border-radius: 8px;
+                overflow: hidden;
             }
-            .david-streaming-content {
-                display: inline;
-                white-space: pre-wrap;
-                font-family: 'Fira Code', monospace;
-                font-size: 13px;
-                line-height: 1.4;
+            .david-evidence-table th {
+                background: rgba(255,255,255,.04);
+                padding: 8px 12px;
+                text-align: left;
+                color: var(--gold);
+                font-weight: 600;
+                font-size: 10.5px;
+                text-transform: uppercase;
+                letter-spacing: .06em;
             }
+            .david-evidence-table td { padding: 8px 12px; border-top: 1px solid var(--bdr); color: var(--txt); }
 
-            .david-action-card {
+            .david-chart-container {
                 background: var(--s1);
                 border: 1px solid var(--bdr);
+                border-radius: 10px;
+                padding: 14px 16px;
+                margin: 12px 0;
+            }
+            .david-chart-title {
+                color: var(--gold);
+                font-weight: 600;
+                font-size: 11px;
+                margin-bottom: 10px;
+                text-transform: uppercase;
+                letter-spacing: .08em;
+            }
+            .david-chart-bar-wrap { display: flex; align-items: center; margin-bottom: 7px; }
+            .david-chart-label {
+                width: 92px;
+                font-size: 11px;
+                color: var(--txt2);
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                margin-right: 10px;
+                flex-shrink: 0;
+            }
+            .david-chart-bar-track {
+                flex: 1;
+                background: rgba(255,255,255,.05);
+                height: 10px;
+                border-radius: 5px;
+                overflow: hidden;
+            }
+            .david-chart-bar-fill {
+                height: 100%;
+                background: linear-gradient(90deg, rgba(196,154,32,.65), #d8b23c);
+                border-radius: 5px;
+                transition: width 1s ease-out;
+            }
+            .david-chart-value {
+                width: 42px;
+                font-size: 11px;
+                color: var(--txt);
+                text-align: right;
+                font-family: var(--dv-mono);
+                margin-left: 10px;
+                flex-shrink: 0;
+            }
+
+            /* ── Action card ── */
+            .david-action-card {
+                background: var(--s1);
+                border: 1px solid var(--bdr2);
                 border-radius: 12px;
-                padding: 15px;
+                padding: 14px 16px;
                 margin-top: 12px;
                 display: flex;
                 flex-direction: column;
-                gap: 10px;
+                gap: 8px;
+                max-width: 420px;
             }
-
-            .david-action-card h4 { margin: 0; font-size: 14px; color: var(--gold); }
+            .david-action-card h4 { margin: 0; font-size: 13px; color: var(--gold); }
             .david-action-card p { margin: 0; font-size: 12px; color: var(--txt2); }
-            .david-action-btn {
+            .david-card-btn {
                 background: var(--gold);
-                color: #000;
+                color: #141005;
                 border: none;
-                border-radius: 6px;
-                padding: 8px;
+                border-radius: 7px;
+                padding: 9px;
                 font-size: 12px;
                 font-weight: 600;
                 cursor: pointer;
                 text-align: center;
+                transition: filter .15s;
             }
+            .david-card-btn:hover { filter: brightness(1.1); }
 
+            /* ── Modal ── */
             .david-modal-overlay {
                 position: absolute;
-                top: 0; left: 0; right: 0; bottom: 0;
-                background: rgba(0, 0, 0, 0.6);
+                inset: 0;
+                background: rgba(4,6,18,.7);
+                -webkit-backdrop-filter: blur(4px);
                 backdrop-filter: blur(4px);
-                z-index: 1000;
-                display: flex;
+                z-index: 50;
                 align-items: center;
                 justify-content: center;
+                padding: 20px;
                 opacity: 0;
-                animation: david-fadeIn 0.2s forwards;
+                animation: david-fadeIn .18s forwards;
             }
             .david-modal-content {
                 background: var(--s1);
-                border: 1px solid var(--bdr);
-                border-radius: 16px;
-                padding: 24px;
-                max-width: 400px;
-                width: 90%;
-                box-shadow: 0 10px 40px rgba(0,0,0,0.4);
-                transform: translateY(20px);
-                animation: david-slideUp 0.3s forwards cubic-bezier(0.16, 1, 0.3, 1);
+                border: 1px solid var(--bdr2);
+                border-radius: 14px;
+                padding: 22px;
+                max-width: 440px;
+                width: 100%;
+                max-height: 100%;
+                overflow-y: auto;
+                box-shadow: 0 20px 60px rgba(0,0,0,.5);
+                transform: translateY(14px);
+                animation: david-slideUp .25s forwards cubic-bezier(.16, 1, .3, 1);
             }
-            .david-modal-title {
-                margin: 0 0 12px 0;
-                color: var(--txt);
-                font-size: 18px;
-                font-weight: 600;
-            }
-            .david-modal-text {
-                margin: 0 0 24px 0;
-                color: var(--txt2);
-                font-size: 14.5px;
-                line-height: 1.5;
-            }
-            .david-modal-actions {
-                display: flex;
-                gap: 12px;
-                justify-content: flex-end;
-            }
+            .david-modal-title { margin: 0 0 10px; color: var(--txt); font-size: 16px; font-weight: 700; }
+            .david-modal-text { margin: 0 0 16px; color: var(--txt2); font-size: 13px; line-height: 1.6; }
+            .david-modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
             .david-modal-btn {
-                padding: 10px 18px;
+                padding: 9px 16px;
                 border-radius: 8px;
-                font-size: 14px;
+                font-size: 12.5px;
                 font-weight: 600;
                 cursor: pointer;
                 border: none;
-                transition: all 0.2s;
+                transition: all .15s;
             }
-            .david-modal-cancel {
-                background: transparent;
-                border: 1px solid var(--bdr);
-                color: var(--txt);
-            }
-            .david-modal-cancel:hover {
-                background: rgba(255, 255, 255, 0.05);
-            }
-            .david-modal-confirm {
-                background: #ff4444;
-                color: #fff;
-            }
-            .david-modal-confirm:hover {
-                background: #cc0000;
-            }
-            .david-modal-confirm.david-btn-gold {
-                background: var(--gold);
-                color: #000;
-            }
-            .david-modal-confirm.david-btn-gold:hover {
-                background: #d4a72d;
-            }
-            @keyframes david-slideUp {
-                to { transform: translateY(0); }
-            }
-            @keyframes david-fadeIn {
-                to { opacity: 1; }
-            }
+            .david-modal-cancel { background: transparent; border: 1px solid var(--bdr2); color: var(--txt); }
+            .david-modal-cancel:hover { background: var(--s2); }
+            .david-modal-confirm { background: var(--err); color: #fff; }
+            .david-modal-confirm:hover { background: #dc2626; }
+            .david-modal-confirm.david-btn-gold { background: var(--gold); color: #141005; }
+            .david-modal-confirm.david-btn-gold:hover { filter: brightness(1.1); }
+            @keyframes david-slideUp { to { transform: translateY(0); } }
+            @keyframes david-fadeIn { to { opacity: 1; } }
             @keyframes david-chip-in {
                 0% { opacity: 0; transform: translateY(10px); }
                 100% { opacity: 1; transform: translateY(0); }
             }
-            .david-fade-in-up {
-                animation: david-chip-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-            }
+            .david-fade-in-up { animation: david-chip-in .3s cubic-bezier(.16, 1, .3, 1); }
 
-            /* --- Mobile drawer for DAVID chat --- */
-            .david-mobile-toggle {
-                display: none;
-                width: 36px;
-                height: 36px;
-                align-items: center;
-                justify-content: center;
-                background: var(--s2);
-                border: 1px solid var(--bdr2);
-                border-radius: 8px;
-                color: var(--txt);
-                cursor: pointer;
-                margin-right: 10px;
-                flex-shrink: 0;
-                -webkit-tap-highlight-color: transparent;
-            }
-            .david-mobile-toggle:hover { background: var(--s3); }
+            /* ── Drawer sidebar + backdrop ── */
             .david-sidebar-backdrop {
                 display: none;
                 position: absolute;
                 inset: 0;
                 background: rgba(0,0,0,.55);
-                z-index: 9;
+                z-index: 25;
                 -webkit-backdrop-filter: blur(2px);
                 backdrop-filter: blur(2px);
             }
             .david-sidebar-backdrop.open { display: block; }
 
-            @media (max-width: 768px) {
-                .david-container { position: relative; }
-                .david-mobile-toggle { display: inline-flex; }
-                .david-chat-header { padding: 14px 16px; }
-                .david-chat-header h2 { font-size: 16px; }
-                .david-chat-header p { font-size: 11px; }
-                .david-messages-area { padding: 16px; gap: 16px; }
-                .david-footer { padding: 12px 14px; }
-                .david-input-wrapper { padding: 8px 12px; border-radius: 12px; }
-                .david-input-wrapper textarea { font-size: 14px; }
+            /* Scrollbars */
+            .david-messages-area::-webkit-scrollbar, .david-session-list::-webkit-scrollbar { width: 8px; }
+            .david-messages-area::-webkit-scrollbar-thumb, .david-session-list::-webkit-scrollbar-thumb {
+                background: var(--s3);
+                border-radius: 4px;
+            }
+            .david-messages-area::-webkit-scrollbar-track, .david-session-list::-webkit-scrollbar-track { background: transparent; }
 
+            /* ── Responsive ── */
+            @media (max-width: 900px) {
+                .david-mobile-toggle { display: inline-flex; }
                 .david-sessions-sidebar {
                     position: absolute;
                     top: 0;
                     left: 0;
                     height: 100%;
-                    width: 78%;
+                    width: 80%;
                     max-width: 300px;
-                    z-index: 10;
+                    z-index: 30;
                     transform: translateX(-100%);
                     transition: transform .25s ease;
                     box-shadow: 8px 0 32px rgba(0,0,0,.5);
+                    border-right: 1px solid var(--bdr2);
                 }
                 .david-sessions-sidebar.open { transform: translateX(0); }
-                .david-main { width: 100%; }
-                .david-quick-actions { padding: 10px 14px 0; gap: 6px; }
-                .david-qa-btn { font-size: 11px; padding: 6px 10px; }
+                .david-chat-header { padding: 10px 12px; }
+                .david-mode-tabs { padding: 7px 12px; }
+                .david-messages-area { padding: 18px 14px 14px; }
+                .david-dock { padding: 8px 12px calc(10px + env(safe-area-inset-bottom)); }
+                .david-msg-user { max-width: 92%; }
+                /* 16px stops iOS zoom-on-focus */
+                .david-input-wrapper textarea { font-size: 16px; }
             }
             @media (max-width: 480px) {
-                .david-chat-header h2 { font-size: 15px; }
-                .david-messages-area { padding: 12px; }
+                .david-msg { font-size: 13px; }
+                .david-messages-area { padding: 14px 12px 12px; }
+                .david-container { border-radius: 8px; }
+            }
+            @media (prefers-reduced-motion: reduce) {
+                .david-msg, .david-status-dot, .david-fade-in-up, .david-cursor { animation: none; }
+                .david-modal-overlay { animation: none; opacity: 1; }
+                .david-modal-content { animation: none; transform: none; }
+                .david-sessions-sidebar { transition: none; }
             }
         `;
         document.head.appendChild(style);
@@ -830,59 +866,78 @@ class DavidChat {
 
         const _st = (typeof ST !== 'undefined') ? ST : {};
         const user = _st.user || { role: 'admin', name: 'Admin' };
-        const roleLabel = (user.role || 'admin').replace('_', ' ').toUpperCase();
+        const roleLabel = (user.role || 'admin').replace(/_/g, ' ').toUpperCase();
+        const isStaffUser = user.role === 'staff_member';
 
         // M.2 mode tabs for this role (persist the active mode across re-renders).
         const _modes = davidModesForRole(user.role);
         if (!this.activeMode || !_modes.some(m => m.id === this.activeMode)) this.activeMode = _modes[0] ? _modes[0].id : null;
-        const _modeTabs = _modes.map(m => `<button type="button" data-mode="${m.id}" title="${m.desc}" onclick="DAVID.switchMode('${m.id}')" style="font-size:11px;padding:4px 11px;border-radius:14px;border:1px solid var(--bdr,#333);background:${m.id === this.activeMode ? '#c49a20' : 'transparent'};color:${m.id === this.activeMode ? '#1a1a1a' : 'var(--txt2,#99a)'};cursor:pointer;font-weight:600;white-space:nowrap">${m.label}</button>`).join('');
+        const _modeTabs = _modes.map(m => `<button type="button" class="david-mode-tab${m.id === this.activeMode ? ' active' : ''}" data-mode="${m.id}" title="${m.desc}" onclick="DAVID.switchMode('${m.id}')">${m.label}</button>`).join('');
+
+        // Role-aware quick actions + composer placeholder.
+        const _qa = isStaffUser ? [
+            ['Next belt progress', 'How close am I to my next belt?'],
+            ['Quiz me', 'Quiz me on my current belt'],
+            ['What to practice', 'What should I practice next?'],
+        ] : [
+            ['Scope audit', 'Summarize authorized facility activity'],
+            ['Competency distribution', 'Analyze competency distribution in my scope'],
+            ['Priority analysis', 'What are the most urgent tasks for me?'],
+        ];
+        const qaButtons = _qa.map(([label, q]) => `<button class="david-qa-btn" type="button" onclick="DAVID.handleQA('${q.replace(/'/g, "\\'")}')">${label}</button>`).join('');
+        const placeholder = isStaffUser
+            ? 'Ask about your belt or studies…'
+            : 'Ask about staff or readiness…';
 
         container.innerHTML = `
             <div class="david-container">
                 <div class="david-layout">
                     <div class="david-sidebar-backdrop" id="david-sidebar-backdrop" onclick="DAVID.toggleSidebar(false)"></div>
                     <div class="david-sessions-sidebar" id="david-sessions-sidebar">
-                        <button class="david-new-chat-btn" id="david-new-chat">➕ New Chat</button>
-                        <div class="david-session-list" id="david-session-list">
-                            <!-- Sessions injected here -->
-                        </div>
+                        <button class="david-new-chat-btn" id="david-new-chat" type="button">
+                            <svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 2v10M2 7h10"/></svg>
+                            New conversation
+                        </button>
+                        <div class="david-sidebar-label">Conversations</div>
+                        <div class="david-session-list" id="david-session-list"></div>
                     </div>
                     <div class="david-main">
-                        <div class="david-chat-header" style="display:flex;align-items:center;gap:10px">
-                            <button class="david-mobile-toggle" aria-label="Toggle DAVID sessions" onclick="DAVID.toggleSidebar()" type="button">
-                                <svg viewBox="0 0 18 18" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 4h14M2 9h14M2 14h14"/></svg>
+                        <div class="david-chat-header">
+                            <button class="david-mobile-toggle" aria-label="Toggle conversations" onclick="DAVID.toggleSidebar()" type="button">
+                                <svg viewBox="0 0 18 18" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 4h14M2 9h14M2 14h14"/></svg>
                             </button>
-                            <div style="flex:1;min-width:0">
-                                <h2><span style="font-size:24px">🧠</span> David OG Intelligence Hub</h2>
-                                <p>Strategic Intelligence Dashboard &bull; Access Level: ${roleLabel}</p>
+                            <div class="david-avatar" aria-hidden="true">D</div>
+                            <div class="david-head-id">
+                                <h2>David OG</h2>
+                                <p><span class="david-status-dot"></span>Online &bull; ${roleLabel} scope</p>
                             </div>
+                            <button class="david-icon-btn" onclick="DAVID.showMetaMemory()" title="Manage meta-memory" aria-label="Manage meta-memory" type="button">
+                                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+                            </button>
                         </div>
-                        <div class="david-mode-tabs" id="david-mode-tabs" style="display:flex;gap:6px;flex-wrap:wrap;padding:6px 16px 0;align-items:center">${_modeTabs}</div>
-                        <div class="david-quick-actions" id="david-qa">
-                            <button class="david-qa-btn" onclick="DAVID.handleQA('Summarize authorized facility activity')">📊 Scope Audit</button>
-                            <button class="david-qa-btn" onclick="DAVID.handleQA('Analyze competency distribution in my scope')">🎓 Competency Distribution</button>
-                            <button class="david-qa-btn" onclick="DAVID.handleQA('What are the most urgent tasks for me?')">📈 Priority Analysis</button>
+                        <div class="david-mode-tabs" id="david-mode-tabs">${_modeTabs}</div>
+                        <div class="david-msgs-wrap">
+                            <div class="david-messages-area" id="david-msgs"></div>
+                            <button type="button" class="david-jump-latest" id="david-jump-latest" title="Jump to latest" aria-label="Jump to latest message">
+                                <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M3.5 8.5L8 13l4.5-4.5"/></svg>
+                            </button>
                         </div>
-                        <div class="david-messages-area" id="david-msgs">
-                            <!-- Chat messages injected here -->
-                        </div>
-                        <div id="david-dynamic-chips" class="david-quick-actions" style="margin-top:0; margin-bottom:15px; display:none; flex-shrink:0;"></div>
-                        <div class="david-footer">
+                        <div class="david-dock">
+                            <div id="david-dynamic-chips" class="david-chips-row" style="display:none"></div>
+                            <div class="david-chips-row" id="david-qa">${qaButtons}</div>
                             <div class="david-input-wrapper">
-                                <textarea placeholder="Ask David OG about staff, reports, or belt progression..." id="david-query"></textarea>
-                                <button class="david-send-btn" id="david-btn">
-                                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+                                <textarea placeholder="${placeholder}" id="david-query" rows="1"></textarea>
+                                <button class="david-send-btn" id="david-btn" aria-label="Send message" type="button">
+                                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
                                 </button>
                             </div>
                         </div>
                     </div>
                 </div>
-                <!-- Controls -->
-                <button class="david-meta-btn" onclick="DAVID.showMetaMemory()" title="Manage Meta-Memory">⚙️</button>
 
                 <!-- Appended Modal Overlay -->
                 <div class="david-modal-overlay" id="david-modal" style="display: none;">
-                    <div class="david-modal-content" style="max-height: 80vh; overflow-y: auto;">
+                    <div class="david-modal-content">
                         <h3 class="david-modal-title" id="david-modal-title"></h3>
                         <p class="david-modal-text" id="david-modal-text"></p>
                         <div id="david-modal-custom-content"></div>
@@ -901,22 +956,14 @@ class DavidChat {
         this.btn = container.querySelector('#david-btn');
 
         // Jump-to-latest arrow (Iiggie's ask): appears when scrolled up, jumps to newest.
-        try {
-            const jumpBtn = document.createElement('button');
-            jumpBtn.type = 'button';
-            jumpBtn.id = 'david-jump-latest';
-            jumpBtn.title = 'Jump to latest';
-            jumpBtn.innerHTML = '&#8595;';
-            jumpBtn.style.cssText = 'position:absolute;right:22px;bottom:90px;width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,.2);background:rgba(20,24,38,.92);color:#e2e8f0;font-size:16px;cursor:pointer;display:none;z-index:6;box-shadow:0 2px 8px rgba(0,0,0,.35)';
+        const jumpBtn = container.querySelector('#david-jump-latest');
+        if (jumpBtn) {
             jumpBtn.onclick = () => { this.msgArea.scrollTop = this.msgArea.scrollHeight; };
-            const host = this.msgArea.parentElement || this.container;
-            if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
-            host.appendChild(jumpBtn);
             this.msgArea.addEventListener('scroll', () => {
                 const nearBottom = this.msgArea.scrollHeight - this.msgArea.scrollTop - this.msgArea.clientHeight < 80;
-                jumpBtn.style.display = nearBottom ? 'none' : 'block';
+                jumpBtn.style.display = nearBottom ? 'none' : 'flex';
             });
-        } catch (_) {}
+        }
 
         this.btn.onclick = () => this.sendMessage();
         this.input.onkeydown = (e) => {
@@ -925,7 +972,7 @@ class DavidChat {
                 this.sendMessage();
             }
         };
-        
+
         // Auto-resize textarea
         this.input.addEventListener('input', () => {
             this.input.style.height = 'auto';
@@ -946,11 +993,7 @@ class DavidChat {
     switchMode(modeId) {
         this.activeMode = modeId;
         const tabs = this.container && this.container.querySelectorAll('#david-mode-tabs [data-mode]');
-        if (tabs) tabs.forEach(b => {
-            const on = b.getAttribute('data-mode') === modeId;
-            b.style.background = on ? '#c49a20' : 'transparent';
-            b.style.color = on ? '#1a1a1a' : 'var(--txt2,#99a)';
-        });
+        if (tabs) tabs.forEach(b => b.classList.toggle('active', b.getAttribute('data-mode') === modeId));
     }
 
     // M.2 — the active mode's directive, appended to the system prompt.
@@ -1196,12 +1239,14 @@ class DavidChat {
 
             div.innerHTML = `
                 <div class="david-session-item-content">
-                    <div>${s.title}</div>
-                    <div style="font-size:10px; opacity:0.6; margin-top:2px;">${timeStr}</div>
+                    <div class="david-session-title">${s.title}</div>
+                    <div class="david-session-date">${timeStr}</div>
                 </div>
-                <div class="david-session-delete" title="Delete session">🗑️</div>
+                <div class="david-session-delete" title="Delete conversation">
+                    <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2.5 4h11M6.5 4V2.8a.8.8 0 01.8-.8h1.4a.8.8 0 01.8.8V4m2.7 0l-.5 9.2a1 1 0 01-1 .95H5.3a1 1 0 01-1-.95L3.8 4M6.5 7v4M9.5 7v4"/></svg>
+                </div>
                 <div class="david-session-confirm-wrapper">
-                    <div class="david-session-action david-session-confirm" title="Confirm Delete">Delete</div>
+                    <div class="david-session-action david-session-confirm" title="Confirm delete">Delete</div>
                     <div class="david-session-action david-session-cancel" title="Cancel">Cancel</div>
                 </div>
             `;
@@ -1209,7 +1254,7 @@ class DavidChat {
             div.onclick = () => {
                 if (div.classList.contains('confirming')) return; // Prevent switching when confirming delete
                 this.loadSession(s.id);
-                if (window.matchMedia && window.matchMedia('(max-width: 768px)').matches) {
+                if (window.matchMedia && window.matchMedia('(max-width: 900px)').matches) {
                     this.toggleSidebar(false);
                 }
             };
@@ -1297,10 +1342,15 @@ class DavidChat {
     renderGreetingOnly() {
         if (!this.msgArea) return;
         const user = (typeof ST !== 'undefined' && ST.user) ? ST.user : { name: 'Admin', first: 'Admin' };
-        const firstName = user.first || user.name.split(' ')[0] || 'Admin';
+        const firstName = user.first || (user.name || 'Admin').split(' ')[0] || 'Admin';
+        const sub = user.role === 'staff_member'
+            ? 'Ask about your belt progress, study material, or what to focus on next — I read your live training record.'
+            : 'Ask about staff readiness, the assessment queue, or belt curriculum — I pull the live data for your scope.';
         this.msgArea.innerHTML = `
-            <div class="david-msg david-msg-ai fade-in">
-                Hey ${firstName}, I'm here. Anything you need me to look into today?
+            <div class="david-hero fade-in">
+                <div class="david-hero-seal">D</div>
+                <h3>Hey ${firstName}.</h3>
+                <p>${sub}</p>
             </div>
         `;
     }
@@ -1373,9 +1423,6 @@ class DavidChat {
             editBtn.className = 'david-edit-btn';
             editBtn.title = 'Edit & resend';
             editBtn.textContent = '✎ Edit';
-            editBtn.style.cssText = 'margin-left:8px;font-size:10px;line-height:1;padding:3px 7px;border-radius:5px;border:1px solid rgba(255,255,255,.2);background:transparent;color:inherit;cursor:pointer;opacity:.6;vertical-align:middle';
-            editBtn.onmouseenter = () => { editBtn.style.opacity = '1'; };
-            editBtn.onmouseleave = () => { editBtn.style.opacity = '.6'; };
             editBtn.onclick = () => {
                 this.input.value = displayContent;
                 this.input.style.height = 'auto';
@@ -1388,10 +1435,14 @@ class DavidChat {
             const pairedUser = this.findPairedUserMessage(messageIndex);
             this.appendMessageActions(div, pairedUser ? pairedUser.content : '');
         }
-        const ts = document.createElement('div');
-        ts.className = 'david-msg-time';
-        ts.textContent = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-        div.appendChild(ts);
+        // Only stamp live messages: restored history has no stored send time, and
+        // stamping it with "now" showed wrong times on old messages.
+        if (messageIndex === null) {
+            const ts = document.createElement('div');
+            ts.className = 'david-msg-time';
+            ts.textContent = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+            div.appendChild(ts);
+        }
 
         this.msgArea.appendChild(div);
         this.msgArea.scrollTop = this.msgArea.scrollHeight;
@@ -1783,13 +1834,31 @@ class DavidChat {
                     errorJson = await res.json();
                 } catch(e) {}
                 
+                if (res.status === 403 && errorJson.action === 'ACTION_QUOTA_EXHAUSTED') {
+                    const isStaff = errorJson.role === 'staff';
+                    contentTarget.innerHTML = `
+                        <div class="david-upsell-card" style="padding: 16px; border-radius: 8px; background: rgba(239,68,68,0.08); border: 1px solid #ef4444; text-align: center; margin-top: 8px;">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" style="margin-bottom: 8px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                            <h3 style="color: #ef4444; margin-top: 0; font-size: 15px;">Monthly Question Limit Reached</h3>
+                            <p style="font-size: 13px; color: var(--txt); opacity: 0.85; line-height: 1.4;">${isStaff
+                                ? "Your facility has used all of this month's David questions. A manager or administrator can still ask from the reserve, or upgrade the facility's SIPS plan."
+                                : "This facility's monthly David questions — including the manager reserve — are used up. Questions reset on the 1st, or upgrade the SIPS plan to add capacity now."}</p>
+                        </div>
+                    `;
+                    const cursor = msgDiv.querySelector('.david-cursor');
+                    if (cursor) cursor.style.display = 'none';
+                    this.isThinking = false;
+                    this.btn.disabled = false;
+                    return;
+                }
+
                 if (res.status === 403 && errorJson.action === 'ACTION_UPSELL') {
                     contentTarget.innerHTML = `
                         <div class="david-upsell-card" style="padding: 16px; border-radius: 8px; background: rgba(196,154,32,0.1); border: 1px solid var(--gold); text-align: center; margin-top: 8px;">
                             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2" style="margin-bottom: 8px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-                            <h3 style="color: var(--gold); margin-top: 0; font-family: 'Fira Code', monospace; font-size: 15px;">David OG Intelligence Locked</h3>
+                            <h3 style="color: var(--gold); margin-top: 0; font-size: 15px;">David OG Intelligence Locked</h3>
                             <p style="font-size: 13px; color: var(--txt); opacity: 0.8; line-height: 1.4;">Your facility currently does not have access to SBD Operational Intelligence.</p>
-                            <button onclick="alert('Contacting Sales...')" style="margin-top: 12px; padding: 8px 16px; background: var(--gold); color: #000; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 12px; font-family: 'Fira Code', monospace; transition: all 0.2s;">Unlock Facility Intelligence</button>
+                            <button onclick="alert('Contacting Sales...')" style="margin-top: 12px; padding: 8px 16px; background: var(--gold); color: #000; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 12px; transition: all 0.2s;">Unlock Facility Intelligence</button>
                         </div>
                     `;
                     const cursor = msgDiv.querySelector('.david-cursor');
@@ -1861,6 +1930,9 @@ class DavidChat {
                                         contentTarget.innerHTML = displayContent.replace(/\n/g, '<br>');
                                     }
                                     this.msgArea.scrollTop = this.msgArea.scrollHeight;
+                                } else if (json.meta && json.meta.quota) {
+                                    // Gap 2 — non-blocking heads-up at 75% (NOTICE) / 90% (UPGRADE).
+                                    this.renderQuotaNotice(msgDiv, json.meta.quota);
                                 } else if (json.error) {
                                     contentTarget.innerHTML += `<span style="color:var(--err)">Error: ${json.error}</span>`;
                                 }
@@ -1964,12 +2036,32 @@ class DavidChat {
         card.innerHTML = `
             <h4>${payload.title || 'Report Available'}</h4>
             <p>${payload.description || 'Download the requested data report.'}</p>
-            <button class="david-action-btn" onclick="${payload.on_click}">
+            <button class="david-card-btn" onclick="${payload.on_click}">
                 ${payload.btn_text || 'Download Report'}
             </button>
         `;
         this.msgArea.appendChild(card);
         this.msgArea.scrollTop = this.msgArea.scrollHeight;
+    }
+
+    // Gap 2 — non-blocking quota heads-up banner (75% NOTICE / 90% UPGRADE). Inserted once
+    // per message, above the streamed answer. Questions/plan language only — never cost.
+    renderQuotaNotice(msgDiv, quota) {
+        if (!msgDiv || !quota) return;
+        if (msgDiv.querySelector('.david-quota-notice')) return; // one banner per message
+        const isUpgrade = quota.state === 'UPGRADE';
+        const color = isUpgrade ? '#ef4444' : '#f59e0b';
+        const title = isUpgrade
+            ? `Approaching your monthly question limit (${quota.percent}% used)`
+            : `Heads up — ${quota.percent}% of this month's questions used`;
+        const body = isUpgrade
+            ? "Your facility is close to its monthly David question allowance. Consider upgrading your SIPS plan to avoid interruption."
+            : "You're past 75% of your facility's monthly David questions for this period.";
+        const banner = document.createElement('div');
+        banner.className = 'david-quota-notice';
+        banner.style.cssText = `margin: 0 0 10px; padding: 10px 14px; border-radius: 8px; background: ${color}1a; border: 1px solid ${color}; font-size: 12px; line-height: 1.4; color: var(--txt);`;
+        banner.innerHTML = `<strong style="color: ${color};">${title}</strong><br>${body}`;
+        msgDiv.insertBefore(banner, msgDiv.firstChild);
     }
 
     // --- Internal Formatters ---
@@ -2048,9 +2140,9 @@ class DavidChat {
                 });
                 customHtml += '</tbody></table>';
             } else if (typeof data === 'string' && data.toLowerCase().includes('select')) {
-                customHtml = `<pre style="background:rgba(0,0,0,0.3); padding:12px; border-radius:6px; font-family:'Fira Code',monospace;"><code style="color:var(--gold)">${data}</code></pre>`;
+                customHtml = `<pre style="background:rgba(0,0,0,0.3); padding:12px; border-radius:6px; font-family:ui-monospace,Menlo,monospace;"><code style="color:var(--gold)">${data}</code></pre>`;
             } else {
-                customHtml = `<pre style="background:rgba(0,0,0,0.3); padding:12px; border-radius:6px; font-family:'Fira Code',monospace; white-space:pre-wrap; word-wrap:break-word;"><code>${JSON.stringify(data, null, 2)}</code></pre>`;
+                customHtml = `<pre style="background:rgba(0,0,0,0.3); padding:12px; border-radius:6px; font-family:ui-monospace,Menlo,monospace; white-space:pre-wrap; word-wrap:break-word;"><code>${JSON.stringify(data, null, 2)}</code></pre>`;
             }
 
             this.showModal({
@@ -2078,7 +2170,7 @@ class DavidChat {
             this.showModal({
                 title: 'DAVID Meta-Memory',
                 text: 'Global parameters learned from your interactions:',
-                customHtml: `<textarea id="david-meta-edit" style="width:100%; height:120px; background:var(--bg); border:1px solid var(--bdr); color:var(--txt); border-radius:8px; padding:12px; font-family:'Fira Code',monospace; outline:none; resize:none;">${blob}</textarea>`,
+                customHtml: `<textarea id="david-meta-edit" style="width:100%; height:120px; background:var(--bg); border:1px solid var(--bdr); color:var(--txt); border-radius:8px; padding:12px; font-family:ui-monospace,Menlo,monospace; outline:none; resize:none;">${blob}</textarea>`,
                 cancelText: 'Close',
                 confirmText: 'Save Memory',
                 onConfirm: async () => {

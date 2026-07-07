@@ -495,7 +495,7 @@ function renderSView(view){
     toast('RBAC Guard: Unauthorized access to Staff Portal', 'err');
     return;
   }
-  ['s-dashboard','s-belt','s-window','s-scoreboard','s-posschool','s-report','s-oip','s-schedule','s-history','s-study','s-guide','s-settings','s-david'].forEach(v=>{
+  ['s-dashboard','s-belt','s-window','s-scoreboard','s-posschool','s-report','s-oip','s-schedule','s-history','s-study','s-foundations','s-instruments','s-guide','s-settings','s-david'].forEach(v=>{
     const el=document.getElementById(v);
     if(el){el.classList.add('hidden');el.classList.remove('fade-in');}
   });
@@ -514,6 +514,8 @@ function renderSView(view){
     's-oip':renderSOIP,
     's-history':renderSHistory,
     's-study':renderSStudy,
+    's-foundations':()=>{ if(typeof renderSFoundations==='function') renderSFoundations(); },
+    's-instruments':()=>{ if(typeof renderSInstruments==='function') renderSInstruments(); },
     's-guide':()=>renderGuideView('s'),
     's-settings':renderSettingsView,
     's-david':()=>renderDavidView('s-david'),
@@ -570,12 +572,12 @@ function goXFacility(fid){
 
 function renderHView(view){
   if(!ST.user) return logout();
-  const allowed = ['hospital','facility_admin','master_admin','staff_admin','system_admin'];
+  const allowed = ['hospital','facility_admin','master_admin','staff_admin','system_admin','assessor'];
   if(!allowed.includes(ST.user.role) && !allowed.includes(ST.portal)) {
     toast('RBAC Guard: Unauthorized access to Facility Portal', 'err');
     return;
   }
-  ['h-dashboard','h-staff','h-profile','h-milestones','h-posschool','h-scoreboard','h-schedule','h-attendance','h-reports','h-assessments','h-progression','h-guide','h-settings','h-david'].forEach(v=>{
+  ['h-dashboard','h-staff','h-profile','h-milestones','h-posschool','h-training','h-instruments','h-scoreboard','h-schedule','h-attendance','h-reports','h-assessments','h-progression','h-guide','h-settings','h-david'].forEach(v=>{
     const el=document.getElementById(v);
     if(el){ el.classList.add('hidden'); el.classList.remove('fade-in'); }
   });
@@ -594,6 +596,8 @@ function renderHView(view){
     'h-staff':()=>renderHStaff(),
     'h-milestones':()=>renderHMilestones(),
     'h-posschool':()=>renderHPosSchool(),
+    'h-training':()=>{ if(typeof renderHTraining==='function') renderHTraining(); },
+    'h-instruments':()=>{ if(typeof renderHInstruments==='function') renderHInstruments(); },
     'h-scoreboard':()=>renderHScoreboard(),
     'h-schedule':()=>renderHSchedule(),
     'h-attendance':()=>renderHAttendance(),
@@ -614,7 +618,7 @@ function renderAView(view){
     toast('RBAC Guard: Unauthorized access to Network Portal', 'err');
     return;
   }
-  ['a-overview','a-leaderboard','a-allstaff','a-scoreboard','a-facilities','a-facility','a-registrations','a-assessments','a-progression','a-upload','a-reports','a-david','a-daviddashboard','a-adminusers','a-promoqueue','a-freeagents','a-placementreviews','a-observations','a-observationreviews','a-guide','a-settings','a-systems','a-systems-dashboard'].forEach(v=>{
+  ['a-overview','a-leaderboard','a-allstaff','a-scoreboard','a-facilities','a-facility','a-registrations','a-assessments','a-progression','a-foundations','a-instruments','a-upload','a-reports','a-david','a-daviddashboard','a-adminusers','a-promoqueue','a-freeagents','a-placementreviews','a-observations','a-observationreviews','a-guide','a-settings','a-systems','a-systems-dashboard'].forEach(v=>{
     const el=document.getElementById(v);
     if(el){ el.classList.add('hidden'); el.classList.remove('fade-in'); }
   });
@@ -627,6 +631,8 @@ function renderAView(view){
     'a-facilities':renderAFacilities,'a-facility':renderAFacility,
     'a-registrations':renderARegistrations,
     'a-assessments':renderAAssessments,'a-progression':renderAProgression,'a-upload':renderAUpload,
+    'a-foundations':()=>{ if(typeof renderHTraining==='function') renderHTraining(); },
+    'a-instruments':()=>{ if(typeof renderHInstruments==='function') renderHInstruments(); },
     'a-reports':renderAReports,
     'a-david':renderADavidView,
     'a-daviddashboard':renderADavidDashboardView,
@@ -681,7 +687,7 @@ function renderADavidDashboardView() {
   const container = document.getElementById('a-daviddashboard');
   if (!container) return;
   // Load the premium Command Center UI directly
-  container.innerHTML = `<iframe src="/david-command-center.html" style="width:100%;height:calc(100vh - 64px);border:none;border-radius:12px;background:var(--bg);" allowfullscreen></iframe>`;
+  container.innerHTML = `<iframe src="/david-command-center.html?v=6" style="width:100%;height:calc(100vh - 64px);border:none;border-radius:12px;background:var(--bg);" allowfullscreen></iframe>`;
 }
 
 window.refreshDashboard = function() {
@@ -1497,7 +1503,7 @@ function startAssessmentTimer(){
           submitBeltTest();
         }
       } else if(!PA.submitting && !PA.submitted){
-        submitPlacementAssessment();
+        submitPlacementAssessment('timer');
       }
       return;
     }
@@ -1511,6 +1517,15 @@ function startAssessmentTimer(){
     const mins = Math.floor(remaining / 60000);
     const secs = Math.floor((remaining % 60000) / 1000);
     el.textContent = `Time remaining: ${mins}:${String(secs).padStart(2,'0')}`;
+
+    // Under 10 minutes: enlarge the countdown so it is unmissable on any device.
+    // Responsive font via clamp(); the chip becomes a centered top bar (left+right
+    // pinned) instead of a small corner chip, so it reads on phones/tablets too.
+    const _warn = remaining <= 10 * 60 * 1000;
+    el.style.fontSize = _warn ? 'clamp(20px, 6vw, 30px)' : '14px';
+    el.style.padding  = _warn ? '10px 18px' : '8px 14px';
+    if(_warn){ el.style.left = '12px'; el.style.right = '12px'; el.style.textAlign = 'center'; }
+    else { el.style.left = 'auto'; el.style.right = '12px'; el.style.textAlign = 'left'; }
 
     if(remaining < 5 * 60 * 1000){
       el.style.background = 'rgba(239,68,68,.15)';
@@ -2086,23 +2101,51 @@ function prSuggestion(pr){
   const simR = (pr && pr.responses || []).filter(r => r.type === 'simulation');
   if(!kR.length && !simR.length) return null;
   const avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
-  const kOverall = Math.round(avg(kR.map(r => r.score)));
+  // Blend the RAW averages, then round once — same as rptComputeModel(). Rounding the
+  // component scores BEFORE blending (e.g. 87.5 -> 88) used to flip belts at a threshold
+  // boundary (Bond: 77.5 read as 78 = Yellow), which made the card disagree with the report.
+  const kRaw = avg(kR.map(r => r.score));
+  const simRaw = avg(simR.map(r => r.aiScore));
+  const kOverall = Math.round(kRaw);
   const kL1 = Math.round(avg(kR.filter(r => r.level === 1).map(r => r.score)));
-  const simOverall = Math.round(avg(simR.map(r => r.aiScore)));
-  const blended = Math.round(kOverall * 0.6 + simOverall * 0.4);
+  const simOverall = Math.round(simRaw);
+  const blended = Math.round(kRaw * 0.6 + simRaw * 0.4);
   const dangerous = kR.some(r => r.isDangerous && !r.correct);
   return sbdSuggestBelt(kOverall, kL1, simOverall, blended, dangerous);
 }
 
-async function submitPlacementAssessment(){
+// The label shown on the placement-review CARD. It is derived from rptComputeModel() — the
+// SAME engine that produces the downloadable assessment report — so the card's SUGGESTED
+// chip can never disagree with the report's BELT RECOMMENDED / FINAL DETERMINATION. (Earlier
+// the card used sbdSuggestBelt with a different blend + dangerous policy, so the same
+// candidate showed e.g. "Yellow" on the card and "No Belt" on the report.)
+function prSuggestionLabel(pr){
+  const has = (pr && pr.responses || []).some(r => r.type === 'knowledge' || r.type === 'simulation');
+  if(!has) return null;
+  const m = rptComputeModel(pr);
+  if(m.outcome === 'CLEAN') return `${m.belt} Belt`;
+  if(m.outcome === 'CONDITIONAL') return `${m.belt} Belt Conditional`;
+  if(m.outcome === 'KNOWLEDGE_FOUNDATION') return 'Knowledge Foundation';
+  return 'No Belt';
+}
+
+async function submitPlacementAssessment(trigger){
   // [CRITICAL GUARDRAIL - DO NOT REMOVE OR BREAK]
   // This function relies on a globally defined `sbFetch` to persist data to Supabase.
-  // Before making any refactors to this method or `api-supabase.js`, 100% verity that 
+  // Before making any refactors to this method or `api-supabase.js`, 100% verity that
   // `sbFetch` is seamlessly connected to POST to `placement_reviews`.
   // Do NOT change the payload object keys unless the backend schema explicitly changes.
-  
+
   if(PA.submitting) return;
   PA.submitting = true;
+  // Submit-lifecycle telemetry (server-side, via the existing activity log). Lets us
+  // reconstruct exactly what happened on a candidate's submit -- did it fire, by button
+  // or timer, and did it succeed or queue offline -- so a "report didn't come through"
+  // is diagnosable from logs instead of guesswork. Best-effort; never throws into submit.
+  try { if(typeof logActivity==='function') logActivity('placement_submit_start', {
+    staffId: PA.staffId, sessionId: ASSESSMENT_SESSION.sessionId || null,
+    trigger: trigger || 'button', currentQ: PA.currentQ, totalQ: getPAQuestions().length
+  }); } catch(_){}
   document.getElementById('placement-content').innerHTML = `
     <div style="text-align:center;padding:60px 0">
       <div style="width:56px;height:56px;border:3px solid rgba(139,92,246,.2);border-top:3px solid #8b5cf6;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 24px"></div>
@@ -2127,6 +2170,10 @@ async function submitPlacementAssessment(){
   PA.submitting = false;
   PA.submitted = true;
   savePAState();
+  try { if(typeof logActivity==='function') logActivity('placement_submit_done', {
+    staffId: PA.staffId, sessionId: ASSESSMENT_SESSION.sessionId || null,
+    pendingSync: !!pendingSync, reviewCreated: !pendingSync
+  }); } catch(_){}
   renderPAComplete(pendingSync);
 }
 
@@ -2186,10 +2233,14 @@ async function paPersistSubmission({ staffId, answers, questions, sessionId, ses
   const _kResp = responses.filter(r => r.type === 'knowledge');
   const _simResp = responses.filter(r => r.type === 'simulation');
   const _avg = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
-  const kOverall = Math.round(_avg(_kResp.map(r => r.score)));
+  // Blend the RAW averages, then round once (matches rptComputeModel + prSuggestion). Do NOT
+  // round the component scores before blending -- that flips belts at threshold boundaries.
+  const _kRaw = _avg(_kResp.map(r => r.score));
+  const _simRaw = _avg(_simResp.map(r => r.aiScore));
+  const kOverall = Math.round(_kRaw);
   const kL1 = Math.round(_avg(_kResp.filter(r => r.level === 1).map(r => r.score)));
-  const simOverall = Math.round(_avg(_simResp.map(r => r.aiScore)));
-  const blended = Math.round(kOverall * 0.6 + simOverall * 0.4);
+  const simOverall = Math.round(_simRaw);
+  const blended = Math.round(_kRaw * 0.6 + _simRaw * 0.4);
   // Dangerous-answer block is wired but stays inert until SIPS supplies the per-question
   // dangerous-answer list (Governing Standards) and questions carry q.isDangerous.
   const hasDangerousKAnswer = _kResp.some(r => r.isDangerous && !r.correct);
@@ -2261,6 +2312,9 @@ async function paPersistSubmission({ staffId, answers, questions, sessionId, ses
       // do not need a new PIN or to retake anything.
       queuePendingPlacement({ body: prBody, staffId: pr.staffId, token: sessionToken });
       pendingSync = true;
+      try { if(typeof logActivity==='function') logActivity('placement_submit_queued', {
+        staffId: pr.staffId, sessionId: sessionId || null, reason: 'network_retries_exhausted'
+      }); } catch(_){}
     }
   } else {
     /* saveDemoData() removed */
@@ -2758,17 +2812,28 @@ function renderAObservations(){
 
   const u = ST.user;
   let pool = (DB.observations || []).filter(o => ['requested','in_progress','returned'].includes(o.status));
-  if(u && u.role === 'staff_admin' && u.assignedFids && u.assignedFids.length)
+  // Role scope (RLS Addendum v1.1) — mirror the Foundations/Instruments model:
+  // system-wide admins (master/admin/staff_admin/assessor/system_admin) see all
+  // facilities and get a Facility filter to narrow the queue; staff_admin stays
+  // limited to its assigned facilities.
+  const isSystemWide = !!(u && ['master_admin','admin','staff_admin','assessor','system_admin'].includes(u.role));
+  let scopeFacs = (DB.facilities || []).filter(f => f.active !== false);
+  if(u && u.role === 'staff_admin' && u.assignedFids && u.assignedFids.length){
+    scopeFacs = scopeFacs.filter(f => u.assignedFids.includes(f.id));
     pool = pool.filter(o => u.assignedFids.includes(o.fid));
+  }
+  const obsFac = ST._obsFacFilter || 'all';
+  if(isSystemWide && obsFac !== 'all') pool = pool.filter(o => o.fid === obsFac);
 
   const requested = pool.filter(o => o.status === 'requested').length;
   const inProg    = pool.filter(o => o.status === 'in_progress').length;
 
   // Authorized observers (people with observer access). Respect the same
-  // facility scoping the queue uses for staff_admins.
+  // facility scoping the queue uses (assigned facilities + the Facility filter).
   let observerList = (DB.staff || []).filter(s => s.observer);
   if(u && u.role === 'staff_admin' && u.assignedFids && u.assignedFids.length)
     observerList = observerList.filter(s => u.assignedFids.includes(s.fid));
+  if(isSystemWide && obsFac !== 'all') observerList = observerList.filter(s => s.fid === obsFac);
   const observers = observerList.length;
 
   const observerRows = observerList
@@ -2808,8 +2873,9 @@ function renderAObservations(){
 
   el.innerHTML = `
     <div>
-      <h2 style="margin:0 0 6px">Observations</h2>
+      <h2 style="margin:0 0 6px">Observations${isSystemWide?' <span style="font-size:11px;color:#64748b;font-weight:500">(all facilities)</span>':''}</h2>
       <p style="color:var(--txt2);font-size:13px;margin:0 0 16px">On-the-floor performance checks &mdash; the third assessment gate, alongside Competency and Simulation.</p>
+      ${isSystemWide && scopeFacs.length>1 ? `<div style="margin-bottom:14px"><select class="form-select" style="max-width:280px" onchange="ST._obsFacFilter=this.value;renderAObservations()"><option value="all"${obsFac==='all'?' selected':''}>All Facilities</option>${scopeFacs.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(f=>`<option value="${f.id}"${obsFac===f.id?' selected':''}>${f.name}</option>`).join('')}</select></div>` : ''}
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px">
         <div class="stat-card"><div class="stat-accent" style="background:#94a3b8"></div><div class="stat-lbl">Awaiting Observer</div><div class="stat-val">${requested}</div><div class="stat-sub">candidate requested</div></div>
         <div class="stat-card"><div class="stat-accent" style="background:#0ea5e9"></div><div class="stat-lbl">In Progress</div><div class="stat-val">${inProg}</div><div class="stat-sub">being scored</div></div>
@@ -3283,8 +3349,17 @@ function renderAPlacementReviews(){
             <div style="min-width:0;flex:1">
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                 <span style="font-size:14px;font-weight:700;color:#f1f5f9">${displayName}</span>
-                ${belt?beltBadge(belt):''}
-                ${(()=>{ if(!isPending) return ''; const sug=prSuggestion(pr); return sug?`<span title="Belt engine suggestion (blended + K + simulation floors, dangerous-answer block)" style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:rgba(196,154,32,.12);color:#eab308">SUGGESTED: ${sug.toUpperCase()}</span>`:''; })()}
+                ${(()=>{
+                  const sug = isPending ? prSuggestionLabel(pr) : null;
+                  // On a PENDING card the belt chip is just a placeholder tentative; when the
+                  // engine suggests No Belt / Knowledge Foundation, a "White" chip next to
+                  // "SUGGESTED: NO BELT" reads as a contradiction. Hide the placeholder chip in
+                  // that case so the chip + the suggestion + the report all read the same.
+                  const noBeltSuggest = isPending && (!sug || sug === 'No Belt' || sug === 'Knowledge Foundation');
+                  const badge = (belt && !noBeltSuggest) ? beltBadge(belt) : '';
+                  const sugChip = (isPending && sug) ? `<span title="Belt engine suggestion — matches the assessment report determination" style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:rgba(196,154,32,.12);color:#eab308">SUGGESTED: ${sug.toUpperCase()}</span>` : '';
+                  return badge + sugChip;
+                })()}
                 ${pr._blended!=null?`<span style="font-size:11px;font-weight:800;color:${pr._blended>=75?'#22c55e':pr._blended>=65?'#f59e0b':'#ef4444'}" title="Blended score (60% knowledge / 40% simulation)">${pr._blended}%</span>`:''}
                 <span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:${isPending?'rgba(167,139,250,.15)':'rgba(34,197,94,.12)'};color:${statusClr}">${statusLabel.toUpperCase()}</span>
               </div>
@@ -3975,13 +4050,15 @@ function rptHandoffStatus(staffArr){
 // ============================================================ ASSESSMENT REPORT GENERATOR
 
 // Belt scoring thresholds — White Belt values from SBD OS Governing Standards §2
+// Single source of truth: these MUST match SBD_BELT_THRESHOLDS / RPT_STANDARDS so the
+// confirmed-report engine (deriveOutcome) agrees with the card + the draft report.
 const BELT_THRESHOLDS = {
   White:  { blended: 75, sim: 72, knowledge: 80 },
-  Yellow: { blended: 78, sim: 74, knowledge: 82 },
-  Green:  { blended: 80, sim: 76, knowledge: 83 },
-  Blue:   { blended: 82, sim: 78, knowledge: 84 },
-  Brown:  { blended: 85, sim: 80, knowledge: 85 },
-  Black:  { blended: 88, sim: 83, knowledge: 88 },
+  Yellow: { blended: 78, sim: 75, knowledge: 83 },
+  Green:  { blended: 81, sim: 78, knowledge: 86 },
+  Blue:   { blended: 85, sim: 82, knowledge: 89 },
+  Brown:  { blended: 87, sim: 84, knowledge: 91 },
+  Black:  { blended: 90, sim: 87, knowledge: 92 },
 };
 
 const LEVEL_LABELS = { '1':'Foundational','2':'Operational','3':'Applied','4':'Advanced','5':'Systems' };
@@ -4040,7 +4117,9 @@ function deriveOutcome(pr) {
   const knowledgeOverall = kTotal ? (kCorrect / kTotal) * 100 : 0;
   const simScored = simulation.filter(r => r.aiScore != null);
   const simOverall = simScored.length ? simScored.reduce((a, r) => a + r.aiScore, 0) / simScored.length : 0;
-  const blended = (knowledgeOverall + simOverall) / 2;
+  // 60% knowledge / 40% simulation -- the governed blend (matches rptComputeModel + the
+  // card). This was a 50/50 average, which made the confirmed report disagree with the card.
+  const blended = (knowledgeOverall * 0.6) + (simOverall * 0.4);
 
   const dangerousIds = detectDangerousAnswers(responses);
   const dangerousKnowledge = knowledge.filter(r => dangerousIds.includes(r.qId || r.id));
@@ -10931,7 +11010,7 @@ function renderHReports(){
   const psTestQueue = [];
   st.forEach(s=>{ [...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].forEach(tid=>{ if(getTrackStatus(s,tid)==='testing') psTestQueue.push({s,tid}); }); });
 
-  const tr=DB.trends[fid];
+  const tr=DB.trends&&DB.trends[fid];
   const yrs=tr?Object.keys(tr).sort():[];
   const latestYr=yrs.length?yrs[yrs.length-1]:'--';
   const prevYr=yrs.length>=2?yrs[yrs.length-2]:null;
@@ -12501,7 +12580,7 @@ function renderFacReports(el){
   const facRanked = [...activeFacs].sort((a,b)=>facStats(b.id).greenPct-facStats(a.id).greenPct);
   const networkRank = facRanked.findIndex(f=>f.id===fid)+1;
   const networkAvgPct = Math.round(activeFacs.reduce((s,f)=>s+facStats(f.id).greenPct,0)/Math.max(activeFacs.length,1));
-  const tr=DB.trends[fid];
+  const tr=DB.trends&&DB.trends[fid];
   const yrs=tr?Object.keys(tr).sort():[];
   const latestYr=yrs.length?yrs[yrs.length-1]:'--';
   const prevYr=yrs.length>=2?yrs[yrs.length-2]:null;
@@ -13703,7 +13782,7 @@ function renderAReports(){
 }
 
 function renderReportCharts(fid){
-  const tr=DB.trends[fid];if(!tr)return;
+  const tr=DB.trends&&DB.trends[fid];if(!tr)return;
   const yrs=Object.keys(tr).sort();
   const latest=tr[yrs[yrs.length-1]];
   if(latest){
@@ -14216,6 +14295,8 @@ async function openApproveRegModal(rid){
       <select id="approve-role-select" class="form-input" style="width:100%;margin-bottom:16px;">
         <option value="staff_member" ${r.requested_role==='staff_member'?'selected':''}>Staff Member (Tech/Free Agent)</option>
         <option value="hospital" ${(r.requested_role==='hospital' || !r.requested_role)?'selected':''}>Facility Admin (Manager/Leader)</option>
+        <option value="educator" ${r.requested_role==='educator'?'selected':''}>Educator / Preceptor (Facility)</option>
+        <option value="assessor" ${r.requested_role==='assessor'?'selected':''}>SBD Assessor (System-wide, observe/confirm)</option>
         <option value="system_admin" ${r.requested_role==='system_admin'?'selected':''}>System Admin (Executive)</option>
         <option value="staff_admin">Staff Admin (SIPS Internal)</option>
 
@@ -14305,6 +14386,8 @@ async function approveReg(rid){
     else if(assignRole === 'system_admin') { assignTitle = 'System Executive'; staffRole = 'executive'; }
     else if(assignRole === 'staff_admin') { assignTitle = 'SIPS Internal'; staffRole = 'admin'; }
     else if(assignRole === 'master_admin') { assignTitle = 'SIPS Leader'; staffRole = 'admin'; }
+    else if(assignRole === 'educator') { assignTitle = 'Educator / Preceptor'; staffRole = 'educator'; }
+    else if(assignRole === 'assessor') { assignTitle = 'SBD Assessor'; staffRole = 'assessor'; }
 
     const regUser={id:'u'+Date.now(),email:r.email,password:r.password,role:assignRole,name:contactName,title:assignTitle,initials,fid:finalFacilityId};
     DB.users.push(regUser);

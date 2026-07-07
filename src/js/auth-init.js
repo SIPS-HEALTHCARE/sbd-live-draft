@@ -2032,7 +2032,7 @@ async function initAppData(){
   window.SBD_INITIALIZING = true;
   console.log('SBD Platform: Multi-table data hydration started...');
   try {
-    const [facs, staff, systems, users, reviews, queue, registrations, freeAgents, promotions, onboarding, beltTestResults, transfers, observations, obsChecklists] = await Promise.race([
+    const [facs, staff, systems, users, reviews, queue, registrations, freeAgents, promotions, onboarding, beltTestResults, transfers, observations, obsChecklists, fndAssignments, fndProgress, instAssignments, instProgress] = await Promise.race([
       Promise.all([
         SB.getFacilities().catch(e=>{ console.error('facs load err', e); return []; }),
         SB.getAllStaff().catch(e=>{ console.error('staff load err', e); return []; }),
@@ -2047,7 +2047,11 @@ async function initAppData(){
         (SB.getBeltTestResults ? SB.getBeltTestResults() : Promise.resolve([])).catch(e=>{ console.error('belt results load err', e); return []; }),
         (SB.getTransferRequests ? SB.getTransferRequests() : Promise.resolve([])).catch(e=>{ console.error('transfers load err', e); return []; }),
         (SB.getObservations ? SB.getObservations() : Promise.resolve([])).catch(e=>{ console.error('observations load err', e); return []; }),
-        (SB.getObservationChecklists ? SB.getObservationChecklists() : Promise.resolve([])).catch(e=>{ console.error('obs checklists load err', e); return []; })
+        (SB.getObservationChecklists ? SB.getObservationChecklists() : Promise.resolve([])).catch(e=>{ console.error('obs checklists load err', e); return []; }),
+        (SB.getFoundationsAssignments ? SB.getFoundationsAssignments() : Promise.resolve([])).catch(e=>{ console.error('fnd assignments load err', e); return []; }),
+        (SB.getFoundationsProgress ? SB.getFoundationsProgress() : Promise.resolve([])).catch(e=>{ console.error('fnd progress load err', e); return []; }),
+        (SB.getInstrumentAssignments ? SB.getInstrumentAssignments() : Promise.resolve([])).catch(e=>{ console.error('inst assignments load err', e); return []; }),
+        (SB.getInstrumentProgress ? SB.getInstrumentProgress() : Promise.resolve([])).catch(e=>{ console.error('inst progress load err', e); return []; })
       ]),
       new Promise((_,rej)=>setTimeout(()=>rej(new Error('Initial data load timeout')), 20000))
     ]);
@@ -2056,6 +2060,13 @@ async function initAppData(){
     if (!window.DB) window.DB = { hospitalSystems: [], facilities: [], staff: [], systems: [] };
     if(typeof mapFacilityFromBackend === 'function') window.DB.facilities = (facs||[]).map(mapFacilityFromBackend); else window.DB.facilities = facs||[];
     if(typeof mapStaffFromBackend === 'function') window.DB.staff = (staff||[]).map(mapStaffFromBackend); else window.DB.staff = staff||[];
+    // SBD Foundations (#22): hydrate per-staff assignments + 3-gate progress from Supabase.
+    // Audit columns (assignment_type/trigger_event, dual-written with legacy type/trigger)
+    // map onto the internal names; facility_id -> facilityId (server auto-fills it).
+    window.DB.foundationsAssignments = (fndAssignments||[]).map(a=>({ id:a.id, staffId:a.staff_id, moduleId:a.module_id, assignedBy:a.assigned_by, type:a.assignment_type||a.type, trigger:(a.trigger_event!=null?a.trigger_event:a.trigger), facilityId:a.facility_id||null, assignedDate:a.assigned_date, status:a.status }));
+    window.DB.foundationsProgress = (fndProgress||[]).map(p=>({ staffId:p.staff_id, moduleId:p.module_id, g1:p.g1, g2:p.g2, g3:p.g3, complete:p.complete, facilityId:p.facility_id||null }));
+    window.DB.instrumentAssignments = (instAssignments||[]).map(a=>({ id:a.id, staffId:a.staff_id, moduleId:a.module_id, assignedBy:a.assigned_by, type:a.assignment_type||a.type, trigger:(a.trigger_event!=null?a.trigger_event:a.trigger), facilityId:a.facility_id||null, assignedDate:a.assigned_date, status:a.status }));
+    window.DB.instrumentProgress = (instProgress||[]).map(p=>({ staffId:p.staff_id, moduleId:p.module_id, g1:p.g1, g2:p.g2, g3:p.g3, complete:p.complete, facilityId:p.facility_id||null }));
     const currentSystems = window.DB.hospitalSystems || [];
     const memoryOptimistic = currentSystems.filter(s => s.id && String(s.id).startsWith('sys-'));
     const storageOptimistic = JSON.parse(localStorage.getItem('sbd_optimistic_systems') || '[]');

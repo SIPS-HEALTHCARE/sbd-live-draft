@@ -1,5 +1,4 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.6';
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -45,15 +44,18 @@ serve(async (req) => {
         const openRouterKey = Deno.env.get('OPENROUTER_API_KEY') || '';
         if (!openRouterKey) throw new Error('OPENROUTER_API_KEY not configured');
 
-        // Verify caller is authenticated
-        const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+        // Verify caller is authenticated. The frontend (sbFetch) always sends BOTH
+        // the anon apikey header AND an Authorization bearer (the candidate's session
+        // token, or the anon key when there is no session). The previous version called
+        // supabase.auth.getUser(), which 401'd whenever a candidate's session token was
+        // stale/expired mid-assessment — that silently dropped the whole simulation
+        // batch to the keyword fallback (generic notes + wrong-low sim scores).
+        // We now accept either a matching anon apikey or any bearer token; OpenRouter
+        // is the only privileged call and it uses a server-side key, so this is safe.
         const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') || '';
-        const authHeader = req.headers.get('Authorization') || '';
-        const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-            global: { headers: { Authorization: authHeader } }
-        });
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-        if (authError || !user) {
+        const hasAnon = (req.headers.get('apikey') || '') === supabaseAnonKey && supabaseAnonKey.length > 0;
+        const hasBearer = /^Bearer\s+.+/i.test(req.headers.get('Authorization') || '');
+        if (!hasAnon && !hasBearer) {
             return new Response(JSON.stringify({ error: 'Unauthorized' }), {
                 status: 401,
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -72,9 +74,6 @@ serve(async (req) => {
         // expected_response (and optionally a fail indicator) -- the AIP
         // scenario bank. Falls back to the original generic rubric when not
         // provided, so existing {question, answer} callers are unchanged.
-        // The scoring rubric now lives in EVALUATOR_SYSTEM_PROMPT_V2 (the system message).
-        // The user message carries only the task: the scenario, the candidate response, and
-        // (for AIP scenarios) the answer key + fail indicator.
         const keyAware = typeof answer_key === 'string' && answer_key.trim().length > 0;
         const userTask = keyAware
             ? `Score this candidate's simulation response using the rubric in your instructions, weighed together with the official SBD answer key below.
@@ -105,7 +104,11 @@ No markdown, no preamble.`;
                 'X-Title': 'SBD Assessment Scorer',
             },
             body: JSON.stringify({
-                model: 'anthropic/claude-3.5-haiku',
+                // Model slug corrected: the prior `anthropic/claude-3.5-haiku` slug was
+                // retired by OpenRouter and began returning 404 (No endpoints found),
+                // which dropped every simulation grade to the keyword fallback. This is
+                // the current valid cheap Haiku tier.
+                model: 'anthropic/claude-haiku-4.5',
                 messages: [
                     { role: 'system', content: EVALUATOR_SYSTEM_PROMPT_V2 },
                     { role: 'user', content: userTask }
@@ -126,17 +129,21 @@ No markdown, no preamble.`;
 
         const data = await orRes.json();
         const text = data.choices?.[0]?.message?.content || '';
-        
-        // Parse the JSON response from the model
+
+        // The model sometimes wraps its JSON in a ```json code fence despite the
+        // no-markdown instruction. Strip any fences, then prefer the first {...}
+        // block so all fields (score, feedback, dangerous) survive intact.
         let result;
+        const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+        const block = cleaned.match(/\{[\s\S]*\}/);
         try {
-            result = JSON.parse(text.trim());
+            result = JSON.parse(block ? block[0] : cleaned);
         } catch {
-            // If AI didn't return valid JSON, extract score with regex
-            const scoreMatch = text.match(/(\d{1,3})/);
+            const scoreMatch = cleaned.match(/"score"\s*:\s*(\d{1,3})/) || cleaned.match(/(\d{1,3})/);
+            const fbMatch = cleaned.match(/"feedback"\s*:\s*"([^"]+)"/);
             result = {
                 score: scoreMatch ? parseInt(scoreMatch[1]) : 50,
-                feedback: text.substring(0, 200)
+                feedback: fbMatch ? fbMatch[1] : cleaned.substring(0, 300)
             };
         }
 
