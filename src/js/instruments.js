@@ -65,7 +65,22 @@ const INSTRUMENT_MODULES = [
     {q:'Kocher clamps are distinguished from Kelly clamps by:',opts:['Size only','Kocher clamps have teeth at the tips; Kelly clamps do not','Color coding','Kocher are curved only'],ans:1},
     {q:'What tray set would you expect to find larger retractors (Richardson, Deaver) and bowel clamps?',opts:['Minor Procedure Tray','Basin Set','Lap/General Surgery Basic Set','Laparoscopic Basic Tray'],ans:2},
     {q:'Which instrument category includes Army-Navy and Richardson?',opts:['Cutting and Dissecting','Clamping and Occluding','Retracting and Exposing','Suturing and Stapling'],ans:2},
-    {q:'What is a depth gauge used for?',opts:['Measuring temperature','Measuring screw length for orthopedic hardware placement','Measuring blood loss','Testing sterilizer depth'],ans:1}
+    {q:'What is a depth gauge used for?',opts:['Measuring temperature','Measuring screw length for orthopedic hardware placement','Measuring blood loss','Testing sterilizer depth'],ans:1},
+    {q:'Which scalpel handle sizes are included in the White Belt cutting instruments?',opts:['#3, #4, and #7','#1, #2, and #5','#10, #11, and #15','#6, #8, and #9'],ans:0},
+    {q:'Which scissors are described as very small with fine tips?',opts:['Mayo scissors','Metzenbaum scissors','Iris scissors','Tissue scissors'],ans:2},
+    {q:'Adson forceps are best described as:',opts:['Long with atraumatic serrations','Small with fine tips','Tweezers-style with circular serrated tips','Heavy with teeth at the tips'],ans:1},
+    {q:'Tissue forceps in the Grasping & Holding category come in which two variants?',opts:['Curved and angled','Perforating and non-perforating','Smooth and toothed','Straight and malleable'],ans:2},
+    {q:'What feature distinguishes an Allis clamp?',opts:['Teeth for grasping tissue','Smooth jaws for delicate tissue','A large curved blade for deep retraction','Multiple holes along the shaft'],ans:0},
+    {q:'Which clamp is described as a large, heavy hemostat?',opts:['Mosquito clamp','Kelly clamp','Towel clamp','Rochester-Pean clamp'],ans:3},
+    {q:'Which features are common to all instruments in the Clamping & Occluding category?',opts:['Insulated shafts and valves','Box locks and ratchets','Smooth jaws and fine tips','Graduated measurement markings'],ans:1},
+    {q:'What is the purpose of a towel clamp?',opts:['Occluding medium vessels','Grasping delicate tissue','Securing surgical drapes','Holding suture needles'],ans:2},
+    {q:'A Richardson retractor is identified by:',opts:['A right-angle blade','Prongs for skin retraction','A self-retaining ratchet','A double-ended handheld design'],ans:0},
+    {q:'Which retractor is pronged and used for skin?',opts:['Deaver retractor','Richardson retractor','Army-Navy retractor','Rake retractor'],ans:3},
+    {q:'Which needle holder is smaller and used for fine suturing?',opts:['Mayo-Hegar needle holder','Heaney needle holder','Webster needle holder','Olsen-Hegar needle holder'],ans:2},
+    {q:'A Heaney needle holder is designed for:',opts:['Fine suturing with a smaller frame','Heavy, deep pelvic suturing','Combined needle holding and suture cutting','Standard suturing with cross-hatched jaws'],ans:1},
+    {q:'Probes in the Measuring & Probing category have what tip design?',opts:['Sharp cutting tips','Smooth rounded tips for exploring','Perforating points','Pronged tips'],ans:1},
+    {q:'What is the function of dilators?',opts:['Exploring tracts with a rounded tip','Measuring screw length','Manual wound irrigation','Enlarging openings using graduated sizes'],ans:3},
+    {q:'Which items make up a Basin Set?',opts:['Basins, graduated pitcher, and medicine cup','Trocars, lap scissors, and graspers','Scalpel handles, forceps, and needle holders','Periosteal elevators and bone curettes'],ans:0},
   ],
   simulations:[
     {s:'You are handed a double-ended handheld retractor. One end has a narrow blade, the other a wider blade. What is it?',opts:['Richardson retractor','Army-Navy retractor','Deaver retractor','Weitlaner retractor'],ans:1},
@@ -77,7 +92,22 @@ const INSTRUMENT_MODULES = [
     {s:'Someone hands you a suction device with many small holes along the shaft instead of a single opening at the tip. What is it?',opts:['Yankauer','Frazier','Poole suction','Bulb syringe'],ans:2},
     {s:'You are building a laparoscopic tray. Which instruments would NOT belong?',opts:['Trocars and laparoscopic scissors','Laparoscopic grasper and clip applier','Richardson retractors and Deaver retractors','Suction/irrigation cannula'],ans:2},
     {s:'A clamp in the tray has a ratchet that clicks at position 1 and 3 but slips past position 2. What do you do?',opts:['Use it, two positions work','Remove from service; the ratchet must engage at every position','Oil the mechanism','Only report if it slips at all positions'],ans:1},
-    {s:'You pick up a heavy curved retractor blade about 12 inches long with no moving parts. What is it most likely?',opts:['Weitlaner retractor','Army-Navy retractor','Deaver retractor','Rake retractor'],ans:2}
+    {s:'You pick up a heavy curved retractor blade about 12 inches long with no moving parts. What is it most likely?',opts:['Weitlaner retractor','Army-Navy retractor','Deaver retractor','Rake retractor'],ans:2},
+    {s:'A surgeon asks for a clamp that will hold delicate tissue without crushing it. Which do you pass?',opts:['Allis clamp','Kocher clamp','Babcock clamp','Rochester-Pean clamp'],ans:2},
+    {s:'In decontam you pick up a flat metal instrument with a groove at one end and no hinges, ratchets, or moving parts. What is it?',opts:['A malleable probe','A scalpel handle','A depth gauge','A dilator'],ans:1},
+    {s:'You need the smallest, most delicate hemostat for a fine case. Which clamp do you select?',opts:['Kelly clamp','Rochester-Pean clamp','Kocher clamp','Mosquito clamp'],ans:3},
+    {s:'The count sheet for a Basic Soft Tissue Set calls for the standard needle holder with cross-hatched jaws. Which instrument do you place?',opts:['Webster needle holder','Heaney needle holder','Olsen-Hegar needle holder','Mayo-Hegar needle holder'],ans:3},
+    {s:'A minor procedure setup needs a device for manual irrigation with no suction connection. What do you add?',opts:['Yankauer suction','Poole suction','Bulb syringe','Frazier suction'],ans:2},
+    {s:'You are picking instruments for a neuro case that needs precise suctioning in a small field. Which suction tip is appropriate?',opts:['Frazier suction','Yankauer suction','Poole suction','Bulb syringe'],ans:0},
+    {s:'A clinic requests a tray for a simple wound closure. Which White Belt tray set is designed for this?',opts:['Basin Set','Lap/General Surgery Basic Set','Minor Procedure Tray','Laparoscopic Basic Tray'],ans:2},
+    {s:'While assembling a tray, the count sheet lists periosteal elevators and bone curettes. Which tray are you building?',opts:['Basic Soft Tissue Set','Orthopedic Basic Soft Tissue Set','Minor Procedure Tray','Basin Set'],ans:1},
+    {s:'The OR asks for towel clamps that will not puncture disposable drapes. Which variant do you provide?',opts:['Perforating towel clamps','Mosquito clamps','Allis clamps','Non-perforating towel clamps'],ans:3},
+    {s:'A surgeon wants to explore a tract with an instrument that can be bent to shape and has a smooth rounded tip. What do you provide?',opts:['A depth gauge','A dilator','A malleable probe','Iris scissors'],ans:2},
+    {s:'A count sheet lists both curved and straight versions of a medium hemostat. Which instrument is this?',opts:['Kelly clamp','Kocher clamp','Rochester-Pean clamp','Mosquito clamp'],ans:0},
+    {s:'A new tech asks what belongs in a Basic Soft Tissue Set. Which contents list is correct?',opts:['Scalpel handles, scissors, forceps, needle holders, retractors, clamps, and a Yankauer','Trocars, lap scissors, graspers, and a clip applier','Basins, a graduated pitcher, and a medicine cup','Periosteal elevators and bone curettes'],ans:0},
+    {s:'The surgeon wants general-purpose cutting scissors, not the fine-tipped Iris. Which White Belt scissors are described as general cutting?',opts:['Metzenbaum scissors','Mayo scissors','Laparoscopic scissors','Tissue scissors'],ans:3},
+    {s:'You are completing a Laparoscopic Basic Tray that already has trocars, lap scissors, and graspers. Which instrument completes the set?',opts:['Clip applier','Bowel clamp','Periosteal elevator','Depth gauge'],ans:0},
+    {s:'During function testing, a Weitlaner retractor\'s ratchet will not hold the arms open under light pressure. What is your assessment?',opts:['Acceptable; an assistant can hold it open','The self-retaining mechanism has failed; remove it from service','Normal wear for retractors','Use it only for shallow cases'],ans:1},
   ],
   observations:[
     {id:'oi1-1',text:'Can name at least five instruments from the Cutting & Dissecting category without reference'},
@@ -109,7 +139,22 @@ const INSTRUMENT_MODULES = [
     {q:'Bipolar forceps differ from monopolar instruments because:',opts:['They are larger','Energy passes between the two tips rather than through the patient to a grounding pad','They do not need insulation','They are single-use only'],ans:1},
     {q:'When inspecting a Gigli saw, what are you looking for?',opts:['Blade sharpness','Wire for kinks or breaks and secure handle attachment','Insulation integrity','Ratchet function'],ans:1},
     {q:'What does the suction irrigator combine?',opts:['Cutting and grasping','Suction and irrigation in one instrument','Retraction and clamping','Electrosurgical and suctioning'],ans:1},
-    {q:'If a bone rongeur spring does not return the jaws to the open position, what do you do?',opts:['Force it open manually','Remove from service; the spring mechanism has failed','Oil the spring','Use it in the closed position'],ans:1}
+    {q:'If a bone rongeur spring does not return the jaws to the open position, what do you do?',opts:['Force it open manually','Remove from service; the spring mechanism has failed','Oil the spring','Use it in the closed position'],ans:1},
+    {q:'Trocar obturators come in which two forms?',opts:['Curved and straight','Sharp and blunt','Perforating and non-perforating','Monopolar and bipolar'],ans:1},
+    {q:'Which parts of a trocar must be inspected?',opts:['Footplate and blade','Cross-hatched jaws','Lumen and valve','Wire and handle attachment'],ans:2},
+    {q:'What are the inspection points for laparoscopic scissors?',opts:['Footplate and cutting edge','Insulation and tip alignment','Wire kinks and handle attachment','Cup jaws and hinge'],ans:1},
+    {q:'Where must insulation be intact on bipolar forceps?',opts:['Only at the tips','Only along the mid-shaft','At all contact points','Insulation is not required on bipolar instruments'],ans:2},
+    {q:'What are the inspection points for a pituitary rongeur?',opts:['Cup jaws and hinge, checking for cracks','Footplate and cutting edge','Wire tension and handle attachment','Electrode and activation'],ans:0},
+    {q:'When inspecting a curette, you examine the:',opts:['Ratchet engagement','Valve seal','Insulation continuity','Cup edge for chips or deformity'],ans:3},
+    {q:'A bone file or rasp is inspected for:',opts:['Surface clogging and corrosion','Spring tension','Footplate alignment','Lumen patency'],ans:0},
+    {q:'Which inspection points apply to a Stille-Luer bone rongeur?',opts:['Electrode and activation','Tip sharpness and shaft straightness','Jaw edges and spring return','Valve seal and lumen'],ans:2},
+    {q:'Besides the cutting edge, what must be checked on an osteotome?',opts:['That the handle is secure','Spring return to open','Footplate travel','Insulation at the grip'],ans:0},
+    {q:'What do you inspect on a nerve hook?',opts:['Cup jaws for cracks','The tip for deformity and the shaft for kinks','Insulation along the shaft','The footplate for chips'],ans:1},
+    {q:'What is inspected on a dural hook?',opts:['Cup jaws and hinge','Footplate and cutting edge','Tip sharpness and a straight shaft','Spring return and jaw edges'],ans:2},
+    {q:'Inspection of the combined suction irrigator includes:',opts:['Cutting edges for chips','Cross-hatched jaw surfaces','Footplate spring action','Lumen patency, clear ports, and intact seals'],ans:3},
+    {q:'In addition to checking the tip for burrs, what must be verified for a trocar obturator?',opts:['Fit with its matching trocar','Insulation continuity','Spring return to the open position','Cup edge condition'],ans:0},
+    {q:'Under the 9-point standard, an instrument that fails a single inspection point is:',opts:['Passed if the other eight points pass','Removed from service','Used with a notation in the log','Sent to the OR with a caution tag'],ans:1},
+    {q:'Which sequence correctly lists the first three points of the 9-point inspection standard?',opts:['Insulation, Lumens, Corrosion','Tips, Serrations, Cutting Edges','Cutting Edges, Cleanliness, Ratchet Function','Cleanliness, Ratchet Function, Box Lock/Hinge'],ans:3},
   ],
   simulations:[
     {s:'You are inspecting a laparoscopic grasper and notice a tiny crack in the insulation near the tip. The crack does not expose bare metal yet. What is your action?',opts:['Acceptable since metal is not exposed','Remove from service immediately; any insulation compromise is a patient safety risk','Monitor and check again next use','Mark it for repair next week'],ans:1},
@@ -121,7 +166,22 @@ const INSTRUMENT_MODULES = [
     {s:'A bipolar forceps has darkened residue on the tips from previous use. Is this acceptable after cleaning?',opts:['Yes, darkening is cosmetic','No; residual buildup on bipolar tips affects electrical conductivity and must be completely removed. If cleaning does not remove it, the instrument needs specialized cleaning or repair','Only matters for monopolar','Carbon buildup improves conductivity'],ans:1},
     {s:'You test a trocar valve and air leaks through when the obturator is removed. What does this mean?',opts:['Normal operation','The valve seal is compromised; the trocar cannot maintain pneumoperitoneum. Remove from service','Trocars are single-use anyway','Only matters for 12mm trocars'],ans:1},
     {s:'A mallet head feels slightly loose when you grip the handle and push on the head. What is your assessment?',opts:['Normal for mallets','The head-handle junction is compromised; a loose mallet head is a safety hazard. Remove from service','Tighten it yourself','Only a problem if the head wobbles visibly'],ans:1},
-    {s:'You are inspecting a periosteal elevator. The blade edge has started to curl slightly at one corner. What do you do?',opts:['Acceptable for a periosteal elevator','Remove from service; a curled blade edge indicates deformation that affects function and can damage tissue','Straighten it with pliers','Only matters for sharp elevators'],ans:1}
+    {s:'You are inspecting a periosteal elevator. The blade edge has started to curl slightly at one corner. What do you do?',opts:['Acceptable for a periosteal elevator','Remove from service; a curled blade edge indicates deformation that affects function and can damage tissue','Straighten it with pliers','Only matters for sharp elevators'],ans:1},
+    {s:'You close a pair of laparoscopic scissors and the tips do not meet in alignment, though the insulation is intact. What is your action?',opts:['Release it; insulation is the only critical check','Remove it from service; tip alignment is an inspection point for laparoscopic scissors','Bend the tips back into alignment by hand','Pass it if the shaft is straight'],ans:1},
+    {s:'A laparoscopic grasper\'s jaws close fully, but the ratchet will not hold them closed. What do you do?',opts:['Release it; the jaws still close','Ask the OR to hold the handle manually during use','Remove it from service; jaw closure and ratchet must both function','Tape the handle closed'],ans:2},
+    {s:'While testing a laparoscopic clip applier, the jaw mechanism sticks halfway through its travel. What is your assessment?',opts:['The jaw mechanism has failed inspection; remove it from service','Acceptable if the lumen is clear','Normal for clip appliers','Work the jaws until they loosen and release it'],ans:0},
+    {s:'A monopolar electrosurgical pencil passes the electrode and insulation checks, but you cannot verify activation. Can it be released?',opts:['Yes; electrode and insulation are sufficient','Yes, if it looks undamaged','Yes, the OR can test it at setup','No; activation must be verified before release'],ans:3},
+    {s:'You find a small insulation nick on a bipolar forceps at a point where the user\'s hand contacts the instrument. The tips are clean. What do you do?',opts:['Release it; only tip insulation matters on bipolar','Remove it immediately; insulation must be intact at all contact points','Cover the nick and release','Monitor it over the next few uses'],ans:1},
+    {s:'A Gigli saw\'s wire has a small kink near the handle attachment, but the wire is not broken. What is your action?',opts:['Remove it from service; kinks in the wire are an inspection failure','Straighten the kink and release','Acceptable as long as the wire is unbroken','Only replace the handle'],ans:0},
+    {s:'You inspect a bone rongeur: the spring action is crisp, but one cutting edge has a visible chip. What do you do?',opts:['Release it; the spring is the critical check','Release it and note the chip on the count sheet','Remove it from service; a failed cutting edge check fails the instrument','Use it for soft tissue only'],ans:2},
+    {s:'After washing, a bone rasp still has debris clogged in its surface. What is your action?',opts:['Release it; rasps are always textured','Pick out the visible debris at the assembly table and release','Release it and flag it for cleaning next cycle','Do not release it; the surface must be free of clogging before it can pass inspection'],ans:3},
+    {s:'You find a hairline crack at the hinge of a pituitary rongeur. The cups close normally. What is your assessment?',opts:['Acceptable while the cups still close','Remove it from service; cracks at the hinge are an inspection failure','Monitor the crack at each reprocessing','Only a problem if the crack reaches the cups'],ans:1},
+    {s:'A Kerrison rongeur has a small chip on its footplate, though the spring action is smooth. Can it be released?',opts:['Yes; the spring action is what matters','Yes, if the surgeon is notified','No; the footplate is a Kerrison inspection point and chips fail it','Yes, after smoothing the chip with a file'],ans:2},
+    {s:'During inspection, a dural hook\'s tip has dulled compared to a new one. What do you do?',opts:['Remove it from service; tip sharpness is the dural hook\'s inspection point','Release it; dural hooks are meant to be blunt','Sharpen it at the assembly table','Release it if the shaft is straight'],ans:0},
+    {s:'You inspect a hinged instrument from a specialty tray and find debris packed in the serrations after washing. Under the 9-point standard, what happens?',opts:['It passes if the ratchet and box lock work','It passes with a note to the next shift','It can be wiped at the assembly table and released','It fails; cleanliness and serrations are inspection points, and failing any point removes it from service'],ans:3},
+    {s:'A coworker suggests skipping the lumen check on a suction irrigator because it \'looks clean from the outside.\' How do you respond?',opts:['Agree; visual inspection of the exterior is enough','Decline; lumens are one of the nine inspection points and lumen patency must be verified','Agree if it was machine washed','Check only the suction port to save time'],ans:1},
+    {s:'While assembling, you grab a trocar obturator from a different set and it seats loosely in your trocar. What do you do?',opts:['Use it; loose seating is fine for blunt entry','Force it in until it seats tightly','Do not substitute; an obturator must be verified to fit its matching trocar','Wrap the pair and let the OR decide'],ans:2},
+    {s:'You spot orange-brown corrosion on the box lock area of an instrument that otherwise functions perfectly. What is your assessment?',opts:['It fails inspection; corrosion is one of the nine points and any failed point removes it from service','It passes because function is normal','Polish it at the assembly table and release','Corrosion only matters on cutting edges'],ans:0},
   ],
   observations:[
     {id:'oi2-1',text:'Can identify all four laparoscopic instruments (#31-34) by sight and name'},
@@ -153,7 +213,22 @@ const INSTRUMENT_MODULES = [
     {q:'A Finochietto rib spreader uses what mechanism to hold open?',opts:['Spring tension','A ratchet mechanism','Magnetic closure','Screw lock'],ans:1},
     {q:'Dura scissors require inspection under:',opts:['Normal light','Magnification due to very fine tips','Ultraviolet light','No special inspection'],ans:1},
     {q:'A right angle (Mixter) clamp has a tip at what angle?',opts:['45 degrees','90 degrees','180 degrees','Variable'],ans:1},
-    {q:'Before reprocessing a breast biopsy needle/localization wire, what must you verify?',opts:['The brand','Whether it is single-use (most facilities use single-use)','The color','The surgeon preference'],ans:1}
+    {q:'Before reprocessing a breast biopsy needle/localization wire, what must you verify?',opts:['The brand','Whether it is single-use (most facilities use single-use)','The color','The surgeon preference'],ans:1},
+    {q:'Which Green Belt retractor is described as a flexible arm system?',opts:['Omni-Tract Retractor','Balfour Retractor','Thompson Retractor','Harrington Retractor'],ans:0},
+    {q:'What design characterizes the Balfour retractor?',opts:['A ratchet mechanism for spreading ribs','A flexible blade shaped by the surgeon','A self-retaining design with a center blade and lateral arms','A table-mounted frame with multiple connectors'],ans:2},
+    {q:'The Harrington retractor is best described as:',opts:['A flexible arm system','A curved retractor for deep abdominal retraction','A gynecologic self-retaining retractor','A perforating drape clamp'],ans:1},
+    {q:'What makes the malleable (ribbon) retractor different from the other Green Belt retractors?',opts:['It is table-mounted','It is self-retaining','It uses a ratchet mechanism','It is flexible and can be shaped by the surgeon'],ans:3},
+    {q:'The Finochietto rib spreader is used in which surgical specialty?',opts:['Gynecologic','Thoracic','Neurosurgical','Vascular'],ans:1},
+    {q:'Which clamp has a rounded jaw designed for large vessels?',opts:['Bulldog Clamp','Right Angle (Mixter) Clamp','Pean Clamp','Backhaus Towel Clip'],ans:2},
+    {q:'A bulldog clamp is used for:',opts:['Clamping chest tubes','Atraumatic bowel clamping','Perforating surgical drapes','Small temporary vessel occlusion'],ans:3},
+    {q:'A Duval clamp is designed for use on what tissue?',opts:['Lung tissue','Bowel','Dura','Large vessels'],ans:0},
+    {q:'What jaw feature does the pituitary rongeur have for disc removal?',opts:['A fenestrated triangular jaw','A 90-degree tip','A small cup','A spring-loaded serrated jaw'],ans:2},
+    {q:'Bipolar bayonet forceps are angled for what purpose?',opts:['Neurosurgical coagulation','Lung tissue grasping','Rib spreading','Skin retraction'],ans:0},
+    {q:'How many tray sets are included in the Green Belt curriculum?',opts:['8','10','12','14'],ans:2},
+    {q:'A probe and groove director combines a probe with what second function?',opts:['A vessel occluder','A bone rongeur','A coagulation tip','An incision guide'],ans:3},
+    {q:'The Thompson retractor is designed for retraction in which types of procedures?',opts:['Gynecologic procedures','Abdominal and thoracic procedures','Ophthalmic procedures','Superficial skin procedures'],ans:1},
+    {q:'How many instruments does the Major Laparotomy tray set contain?',opts:['80+','40+','25+','120+'],ans:0},
+    {q:'Which instruments are specifically noted for the Laminectomy/Spine tray set?',opts:['Trials, reamers, and power equipment','Heavy rongeurs and elevators','Satinsky clamps and vessel loops','Rib spreaders and lung clamps'],ans:1},
   ],
   simulations:[
     {s:'You are disassembling a Bookwalter retractor system after decontamination. The count sheet lists 14 components. You count 13. What do you do?',opts:['Close enough for a retractor system','Stop. Account for every component. A missing blade or connector could be left in the patient field. Search thoroughly and report the discrepancy','Add a similar component','Document 13 and proceed'],ans:1},
@@ -165,7 +240,22 @@ const INSTRUMENT_MODULES = [
     {s:'A bulldog clamp spring feels weak compared to others in the set. It still closes but with noticeably less tension. What do you do?',opts:['It still closes, so it works','Remove from service; weak spring tension means the clamp may not maintain occlusion on a vessel during surgery','Test it on paper to confirm','Replace the spring yourself'],ans:1},
     {s:'During assembly of a Thoracotomy set, you notice the chest tube clamp has residual dried material in the jaw serrations despite going through decontam. What is your action?',opts:['Sterilization will handle it','Return for re-cleaning; the instrument is not clean and cannot proceed to sterilization. High bioburden from thoracic cases requires thorough cleaning','Wipe it with alcohol','Note it and proceed'],ans:1},
     {s:'You are asked to identify an instrument with a fenestrated triangular jaw. What is it?',opts:['Doyen clamp','Satinsky clamp','Lung clamp (Duval)','Pean clamp'],ans:2},
-    {s:'A surgeon preference card requests a "Mixter." What instrument do they want?',opts:['A mixing bowl','A right angle clamp','A Metzenbaum scissors','A malleable retractor'],ans:1}
+    {s:'A surgeon preference card requests a "Mixter." What instrument do they want?',opts:['A mixing bowl','A right angle clamp','A Metzenbaum scissors','A malleable retractor'],ans:1},
+    {s:'A surgeon preference card for a tonsillectomy lists a \'Schnidt.\' What instrument do you pull?',opts:['A rounded-jaw vessel clamp','A long angled hemostat (tonsil clamp)','A non-perforating towel clip','An atraumatic bowel clamp'],ans:1},
+    {s:'The OR reports that towel clips have been puncturing disposable drapes. The surgeon requests clips that will not perforate. Which do you supply?',opts:['Backhaus towel clips','Schnidt clamps','Jones towel clips','Pean clamps'],ans:2},
+    {s:'A gynecologic case is posted and the surgeon asks for the self-retaining retractor designed for gynecologic procedures. Which do you send?',opts:['O\'Sullivan-O\'Connor retractor','Finochietto rib spreader','Harrington retractor','Balfour retractor'],ans:0},
+    {s:'You are assembling a Vascular Surgery tray. Which items from your Green Belt training should you expect to verify on this set?',opts:['Rib spreaders and lung clamps','Heavy rongeurs and elevators','Intestinal clamps and towel clips','Satinsky clamps, bulldog clamps, and vessel loops'],ans:3},
+    {s:'An unlabeled tray arrives at assembly containing a Finochietto rib spreader and Duval lung clamps. Which Green Belt tray set does it most likely belong to?',opts:['Thoracotomy','Bowel Resection','Craniotomy','Shoulder Arthroplasty'],ans:0},
+    {s:'At the inspection station you pick up a fine double hook used for skin retraction. What instrument are you holding?',opts:['Frazier dural hook','Skin hook','Probe and groove director','Right angle clamp'],ans:1},
+    {s:'You are building a Bowel Resection tray and the count sheet lists intestinal clamps. Which instrument satisfies that line?',opts:['Duval lung clamps','Satinsky clamps','Doyen clamps','Pean clamps'],ans:2},
+    {s:'A tray you are verifying contains trials, reamers, and power equipment. Which Green Belt tray set are you working on?',opts:['Shoulder Arthroplasty','Laminectomy/Spine','Major Laparotomy','Open Cholecystectomy'],ans:0},
+    {s:'A new tech asks which Green Belt retractors mount to the OR table. What is the correct pair?',opts:['Bookwalter and Thompson','Balfour and O\'Sullivan-O\'Connor','Malleable and Harrington','Finochietto and Omni-Tract'],ans:0},
+    {s:'During Craniotomy tray assembly, the count sheet lists a fine hook used on the dura. Which instrument do you place?',opts:['Skin hook','Pituitary rongeur','Dura scissors','Frazier dural hook'],ans:3},
+    {s:'Your Lead asks you to stage the two laparoscopic tray sets that appear on the Green Belt tray list. Which pair do you pull?',opts:['Laparoscopic Bariatric and Robotic','Laparoscopic Colectomy and Laparoscopic Hysterectomy','Open Cholecystectomy and CABG','Thoracotomy and Craniotomy'],ans:1},
+    {s:'During Thoracotomy set assembly, the count sheet lists a heavy clamp used for chest tubes. Which instrument do you place?',opts:['A bulldog clamp','A Doyen clamp','A chest tube clamp','A Jones towel clip'],ans:2},
+    {s:'You are staging case carts and see a Green Belt set labeled \'Retractor System Assembly.\' Which retractor system does the Green Belt tray list pair with this set?',opts:['Thompson','Omni-Tract','Balfour','Bookwalter'],ans:3},
+    {s:'After a craniotomy case, the pickup contains dura scissors, bipolar bayonet forceps, a Frazier dural hook, and a Backhaus towel clip. The neuro count sheet lists only neurosurgical instruments. Which item does not belong on that list?',opts:['Dura scissors','Bipolar bayonet forceps','Backhaus towel clip','Frazier dural hook'],ans:2},
+    {s:'The Lead asks you to gather the two self-retaining retractors from the Green Belt list for an in-service on retractor mechanisms. Which pair do you gather?',opts:['Bookwalter and Thompson','Balfour and O\'Sullivan-O\'Connor','Malleable and Harrington','Finochietto and skin hook'],ans:1},
   ],
   observations:[
     {id:'oi3-1',text:'Can identify components of a retractor system (Bookwalter or equivalent) and verify count'},
@@ -198,7 +288,22 @@ const INSTRUMENT_MODULES = [
     {q:'What is an aortic punch used for?',opts:['Punching holes in sterile packaging','Creating precise holes in the aorta for graft anastomosis','Testing aortic valve function','Marking instruments'],ans:1},
     {q:'Vessel loops are typically:',opts:['Reusable after sterilization','Single-use silicone used for vessel identification and retraction','Metal clamps','Suture material'],ans:1},
     {q:'A LigaSure device seals tissue by:',opts:['Suturing','Stapling','Fusing tissue with controlled electrical energy and pressure','Ultrasonic vibration'],ans:2},
-    {q:'How many total named instruments should a Blue Belt tech know?',opts:['50','80','100','150'],ans:2}
+    {q:'How many total named instruments should a Blue Belt tech know?',opts:['50','80','100','150'],ans:2},
+    {q:'An aortic root retractor provides exposure of what structure?',opts:['The sternum','The cardiac root','The lung hilum','The renal pelvis'],ans:1},
+    {q:'What is the function of a malleable coronary suction tip?',opts:['Flexible suction of the cardiac surgical field','Creating holes in the aorta','Retracting the aortic root','Clamping coronary vessels'],ans:0},
+    {q:'Micro scissors are described as:',opts:['Heavy scissors for dense tissue','Curved scissors for ophthalmic procedures','Extremely fine scissors for microsurgical work','Spring-handled needle drivers'],ans:2},
+    {q:'An arthroscopy shaver handpiece is a powered instrument used for:',opts:['Cataract removal','Sternotomy','Vessel sealing','Joint debridement'],ans:3},
+    {q:'A phacoemulsification handpiece is used in which procedure?',opts:['Cataract surgery','Hip arthroscopy','Bladder examination','Sinus surgery'],ans:0},
+    {q:'How many tray sets are included in the Blue Belt curriculum?',opts:['8','10','12','16'],ans:2},
+    {q:'In addition to the leak test, what inspection does a flexible ureteroscope require?',opts:['Ratchet inspection','Channel inspection','Spring tension check','Jaw alignment check'],ans:1},
+    {q:'A laparoscopic stapler performs which two actions?',opts:['Suctions and irrigates','Coagulates and retracts','Grasps and dissects','Fires staples and cuts'],ans:3},
+    {q:'An endoscopic clip applier is described as:',opts:['Multi-fire, for laparoscopic hemostasis','Single-use silicone for vessel identification','An ultrasonic energy device','A rigid scope for bladder examination'],ans:0},
+    {q:'A Harmonic scalpel handpiece uses ultrasonic energy to do what to tissue?',opts:['Fuse it under pressure','Cut and coagulate it','Apply clips to it','Staple and divide it'],ans:1},
+    {q:'Which of the following is a Blue Belt tray set?',opts:['Major Laparotomy','Laparoscopic Hysterectomy','Laparoscopic Bariatric','Open Cholecystectomy'],ans:2},
+    {q:'Besides the optics, which inspection points are listed for a rigid cystoscope?',opts:['Light post and seals','Ratchet and box lock','Jaw surfaces and cable','Staple cartridge and anvil'],ans:0},
+    {q:'Which Blue Belt tray set is designated for trauma?',opts:['Liver Resection','Spinal Fusion','Laparoscopic Bariatric','Exploratory Laparotomy'],ans:3},
+    {q:'A sternal saw is a powered instrument used to perform what?',opts:['A craniotomy','A sternotomy','A laminectomy','An arthroscopy'],ans:1},
+    {q:'The Blue Belt robotic tray set is associated with which system?',opts:['Bookwalter','Omni-Tract','da Vinci','LigaSure'],ans:2},
   ],
   simulations:[
     {s:'A sternal saw arrives in decontam after a cardiac case. The OR scrub says "just throw it in the washer." What is your response?',opts:['Follow their instruction','Powered instruments require manufacturer-specific cleaning. Consult the IFU before processing. A sternal saw cannot simply go in the washer','Soak it overnight','Send it to biomedical engineering'],ans:1},
@@ -210,7 +315,22 @@ const INSTRUMENT_MODULES = [
     {s:'You are building an Exploratory Laparotomy (Trauma) set. This is a rapid deployment set. Why does the Lead need to know every instrument in it?',opts:['For billing purposes','The Lead must assess immediate availability. In trauma, any missing instrument delays care. Complete knowledge of the set profile enables instant readiness assessment','It is the smallest set','Trauma sets do not need full verification'],ans:1},
     {s:'A cystoscope rigid optic has a small scratch on the lens. Images appear slightly foggy. What is your assessment?',opts:['Acceptable for an older scope','A scratched optic degrades visualization for the surgeon. Remove for evaluation and possible repair or replacement','Clean the lens again','Only matters for flexible scopes'],ans:1},
     {s:'You are training a Green Belt tech on CABG instrumentation. They say they are uncomfortable handling cardiac instruments because they have never seen them before. What is the correct approach?',opts:['Tell them to figure it out','Walk through each instrument by name, category, and function. Demonstrate inspection points. Confirm understanding before letting them handle independently. This is what coaching authority looks like','Let them skip cardiac sets','Assign them to a different area permanently'],ans:1},
-    {s:'A phacoemulsification handpiece arrived from the ophthalmic OR. You have never processed one before. What is your first step?',opts:['Process it like any other instrument','Locate and read the manufacturer IFU before touching it. Ophthalmic instruments have specific processing requirements, and TASS (Toxic Anterior Segment Syndrome) is a known risk from improper cleaning','Ask the OR to clean it themselves','Put it in the ultrasonic'],ans:1}
+    {s:'A phacoemulsification handpiece arrived from the ophthalmic OR. You have never processed one before. What is your first step?',opts:['Process it like any other instrument','Locate and read the manufacturer IFU before touching it. Ophthalmic instruments have specific processing requirements, and TASS (Toxic Anterior Segment Syndrome) is a known risk from improper cleaning','Ask the OR to clean it themselves','Put it in the ultrasonic'],ans:1},
+    {s:'You are assembling a Valve Replacement set and the aortic root retractor is on the count sheet. Which points does your training list for its inspection?',opts:['Blade and ratchet','Optics and seals','Jaw surfaces and cable','Channels and light post'],ans:0},
+    {s:'At the assembly table for an ophthalmology set, you must place the curved, fine scissors used for ophthalmic procedures. Which instrument is it?',opts:['Micro scissors','Corneal scissors','Castroviejo micro needle driver','Aortic punch'],ans:1},
+    {s:'The Knee Arthroscopy case cart is missing its fluid management component. Which item do you add?',opts:['Arthroscopy pump tubing','Coronary suction tip','Vessel loops','LigaSure device'],ans:0},
+    {s:'An orthopedic surgeon posts a hip arthroscopy and asks for the access instruments. What do you prepare?',opts:['The Knee Arthroscopy set','The Hip Replacement Revision set','The Hip Portal Set','The Spinal Fusion set'],ans:2},
+    {s:'A LigaSure vessel sealing device arrives at your inspection station. Which points must you inspect?',opts:['Blade and ratchet','Optics and light post','Channels and seals','Jaw surfaces and cable'],ans:3},
+    {s:'In decontam you find micro scissors loose beneath heavy instruments in a transport bin. What is your concern?',opts:['None; scissors are durable instruments','Micro scissors are extremely fine and easily damaged by contact with heavy instruments; inspect them carefully before they proceed','Only visible rust would be a problem','They only require a rinse before assembly'],ans:1},
+    {s:'Two cardiac cases are posted for tomorrow. Which two Blue Belt cardiac tray sets do you stage?',opts:['Open Heart/CABG and Valve Replacement','Liver Resection and Spinal Fusion','Laparoscopic Bariatric and Robotic','FESS and Cochlear Implant'],ans:0},
+    {s:'Silicone vessel loops arrive in decontam mixed with instruments from an open vascular case. A new tech asks whether to load them in the washer for reuse. What do you tell them?',opts:['Wash and sterilize them with the set','They are single-use silicone items; they are not reprocessed. Discard them per policy','Soak them in enzymatic solution first','Send them out for repair evaluation'],ans:1},
+    {s:'Urology posts a procedure requiring ureteral and renal access. Which scope do you prepare?',opts:['Rigid cystoscope','Arthroscopy shaver handpiece','Flexible ureteroscope','Phacoemulsification handpiece'],ans:2},
+    {s:'An ENT surgeon posts an endoscopic sinus case. Which Blue Belt tray set do you stage?',opts:['Cochlear Implant','Spinal Fusion','FESS/Endoscopic Sinus','Knee Arthroscopy'],ans:2},
+    {s:'Two clip appliers arrive in decontam: one from an open vascular case and one from a laparoscopic case. Which applier belongs to the open case?',opts:['Endoscopic clip applier','Laparoscopic stapler','Harmonic scalpel handpiece','Ligaclip applier'],ans:3},
+    {s:'Tomorrow\'s schedule shows a liver resection, a hip revision arthroplasty, and a bariatric laparoscopic case. Which three Blue Belt sets do you pull?',opts:['Liver Resection, Hip Replacement Revision, and Laparoscopic Bariatric','Open Heart/CABG, Valve Replacement, and Robotic','Laparoscopic Bowel Resection, FESS, and Cochlear Implant','Spinal Fusion, Knee Arthroscopy, and Exploratory Laparotomy'],ans:0},
+    {s:'You are organizing the energy device storage area. Which two Blue Belt devices belong there?',opts:['Sternal saw and arthroscopy shaver','Harmonic scalpel and LigaSure','Aortic punch and Ligaclip applier','Ureteroscope and cystoscope'],ans:1},
+    {s:'Urology posts a bladder examination. Which scope do you prepare?',opts:['Flexible ureteroscope','Rigid ureteroscope','Flexible cystoscope','Rigid cystoscope'],ans:3},
+    {s:'A microsurgeon needs the needle driver for microsurgical suturing. Which instrument do you provide?',opts:['Micro scissors','Corneal scissors','Castroviejo micro needle driver','Endoscopic clip applier'],ans:2},
   ],
   observations:[
     {id:'oi4-1',text:'Can identify at least three cardiac instruments (sternal saw, aortic punch, coronary suction tip, aortic root retractor)'},
@@ -336,6 +456,8 @@ function openInstModule(mid){
 }
 // Per-attempt shuffled question order + practice-retake flags (mirrors foundations.js).
 // The order array maps display index -> original item index; submitInstGate scores against it.
+// Each attempt draws INST_GATE_DRAW questions from the module's full bank.
+const INST_GATE_DRAW=10;
 let INST_GATE_ORDER={};
 let INST_GATE_RETAKE={};
 function retakeInstGate(mid,gk){
@@ -347,7 +469,7 @@ function renderInstGate(m,s,gk,items,title,desc){
  const gates=getInstModuleGates(s.id,m.id),g=gates[gk];
  const retake=!!INST_GATE_RETAKE[m.id+gk];
  const locked=g.status==='pass'&&!retake;
- const order=shuffleArray(items.map((_,i)=>i));
+ const order=shuffleArray(items.map((_,i)=>i)).slice(0,INST_GATE_DRAW);
  INST_GATE_ORDER[m.id+gk]=order;
  let h='<div class="fnd-kc"><div style="font-size:16px;font-weight:700;color:#e2e8f0;margin-bottom:4px">'+title+'</div><div style="font-size:12px;color:#94a3b8;margin-bottom:16px">'+desc+'</div>';
  if(locked){h+='<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--r);padding:14px;text-align:center;margin-bottom:16px"><div style="font-size:20px;font-weight:700;color:#4ade80">'+g.score+'%</div><div style="font-size:13px;color:#4ade80;font-weight:600">Passed</div><button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="retakeInstGate(\''+m.id+'\',\''+gk+'\')">Retake (practice)</button></div>';}
@@ -366,16 +488,16 @@ function renderInstG3(m,s,gates){
 function submitInstGate(mid,gk){
  const m=INSTRUMENT_MODULES.find(x=>x.id===mid);if(!m)return;const s=getStaff(ST.staffId);if(!s)return;
  const items=gk==='g1'?m.questions:m.simulations;
- // Score against the shuffled order the user actually saw (display idx -> item idx)
- const order=INST_GATE_ORDER[m.id+gk]||items.map((_,i)=>i);
+ // Score against the shuffled draw the user actually saw (display idx -> item idx)
+ const order=INST_GATE_ORDER[m.id+gk]||items.map((_,i)=>i).slice(0,INST_GATE_DRAW);
  delete INST_GATE_RETAKE[m.id+gk];
  let correct=0;
  order.forEach((origIdx,qi)=>{const sel=document.querySelector('input[name="inst-'+gk+'-'+m.id+'-'+qi+'"]:checked');if(sel&&parseInt(sel.value)===items[origIdx].ans) correct++;});
- const score=Math.round((correct/items.length)*100);saveInstGateScore(s.id,m.id,gk,score);
+ const score=Math.round((correct/order.length)*100);saveInstGateScore(s.id,m.id,gk,score);
  order.forEach((origIdx,qi)=>{const item=items[origIdx];const opts=document.querySelectorAll('input[name="inst-'+gk+'-'+m.id+'-'+qi+'"]');opts.forEach((opt,oi)=>{const lbl=opt.closest('.fnd-q-opt');if(!lbl)return;opt.disabled=true;if(oi===item.ans)lbl.classList.add('fnd-q-correct');else if(opt.checked&&oi!==item.ans)lbl.classList.add('fnd-q-wrong');});});
  const rEl=document.getElementById('inst-gate-result');const gateLabel=gk==='g1'?'Knowledge':'Simulation';
- if(rEl){if(score>=80){rEl.innerHTML='<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--r);padding:14px 16px;text-align:center;margin-top:12px"><div style="font-size:24px;font-weight:700;color:#4ade80">'+score+'%</div><div style="font-size:13px;color:#4ade80;font-weight:600;margin:4px 0">'+gateLabel+' Gate Passed</div><div style="font-size:12px;color:#94a3b8">'+correct+' of '+items.length+' correct.</div></div>';toast(gateLabel+' passed: '+score+'%','ok');}
- else{rEl.innerHTML='<div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:var(--r);padding:14px 16px;text-align:center;margin-top:12px"><div style="font-size:24px;font-weight:700;color:#f87171">'+score+'%</div><div style="font-size:13px;color:#f87171;font-weight:600;margin:4px 0">Not Yet Passing</div><div style="font-size:12px;color:#94a3b8">'+correct+' of '+items.length+' correct. 80% required.</div><button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="openInstModule(\''+mid+'\')">Try Again</button></div>';toast('Score: '+score+'%. 80% required.','err');}}
+ if(rEl){if(score>=80){rEl.innerHTML='<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--r);padding:14px 16px;text-align:center;margin-top:12px"><div style="font-size:24px;font-weight:700;color:#4ade80">'+score+'%</div><div style="font-size:13px;color:#4ade80;font-weight:600;margin:4px 0">'+gateLabel+' Gate Passed</div><div style="font-size:12px;color:#94a3b8">'+correct+' of '+order.length+' correct.</div></div>';toast(gateLabel+' passed: '+score+'%','ok');}
+ else{rEl.innerHTML='<div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:var(--r);padding:14px 16px;text-align:center;margin-top:12px"><div style="font-size:24px;font-weight:700;color:#f87171">'+score+'%</div><div style="font-size:13px;color:#f87171;font-weight:600;margin:4px 0">Not Yet Passing</div><div style="font-size:12px;color:#94a3b8">'+correct+' of '+order.length+' correct. 80% required.</div><button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="openInstModule(\''+mid+'\')">Try Again</button></div>';toast('Score: '+score+'%. 80% required.','err');}}
 }
  
 // ── Hospital Portal: Render Instruments ──
