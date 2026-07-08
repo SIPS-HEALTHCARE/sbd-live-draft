@@ -841,8 +841,10 @@ function applyAdminFilter(staffArr){
 // ============================================================ POSITION SCHOOL ENGINE
 // ============================================================
 // POSITION SCHOOL PRACTICE BANKS
-// 80% on both tests unlocks PS track completion request
+// 80% on both tests, PS_PASSES_REQUIRED times each, moves the track into
+// Observation; a leader confirms observation to complete the track.
 // ============================================================
+const PS_PASSES_REQUIRED = 3;
 const PS_TRACKS = {
   '01':  {id:'01',  name:'QA School',               desc:'Own the verification layer of SPD operations. Audits, data, variance investigation, compliance.',  belt:'Green', tier:'green', seq:1, prereq:null},
   '02A': {id:'02A', name:'OR Liaison School',        desc:'Manage the SPD-OR interface. Case cart build accuracy, preference cards, surgeon communication.',   belt:'Green', tier:'green', seq:2, prereq:'01'},
@@ -989,7 +991,7 @@ function ensurePSTracks(staff){
 }
 
 // Get status of a specific PS track for a staff member
-// Returns: 'locked' | 'eligible' | 'active' | 'testing' | 'complete'
+// Returns: 'locked' | 'eligible' | 'active' | 'testing' | 'observation' | 'complete'
 function getTrackStatus(staff, tid){
   ensurePSTracks(staff);
   const t = PS_TRACKS[tid];
@@ -1052,11 +1054,49 @@ function readyToTestPS(staffId, tid){
   ensurePSTracks(s);
   if(getTrackStatus(s, tid) !== 'active') return;
   s.ps.tracks[tid].status = 'testing';
-  toast('Marked as ready to test. Your assessor has been notified.');
+  // Passes may already be banked from practicing while active
+  const advanced = maybeAdvancePSObservation(s, tid);
+  toast(advanced ? 'All practice passes complete. You are now in Observation — awaiting leader sign-off.' : 'Marked as ready to test. Your assessor has been notified.');
   if (IS_LIVE && typeof SB !== 'undefined' && SB.updateStaff) {
     SB.updateStaff(staffId, mapStaffPSToBackend(s)).catch(e=>{ console.warn('PS sync failed:', e); toast('Saved on screen, but syncing to the server failed — please refresh to confirm.','err'); });
   }
   if(typeof renderSPosSchool === 'function') renderSPosSchool();
+}
+
+// Pass counts for a track, tolerating legacy records with no passes key
+function getPSPassCounts(td){
+  const p = (td && td.passes) || {};
+  return { knowledge: p.knowledge || 0, simulation: p.simulation || 0 };
+}
+
+// Advance testing → observation once both modes have PS_PASSES_REQUIRED passes.
+// Mutates the track in place; caller persists. Returns true if advanced.
+function maybeAdvancePSObservation(s, tid){
+  const td = s.ps.tracks[tid];
+  if(!td || td.status !== 'testing') return false;
+  const p = getPSPassCounts(td);
+  if(p.knowledge < PS_PASSES_REQUIRED || p.simulation < PS_PASSES_REQUIRED) return false;
+  td.status = 'observation';
+  if(!td.observationAt) td.observationAt = new Date().toISOString().slice(0,10);
+  return true;
+}
+
+// Record a passing (>=80%) practice attempt on the persisted ps_tracks JSONB.
+// Always spreads the existing track object — never partial-writes a track.
+function recordPSPass(s, tid, mode){
+  if(!s || !PS_TRACKS[tid] || !['knowledge','simulation'].includes(mode)) return;
+  ensurePSTracks(s);
+  const t = { ...(s.ps.tracks[tid] || {}) };
+  const passes = { ...getPSPassCounts(t) };
+  passes[mode] += 1;
+  t.passes = passes;
+  s.ps.tracks[tid] = t;
+  if(maybeAdvancePSObservation(s, tid)){
+    toast('All practice passes complete. You are now in Observation — awaiting leader sign-off.', 'ok');
+  }
+  if (IS_LIVE && typeof SB !== 'undefined' && SB.updateStaff) {
+    SB.updateStaff(s.id, mapStaffPSToBackend(s)).catch(e=>{ console.warn('PS sync failed:', e); toast('Saved on screen, but syncing to the server failed — please refresh to confirm.','err'); });
+  }
 }
 
 // Admin/Assessor action: award star (complete a track)
@@ -1067,6 +1107,10 @@ function completePSTrack(staffId, tid){
   const ts = getTrackStatus(s, tid);
   if(ts === 'locked' || ts === 'complete') return;
   if(!s.ps.tracks[tid]) s.ps.tracks[tid] = {};
+  if(ts === 'observation'){
+    s.ps.tracks[tid].observationBy = ST.user?.id || null;
+    if(!s.ps.tracks[tid].observationAt) s.ps.tracks[tid].observationAt = new Date().toISOString().slice(0,10);
+  }
   s.ps.tracks[tid].status = 'complete';
   s.ps.tracks[tid].completedAt = new Date().toISOString().slice(0,10);
   if(!s.ps.tracks[tid].startedAt) s.ps.tracks[tid].startedAt = s.ps.tracks[tid].completedAt;
@@ -1075,7 +1119,7 @@ function completePSTrack(staffId, tid){
   s.stars = calcTotalPSStars(s);
   // Update legacy ps.done for any completed track
   s.ps.done = [...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].some(t => getTrackStatus(s,t)==='complete');
-  s.ps.enrolled = [...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].some(t => ['active','testing'].includes(getTrackStatus(s,t)));
+  s.ps.enrolled = [...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].some(t => ['active','testing','observation'].includes(getTrackStatus(s,t)));
   toast('Position School track complete! Star awarded.');
   
   if (IS_LIVE && typeof SB !== 'undefined' && SB.updateStaff) {
@@ -4816,7 +4860,7 @@ function pSection(title, badge){
 
 // PS status for print
 function pPSStatus(status){
-  const map={complete:'<span class="badge badge-green">Complete ★</span>',testing:'<span class="badge badge-blue">Ready to Test</span>',active:'<span class="badge badge-warn">In Progress</span>',eligible:'<span class="badge badge-gold">Available</span>',locked:'<span class="badge badge-muted">Locked</span>'};
+  const map={complete:'<span class="badge badge-green">Complete ★</span>',observation:'<span class="badge badge-blue">In Observation</span>',testing:'<span class="badge badge-blue">Ready to Test</span>',active:'<span class="badge badge-warn">In Progress</span>',eligible:'<span class="badge badge-gold">Available</span>',locked:'<span class="badge badge-muted">Locked</span>'};
   return map[status]||'–';
 }
 
@@ -5384,7 +5428,7 @@ function downloadFacilityReportV2(fid){
   const handoff = rptHandoffStatus(st);
   const promoReady = st.filter(s=>s.promo);
   const psTestQueue=[];
-  st.forEach(s=>{[...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].forEach(tid=>{if(getTrackStatus(s,tid)==='testing')psTestQueue.push({s,tid});});});
+  st.forEach(s=>{[...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].forEach(tid=>{if(['testing','observation'].includes(getTrackStatus(s,tid)))psTestQueue.push({s,tid});});});
   const activeFacs=DB.facilities.filter(f=>f.active!==false);
   const facRanked=[...activeFacs].sort((a,b)=>facStats(b.id).greenPct-facStats(a.id).greenPct);
   const networkRank=facRanked.findIndex(f=>f.id===facId)+1;
@@ -5467,7 +5511,7 @@ function downloadFacilityReportV2(fid){
     <tbody>${Object.keys(PS_TRACKS).map(tid=>{
       const t=PS_TRACKS[tid];
       const done=st.filter(s=>getTrackStatus(s,tid)==='complete').length;
-      const act=st.filter(s=>['active','testing'].includes(getTrackStatus(s,tid))).length;
+      const act=st.filter(s=>['active','testing','observation'].includes(getTrackStatus(s,tid))).length;
       const elig=st.filter(s=>getTrackStatus(s,tid)==='eligible').length;
       return `<tr>
         <td style="font-weight:600">${t.name}</td>
@@ -5589,7 +5633,7 @@ function downloadSystemReportV2(){
     <tbody>${Object.keys(PS_TRACKS).map(tid=>{
       const t=PS_TRACKS[tid];
       const done=allSt.filter(s=>getTrackStatus(s,tid)==='complete').length;
-      const act=allSt.filter(s=>['active','testing'].includes(getTrackStatus(s,tid))).length;
+      const act=allSt.filter(s=>['active','testing','observation'].includes(getTrackStatus(s,tid))).length;
       const elig=allSt.filter(s=>getTrackStatus(s,tid)==='eligible').length;
       const locked=allSt.filter(s=>getTrackStatus(s,tid)==='locked').length;
       return`<tr><td style="font-weight:600">${t.name}</td>
@@ -5638,7 +5682,7 @@ function downloadNetworkReport(){
   const promoReady = allSt.filter(s=>s.promo);
   const stagnationAll = rptStagnation(allSt);
   const psTestQueueAll=[];
-  allSt.forEach(s=>{[...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].forEach(tid=>{if(getTrackStatus(s,tid)==='testing')psTestQueueAll.push({s,tid});});});
+  allSt.forEach(s=>{[...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].forEach(tid=>{if(['testing','observation'].includes(getTrackStatus(s,tid)))psTestQueueAll.push({s,tid});});});
   const oipPending=allSt.filter(s=>!s.oip||!s.oip.completed).length;
   if(ST.user) SB.logReportDownload('network', ST.user.id).catch(e => { if (e instanceof ReferenceError || e instanceof TypeError || e instanceof SyntaxError) throw e; });
 
@@ -5708,7 +5752,7 @@ function downloadNetworkReport(){
       const t=PS_TRACKS[tid];
       const done=allSt.filter(s=>getTrackStatus(s,tid)==='complete').length;
       const act=allSt.filter(s=>getTrackStatus(s,tid)==='active').length;
-      const testing=allSt.filter(s=>getTrackStatus(s,tid)==='testing').length;
+      const testing=allSt.filter(s=>['testing','observation'].includes(getTrackStatus(s,tid))).length;
       const elig=allSt.filter(s=>getTrackStatus(s,tid)==='eligible').length;
       const locked=allSt.filter(s=>getTrackStatus(s,tid)==='locked').length;
       return`<tr><td style="font-weight:600">${t.name}</td>
@@ -5878,7 +5922,7 @@ async function renderSReport(){
           <td style="font-size:12px;font-weight:600">${t.name}</td>
           <td><span style="font-size:9.5px;font-weight:700;color:${t.tier==='green'?'var(--blt-gr)':'var(--blue)'}">
             ${t.tier==='green'?'GREEN':'BLUE'} TIER</span></td>
-          <td>${status==='complete'?'<span class="pill p-ok">Complete ★</span>':status==='testing'?'<span class="pill p-blue">Ready to Test</span>':status==='active'?'<span class="pill p-warn">In Progress</span>':'<span class="pill p-gold">Available</span>'}</td>
+          <td>${status==='complete'?'<span class="pill p-ok">Complete ★</span>':status==='observation'?'<span class="pill" style="background:rgba(168,85,247,.12);color:#a855f7;border:1px solid rgba(168,85,247,.3)">In Observation</span>':status==='testing'?'<span class="pill p-blue">Ready to Test</span>':status==='active'?'<span class="pill p-warn">In Progress</span>':'<span class="pill p-gold">Available</span>'}</td>
           <td style="font-size:11px;color:var(--txt3)">${td.promptedAt||'--'}</td>
           <td style="font-size:11px;color:var(--txt3)">${td.startedAt||'--'}</td>
           <td style="font-size:11px;color:${status==='complete'?'var(--ok)':'var(--txt3)'};font-weight:${status==='complete'?'600':'400'}">${td.completedAt||'--'}</td>
@@ -6053,31 +6097,34 @@ function openPSTrackDetail(tid, staffId){
     const psScores = s.psPracticeScores?.[tid] || {};
     const kScore = psScores.knowledge || 0;
     const sScore = psScores.simulation || 0;
-    const bothPassed = kScore >= 80 && sScore >= 80;
+    const passCounts = getPSPassCounts(td);
     const hasPendingReq = DB.psCompletionRequests?.find(r => r.sid===s.id && r.tid===tid && r.status==='pending');
-    
+
     const practiceSection = bank ? `
       <div style="background:var(--s2);border:1px solid var(--bdr);border-radius:var(--r);padding:14px;margin-top:14px">
         <div style="font-size:11px;font-weight:700;color:var(--txt);letter-spacing:.05em;margin-bottom:10px">SIPS INTELLIGENCE – PRACTICE TESTS</div>
-        <div style="font-size:11.5px;color:var(--txt2);margin-bottom:10px">Score 80%+ on both tests to unlock your track completion request.</div>
+        <div style="font-size:11.5px;color:var(--txt2);margin-bottom:10px">Score 80%+ on both tests ${PS_PASSES_REQUIRED} times each to enter Observation and unlock leader sign-off.</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
           <div style="background:${kScore>=80?'rgba(34,197,94,.06)':'var(--bg)'};border:1px solid ${kScore>=80?'rgba(34,197,94,.2)':'var(--bdr)'};border-radius:var(--rs);padding:10px;text-align:center;cursor:pointer" onclick="startPSPracticeTest('${tid}','knowledge')">
             <div style="font-size:11px;font-weight:700;color:var(--txt3);margin-bottom:4px">KNOWLEDGE</div>
             <div style="font-size:22px;font-weight:800;color:${kScore>=80?'var(--ok)':kScore>0?'var(--warn)':'var(--txt3)'}">${kScore>0?kScore+'%':'--'}</div>
+            <div style="font-size:10px;color:${passCounts.knowledge>=PS_PASSES_REQUIRED?'var(--ok)':'var(--txt3)'};margin-top:3px">Passes: ${passCounts.knowledge}/${PS_PASSES_REQUIRED}</div>
             <button class="btn ${kScore>=80?'btn-ghost':'btn-gold'} btn-xs" style="margin-top:6px;width:100%">${kScore>=80?'Retake':'Start'}</button>
           </div>
           <div style="background:${sScore>=80?'rgba(34,197,94,.06)':'var(--bg)'};border:1px solid ${sScore>=80?'rgba(34,197,94,.2)':'var(--bdr)'};border-radius:var(--rs);padding:10px;text-align:center;cursor:pointer" onclick="startPSPracticeTest('${tid}','simulation')">
             <div style="font-size:11px;font-weight:700;color:var(--txt3);margin-bottom:4px">SIMULATION</div>
             <div style="font-size:22px;font-weight:800;color:${sScore>=80?'var(--ok)':sScore>0?'var(--warn)':'var(--txt3)'}">${sScore>0?sScore+'%':'--'}</div>
+            <div style="font-size:10px;color:${passCounts.simulation>=PS_PASSES_REQUIRED?'var(--ok)':'var(--txt3)'};margin-top:3px">Passes: ${passCounts.simulation}/${PS_PASSES_REQUIRED}</div>
             <button class="btn ${sScore>=80?'btn-ghost':'btn-gold'} btn-xs" style="margin-top:6px;width:100%">${sScore>=80?'Retake':'Start'}</button>
           </div>
         </div>
-        ${hasPendingReq ? '<div style="text-align:center;font-size:12px;color:var(--warn);font-weight:600">⏳ Track completion request pending admin review</div>' :
-          bothPassed ? `<button class="btn btn-ok" style="width:100%;justify-content:center" onclick="requestPSCompletion('${tid}');closeModal()">Request Track Completion &#10003;</button>` : ''}
+        ${hasPendingReq ? '<div style="text-align:center;font-size:12px;color:var(--warn);font-weight:600">⏳ Sign-off request pending leader review</div>' :
+          status==='observation' ? `<button class="btn btn-ok" style="width:100%;justify-content:center" onclick="requestPSCompletion('${tid}');closeModal()">Request Sign-off &#10003;</button>` : ''}
       </div>` : '';
-    
+
     if(status==='eligible') actionBtn=practiceSection + `<button class="btn btn-gold" style="margin-top:10px;width:100%" onclick="beginPSTrack('${s.id}','${tid}');closeModal()">Begin ${t.name}</button>`;
     else if(status==='active') actionBtn=practiceSection + `<button class="btn btn-gold" style="margin-top:10px;width:100%" onclick="readyToTestPS('${s.id}','${tid}');closeModal()">Mark Ready to Test</button>`;
+    else if(status==='observation') actionBtn=`<div style="display:flex;align-items:center;gap:8px;margin-top:12px;padding:12px 14px;background:rgba(168,85,247,.08);border:1px solid rgba(168,85,247,.25);border-radius:var(--rs)"><span style="color:#a855f7;font-size:16px">&#128065;</span><span style="font-size:13px;font-weight:700;color:#a855f7">In Observation${td.observationAt?' since '+td.observationAt:''} – awaiting leader sign-off</span></div>` + practiceSection;
     else if(status==='complete') actionBtn=`<div style="display:flex;align-items:center;gap:8px;margin-top:12px;padding:12px 14px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:var(--rs)"><span style="color:var(--ok);font-size:18px">★</span><span style="font-size:13px;font-weight:700;color:var(--ok)">Track Complete – Star Earned</span></div>`;
     else actionBtn = practiceSection;
   }
@@ -6316,7 +6363,7 @@ function startPSPracticeTest(trackId, mode) {
   if (!bank) { toast('No practice content for this track yet.', 'err'); return; }
   const pool = mode === 'knowledge' ? bank.knowledge : bank.simulation;
   if (!pool || !pool.length) { toast('Practice content not available for this mode.', 'err'); return; }
-  const shuffled = [...pool].sort(() => Math.random() - 0.5);
+  const shuffled = shuffleArray(pool);
   PS_PRACTICE_STATE = {
     active: true, trackId, mode,
     questions: shuffled, current: 0, answers: [], score: 0,
@@ -6361,6 +6408,8 @@ function savePSPracticeScore(trackId, mode, score, total) {
   if (!s.psPracticeScores) s.psPracticeScores = {};
   if (!s.psPracticeScores[trackId]) s.psPracticeScores[trackId] = {};
   const pct = Math.round(score / total * 100);
+  // Passing attempts count toward observation eligibility (persisted in ps_tracks)
+  if (pct >= 80) recordPSPass(s, trackId, mode);
   const existing = s.psPracticeScores[trackId][mode] || 0;
   if (pct > existing) {
     s.psPracticeScores[trackId][mode] = pct;
@@ -6396,7 +6445,11 @@ function renderPSPracticeView(el) {
     const otherMode = ps.mode === 'knowledge' ? 'simulation' : 'knowledge';
     const scores = getPSPracticeScores(null, ps.trackId) || {};
     const otherScore = scores[otherMode] || 0;
-    const bothPassed = pct >= 80 && otherScore >= 80;
+    const _staff = getStaff(ST.staffId);
+    const _td = _staff?.ps?.tracks?.[ps.trackId] || {};
+    const _pc = getPSPassCounts(_td);
+    const _inObs = _td.status === 'observation';
+    const _passProg = `Knowledge ${_pc.knowledge}/${PS_PASSES_REQUIRED} &bull; Simulation ${_pc.simulation}/${PS_PASSES_REQUIRED}`;
 
     el.innerHTML = `
       <div style="max-width:600px;margin:0 auto">
@@ -6417,10 +6470,10 @@ function renderPSPracticeView(el) {
             <div style="font-size:10px;color:var(--txt3)">${otherScore>=80?'Threshold met':otherScore>0?'Below 80%':'Not taken yet'}</div>
           </div>
         </div>
-        ${bothPassed ? `<div style="background:rgba(34,197,94,.06);border:1.5px solid rgba(34,197,94,.3);border-radius:var(--r);padding:12px 16px;margin-bottom:14px">
-          <div style="font-size:12.5px;font-weight:700;color:var(--ok);margin-bottom:4px">Both Tests Passed: Track Completion Review Unlocked</div>
-          <div style="font-size:12px;color:var(--txt2)">You have met the 80% threshold on both tests for ${track ? track.name : 'this track'}. Your supervisor can now review you for track completion.</div>
-        </div>` : pct >= 80 ? `<div style="background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);border-radius:var(--rs);padding:11px 14px;margin-bottom:14px;font-size:12px;color:var(--txt2)"><strong style="color:var(--warn)">This test passed.</strong> Complete the ${ps.mode==='knowledge'?'Simulation Scenarios':'Knowledge Test'} at 80%+ to unlock track completion review.</div>` : `<div style="background:rgba(239,68,68,.05);border:1px solid rgba(239,68,68,.15);border-radius:var(--rs);padding:11px 14px;margin-bottom:14px;font-size:12px;color:var(--txt2)">Review the questions you missed and retake. <strong style="color:var(--err)">80% required</strong> on both tests to request track completion.</div>`}
+        ${_inObs ? `<div style="background:rgba(168,85,247,.06);border:1.5px solid rgba(168,85,247,.3);border-radius:var(--r);padding:12px 16px;margin-bottom:14px">
+          <div style="font-size:12.5px;font-weight:700;color:#a855f7;margin-bottom:4px">You Are In Observation</div>
+          <div style="font-size:12px;color:var(--txt2)">All required practice passes are complete for ${track ? track.name : 'this track'} (${_passProg}). A leader will now observe and sign off your track completion.</div>
+        </div>` : pct >= 80 ? `<div style="background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.2);border-radius:var(--rs);padding:11px 14px;margin-bottom:14px;font-size:12px;color:var(--txt2)"><strong style="color:var(--ok)">This attempt passed.</strong> Progress: ${_passProg}. Pass both tests ${PS_PASSES_REQUIRED} times each to enter Observation.</div>` : `<div style="background:rgba(239,68,68,.05);border:1px solid rgba(239,68,68,.15);border-radius:var(--rs);padding:11px 14px;margin-bottom:14px;font-size:12px;color:var(--txt2)">Review the questions you missed and retake. <strong style="color:var(--err)">80% required</strong> to bank a pass &mdash; progress: ${_passProg}.</div>`}
         ${wrongs.length ? `<div class="card mb14">
           <div class="card-hd"><div class="card-ttl">Review These</div><span class="pill p-err">${wrongs.length} missed</span></div>
           <div style="max-height:340px;overflow-y:auto">
@@ -6488,8 +6541,9 @@ function renderPSPracticeView(el) {
 function requestPSCompletion(tid) {
   const s = getStaff(ST.staffId);
   if (!s) return;
-  if (!s.psPracticeScores || !s.psPracticeScores[tid] || !s.psPracticeScores[tid].unlocked) {
-    toast('Complete both practice tests at 80% or above before requesting track completion.', 'err');
+  ensurePSTracks(s);
+  if (getTrackStatus(s, tid) !== 'observation') {
+    toast('Pass both practice tests at 80%+ ' + PS_PASSES_REQUIRED + ' times each to enter Observation before requesting sign-off.', 'err');
     return;
   }
   if (!DB.psCompletionRequests) DB.psCompletionRequests = [];
@@ -6500,8 +6554,8 @@ function requestPSCompletion(tid) {
     id: 'psr-' + Date.now(),
     sid: s.id, fid: s.fid, tid,
     trackName: track ? track.name : tid,
-    practiceK: s.psPracticeScores[tid].knowledge,
-    practiceS: s.psPracticeScores[tid].simulation,
+    practiceK: s.psPracticeScores?.[tid]?.knowledge || null,
+    practiceS: s.psPracticeScores?.[tid]?.simulation || null,
     requestedAt: new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),
     status: 'pending'
   });
@@ -6535,18 +6589,38 @@ function renderSPosSchool(){
     const isEligible = status==='eligible';
     const isActive = status==='active';
     const isTesting = status==='testing';
+    const isObservation = status==='observation';
     const isDone = status==='complete';
     const tierCol = t.tier==='green' ? 'var(--blt-g)' : 'var(--blue)';
 
     const prereqName = t.prereq ? PS_TRACKS[t.prereq].name : null;
+    const passCounts = getPSPassCounts(td);
+    const passProgress = `Knowledge ${passCounts.knowledge}/${PS_PASSES_REQUIRED} &bull; Simulation ${passCounts.simulation}/${PS_PASSES_REQUIRED}`;
 
     let badge='', actionBtns='', timeline='';
     if(isDone){
       badge=`<span style="background:#22c55e18;color:var(--ok);border:1px solid #22c55e33;border-radius:20px;padding:3px 10px;font-size:10px;font-weight:700">★ COMPLETE</span>`;
       timeline=td.completedAt?`<div style="font-size:10.5px;color:var(--txt3);margin-top:4px">Completed ${td.completedAt}${td.promptedAt&&td.promptedAt!==td.completedAt?' &bull; First available '+td.promptedAt:''}</div>`:'';
+    } else if(isObservation){
+      badge=`<span style="background:rgba(168,85,247,.12);color:#a855f7;border:1px solid rgba(168,85,247,.3);border-radius:20px;padding:3px 10px;font-size:10px;font-weight:700">IN OBSERVATION</span>`;
+      const hasPendingObsReq = DB.psCompletionRequests?.find(r => r.sid===s.id && r.tid===tid && r.status==='pending');
+      actionBtns=`<div style="margin-top:10px">
+        <div style="font-size:10.5px;color:var(--txt3);margin-bottom:8px">Practice passes: ${passProgress}</div>
+        ${hasPendingObsReq?'<div style="font-size:11px;color:var(--warn);font-weight:600">&#9203; Sign-off request pending leader review</div>':`<div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-gold btn-sm" onclick="requestPSCompletion('${tid}')">Request Sign-off</button>
+          <button class="btn btn-ghost btn-sm" onclick="openPSTrackDetail('${tid}','${s.id}')">Review Curriculum</button>
+        </div>`}
+      </div>`;
+      timeline=`<div style="font-size:10.5px;color:var(--txt3);margin-top:4px">In Observation${td.observationAt?' since '+td.observationAt:''} &bull; awaiting leader sign-off.</div>`;
     } else if(isTesting){
       badge=`<span style="background:rgba(59,130,246,.12);color:var(--blue);border:1px solid rgba(59,130,246,.25);border-radius:20px;padding:3px 10px;font-size:10px;font-weight:700">READY TO TEST</span>`;
-      timeline=`<div style="font-size:10.5px;color:var(--txt3);margin-top:4px">Started ${td.startedAt||'--'}. Awaiting assessor sign-off.</div>`;
+      actionBtns=`<div style="margin-top:10px">
+        <div style="font-size:10.5px;color:var(--txt3);margin-bottom:8px">Practice passes: ${passProgress} &mdash; pass both tests ${PS_PASSES_REQUIRED} times to enter Observation.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-sm" style="background:rgba(34,197,94,.12);border:1.5px solid rgba(34,197,94,.4);color:var(--ok);font-weight:700" onclick="openPSTrackDetail('${tid}','${s.id}')">&#9679; Study & Practice</button>
+        </div>
+      </div>`;
+      timeline=`<div style="font-size:10.5px;color:var(--txt3);margin-top:4px">Started ${td.startedAt||'--'}.</div>`;
     } else if(isActive){
       badge=`<span style="background:rgba(234,179,8,.1);color:var(--warn);border:1px solid rgba(234,179,8,.25);border-radius:20px;padding:3px 10px;font-size:10px;font-weight:700">IN PROGRESS</span>`;
       const _actScores = s.psPracticeScores?.[tid] || {};
@@ -6591,7 +6665,7 @@ function renderSPosSchool(){
         <div style="font-size:11px;color:var(--txt2)">${m.title}</div>
       </div>`).join('') : '';
 
-    return `<div style="background:${isDone?'rgba(34,197,94,.03)':isEligible||isActive||isTesting?'rgba(196,154,32,.03)':'var(--s2)'};border:1px solid ${isDone?'rgba(34,197,94,.15)':isEligible||isActive||isTesting?'var(--gold-bd)':'var(--bdr)'};border-radius:var(--r);padding:14px 16px;opacity:${isLocked?.55:1}">
+    return `<div style="background:${isDone?'rgba(34,197,94,.03)':isEligible||isActive||isTesting||isObservation?'rgba(196,154,32,.03)':'var(--s2)'};border:1px solid ${isDone?'rgba(34,197,94,.15)':isEligible||isActive||isTesting||isObservation?'var(--gold-bd)':'var(--bdr)'};border-radius:var(--r);padding:14px 16px;opacity:${isLocked?.55:1}">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
         <div style="flex:1;min-width:0">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;flex-wrap:wrap">
@@ -9083,7 +9157,7 @@ function renderXReports(){
         <tbody>${Object.keys(PS_TRACKS).map(tid=>{
           const t = PS_TRACKS[tid];
           const completed = allSt.filter(s=>getTrackStatus(s,tid)==='complete').length;
-          const active = allSt.filter(s=>['active','testing'].includes(getTrackStatus(s,tid))).length;
+          const active = allSt.filter(s=>['active','testing','observation'].includes(getTrackStatus(s,tid))).length;
           const eligible = allSt.filter(s=>getTrackStatus(s,tid)==='eligible').length;
           const locked = allSt.filter(s=>getTrackStatus(s,tid)==='locked').length;
           return `<tr>
@@ -9211,7 +9285,7 @@ function renderHDashboard(){
     <div class="card">
       <div class="card-hd"><div class="card-ttl">Recent Staff Activity</div><button class="btn btn-ghost btn-sm" onclick="hNav(document.querySelector('[data-view=h-staff]'),'h-staff','Staff Directory')">View All</button></div>
       <div style="overflow-x:auto"><table class="tbl" style="min-width:380px"><thead><tr><th>Name</th><th class="hide-sm">Role</th><th>Belt</th><th class="hide-sm">Days</th><th>Adv. Gates</th><th class="hide-sm">Pos School</th></tr></thead>
-      <tbody>${st.slice(0,6).map(s=>`<tr onclick="openHProfile('${s.id}')"><td class="fw7" style="white-space:nowrap">${fullName(s)}</td><td class="tc-dim hide-sm">${renderRoleDropdown(s)}</td><td style="white-space:nowrap">${beltBadge(s.belt)}</td><td class="hide-sm" style="font-size:12px;color:var(--txt3)">${daysAtLabel(s.since)}</td><td>${gateDots(s.nxt)}</td><td class="hide-sm">${(()=>{const st2=calcTotalPSStars(s);const et=getEligibleTracks(s);const at=[...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].filter(t=>['active','testing'].includes(getTrackStatus(s,t)));return at.length>0?'<span class="pill p-warn" style="font-size:9px">In Progress</span>':st2>0?'<span class="pill p-ok" style="font-size:9px">'+Array(st2).fill('★').join('')+'</span>':et.length>0?'<span class="pill p-gold" style="font-size:9px">Available</span>':'<span style="font-size:11px;color:var(--txt3)">--</span>';})()}</td></tr>`).join('')}</tbody>
+      <tbody>${st.slice(0,6).map(s=>`<tr onclick="openHProfile('${s.id}')"><td class="fw7" style="white-space:nowrap">${fullName(s)}</td><td class="tc-dim hide-sm">${renderRoleDropdown(s)}</td><td style="white-space:nowrap">${beltBadge(s.belt)}</td><td class="hide-sm" style="font-size:12px;color:var(--txt3)">${daysAtLabel(s.since)}</td><td>${gateDots(s.nxt)}</td><td class="hide-sm">${(()=>{const st2=calcTotalPSStars(s);const et=getEligibleTracks(s);const at=[...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].filter(t=>['active','testing','observation'].includes(getTrackStatus(s,t)));return at.length>0?'<span class="pill p-warn" style="font-size:9px">In Progress</span>':st2>0?'<span class="pill p-ok" style="font-size:9px">'+Array(st2).fill('★').join('')+'</span>':et.length>0?'<span class="pill p-gold" style="font-size:9px">Available</span>':'<span style="font-size:11px;color:var(--txt3)">--</span>';})()}</td></tr>`).join('')}</tbody>
       </table></div>
     </div>`;
 }
@@ -9237,7 +9311,7 @@ function renderHStaff(){
         <td class="hide-sm" style="font-size:12px;color:var(--txt3)">${daysAtPhrase(s.since)}</td>
         <td>${currentGateDots(s)}</td>
         <td>${nb?gateDots(s.nxt):'<span style="font-size:10px;color:var(--txt3)">Max</span>'}</td>
-        <td>${s.promo?'<span class="pill p-gold">Eligible</span>':[...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].some(t=>['active','testing'].includes(getTrackStatus(s,t)))?'<span class="pill p-warn">PS Active</span>':calcTotalPSStars(s)>0?'<span class="pill p-ok" style="font-size:9px">'+Array(calcTotalPSStars(s)).fill('★').join('')+'</span>':'<span style="font-size:10.5px;color:var(--txt3)">--</span>'}</td>
+        <td>${s.promo?'<span class="pill p-gold">Eligible</span>':[...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].some(t=>['active','testing','observation'].includes(getTrackStatus(s,t)))?'<span class="pill p-warn">PS Active</span>':calcTotalPSStars(s)>0?'<span class="pill p-ok" style="font-size:9px">'+Array(calcTotalPSStars(s)).fill('★').join('')+'</span>':'<span style="font-size:10.5px;color:var(--txt3)">--</span>'}</td>
         ${facAdmin?`<td onclick="event.stopPropagation()" style="white-space:nowrap">
           <button class="btn btn-ghost btn-xs" style="margin-right:3px" onclick="openRecordModal('${s.id}')">${ICO.record}</button>
           <button class="btn btn-blue btn-xs" onclick="openPromoteModal('${s.id}','admin')" title="Promote">⬆</button>
@@ -9477,8 +9551,9 @@ function renderHProfile(sid,context){
   const allT=[...PS_GREEN_TRACKS,...(bIdx>=3?PS_BLUE_TRACKS:[])];
   return allT.map(tid=>{
     const t=PS_TRACKS[tid]; const st2=getTrackStatus(s,tid); const td=s.ps&&s.ps.tracks?s.ps.tracks[tid]||{}:{};
-    const statusBadge=st2==='complete'?'<span class="pill p-ok">Complete ★</span>':st2==='testing'?'<span class="pill p-blue">Ready to Test</span>':st2==='active'?'<span class="pill p-warn">In Progress</span>':st2==='eligible'?'<span class="pill p-gold">Available</span>':'<span class="pill p-muted">Locked</span>';
-    const action=st2==='testing'?`<button class="btn btn-ok btn-xs" style="margin-left:8px" onclick="completePSTrack('${s.id}','${tid}'); event.stopPropagation()">Award Star</button>`:st2==='active'?`<span style="font-size:10.5px;color:var(--txt3);margin-left:8px">Since ${td.startedAt||'--'}</span>`:'';
+    const _p=getPSPassCounts(td);
+    const statusBadge=st2==='complete'?'<span class="pill p-ok">Complete ★</span>':st2==='observation'?'<span class="pill" style="background:rgba(168,85,247,.12);color:#a855f7;border:1px solid rgba(168,85,247,.3)">In Observation</span>':st2==='testing'?'<span class="pill p-blue">Ready to Test</span>':st2==='active'?'<span class="pill p-warn">In Progress</span>':st2==='eligible'?'<span class="pill p-gold">Available</span>':'<span class="pill p-muted">Locked</span>';
+    const action=st2==='observation'?`<button class="btn btn-ok btn-xs" style="margin-left:8px" onclick="completePSTrack('${s.id}','${tid}'); event.stopPropagation()">Confirm Observation & Award Star</button>`:st2==='testing'?`<span style="font-size:10.5px;color:var(--txt3);margin-left:8px">K ${_p.knowledge}/${PS_PASSES_REQUIRED} &bull; S ${_p.simulation}/${PS_PASSES_REQUIRED}</span><button class="btn btn-ok btn-xs" style="margin-left:8px" onclick="completePSTrack('${s.id}','${tid}'); event.stopPropagation()">Award Star</button>`:st2==='active'?`<span style="font-size:10.5px;color:var(--txt3);margin-left:8px">Since ${td.startedAt||'--'}</span>`:'';
     const canClick = st2 !== 'locked';
     return `<div class="irow" style="${st2==='locked'?'opacity:.5':'cursor:pointer'}" ${canClick?`onclick="openPSTrackDetail('${tid}','${s.id}')"`:''}><div class="ilbl" style="font-size:11.5px;flex:1">${t.name}</div><div class="ival" style="display:flex;align-items:center;gap:6px">${statusBadge}${action}</div></div>`;
   }).join('')+'<div class="irow" style="border:none"><div class="ilbl">Promotion Eligible</div><div class="ival">'+( s.promo?'<span class="pill p-gold">Yes</span>':'<span style="color:var(--txt3);font-size:12px">Not yet</span>' )+'</div></div>';
@@ -10857,12 +10932,13 @@ function renderHPosSchool(){
 
   // Build per-track stats
   const allTracks = Object.keys(PS_TRACKS);
-  let activeCount=0, completeCount=0, eligibleCount=0, testingCount=0;
+  let activeCount=0, completeCount=0, eligibleCount=0, testingCount=0, observationCount=0;
   st.forEach(s=>{
     allTracks.forEach(tid=>{
       const st2=getTrackStatus(s,tid);
       if(st2==='active') activeCount++;
       if(st2==='testing') testingCount++;
+      if(st2==='observation') observationCount++;
       if(st2==='complete') completeCount++;
       if(st2==='eligible') eligibleCount++;
     });
@@ -10873,7 +10949,7 @@ function renderHPosSchool(){
     const greenSt=getPSStarsAtBelt(s,'Green');
     const blueSt=getPSStarsAtBelt(s,'Blue');
     const totalSt=calcTotalPSStars(s);
-    const activeTracks=[...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].filter(tid=>['active','testing'].includes(getTrackStatus(s,tid)));
+    const activeTracks=[...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].filter(tid=>['active','testing','observation'].includes(getTrackStatus(s,tid)));
     const eligTracks=getEligibleTracks(s);
     let psCell='';
     if(totalSt>0||activeTracks.length>0||eligTracks.length>0){
@@ -10894,13 +10970,14 @@ function renderHPosSchool(){
     </tr>`;
   }
 
-  // Testing queue
+  // Sign-off queue: ready-to-test + in-observation staff both need leader action
   const testQueue=[];
   st.forEach(s=>{
     allTracks.forEach(tid=>{
-      if(getTrackStatus(s,tid)==='testing'){
+      const st2=getTrackStatus(s,tid);
+      if(st2==='testing'||st2==='observation'){
         const td=s.ps.tracks[tid]||{};
-        testQueue.push({s,tid,startedAt:td.startedAt});
+        testQueue.push({s,tid,status:st2,startedAt:td.startedAt,passes:getPSPassCounts(td)});
       }
     });
   });
@@ -10912,7 +10989,7 @@ function renderHPosSchool(){
     const t = PS_TRACKS[tid];
     const cur = PS_CURRICULUM[tid];
     const doneCount = st.filter(s=>getTrackStatus(s,tid)==='complete').length;
-    const activeCount2 = st.filter(s=>['active','testing'].includes(getTrackStatus(s,tid))).length;
+    const activeCount2 = st.filter(s=>['active','testing','observation'].includes(getTrackStatus(s,tid))).length;
     const eligCount = st.filter(s=>getTrackStatus(s,tid)==='eligible').length;
     const tierCol = t.tier==='green' ? 'var(--blt-g)' : 'var(--blue)';
     return `<div style="background:var(--s2);border:1px solid var(--bdr);border-radius:var(--rs);padding:12px 14px;cursor:pointer" onclick="openPSTrackDetail('${tid}',null)">
@@ -10942,23 +11019,24 @@ function renderHPosSchool(){
         <div class="stat-lbl">In Progress</div><div class="stat-val" style="color:var(--warn)">${activeCount}</div>
         <div class="stat-sub">Active tracks</div></div>
       <div class="stat-card"><div class="stat-accent" style="background:var(--blue)"></div>
-        <div class="stat-lbl">Ready to Test</div><div class="stat-val" style="color:var(--blue)">${testingCount}</div>
-        <div class="stat-sub">Awaiting assessor</div></div>
+        <div class="stat-lbl">Awaiting Sign-off</div><div class="stat-val" style="color:var(--blue)">${testingCount+observationCount}</div>
+        <div class="stat-sub">${observationCount} in observation</div></div>
       <div class="stat-card"><div class="stat-accent" style="background:var(--gold)"></div>
         <div class="stat-lbl">Available to Start</div><div class="stat-val" style="color:var(--gold)">${eligibleCount}</div>
         <div class="stat-sub">Tracks unlocked</div></div>
     </div>
 
     ${testQueue.length?`<div class="card mb16">
-      <div class="card-hd"><div class="card-ttl">Ready to Test</div><span class="pill p-blue">${testQueue.length} pending</span></div>
-      <div style="overflow-x:auto"><table class="tbl" style="min-width:400px">
-        <thead><tr><th>Staff Member</th><th>Belt</th><th>Track</th><th>Started</th><th>Action</th></tr></thead>
-        <tbody>${testQueue.map(({s,tid,startedAt})=>`<tr>
+      <div class="card-hd"><div class="card-ttl">Awaiting Sign-off</div><span class="pill p-blue">${testQueue.length} pending</span></div>
+      <div style="overflow-x:auto"><table class="tbl" style="min-width:480px">
+        <thead><tr><th>Staff Member</th><th>Belt</th><th>Track</th><th>Status</th><th>Started</th><th>Action</th></tr></thead>
+        <tbody>${testQueue.map(({s,tid,status,startedAt,passes})=>`<tr>
           <td class="fw7" onclick="openHProfile('${s.id}')" style="cursor:pointer">${fullName(s)}</td>
           <td>${beltBadge(s.belt,s)}</td>
           <td style="font-size:12px">${PS_TRACKS[tid].name}</td>
+          <td>${status==='observation'?'<span class="pill" style="background:rgba(168,85,247,.12);color:#a855f7;border:1px solid rgba(168,85,247,.3)">In Observation</span>':`<span class="pill p-blue">Ready to Test</span><div style="font-size:10px;color:var(--txt3);margin-top:2px">K ${passes.knowledge}/${PS_PASSES_REQUIRED} &bull; S ${passes.simulation}/${PS_PASSES_REQUIRED}</div>`}</td>
           <td style="font-size:11.5px;color:var(--txt3)">${startedAt||'--'}</td>
-          <td><button class="btn btn-ok btn-xs" onclick="completePSTrack('${s.id}','${tid}')">Award Star</button></td>
+          <td><button class="btn btn-ok btn-xs" onclick="completePSTrack('${s.id}','${tid}')">${status==='observation'?'Confirm Observation & Award Star':'Award Star'}</button></td>
         </tr>`).join('')}</tbody>
       </table></div>
     </div>`:''}
@@ -11007,7 +11085,7 @@ function renderHReports(){
   const handoff = rptHandoffStatus(st);
   const promoReady = st.filter(s=>s.promo);
   const psTestQueue = [];
-  st.forEach(s=>{ [...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].forEach(tid=>{ if(getTrackStatus(s,tid)==='testing') psTestQueue.push({s,tid}); }); });
+  st.forEach(s=>{ [...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].forEach(tid=>{ if(['testing','observation'].includes(getTrackStatus(s,tid))) psTestQueue.push({s,tid}); }); });
 
   const tr=DB.trends&&DB.trends[fid];
   const yrs=tr?Object.keys(tr).sort():[];
@@ -11134,7 +11212,7 @@ function renderHReports(){
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;padding:4px 0">
         ${Object.keys(PS_TRACKS).map(tid=>{
           const completed = st.filter(s=>getTrackStatus(s,tid)==='complete').length;
-          const active = st.filter(s=>['active','testing'].includes(getTrackStatus(s,tid))).length;
+          const active = st.filter(s=>['active','testing','observation'].includes(getTrackStatus(s,tid))).length;
           const eligible = st.filter(s=>getTrackStatus(s,tid)==='eligible').length;
           const t = PS_TRACKS[tid];
           return `<div style="background:var(--s2);border:1px solid var(--bdr);border-radius:var(--rs);padding:10px">
@@ -11240,7 +11318,7 @@ function renderHAssessments(){
   const pending   = st.filter(s=>(s.cur||{}).c===null||(s.cur||{}).s===null||(s.cur||{}).o===null);
   const promoReady= st.filter(s=>s.promo);
   const psQueue   = [];
-  st.forEach(s=>{[...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].forEach(tid=>{if(getTrackStatus(s,tid)==='testing')psQueue.push({s,tid});});});
+  st.forEach(s=>{[...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].forEach(tid=>{if(['testing','observation'].includes(getTrackStatus(s,tid)))psQueue.push({s,tid});});});
   const queueItems= DB.queue.filter(q=>{ const s=getStaff(q.sid); return s&&s.fid===fid; });
 
   document.getElementById('h-assessments').innerHTML=`
@@ -11398,9 +11476,9 @@ function renderAOverview(){
     ${(()=>{
       const eligible=DB.staff.filter(s=>beltIdx(s.belt)>=2);
       const psStars=eligible.reduce((sum,s)=>sum+calcTotalPSStars(s),0);
-      const psActive=DB.staff.filter(s=>[...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].some(t=>['active','testing'].includes(getTrackStatus(s,t)))).length;
+      const psActive=DB.staff.filter(s=>[...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].some(t=>['active','testing','observation'].includes(getTrackStatus(s,t)))).length;
       const psTestReady=[];
-      DB.staff.filter(s=>beltIdx(s.belt)>=2).forEach(s=>{[...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].forEach(tid=>{if(getTrackStatus(s,tid)==='testing')psTestReady.push({s,tid});});});
+      DB.staff.filter(s=>beltIdx(s.belt)>=2).forEach(s=>{[...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].forEach(tid=>{if(['testing','observation'].includes(getTrackStatus(s,tid)))psTestReady.push({s,tid});});});
       return `<div class="card mb16">
         <div class="card-hd">
           <div class="card-ttl">Position School Network Summary</div>
@@ -12574,7 +12652,7 @@ function renderFacReports(el){
   const handoff = rptHandoffStatus(st);
   const promoReady = st.filter(s=>s.promo);
   const psTestQueue = [];
-  st.forEach(s=>{ [...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].forEach(tid=>{ if(getTrackStatus(s,tid)==='testing') psTestQueue.push({s,tid}); }); });
+  st.forEach(s=>{ [...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].forEach(tid=>{ if(['testing','observation'].includes(getTrackStatus(s,tid))) psTestQueue.push({s,tid}); }); });
   const activeFacs = DB.facilities.filter(f=>f.active!==false);
   const facRanked = [...activeFacs].sort((a,b)=>facStats(b.id).greenPct-facStats(a.id).greenPct);
   const networkRank = facRanked.findIndex(f=>f.id===fid)+1;
@@ -12621,7 +12699,7 @@ function renderFacReports(el){
     ${rptSection('Position School Pipeline')}
     <div class="card mb16">
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;padding:4px 0">
-        ${Object.keys(PS_TRACKS).map(tid=>{const t=PS_TRACKS[tid];const done=st.filter(s=>getTrackStatus(s,tid)==='complete').length;const act=st.filter(s=>['active','testing'].includes(getTrackStatus(s,tid))).length;const elig=st.filter(s=>getTrackStatus(s,tid)==='eligible').length;return`<div style="background:var(--s2);border:1px solid var(--bdr);border-radius:var(--rs);padding:10px"><div style="font-size:9.5px;color:${t.tier==='green'?'var(--blt-gr)':'var(--blue)'};font-weight:700;margin-bottom:3px">${tid}</div><div style="font-size:11.5px;font-weight:700;margin-bottom:6px">${t.name}</div><div style="font-size:10.5px;display:flex;justify-content:space-between"><span style="color:var(--ok)">${done}✓</span><span style="color:var(--warn)">${act} act</span><span style="color:var(--gold)">${elig} avail</span></div></div>`;}).join('')}
+        ${Object.keys(PS_TRACKS).map(tid=>{const t=PS_TRACKS[tid];const done=st.filter(s=>getTrackStatus(s,tid)==='complete').length;const act=st.filter(s=>['active','testing','observation'].includes(getTrackStatus(s,tid))).length;const elig=st.filter(s=>getTrackStatus(s,tid)==='eligible').length;return`<div style="background:var(--s2);border:1px solid var(--bdr);border-radius:var(--rs);padding:10px"><div style="font-size:9.5px;color:${t.tier==='green'?'var(--blt-gr)':'var(--blue)'};font-weight:700;margin-bottom:3px">${tid}</div><div style="font-size:11.5px;font-weight:700;margin-bottom:6px">${t.name}</div><div style="font-size:10.5px;display:flex;justify-content:space-between"><span style="color:var(--ok)">${done}✓</span><span style="color:var(--warn)">${act} act</span><span style="color:var(--gold)">${elig} avail</span></div></div>`;}).join('')}
       </div>
     </div>
     ${stagnation.length?`${rptSection('Stagnation Alerts',stagnation.length+' flagged')}
@@ -13591,7 +13669,7 @@ function renderAReports(){
   const promoReady = allSt.filter(s=>s.promo);
   const stagnationAll = rptStagnation(allSt);
   const psTestQueueAll = [];
-  allSt.forEach(s=>{ [...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].forEach(tid=>{ if(getTrackStatus(s,tid)==='testing') psTestQueueAll.push({s,tid}); }); });
+  allSt.forEach(s=>{ [...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].forEach(tid=>{ if(['testing','observation'].includes(getTrackStatus(s,tid))) psTestQueueAll.push({s,tid}); }); });
   const totalAssessments = allSt.reduce((a,s)=>a+(s.history||[]).length,0);
 
   // ─ Per-facility breakdown
@@ -13727,7 +13805,7 @@ function renderAReports(){
           const t = PS_TRACKS[tid];
           const completed = allSt.filter(s=>getTrackStatus(s,tid)==='complete').length;
           const active    = allSt.filter(s=>getTrackStatus(s,tid)==='active').length;
-          const testing   = allSt.filter(s=>getTrackStatus(s,tid)==='testing').length;
+          const testing   = allSt.filter(s=>['testing','observation'].includes(getTrackStatus(s,tid))).length;
           const eligible  = allSt.filter(s=>getTrackStatus(s,tid)==='eligible').length;
           const locked    = allSt.filter(s=>getTrackStatus(s,tid)==='locked').length;
           return `<tr>
