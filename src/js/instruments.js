@@ -256,7 +256,10 @@ function saveInstGateScore(sid,mid,gate,score){
  if(!DB.instrumentProgress) DB.instrumentProgress=[];
  let p=DB.instrumentProgress.find(x=>x.staffId===sid&&x.moduleId===mid);
  if(!p){p={staffId:sid,moduleId:mid,g1:{status:'open',score:0,attempts:[]},g2:{status:'open',score:0,attempts:[]},g3:{status:'open',items:[]},complete:false};DB.instrumentProgress.push(p);}
- const g=p[gate];g.attempts.push({date:new Date().toISOString().slice(0,10),score});g.score=score;g.status=score>=80?'pass':'attempted';
+ const g=p[gate];g.attempts.push({date:new Date().toISOString().slice(0,10),score});
+ // Best score wins; a passed gate never regresses from a practice retake
+ g.score=Math.max(g.score||0,score);
+ if(score>=80) g.status='pass'; else if(g.status!=='pass') g.status='attempted';
  if(p.g1.status==='pass'&&p.g2.status==='pass'&&p.g3.status==='pass'){p.complete=true;const a=(DB.instrumentAssignments||[]).find(x=>x.staffId===sid&&x.moduleId===mid);if(a)a.status='completed';}
  _instSaveProgress(p);
  if(p.complete) _instSaveAssignmentStatus(sid,mid,'completed');
@@ -331,13 +334,27 @@ function openInstModule(mid){
  html+='</div>';
  el.innerHTML=html;el.scrollTop=0;
 }
+// Per-attempt shuffled question order + practice-retake flags (mirrors foundations.js).
+// The order array maps display index -> original item index; submitInstGate scores against it.
+let INST_GATE_ORDER={};
+let INST_GATE_RETAKE={};
+function retakeInstGate(mid,gk){
+ INST_GATE_RETAKE[mid+gk]=true;
+ ST._instTab=gk==='g1'?'gate1':'gate2';
+ openInstModule(mid);
+}
 function renderInstGate(m,s,gk,items,title,desc){
  const gates=getInstModuleGates(s.id,m.id),g=gates[gk];
+ const retake=!!INST_GATE_RETAKE[m.id+gk];
+ const locked=g.status==='pass'&&!retake;
+ const order=shuffleArray(items.map((_,i)=>i));
+ INST_GATE_ORDER[m.id+gk]=order;
  let h='<div class="fnd-kc"><div style="font-size:16px;font-weight:700;color:#e2e8f0;margin-bottom:4px">'+title+'</div><div style="font-size:12px;color:#94a3b8;margin-bottom:16px">'+desc+'</div>';
- if(g.status==='pass'){h+='<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--r);padding:14px;text-align:center;margin-bottom:16px"><div style="font-size:20px;font-weight:700;color:#4ade80">'+g.score+'%</div><div style="font-size:13px;color:#4ade80;font-weight:600">Passed</div></div>';}
+ if(locked){h+='<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--r);padding:14px;text-align:center;margin-bottom:16px"><div style="font-size:20px;font-weight:700;color:#4ade80">'+g.score+'%</div><div style="font-size:13px;color:#4ade80;font-weight:600">Passed</div><button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="retakeInstGate(\''+m.id+'\',\''+gk+'\')">Retake (practice)</button></div>';}
+ else if(retake&&g.status==='pass'){h+='<div style="background:rgba(196,154,32,.08);border:1px solid rgba(196,154,32,.25);border-radius:var(--r);padding:10px 14px;margin-bottom:16px;font-size:12px;color:#94a3b8">Practice retake &mdash; your passed status and best score ('+g.score+'%) are kept even if you score lower.</div>';}
  const qk=gk==='g1'?'q':'s';
- items.forEach((item,qi)=>{h+='<div class="fnd-q" data-qi="'+qi+'"><div class="fnd-q-text">'+(qi+1)+'. '+(item[qk]||item.q||item.s)+'</div>';item.opts.forEach((opt,oi)=>{h+='<label class="fnd-q-opt"><input type="radio" name="inst-'+gk+'-'+m.id+'-'+qi+'" value="'+oi+'"'+(g.status==='pass'?' disabled':'')+'><span class="fnd-q-lbl">'+opt+'</span></label>';});h+='</div>';});
- if(g.status!=='pass') h+='<button class="btn btn-gold" style="margin-top:16px;width:100%" onclick="submitInstGate(\''+m.id+'\',\''+gk+'\')">Submit</button>';
+ order.forEach((origIdx,qi)=>{const item=items[origIdx];h+='<div class="fnd-q" data-qi="'+qi+'"><div class="fnd-q-text">'+(qi+1)+'. '+(item[qk]||item.q||item.s)+'</div>';item.opts.forEach((opt,oi)=>{h+='<label class="fnd-q-opt"><input type="radio" name="inst-'+gk+'-'+m.id+'-'+qi+'" value="'+oi+'"'+(locked?' disabled':'')+'><span class="fnd-q-lbl">'+opt+'</span></label>';});h+='</div>';});
+ if(!locked) h+='<button class="btn btn-gold" style="margin-top:16px;width:100%" onclick="submitInstGate(\''+m.id+'\',\''+gk+'\')">Submit</button>';
  h+='<div id="inst-gate-result"></div></div>';return h;
 }
 function renderInstG3(m,s,gates){
@@ -348,10 +365,14 @@ function renderInstG3(m,s,gates){
 }
 function submitInstGate(mid,gk){
  const m=INSTRUMENT_MODULES.find(x=>x.id===mid);if(!m)return;const s=getStaff(ST.staffId);if(!s)return;
- const items=gk==='g1'?m.questions:m.simulations;let correct=0;
- items.forEach((item,qi)=>{const sel=document.querySelector('input[name="inst-'+gk+'-'+m.id+'-'+qi+'"]:checked');if(sel&&parseInt(sel.value)===item.ans) correct++;});
+ const items=gk==='g1'?m.questions:m.simulations;
+ // Score against the shuffled order the user actually saw (display idx -> item idx)
+ const order=INST_GATE_ORDER[m.id+gk]||items.map((_,i)=>i);
+ delete INST_GATE_RETAKE[m.id+gk];
+ let correct=0;
+ order.forEach((origIdx,qi)=>{const sel=document.querySelector('input[name="inst-'+gk+'-'+m.id+'-'+qi+'"]:checked');if(sel&&parseInt(sel.value)===items[origIdx].ans) correct++;});
  const score=Math.round((correct/items.length)*100);saveInstGateScore(s.id,m.id,gk,score);
- items.forEach((item,qi)=>{const opts=document.querySelectorAll('input[name="inst-'+gk+'-'+m.id+'-'+qi+'"]');opts.forEach((opt,oi)=>{const lbl=opt.closest('.fnd-q-opt');if(!lbl)return;opt.disabled=true;if(oi===item.ans)lbl.classList.add('fnd-q-correct');else if(opt.checked&&oi!==item.ans)lbl.classList.add('fnd-q-wrong');});});
+ order.forEach((origIdx,qi)=>{const item=items[origIdx];const opts=document.querySelectorAll('input[name="inst-'+gk+'-'+m.id+'-'+qi+'"]');opts.forEach((opt,oi)=>{const lbl=opt.closest('.fnd-q-opt');if(!lbl)return;opt.disabled=true;if(oi===item.ans)lbl.classList.add('fnd-q-correct');else if(opt.checked&&oi!==item.ans)lbl.classList.add('fnd-q-wrong');});});
  const rEl=document.getElementById('inst-gate-result');const gateLabel=gk==='g1'?'Knowledge':'Simulation';
  if(rEl){if(score>=80){rEl.innerHTML='<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--r);padding:14px 16px;text-align:center;margin-top:12px"><div style="font-size:24px;font-weight:700;color:#4ade80">'+score+'%</div><div style="font-size:13px;color:#4ade80;font-weight:600;margin:4px 0">'+gateLabel+' Gate Passed</div><div style="font-size:12px;color:#94a3b8">'+correct+' of '+items.length+' correct.</div></div>';toast(gateLabel+' passed: '+score+'%','ok');}
  else{rEl.innerHTML='<div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:var(--r);padding:14px 16px;text-align:center;margin-top:12px"><div style="font-size:24px;font-weight:700;color:#f87171">'+score+'%</div><div style="font-size:13px;color:#f87171;font-weight:600;margin:4px 0">Not Yet Passing</div><div style="font-size:12px;color:#94a3b8">'+correct+' of '+items.length+' correct. 80% required.</div><button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="openInstModule(\''+mid+'\')">Try Again</button></div>';toast('Score: '+score+'%. 80% required.','err');}}

@@ -522,8 +522,10 @@ function saveGateScore(staffId,moduleId,gate,score){
  if(!p){p={staffId,moduleId,g1:{status:'open',score:0,attempts:[]},g2:{status:'open',score:0,attempts:[]},g3:{status:'open',items:[]},complete:false};DB.foundationsProgress.push(p);}
  const g=p[gate];
  g.attempts.push({date:new Date().toISOString().slice(0,10),score});
- g.score=score;
- g.status=score>=80?'pass':'attempted';
+ // Best score wins; a passed gate never regresses from a practice retake
+ g.score=Math.max(g.score||0,score);
+ if(score>=80) g.status='pass';
+ else if(g.status!=='pass') g.status='attempted';
  // Check if all 3 gates pass
  if(p.g1.status==='pass'&&p.g2.status==='pass'&&p.g3.status==='pass'){
    p.complete=true;
@@ -677,29 +679,47 @@ function renderFndModuleTab(m,s,gates,tab){
  el.scrollTop=0;
 }
  
+// Per-attempt shuffled question order + practice-retake flags, keyed moduleId+gateKey.
+// The order array maps display index -> original item index; submitFndGate scores
+// against it so answers always line up with what the user saw.
+let FND_GATE_ORDER={};
+let FND_GATE_RETAKE={};
+function retakeFndGate(moduleId,gateKey){
+ FND_GATE_RETAKE[moduleId+gateKey]=true;
+ ST._fndTab=gateKey==='g1'?'gate1':'gate2';
+ openFndModule(moduleId);
+}
 function renderFndGateAssessment(m,s,gateKey,items,title,desc){
  const gates=getModuleGates(s.id,m.id);
  const g=gates[gateKey];
+ const retake=!!FND_GATE_RETAKE[m.id+gateKey];
+ const locked=g.status==='pass'&&!retake;
+ const order=shuffleArray(items.map((_,i)=>i));
+ FND_GATE_ORDER[m.id+gateKey]=order;
  let h='<div class="fnd-kc">';
  h+='<div style="font-size:16px;font-weight:700;color:#e2e8f0;margin-bottom:4px">'+title+'</div>';
  h+='<div style="font-size:12px;color:#94a3b8;margin-bottom:16px">'+desc+'</div>';
- if(g.status==='pass'){
+ if(locked){
    h+='<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--r);padding:14px;text-align:center;margin-bottom:16px">';
    h+='<div style="font-size:20px;font-weight:700;color:#4ade80">'+g.score+'%</div>';
-   h+='<div style="font-size:13px;color:#4ade80;font-weight:600">Passed</div></div>';
+   h+='<div style="font-size:13px;color:#4ade80;font-weight:600">Passed</div>';
+   h+='<button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="retakeFndGate(\''+m.id+'\',\''+gateKey+'\')">Retake (practice)</button></div>';
+ } else if(retake&&g.status==='pass'){
+   h+='<div style="background:rgba(196,154,32,.08);border:1px solid rgba(196,154,32,.25);border-radius:var(--r);padding:10px 14px;margin-bottom:16px;font-size:12px;color:#94a3b8">Practice retake &mdash; your passed status and best score ('+g.score+'%) are kept even if you score lower.</div>';
  }
  h+='<div id="fnd-gate-questions">';
  const qKey=gateKey==='g1'?'q':'s';
- items.forEach((item,qi)=>{
+ order.forEach((origIdx,qi)=>{
+   const item=items[origIdx];
    h+='<div class="fnd-q" data-qi="'+qi+'">';
    h+='<div class="fnd-q-text">'+(qi+1)+'. '+(item[qKey]||item.q||item.s)+'</div>';
    item.opts.forEach((opt,oi)=>{
-     h+='<label class="fnd-q-opt"><input type="radio" name="fnd-'+gateKey+'-'+m.id+'-'+qi+'" value="'+oi+'"'+(g.status==='pass'?' disabled':'')+'><span class="fnd-q-lbl">'+opt+'</span></label>';
+     h+='<label class="fnd-q-opt"><input type="radio" name="fnd-'+gateKey+'-'+m.id+'-'+qi+'" value="'+oi+'"'+(locked?' disabled':'')+'><span class="fnd-q-lbl">'+opt+'</span></label>';
    });
    h+='</div>';
  });
  h+='</div>';
- if(g.status!=='pass'){
+ if(!locked){
    h+='<button class="btn btn-gold" style="margin-top:16px;width:100%" onclick="submitFndGate(\''+m.id+'\',\''+gateKey+'\')">Submit</button>';
  }
  h+='<div id="fnd-gate-result"></div></div>';
@@ -735,17 +755,21 @@ function submitFndGate(moduleId,gateKey){
  const m=FOUNDATIONS_MODULES.find(x=>x.id===moduleId);if(!m) return;
  const s=getStaff(ST.staffId);if(!s) return;
  const items=gateKey==='g1'?m.questions:m.simulations;
+ // Score against the shuffled order the user actually saw (display idx -> item idx)
+ const order=FND_GATE_ORDER[m.id+gateKey]||items.map((_,i)=>i);
+ delete FND_GATE_RETAKE[m.id+gateKey];
  let correct=0;
- items.forEach((item,qi)=>{
+ order.forEach((origIdx,qi)=>{
    const sel=document.querySelector('input[name="fnd-'+gateKey+'-'+m.id+'-'+qi+'"]:checked');
-   if(sel&&parseInt(sel.value)===item.ans) correct++;
+   if(sel&&parseInt(sel.value)===items[origIdx].ans) correct++;
  });
  const score=Math.round((correct/items.length)*100);
  saveGateScore(s.id,m.id,gateKey,score);
  const passed=score>=80;
  const gateLabel=gateKey==='g1'?'Knowledge':'Simulation';
  // Highlight answers
- items.forEach((item,qi)=>{
+ order.forEach((origIdx,qi)=>{
+   const item=items[origIdx];
    const opts=document.querySelectorAll('input[name="fnd-'+gateKey+'-'+m.id+'-'+qi+'"]');
    opts.forEach((opt,oi)=>{const lbl=opt.closest('.fnd-q-opt');if(!lbl)return;opt.disabled=true;if(oi===item.ans)lbl.classList.add('fnd-q-correct');else if(opt.checked&&oi!==item.ans)lbl.classList.add('fnd-q-wrong');});
  });
