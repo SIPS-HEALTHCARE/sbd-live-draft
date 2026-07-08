@@ -996,6 +996,9 @@ function getTrackStatus(staff, tid){
   ensurePSTracks(staff);
   const t = PS_TRACKS[tid];
   if(!t) return 'locked';
+  // Admin override bypasses the belt/prereq locks — trust the stored status
+  const tdOv = staff.ps.tracks[tid];
+  if(tdOv?.override) return tdOv.status || 'eligible';
   const bIdx = beltIdx(staff.belt);
   // Belt gate  --  must meet tier requirement
   if(t.tier==='green' && bIdx < 2) return 'locked';
@@ -1047,6 +1050,34 @@ function beginPSTrack(staffId, tid){
   if(typeof renderSPosSchool === 'function') renderSPosSchool();
 }
 
+// Admin action: override-assign a belt-locked track (master_admin / staff_admin only).
+// Skips the belt/prereq lock only — the 3-pass + observation lifecycle still applies (B4).
+function overrideAssignPSTrack(staffId, tid){
+  if(!['master_admin','staff_admin'].includes(ST.user?.role)){ toast('Only Master Admins and Assessors can override-assign tracks.','err'); return; }
+  const s = getStaff(staffId);
+  const t = PS_TRACKS[tid];
+  if(!s || !t) return;
+  ensurePSTracks(s);
+  const prev = s.ps.tracks[tid] || {};
+  if(prev.status === 'complete'){ toast('This track is already completed.','err'); return; }
+  if(getTrackStatus(s, tid) !== 'locked'){ toast('This track is not locked — no override needed.','err'); return; }
+  if(!confirm(`Override-assign ${t.name} to ${fullName(s)}?\n\nThis bypasses the belt/prerequisite lock and activates the track immediately, including in the staff member's own portal. It still requires ${PS_PASSES_REQUIRED} practice passes per test and observation sign-off to complete.\n\nThe override is recorded on the staff record.`)) return;
+  const today = new Date().toISOString().slice(0,10);
+  s.ps.tracks[tid] = { ...prev,                    // spread — never partial-write a track
+    status:'active', override:true,
+    overrideBy: ST.user.id, overrideAt: today,
+    promptedAt: prev.promptedAt || today,
+    startedAt: prev.startedAt || today,
+    completedAt: prev.completedAt || null };
+  s.ps.enrolled = true;
+  toast(t.name + ' override-assigned to ' + fullName(s) + '.');
+  if (IS_LIVE && typeof SB !== 'undefined' && SB.updateStaff) {
+    SB.updateStaff(s.id, mapStaffPSToBackend(s)).catch(e=>{ console.warn('PS sync failed:', e); toast('Saved on screen, but syncing to the server failed — please refresh to confirm.','err'); });
+  }
+  if(ST.portal==='a') renderAView(ST.aView);
+  if(ST.portal==='h') renderHView(ST.hView);
+}
+
 // Staff action: signal ready to test
 function readyToTestPS(staffId, tid){
   const s = getStaff(staffId);
@@ -1067,6 +1098,13 @@ function readyToTestPS(staffId, tid){
 function getPSPassCounts(td){
   const p = (td && td.passes) || {};
   return { knowledge: p.knowledge || 0, simulation: p.simulation || 0 };
+}
+
+// Small ⚡ marker for override-assigned tracks (admin/leader surfaces)
+function psOverrideMark(td){
+  if(!td || !td.override) return '';
+  const by = DB.users?.find(u => u.id === td.overrideBy);
+  return `<span style="font-size:11px;margin-left:4px;cursor:help" title="Override-assigned by ${(by && (by.name || by.email)) || 'admin'} on ${td.overrideAt || '--'}">&#9889;</span>`;
 }
 
 // Advance testing → observation once both modes have PS_PASSES_REQUIRED passes.
@@ -6692,8 +6730,10 @@ function renderSPosSchool(){
   }
 
   const bIdx = beltIdx(s.belt);
+  // Blue tier is also shown under-belt when a track was admin-override-assigned
+  const showBlue = bIdx>=3 || PS_BLUE_TRACKS.some(tid => s.ps?.tracks?.[tid]?.override);
   const greenTracks = PS_GREEN_TRACKS.map(trackCard).join('<div style="height:8px"></div>');
-  const blueTracks  = bIdx>=3 ? PS_BLUE_TRACKS.map(trackCard).join('<div style="height:8px"></div>') : '';
+  const blueTracks  = showBlue ? PS_BLUE_TRACKS.map(trackCard).join('<div style="height:8px"></div>') : '';
 
   el.innerHTML=`
     <div class="stat-grid mb16">
@@ -6702,7 +6742,7 @@ function renderSPosSchool(){
         <div class="stat-val" style="color:var(--gold)">${greenStars}<span style="font-size:12px;color:var(--txt3)">/3</span></div>
         <div class="stat-sub">${greenStars===3?'All tracks complete!':greenStars===0?'Begin QA School':greenStars+' of 3 complete'}</div>
       </div>
-      ${bIdx>=3?`<div class="stat-card"><div class="stat-accent" style="background:var(--blue)"></div>
+      ${showBlue?`<div class="stat-card"><div class="stat-accent" style="background:var(--blue)"></div>
         <div class="stat-lbl">Blue Belt Stars</div>
         <div class="stat-val" style="color:var(--blue)">${blueStars}<span style="font-size:12px;color:var(--txt3)">/4</span></div>
         <div class="stat-sub">${blueStars===4?'All tracks complete!':blueStars+' of 4 complete'}</div>
@@ -6727,7 +6767,7 @@ function renderSPosSchool(){
       <div style="display:flex;flex-direction:column;gap:8px">${greenTracks}</div>
     </div>
 
-    ${bIdx>=3?`<div>
+    ${showBlue?`<div>
       <div style="font-size:12px;font-weight:700;color:var(--blue);letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px">BLUE BELT TIER</div>
       <div style="font-size:11px;color:var(--txt3);margin-bottom:12px">Builds in direct sequence: Lead Tech School → Supervisor School → HFL Foundation → Manager School.</div>
       <div style="display:flex;flex-direction:column;gap:8px">${blueTracks}</div>
@@ -9547,15 +9587,18 @@ function renderHProfile(sid,context){
       <div>
         <div class="card mb16"><div class="card-hd"><div class="card-ttl">Position School</div><span style="color:var(--gold);font-size:13px;font-weight:700">${calcTotalPSStars(s)>0?Array(calcTotalPSStars(s)).fill('★').join(' '):''}</span></div><div class="card-body">${(()=>{
   const bIdx=beltIdx(s.belt);
-  if(bIdx<2) return '<div style="color:var(--txt3);font-size:12px;text-align:center;padding:12px">Unlocks at Green Belt</div>';
-  const allT=[...PS_GREEN_TRACKS,...(bIdx>=3?PS_BLUE_TRACKS:[])];
+  // Override-assign is keyed on the viewer's role, never the portal/mode argument,
+  // so hospital/facility_admin users sharing this view never see it (B3)
+  const isOverrideAdmin=['master_admin','staff_admin'].includes(ST.user?.role);
+  if(bIdx<2 && !isOverrideAdmin) return '<div style="color:var(--txt3);font-size:12px;text-align:center;padding:12px">Unlocks at Green Belt</div>';
+  const allT=isOverrideAdmin?[...PS_GREEN_TRACKS,...PS_BLUE_TRACKS]:[...PS_GREEN_TRACKS,...(bIdx>=3?PS_BLUE_TRACKS:[])];
   return allT.map(tid=>{
     const t=PS_TRACKS[tid]; const st2=getTrackStatus(s,tid); const td=s.ps&&s.ps.tracks?s.ps.tracks[tid]||{}:{};
     const _p=getPSPassCounts(td);
     const statusBadge=st2==='complete'?'<span class="pill p-ok">Complete ★</span>':st2==='observation'?'<span class="pill" style="background:rgba(168,85,247,.12);color:#a855f7;border:1px solid rgba(168,85,247,.3)">In Observation</span>':st2==='testing'?'<span class="pill p-blue">Ready to Test</span>':st2==='active'?'<span class="pill p-warn">In Progress</span>':st2==='eligible'?'<span class="pill p-gold">Available</span>':'<span class="pill p-muted">Locked</span>';
-    const action=st2==='observation'?`<button class="btn btn-ok btn-xs" style="margin-left:8px" onclick="completePSTrack('${s.id}','${tid}'); event.stopPropagation()">Confirm Observation & Award Star</button>`:st2==='testing'?`<span style="font-size:10.5px;color:var(--txt3);margin-left:8px">K ${_p.knowledge}/${PS_PASSES_REQUIRED} &bull; S ${_p.simulation}/${PS_PASSES_REQUIRED}</span><button class="btn btn-ok btn-xs" style="margin-left:8px" onclick="completePSTrack('${s.id}','${tid}'); event.stopPropagation()">Award Star</button>`:st2==='active'?`<span style="font-size:10.5px;color:var(--txt3);margin-left:8px">Since ${td.startedAt||'--'}</span>`:'';
+    const action=st2==='observation'?`<button class="btn btn-ok btn-xs" style="margin-left:8px" onclick="completePSTrack('${s.id}','${tid}'); event.stopPropagation()">Confirm Observation & Award Star</button>`:st2==='testing'?`<span style="font-size:10.5px;color:var(--txt3);margin-left:8px">K ${_p.knowledge}/${PS_PASSES_REQUIRED} &bull; S ${_p.simulation}/${PS_PASSES_REQUIRED}</span><button class="btn btn-ok btn-xs" style="margin-left:8px" onclick="completePSTrack('${s.id}','${tid}'); event.stopPropagation()">Award Star</button>`:st2==='active'?`<span style="font-size:10.5px;color:var(--txt3);margin-left:8px">Since ${td.startedAt||'--'}</span>`:st2==='locked'&&isOverrideAdmin?`<button class="btn btn-ghost btn-xs" style="margin-left:8px;border-color:var(--gold-bd);color:var(--gold)" onclick="overrideAssignPSTrack('${s.id}','${tid}')">Override Assign</button>`:'';
     const canClick = st2 !== 'locked';
-    return `<div class="irow" style="${st2==='locked'?'opacity:.5':'cursor:pointer'}" ${canClick?`onclick="openPSTrackDetail('${tid}','${s.id}')"`:''}><div class="ilbl" style="font-size:11.5px;flex:1">${t.name}</div><div class="ival" style="display:flex;align-items:center;gap:6px">${statusBadge}${action}</div></div>`;
+    return `<div class="irow" style="${st2==='locked'?(isOverrideAdmin?'':'opacity:.5'):'cursor:pointer'}" ${canClick?`onclick="openPSTrackDetail('${tid}','${s.id}')"`:''}><div class="ilbl" style="font-size:11.5px;flex:1">${t.name}${psOverrideMark(td)}</div><div class="ival" style="display:flex;align-items:center;gap:6px">${statusBadge}${action}</div></div>`;
   }).join('')+'<div class="irow" style="border:none"><div class="ilbl">Promotion Eligible</div><div class="ival">'+( s.promo?'<span class="pill p-gold">Yes</span>':'<span style="color:var(--txt3);font-size:12px">Not yet</span>' )+'</div></div>';
 })()}</div></div>
         <div class="card"><div class="card-hd"><div class="card-ttl">Assessment History</div></div><div class="card-body"><div class="tl">${s.history.length?s.history.slice().reverse().map(h=>`<div class="tl-item"><div class="tl-dot" style="background:${h.res==='pass'?'rgba(34,197,94,.15)':'rgba(239,68,68,.15)'};color:${h.res==='pass'?'var(--ok)':'var(--err)'}">${h.res==='pass'?ICO.check:ICO.x}</div><div><div class="tl-date">${h.dt} &bull; ${beltBadge(h.belt)}</div><div class="tl-txt">${h.type}: <strong style="color:${h.res==='pass'?'var(--ok)':'var(--err)'}">${h.res.charAt(0).toUpperCase()+h.res.slice(1)}</strong></div></div></div>`).join(''):'<div style="font-size:12px;color:var(--txt3)">No assessment history recorded yet.</div>'}</div></div></div>
@@ -10955,7 +10998,7 @@ function renderHPosSchool(){
     if(totalSt>0||activeTracks.length>0||eligTracks.length>0){
       const parts=[];
       if(totalSt>0) parts.push('<span style="color:var(--gold);font-weight:700">'+Array(totalSt).fill('★').join('')+'</span>');
-      if(activeTracks.length>0) parts.push('<span class="pill p-warn" style="font-size:9px">'+activeTracks.map(t=>PS_TRACKS[t].name).join(', ')+'</span>');
+      if(activeTracks.length>0) parts.push('<span class="pill p-warn" style="font-size:9px">'+activeTracks.map(t=>PS_TRACKS[t].name+(s.ps?.tracks?.[t]?.override?' &#9889;':'')).join(', ')+'</span>');
       else if(eligTracks.length>0) parts.push('<span class="pill p-muted" style="font-size:9px">'+eligTracks.length+' available</span>');
       psCell=parts.join(' ');
     } else {
@@ -10977,12 +11020,12 @@ function renderHPosSchool(){
       const st2=getTrackStatus(s,tid);
       if(st2==='testing'||st2==='observation'){
         const td=s.ps.tracks[tid]||{};
-        testQueue.push({s,tid,status:st2,startedAt:td.startedAt,passes:getPSPassCounts(td)});
+        testQueue.push({s,tid,status:st2,td,startedAt:td.startedAt,passes:getPSPassCounts(td)});
       }
     });
   });
 
-  const eligible=st.filter(s=>beltIdx(s.belt)>=2);
+  const eligible=st.filter(s=>beltIdx(s.belt)>=2 || Object.values(s.ps?.tracks||{}).some(td=>td?.override));
 
   // Track overview cards (curriculum summary)
   function trackOverviewCard(tid){
@@ -11030,10 +11073,10 @@ function renderHPosSchool(){
       <div class="card-hd"><div class="card-ttl">Awaiting Sign-off</div><span class="pill p-blue">${testQueue.length} pending</span></div>
       <div style="overflow-x:auto"><table class="tbl" style="min-width:480px">
         <thead><tr><th>Staff Member</th><th>Belt</th><th>Track</th><th>Status</th><th>Started</th><th>Action</th></tr></thead>
-        <tbody>${testQueue.map(({s,tid,status,startedAt,passes})=>`<tr>
+        <tbody>${testQueue.map(({s,tid,status,td,startedAt,passes})=>`<tr>
           <td class="fw7" onclick="openHProfile('${s.id}')" style="cursor:pointer">${fullName(s)}</td>
           <td>${beltBadge(s.belt,s)}</td>
-          <td style="font-size:12px">${PS_TRACKS[tid].name}</td>
+          <td style="font-size:12px">${PS_TRACKS[tid].name}${psOverrideMark(td)}</td>
           <td>${status==='observation'?'<span class="pill" style="background:rgba(168,85,247,.12);color:#a855f7;border:1px solid rgba(168,85,247,.3)">In Observation</span>':`<span class="pill p-blue">Ready to Test</span><div style="font-size:10px;color:var(--txt3);margin-top:2px">K ${passes.knowledge}/${PS_PASSES_REQUIRED} &bull; S ${passes.simulation}/${PS_PASSES_REQUIRED}</div>`}</td>
           <td style="font-size:11.5px;color:var(--txt3)">${startedAt||'--'}</td>
           <td><button class="btn btn-ok btn-xs" onclick="completePSTrack('${s.id}','${tid}')">${status==='observation'?'Confirm Observation & Award Star':'Award Star'}</button></td>
