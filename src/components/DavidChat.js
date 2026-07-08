@@ -1620,6 +1620,20 @@ class DavidChat {
             name: `${s.first || ''} ${s.last || ''}`.trim()
         }));
 
+        // Fix 4 (D1/D2): placements + F/I training context, scoped exactly like staff above.
+        // Placement responses[] transcripts are never serialized (token blowup); the
+        // serializers emit compact one-line-per-record blocks.
+        let placementsBlock = "", trainingCatalog = "", trainingProgress = "";
+        try {
+            const DS = (typeof window !== 'undefined' && window.DavidSerializers) || {};
+            const authorizedStaffIds = new Set(authorizedStaff.map(s => String(s.id)));
+            const authorizedPlacements = (_db.placementReviews || []).filter(pr =>
+                isMaster || authFidList.includes(pr.fid) || authorizedStaffIds.has(String(pr.staffId)));
+            if (DS.aiSerializePlacements) placementsBlock = DS.aiSerializePlacements(authorizedPlacements);
+            if (DS.aiSerializeTrainingCatalog) trainingCatalog = DS.aiSerializeTrainingCatalog();
+            if (DS.aiSerializeTrainingProgress) trainingProgress = DS.aiSerializeTrainingProgress(authorizedStaff, _db.foundationsProgress, _db.instrumentProgress);
+        } catch (e) { /* context enrichment must never break the snapshot */ }
+
         // PRE-COGNITION DATA COMPRESSION
         // Run aggregations client-side so David doesn't burn tokens counting commas.
         let precognitionData = "";
@@ -1660,8 +1674,13 @@ class DavidChat {
             DEEP DIVE DATA (Use this to answer specific facility/staff queries):
             [FACILITIES]: ${JSON.stringify(detailedFacilities)}
             [STAFF]: ${JSON.stringify(detailedStaff)}
+            ${placementsBlock || '[PLACEMENTS]: No placement reviews in scope.'}
+            ${trainingCatalog}
+            ${trainingProgress || '[TRAINING_PROGRESS]: No Foundations/Instruments progress recorded in scope.'}
             [ASSESSMENT_QUEUE]: ${JSON.stringify(authorizedQueue)}
             [INSTITUTIONAL_SYSTEMS]: ${JSON.stringify(authorizedSystems)}
+
+            [TRAINING GUIDANCE]: When placement level scores, assessment history, or practice weak areas show a gap, you MAY recommend specific Foundations/Instrument modules for retraining — use the exact module ids and titles from [TRAINING_CATALOG], matching the weak area to the module's domain — and Position School tracks where leadership development fits. ALWAYS state that assignment is manual: a leader must assign modules through the Training Modules UI. You cannot assign modules, change records, or write anything.
         `.trim();
     }
 
@@ -1672,6 +1691,16 @@ class DavidChat {
         const myFac = (_db.facilities || []).find(f => f.id === me.fid);
         const g = (x) => x || '—';
         const ps = me.ps || {};
+        // Fix 4 (D1/D2): own placement summary + own F/I progress — self-scope only, never peers'.
+        let myPlacement = "", myTraining = "";
+        try {
+            const DS = (typeof window !== 'undefined' && window.DavidSerializers) || {};
+            const mine = (_db.placementReviews || [])
+                .filter(pr => String(pr.staffId) === String(me.id))
+                .sort((a, b) => new Date(b.submittedAt || b.createdAt || 0) - new Date(a.submittedAt || a.createdAt || 0));
+            if (mine.length && DS.aiSerializePlacements) myPlacement = DS.aiSerializePlacements([mine[0]]);
+            if (DS.aiSerializeTrainingProgress) myTraining = DS.aiSerializeTrainingProgress([me], _db.foundationsProgress, _db.instrumentProgress);
+        } catch (e) { /* context enrichment must never break the snapshot */ }
         return `
             DAVID PERSONAL COACHING SNAPSHOT — you are coaching THIS person about THEIR OWN progress only:
             - Name: ${`${me.first || ''} ${me.last || ''}`.trim() || 'Technician'}
@@ -1681,6 +1710,8 @@ class DavidChat {
             - Next-belt gates: Competency=${g(me.nxt?.c)}, Simulation=${g(me.nxt?.s)}, Observation=${g(me.nxt?.o)}
             - Position School: enrolled=${ps.enrolled ? 'yes' : 'no'}, completed=${ps.done ? 'yes' : 'no'}${ps.track ? `, track=${ps.track}` : ''}
             - Practice scores (best % per belt/mode): ${JSON.stringify(me.practiceScores || {})}
+            ${myPlacement || '- Placement assessment: none on file.'}
+            ${myTraining || '- Foundations/Instruments training: none recorded yet.'}
             [SCOPE]: You can see ONLY this person's own record. You have NO access to other staff, other facilities, the assessment queue, or network data. If asked about anyone else, say you can only help them with their own training.
         `.trim();
     }

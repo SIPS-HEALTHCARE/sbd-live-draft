@@ -155,6 +155,51 @@
     return `LEARNING VELOCITY & READINESS:\n${lines.join('\n')}`;
   }
 
+  // Fix 4 D1 — compact placement-review lines for the platform snapshot. Serializes ONLY
+  // summary fields; responses[] (full answer transcripts) are deliberately excluded (token blowup).
+  // Sync: reads the already-mapped rows it is given, never fetches.
+  function aiSerializePlacements(reviews) {
+    if (!Array.isArray(reviews) || reviews.length === 0) return '';
+    const lines = reviews.map(pr => {
+      const levels = Object.entries(pr.levelScores || {})
+        .map(([lvl, pct]) => `L${lvl} ${Math.round(Number(pct) || 0)}%`).join(' / ');
+      return `  • ${pr.staffName || 'Unknown'} (staff ${pr.staffId || '—'}): status=${pr.status || '—'}, tentative=${pr.tentativeBelt || '—'}, confirmed=${pr.confirmedBelt || '—'}`
+        + (levels ? `, levels: ${levels}` : '')
+        + (pr.submittedAt ? `, submitted ${String(pr.submittedAt).slice(0, 10)}` : '')
+        + (pr.reviewedAt ? `, reviewed ${String(pr.reviewedAt).slice(0, 10)}` : '');
+    });
+    return `[PLACEMENTS] (placement assessments, summary only — answer transcripts not included):\n${lines.join('\n')}`;
+  }
+
+  // Fix 4 D2 — static F/I module catalog, one line per module, so David can name real module
+  // ids/titles/domains when recommending retraining. Sync; reads the load-time constants.
+  function aiSerializeTrainingCatalog() {
+    const fnd = (typeof FOUNDATIONS_MODULES !== 'undefined') ? FOUNDATIONS_MODULES : [];
+    const inst = (typeof INSTRUMENT_MODULES !== 'undefined') ? INSTRUMENT_MODULES : [];
+    if (!fnd.length && !inst.length) return '';
+    const f = fnd.map(m => `  • ${m.id}: ${m.title} (domain: ${m.domain})`).join('\n');
+    const i = inst.map(m => `  • ${m.id}: ${m.title} (${m.belt} Belt, domain: ${m.domain})`).join('\n');
+    return `[TRAINING_CATALOG] (assignable modules; each has 3 gates: knowledge, simulation, observation):\nFoundations:\n${f}\nInstruments:\n${i}`;
+  }
+
+  // Fix 4 D2 — compact per-staff F/I progress (module id + gate statuses + best score).
+  // Scope is enforced by the caller-supplied staffList: rows for other staff are dropped.
+  function aiSerializeTrainingProgress(staffList, fndProgress, instProgress) {
+    const nameOf = {};
+    (staffList || []).forEach(s => { nameOf[String(s.id)] = `${s.first || ''} ${s.last || ''}`.trim() || String(s.id); });
+    const gate = (g) => g ? `${g.status || 'open'}${typeof g.score === 'number' && g.score > 0 ? `(${g.score}%)` : ''}` : 'open';
+    const byStaff = {};
+    const add = (rows) => (rows || []).forEach(p => {
+      const sid = String(p.staffId);
+      if (!(sid in nameOf)) return;
+      (byStaff[sid] = byStaff[sid] || []).push(`${p.moduleId} G1=${gate(p.g1)} G2=${gate(p.g2)} G3=${(p.g3 && p.g3.status) || 'open'}${p.complete ? ' ✓complete' : ''}`);
+    });
+    add(fndProgress); add(instProgress);
+    const sids = Object.keys(byStaff);
+    if (!sids.length) return '';
+    return `[TRAINING_PROGRESS] (Foundations fm-* / Instruments im-* per staff):\n${sids.map(sid => `  • ${nameOf[sid]}: ${byStaff[sid].join('; ')}`).join('\n')}`;
+  }
+
   // P4 — facility compliance forecast: current Green+ %, velocity trajectory, survey-readiness,
   // and the bottleneck (critical-path staff). Built on in-memory DB.staff + logic.js engine.
   async function aiSerializeComplianceForecast(fid) {
@@ -172,5 +217,5 @@
     return `COMPLIANCE FORECAST (this facility):\n${lines.join('\n')}\n  To answer "will we hit X% Green+ by <date>": project from current %, the below-Green count, and the avg velocity; flag the bottleneck staff as the critical path to close the gap.`;
   }
 
-  window.DavidSerializers = { aiSerializePracticeHistory, aiSerializeEngagement, aiSerializeFacilityEngagement, aiSerializeVelocity, aiSerializeComplianceForecast };
+  window.DavidSerializers = { aiSerializePracticeHistory, aiSerializeEngagement, aiSerializeFacilityEngagement, aiSerializeVelocity, aiSerializeComplianceForecast, aiSerializePlacements, aiSerializeTrainingCatalog, aiSerializeTrainingProgress };
 })();
