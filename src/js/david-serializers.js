@@ -200,6 +200,79 @@
     return `[TRAINING_PROGRESS] (Foundations fm-* / Instruments im-* per staff):\n${sids.map(sid => `  • ${nameOf[sid]}: ${byStaff[sid].join('; ')}`).join('\n')}`;
   }
 
+  // Fix 4 D2b — David #72(b): deterministic placement -> module retraining recommendations.
+  // Rule (plans/TEAM-INSTRUCTION.md): per staff, take the most recent placement_reviews row;
+  // for each response whose qId maps to a Foundations module, read score ?? aiScore — knowledge
+  // responses carry `score`, simulation responses carry `aiScore`, never both, so reading only
+  // `score` would silently drop every simulation answer. Roll up per module (avg), gated on
+  // MIN_MODULE_QS answered questions; skip modules already complete. <70% recommend, 70-79% watch
+  // (off by default), >=80% silent. Sync — reads already-loaded rows, never fetches. Suggestion
+  // only: no write tool exists for David to act on this.
+  const PLACEMENT_MODULE_MAP = {
+    p1:1,p2:1,p6:1,p7:1,p16:1,p27:1,p28:1,p38:1,p50:1,p52:1,p55:1,p56:1,
+    p3:2,p4:2,p5:2,p9:2,p10:2,p12:2,p14:2,p17:2,p21:2,p39:2,
+    p18:3,p20:3,p23:3,p24:3,p31:3,p34:3,p36:3,p48:3,
+    p8:4,p11:4,p60:4,
+    p15:5,p19:5,p22:5,p29:5,
+    p13:6,p25:6,p26:6,p30:6,p32:6,p37:6,p42:6,p43:6,p44:6,p45:6,p49:6,
+    p35:7,
+    p33:9,p40:9,p41:9,p46:9,p47:9,p51:9,p53:9,p54:9,p57:9,
+    p58:10,p59:10,
+  };
+  const PLACEMENT_MODULE_TITLES = {1:'Foundations',2:'Decontamination',3:'Inspection & Identification',4:'Assembly & Tray Building',5:'Packaging & Wrapping',6:'Sterilization',7:'Storage & Distribution',8:'High-Level Disinfection',9:'Quality Assurance',10:'Professional Development'};
+
+  function aiSerializePlacementModuleRecommendations(placements, staffList, foundationsProgress) {
+    const MIN_MODULE_QS = 3, INCLUDE_WATCH = false;
+    if (!Array.isArray(placements) || !placements.length) return '';
+    const nameOf = {};
+    (staffList || []).forEach(s => { nameOf[String(s.id)] = `${s.first || ''} ${s.last || ''}`.trim() || String(s.id); });
+
+    // Match the staff-self path's "latest" comparator (submittedAt, falling back to createdAt)
+    // so both views pick the same row for the same person when submittedAt is unset.
+    const latestTs = (pr) => new Date(pr.submittedAt || pr.createdAt || 0);
+    const latestByStaff = {};
+    placements.forEach(pr => {
+      const sid = String(pr.staffId);
+      const prev = latestByStaff[sid];
+      if (!prev || latestTs(pr) > latestTs(prev)) latestByStaff[sid] = pr;
+    });
+
+    const lines = [];
+    Object.values(latestByStaff).forEach(pr => {
+      const sid = String(pr.staffId);
+      const responses = Array.isArray(pr.responses) ? pr.responses : [];
+      if (!responses.length) return;
+      const agg = {};
+      responses.forEach(r => {
+        const m = PLACEMENT_MODULE_MAP[r.qId]; if (!m) return;
+        const s = (r.score != null) ? Number(r.score) : (r.aiScore != null ? Number(r.aiScore) : null);
+        if (s == null || Number.isNaN(s)) return;
+        (agg[m] = agg[m] || { sum: 0, n: 0 }); agg[m].sum += s; agg[m].n += 1;
+      });
+      const doneModules = new Set(
+        (foundationsProgress || []).filter(p => String(p.staffId) === sid && p.complete)
+          .map(p => Number(String(p.moduleId).replace('fm-', '')))
+      );
+      const recs = [];
+      Object.keys(agg).forEach(m => {
+        const { sum, n } = agg[m];
+        if (n < MIN_MODULE_QS) return;
+        const mNum = Number(m);
+        if (doneModules.has(mNum)) return;
+        const score = Math.round(sum / n);
+        if (score < 70) recs.push({ m: mNum, score, band: 'recommend' });
+        else if (INCLUDE_WATCH && score < 80) recs.push({ m: mNum, score, band: 'watch' });
+      });
+      if (!recs.length) return;
+      recs.sort((a, b) => a.score - b.score || a.m - b.m);
+      const who = nameOf[sid] || `staff ${sid}`;
+      const modStr = recs.map(r => `fm-${String(r.m).padStart(2, '0')} ${PLACEMENT_MODULE_TITLES[r.m]} (${r.score}%${r.band === 'watch' ? ' watch' : ''})`).join(', ');
+      lines.push(`  • ${who}: ${modStr}`);
+    });
+    if (!lines.length) return '';
+    return `[PLACEMENT_RETRAINING] (deterministic rule, David #72(b); latest placement per person, lowest score first — SUGGEST to the leader, never auto-assign):\n${lines.join('\n')}`;
+  }
+
   // P4 — facility compliance forecast: current Green+ %, velocity trajectory, survey-readiness,
   // and the bottleneck (critical-path staff). Built on in-memory DB.staff + logic.js engine.
   async function aiSerializeComplianceForecast(fid) {
@@ -217,5 +290,5 @@
     return `COMPLIANCE FORECAST (this facility):\n${lines.join('\n')}\n  To answer "will we hit X% Green+ by <date>": project from current %, the below-Green count, and the avg velocity; flag the bottleneck staff as the critical path to close the gap.`;
   }
 
-  window.DavidSerializers = { aiSerializePracticeHistory, aiSerializeEngagement, aiSerializeFacilityEngagement, aiSerializeVelocity, aiSerializeComplianceForecast, aiSerializePlacements, aiSerializeTrainingCatalog, aiSerializeTrainingProgress };
+  window.DavidSerializers = { aiSerializePracticeHistory, aiSerializeEngagement, aiSerializeFacilityEngagement, aiSerializeVelocity, aiSerializeComplianceForecast, aiSerializePlacements, aiSerializeTrainingCatalog, aiSerializeTrainingProgress, aiSerializePlacementModuleRecommendations };
 })();
