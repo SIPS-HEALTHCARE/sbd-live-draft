@@ -13,8 +13,12 @@ const BELT_SESSION_TTL_MINUTES = 120;      // belt test = 60 items, needs longer
 function sessionTtlFor(assessmentType: string): number {
     return assessmentType === 'belt' ? BELT_SESSION_TTL_MINUTES : SESSION_TTL_MINUTES;
 }
-const MAX_FAILED_ATTEMPTS = 5;
-const RATE_LIMIT_WINDOW_HOURS = 1;
+// ── #60 validate_pin rate-limiting — generous, proctoring-safe defaults.
+// Only FAILED PIN entries count, so an assessor legitimately unlocking several
+// candidates in one session never trips it. All three knobs are named here.
+const MAX_FAILED_ATTEMPTS = 5;         // failures within the window that trigger a lock
+const LOCKOUT_WINDOW_MINUTES = 10;     // sliding window the failures are counted in
+const LOCKOUT_DURATION_MINUTES = 15;   // how long the lock holds after the last failure
 const ASSESSOR_ROLES = ['master_admin', 'staff_admin', 'system_admin', 'admin', 'master', 'educator', 'preceptor'];
 
 /**
@@ -199,18 +203,48 @@ serve(async (req) => {
             const { pin, staff_id, assessment_type = 'placement' } = body;
             if (!pin || !staff_id) throw new Error('pin and staff_id are required');
 
-            // 1. Rate limit check: count recent failed attempts
-            const oneHourAgo = new Date(Date.now() - RATE_LIMIT_WINDOW_HOURS * 60 * 60 * 1000).toISOString();
-            const { count: failedCount } = await supabaseAdmin
-                .from('sbd_assessment_pins')
-                .select('id', { count: 'exact', head: true })
+            // 1. Rate limit / lockout check (#60). Count only FAILED attempts for
+            //    this account in the sliding window — correct PINs are never recorded,
+            //    so they can't push a legitimate candidate toward a lock. Once
+            //    MAX_FAILED_ATTEMPTS failures land within LOCKOUT_WINDOW_MINUTES, the
+            //    account is locked for LOCKOUT_DURATION_MINUTES from the last failure.
+            const lookbackMs = Math.max(LOCKOUT_WINDOW_MINUTES, LOCKOUT_DURATION_MINUTES) * 60 * 1000;
+            const lookbackIso = new Date(Date.now() - lookbackMs).toISOString();
+            const { data: recentFails } = await supabaseAdmin
+                .from('sbd_assessment_pin_attempts')
+                .select('created_at')
                 .eq('staff_id', staff_id)
-                .eq('used', false)
-                .gt('created_at', oneHourAgo);
+                .eq('outcome', 'failed')
+                .gt('created_at', lookbackIso)
+                .order('created_at', { ascending: false });
 
-            // We track failed attempts via a separate approach:
-            // Check if there's a recent lockout flag in session metadata
-            // For now, we limit by checking attempt patterns
+            if (recentFails && recentFails.length >= MAX_FAILED_ATTEMPTS) {
+                const lastFailMs = new Date(recentFails[0].created_at).getTime();
+                const windowMs = LOCKOUT_WINDOW_MINUTES * 60 * 1000;
+                // How many of those failures fall within LOCKOUT_WINDOW_MINUTES of the
+                // most recent one — the actual "N fails / window" trigger condition.
+                const inWindow = recentFails.filter(
+                    (r: any) => lastFailMs - new Date(r.created_at).getTime() <= windowMs
+                ).length;
+                const lockExpiresMs = lastFailMs + LOCKOUT_DURATION_MINUTES * 60 * 1000;
+                if (inWindow >= MAX_FAILED_ATTEMPTS && Date.now() < lockExpiresMs) {
+                    const retryMinutes = Math.ceil((lockExpiresMs - Date.now()) / 60000);
+                    // Audit the lock actually biting. Logged as 'locked_out' (NOT
+                    // 'failed') so a locked account retrying can't extend its own lock.
+                    const { error: lockLogErr } = await supabaseAdmin
+                        .from('sbd_assessment_pin_attempts')
+                        .insert({ staff_id, assessment_type, outcome: 'locked_out' });
+                    if (lockLogErr) console.error('Lockout audit log failed:', lockLogErr);
+                    return new Response(JSON.stringify({
+                        error: `Too many incorrect attempts. Try again in ${retryMinutes} minute${retryMinutes === 1 ? '' : 's'}, or ask your assessor for a new PIN.`,
+                        code: 'RATE_LIMITED',
+                        retry_after_minutes: retryMinutes,
+                    }), {
+                        status: 429,
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    });
+                }
+            }
 
             // 2. Find unexpired, unused PIN for this staff + type
             const { data: pinRows } = await supabaseAdmin
@@ -239,6 +273,18 @@ serve(async (req) => {
             const isValid = bcrypt.compareSync(pin, pinRecord.pin_hash);
 
             if (!isValid) {
+                // Record the failed attempt so it counts toward the lockout above (#60).
+                // Best-effort: a logging failure must never upgrade a wrong-PIN into a
+                // hard error for the candidate.
+                const { error: failLogErr } = await supabaseAdmin
+                    .from('sbd_assessment_pin_attempts')
+                    .insert({
+                        staff_id,
+                        facility_id: pinRecord.facility_id,
+                        assessment_type,
+                        outcome: 'failed',
+                    });
+                if (failLogErr) console.error('PIN attempt log failed:', failLogErr);
                 return new Response(JSON.stringify({
                     error: 'Invalid authorization code. Please try again.',
                     code: 'INVALID_PIN'
