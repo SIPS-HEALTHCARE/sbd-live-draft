@@ -354,6 +354,9 @@ const SB = {
   validateAssessmentSession(sessionToken){ return sbFetch('/functions/v1/sbd-assessor-pin', { method:'POST', body:{ action:'validate_session', session_token:sessionToken } }); },
   saveAssessmentProgress(sessionToken, progress){ return sbFetch('/functions/v1/sbd-assessor-pin', { method:'POST', body:{ action:'save_progress', session_token:sessionToken, progress } }); },
   completeAssessmentSession(sessionToken){ return sbFetch('/functions/v1/sbd-assessor-pin', { method:'POST', body:{ action:'complete_session', session_token:sessionToken } }); },
+  // #21 admin in-progress tracker. Admin-gated service-role read; the function
+  // scopes results to the caller's facilities (master_admin sees all).
+  getInProgressAssessments(){ return sbFetch('/functions/v1/sbd-admin-sessions', { method:'POST', body:{} }); },
   notifyPlacementEvent(type, data){ return sbFetch('/functions/v1/sbd-emails', { method:'POST', body:{ type, data } }); }
 };
 if (typeof window !== 'undefined') {

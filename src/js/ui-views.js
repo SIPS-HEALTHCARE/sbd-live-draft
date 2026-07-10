@@ -630,7 +630,7 @@ function renderAView(view){
     'a-overview':renderAOverview,'a-leaderboard':renderALeaderboard,'a-allstaff':renderAAllStaff,'a-scoreboard':renderAScoreboard,
     'a-facilities':renderAFacilities,'a-facility':renderAFacility,
     'a-registrations':renderARegistrations,
-    'a-assessments':renderAAssessments,'a-progression':renderAProgression,'a-upload':renderAUpload,
+    'a-assessments':()=>{ _inProgressCache=null; renderAAssessments(); },'a-progression':renderAProgression,'a-upload':renderAUpload,
     'a-foundations':()=>{ if(typeof renderHTraining==='function') renderHTraining(); },
     'a-instruments':()=>{ if(typeof renderHInstruments==='function') renderHInstruments(); },
     'a-reports':renderAReports,
@@ -13259,6 +13259,7 @@ function renderAAssessments() {
   }
 
   el.innerHTML = `
+    <div id="a-inprogress-panel" style="margin-bottom:20px"></div>
     ${(staffRequests.length+adminQueue.length) === 0 ? '' : `<div class="stat-grid" style="margin-bottom:16px">
       <div class="stat-card"><div class="stat-accent" style="background:var(--warn)"></div><div class="stat-lbl">Staff Requests</div><div class="stat-val" style="color:var(--warn)">${staffRequests.length}</div><div class="stat-sub">awaiting approval</div></div>
       <div class="stat-card"><div class="stat-accent" style="background:var(--blue)"></div><div class="stat-lbl">In Admin Queue</div><div class="stat-val" style="color:var(--blue)">${adminQueue.length}</div><div class="stat-sub">to record</div></div>
@@ -13357,6 +13358,77 @@ function renderAAssessments() {
         </div>`}
       </div>
     </div>`;
+
+  // #21 — populate the in-progress tracker asynchronously (own fetch, own refresh).
+  renderInProgressPanel();
+}
+
+// ── #21 In-progress assessment tracker (admin) ──
+// Lists candidates who are mid-assessment: name, question X of Y, time remaining,
+// status. Data comes from the admin-gated sbd-admin-sessions edge function — a
+// service-role read, so it works regardless of the sessions table's own RLS and
+// changes no policy. Strictly read-only; never writes candidate data. Manual
+// refresh only (no background timer to leak across view changes).
+//
+// renderAAssessments() re-runs on every search keystroke, so the fetched data is
+// cached: incidental re-renders paint from cache, and only the first load or an
+// explicit Refresh actually hits the edge function.
+let _inProgressCache = null;
+async function renderInProgressPanel(forceFetch){
+  const panel = document.getElementById('a-inprogress-panel');
+  if(!panel) return;
+  const header = (bodyHtml, count) => `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <div style="font-size:12px;font-weight:700;color:var(--txt1);letter-spacing:.05em">IN-PROGRESS ASSESSMENTS</div>
+      ${count>0 ? `<span class="pill p-blue">${count} live</span>` : ''}
+      <button class="btn btn-ghost btn-xs" style="margin-left:auto;white-space:nowrap" onclick="renderInProgressPanel(true)">&#8635; Refresh</button>
+    </div>
+    <div class="card">${bodyHtml}</div>`;
+  const paint = (sessions) => {
+    if(sessions.length === 0){
+      panel.innerHTML = header('<div class="empty-state"><div class="empty-ttl">No assessments in progress</div><div class="empty-desc">Candidates mid-assessment will appear here.</div></div>', 0);
+      return;
+    }
+    const rows = sessions.map(s => {
+      const fac = getFac(s.facility_id);
+      const progress = s.total ? `${s.answered} of ${s.total}` : `${s.answered}`;
+      const mins = Number.isFinite(s.remaining_minutes) ? s.remaining_minutes : 0;
+      const timeColor = mins <= 5 ? 'var(--err)' : mins <= 15 ? 'var(--warn)' : 'var(--txt2)';
+      const typeLabel = s.assessment_type === 'belt' ? 'Belt' : 'Placement';
+      return `<tr>
+        <td class="fw7" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.staff_name || 'Unknown'}</td>
+        <td class="hide-sm tc-dim" style="font-size:11.5px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${fac ? fac.name : (s.facility_id || '')}</td>
+        <td><span class="pill ${s.assessment_type==='belt'?'p-gold':'p-blue'}">${typeLabel}</span></td>
+        <td style="white-space:nowrap">${progress}</td>
+        <td style="white-space:nowrap;color:${timeColor};font-weight:700">${mins} min</td>
+        <td><span class="pill p-ok">Active</span></td>
+      </tr>`;
+    }).join('');
+    panel.innerHTML = header(`
+      <div style="overflow-x:auto">
+        <table class="tbl tbl-static" style="min-width:560px">
+          <thead><tr><th>Candidate</th><th class="hide-sm">Facility</th><th>Type</th><th>Progress</th><th>Time Left</th><th>Status</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`, sessions.length);
+  };
+
+  // Incidental re-render (search keystroke, etc.) — paint from cache, no fetch.
+  if(!forceFetch && _inProgressCache !== null){ paint(_inProgressCache); return; }
+
+  if(typeof IS_LIVE==='undefined' || !IS_LIVE){
+    panel.innerHTML = header('<div class="empty-state"><div class="empty-desc">Live session data requires live mode.</div></div>', 0);
+    return;
+  }
+  panel.innerHTML = header('<div class="empty-state"><div class="empty-desc">Loading live sessions&hellip;</div></div>', 0);
+  try {
+    const res = await SB.getInProgressAssessments();
+    _inProgressCache = (res && res.sessions) || [];
+  } catch(e){
+    panel.innerHTML = header(`<div class="empty-state"><div class="empty-ttl">Couldn&rsquo;t load live sessions</div><div class="empty-desc">${e.message||'Request failed'}</div></div>`, 0);
+    return;
+  }
+  paint(_inProgressCache);
 }
 
 // ============================================================
