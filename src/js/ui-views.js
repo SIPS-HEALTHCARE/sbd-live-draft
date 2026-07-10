@@ -1582,7 +1582,7 @@ function startAssessmentTimer(){
       // placement pipeline (and vice-versa).
       if(ASSESSMENT_SESSION.type === 'belt'){
         if(typeof BT !== 'undefined' && typeof submitBeltTest === 'function' && !BT.submitting && !BT.submitted){
-          submitBeltTest();
+          submitBeltTest('timer');
         }
       } else if(!PA.submitting && !PA.submitted){
         submitPlacementAssessment('timer');
@@ -2023,7 +2023,24 @@ function renderPAIntro(){
     </div>`;
 }
 
-function renderPAComplete(pendingSync){
+// Shared "time ran out" notice for the assessment completion screens (#20).
+// Rendered ONLY when a run was auto-submitted by the expiry timer (trigger==='timer'),
+// never on a manual button submit. Reassures the candidate their answers were captured.
+// Defined here (ui-views.js loads before belt-test-flow.js) so both the placement and
+// belt completion screens show an identical message. Returns '' when not timed out.
+function assessmentTimedOutNoticeHTML(timedOut){
+  if(!timedOut) return '';
+  return `
+    <div role="status" aria-live="polite" style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.35);border-radius:12px;padding:14px 18px;max-width:480px;margin:0 auto 24px;display:flex;align-items:flex-start;gap:12px;text-align:left">
+      <div style="font-size:22px;line-height:1;flex-shrink:0">&#9201;</div>
+      <div>
+        <div style="font-size:13.5px;font-weight:700;color:#fbbf24;margin-bottom:3px">Time ran out</div>
+        <div style="font-size:12.5px;color:#cbd5e1;line-height:1.6">Your time expired, so your answers were submitted automatically. Nothing you entered was lost — every response was saved as you went.</div>
+      </div>
+    </div>`;
+}
+
+function renderPAComplete(pendingSync, timedOut){
   const headline = pendingSync ? 'Assessment Saved' : 'Assessment Submitted';
   const subtitle = pendingSync
     ? 'You appear to be offline, so your responses are saved on this device and will be submitted automatically as soon as your connection is restored. You do not need a new PIN or to retake anything.'
@@ -2037,6 +2054,7 @@ function renderPAComplete(pendingSync){
     : 'You can access your dashboard while you wait. Your placement will be confirmed shortly.';
   document.getElementById('placement-content').innerHTML = `
     <div style="text-align:center;padding:20px 0 32px">
+      ${assessmentTimedOutNoticeHTML(timedOut)}
       <div style="width:72px;height:72px;background:rgba(34,197,94,.12);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:32px">&#10003;</div>
       <div style="font-size:24px;font-weight:800;color:#f1f5f9;margin-bottom:10px">${headline}</div>
       <div style="font-size:14px;color:#94a3b8;line-height:1.65;max-width:480px;margin:0 auto 28px">
@@ -2256,7 +2274,7 @@ async function submitPlacementAssessment(trigger){
     staffId: PA.staffId, sessionId: ASSESSMENT_SESSION.sessionId || null,
     pendingSync: !!pendingSync, reviewCreated: !pendingSync
   }); } catch(_){}
-  renderPAComplete(pendingSync);
+  renderPAComplete(pendingSync, trigger === 'timer');
 }
 
 // ── Headless scoring + persistence core ─────────────────────────────────────
