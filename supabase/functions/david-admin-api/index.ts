@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.6";
+import { MODELS } from "../_shared/models.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -246,7 +247,10 @@ serve(async (req) => {
         mtd[k].cost += Number(r.cost || 0);
       });
 
-      return new Response(JSON.stringify({ success: true, data: { analytics, access, mtd } }), {
+      // #47: surface the models currently serving David chat + assessment grading so
+      // the Command Center can show which model is live (a retired slug once broke
+      // grading unnoticed). Slugs come from the shared source of truth.
+      return new Response(JSON.stringify({ success: true, data: { analytics, access, mtd, models: MODELS } }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }

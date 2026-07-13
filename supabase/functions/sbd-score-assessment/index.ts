@@ -1,4 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { callOpenRouter } from '../_shared/openrouter.ts';
+import { MODEL_CHAINS } from '../_shared/models.ts';
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -95,32 +97,29 @@ Candidate response: ${answer}
 Respond with ONLY a JSON object like: {"score":75,"feedback":"One or two sentences naming what was present and what was missing."}
 No markdown, no preamble.`;
 
-        const orRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${openRouterKey}`,
-                'Content-Type': 'application/json',
-                'HTTP-Referer': 'https://belt.sterilebydesign.ai',
-                'X-Title': 'SBD Assessment Scorer',
-            },
-            body: JSON.stringify({
-                // Model slug corrected: the prior `anthropic/claude-3.5-haiku` slug was
-                // retired by OpenRouter and began returning 404 (No endpoints found),
-                // which dropped every simulation grade to the keyword fallback. This is
-                // the current valid cheap Haiku tier.
-                model: 'anthropic/claude-haiku-4.5',
+        // #47: resilient call. Primary is the cheap Haiku tier, falling back to Sonnet
+        // on a dead slug (a retired slug — e.g. the old `claude-3.5-haiku` that 404'd —
+        // once dropped every grade to the keyword fallback), a provider 5xx, or a
+        // timeout. The chain lives in _shared/models.ts so the active model is
+        // reportable from one place.
+        let orRes: Response;
+        let servedModel: string;
+        try {
+            const call = await callOpenRouter({
+                apiKey: openRouterKey,
+                models: MODEL_CHAINS.assessmentScorer,
                 messages: [
                     { role: 'system', content: EVALUATOR_SYSTEM_PROMPT_V2 },
                     { role: 'user', content: userTask }
                 ],
-                max_tokens: keyAware ? 240 : 180,
+                maxTokens: keyAware ? 240 : 180,
                 temperature: 0.3,
-            }),
-        });
-
-        if (!orRes.ok) {
-            const errBody = await orRes.text();
-            console.error('OpenRouter error:', errBody);
+                title: 'SBD Assessment Scorer',
+            });
+            orRes = call.res;
+            servedModel = call.servedModel;
+        } catch (err: any) {
+            console.error('OpenRouter error (all models failed):', err?.message || err);
             return new Response(JSON.stringify({ error: 'AI scoring unavailable' }), {
                 status: 502,
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -147,7 +146,7 @@ No markdown, no preamble.`;
             };
         }
 
-        return new Response(JSON.stringify(result), {
+        return new Response(JSON.stringify({ ...result, model: servedModel }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
 

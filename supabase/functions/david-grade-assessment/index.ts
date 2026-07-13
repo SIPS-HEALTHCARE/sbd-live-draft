@@ -12,6 +12,8 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.6';
+import { callOpenRouter } from '../_shared/openrouter.ts';
+import { MODEL_CHAINS } from '../_shared/models.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -100,22 +102,25 @@ Return ONLY a JSON array, one object per item, no prose:
 ITEMS:
 ${JSON.stringify(items.map(({ i, question, candidate_answer, answer_key, fail_indicator }) => ({ i, question, candidate_answer, answer_key, fail_indicator })), null, 1)}`;
 
-    const orRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openRouterKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://belt.sterilebydesign.ai',
-        'X-Title': 'DAVID Assessment Grading',
-      },
-      body: JSON.stringify({
-        model: 'anthropic/claude-sonnet-4.5',
+    // #47: resilient call. Sonnet primary, Haiku fallback on a dead slug, provider
+    // 5xx, or timeout — a retired grader slug no longer 502s the whole batch. Chain
+    // defined in _shared/models.ts.
+    let orRes: Response;
+    let servedModel: string = MODEL_CHAINS.grader[0];
+    try {
+      const call = await callOpenRouter({
+        apiKey: openRouterKey,
+        models: MODEL_CHAINS.grader,
         messages: [{ role: 'user', content: gradingPrompt }],
         temperature: 0,
-        max_tokens: 8000,
-      }),
-    });
-    if (!orRes.ok) return json({ error: `Grading model error: ${await orRes.text()}` }, 502);
+        maxTokens: 8000,
+        title: 'DAVID Assessment Grading',
+      });
+      orRes = call.res;
+      servedModel = call.servedModel;
+    } catch (err: any) {
+      return json({ error: `Grading model error: ${err?.message || err}` }, 502);
+    }
     const orJson = await orRes.json();
     const raw = orJson.choices?.[0]?.message?.content || '';
     const match = raw.match(/\[[\s\S]*\]/);
@@ -148,7 +153,7 @@ ${JSON.stringify(items.map(({ i, question, candidate_answer, answer_key, fail_in
         is_correct: r.score >= 1,
         partial_score: r.score,
         needs_manual_scoring: false,
-        component_answers: { david: { verdict: r.verdict, score: r.score, note: r.note, model: 'anthropic/claude-sonnet-4.5', graded_at: new Date().toISOString() } },
+        component_answers: { david: { verdict: r.verdict, score: r.score, note: r.note, model: servedModel, graded_at: new Date().toISOString() } },
       }).eq('id', r.response_id);
     }
     await supabase.from('aip_assessment_attempts').update({
