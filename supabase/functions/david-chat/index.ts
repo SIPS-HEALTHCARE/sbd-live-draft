@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.6';
 import { verifyUserAndFacility } from './auth.ts';
+import { callOpenRouter } from '../_shared/openrouter.ts';
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -40,6 +41,10 @@ serve(async (req) => {
             'anthropic/claude-haiku-4.5',
         ]);
         const chosenModel = (typeof model === 'string' && ALLOWED_MODELS.has(model)) ? model : DEFAULT_MODEL;
+        // #47: model fallback chain for every engine call. A routed (cheaper) model
+        // that dies falls to Sonnet; transient 5xx/timeouts on either are retried by
+        // the shared helper. Supersedes the old one-shot recursive self-heal.
+        const modelChain = chosenModel === DEFAULT_MODEL ? [DEFAULT_MODEL] : [chosenModel, DEFAULT_MODEL];
 
         const authHeader = req.headers.get('Authorization') || '';
         let authResult;
@@ -191,43 +196,31 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
         let usageCompletionTokens = 0;
         let usageCost = 0;
 
-        async function runAutonomousLoop(messageChain: any[], depth: number = 0, modelOverride: string | null = null) {
+        async function runAutonomousLoop(messageChain: any[], depth: number = 0) {
             if (depth > 8) return;
 
-            const orRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${openRouterKey}`,
-                    'Content-Type': 'application/json',
-                    'HTTP-Referer': 'https://belt.sterilebydesign.ai',
-                    'X-Title': 'DAVID Intelligence - SBD Belt Platform',
-                },
-                body: JSON.stringify({
-                    model: modelOverride || chosenModel,
+            // #47: resilient engine call. The shared helper walks modelChain
+            // (routed model → Sonnet), retries transient 5xx/timeouts with backoff,
+            // and skips a dead slug — replacing the prior one-shot recursive self-heal.
+            let orRes: Response;
+            try {
+                const call = await callOpenRouter({
+                    apiKey: openRouterKey,
+                    models: modelChain,
                     messages: messageChain,
-                    // Omit `tools` entirely when the caller has none (base tier) — an empty
-                    // tools array is rejected by some providers.
-                    ...(tools.length > 0 ? { tools } : {}),
-                    max_tokens: 4000,
+                    maxTokens: 4000,
                     temperature: 0.7,
                     stream: true,
-                    // Ask the provider to return token accounting + real generation cost in the
-                    // final stream chunk, so metering uses ground-truth cost (not a formula).
-                    usage: { include: true },
-                }),
-            });
-
-            if (!orRes.ok) {
-                const errBody = await orRes.text();
-                console.error('[DAVID] OpenRouter error:', errBody);
-                // M.3 self-heal: if a routed (non-default) model failed, retry once on the default
-                // model with the same (unmutated) message chain — so a bad cheap-model slug can
-                // never break a turn; it just falls back to Sonnet.
-                if (!modelOverride && chosenModel !== DEFAULT_MODEL) {
-                    console.warn('[DAVID] Model', chosenModel, 'failed; retrying on', DEFAULT_MODEL);
-                    return runAutonomousLoop(messageChain, depth, DEFAULT_MODEL);
-                }
-                await writer.write(encoder.encode(`data: ${JSON.stringify({ error: `AI service error: ${errBody}` })}\n\n`));
+                    title: 'DAVID Intelligence - SBD Belt Platform',
+                    // Omit `tools` entirely when the caller has none (base tier) — an empty
+                    // tools array is rejected by some providers. `usage` asks the provider
+                    // for token accounting + real generation cost in the final chunk.
+                    extraBody: { ...(tools.length > 0 ? { tools } : {}), usage: { include: true } },
+                });
+                orRes = call.res;
+            } catch (err: any) {
+                console.error('[DAVID] OpenRouter error (all models failed):', err?.message || err);
+                await writer.write(encoder.encode(`data: ${JSON.stringify({ error: 'AI service error' })}\n\n`));
                 return;
             }
 
@@ -341,12 +334,24 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
 
                 if (!visibleAnswer) {
                     messages.push({ role: 'system', content: 'Your previous turn produced no visible answer. Respond NOW with your full answer in plain conversational text only. Do NOT use <thinking>, <chips>, <chart>, or <citation>. Do NOT call tools. Coach from any knowledge base results you already have.' });
-                    const forced = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-                        method: 'POST',
-                        headers: { 'Authorization': `Bearer ${openRouterKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://belt.sterilebydesign.ai', 'X-Title': 'DAVID' },
-                        body: JSON.stringify({ model: DEFAULT_MODEL, messages, max_tokens: 3000, temperature: 0.7, stream: true, usage: { include: true } }),
-                    });
-                    if (forced.ok && forced.body) {
+                    // #47: same resilient path for the forced-completion recovery.
+                    let forced: Response | null = null;
+                    try {
+                        const fcall = await callOpenRouter({
+                            apiKey: openRouterKey,
+                            models: [DEFAULT_MODEL],
+                            messages,
+                            maxTokens: 3000,
+                            temperature: 0.7,
+                            stream: true,
+                            title: 'DAVID',
+                            extraBody: { usage: { include: true } },
+                        });
+                        forced = fcall.res;
+                    } catch (err: any) {
+                        console.error('[DAVID] Forced completion failed:', err?.message || err);
+                    }
+                    if (forced && forced.ok && forced.body) {
                         const fReader = forced.body.getReader();
                         const fDecoder = new TextDecoder('utf-8');
                         let fBuffer = '';
@@ -375,7 +380,7 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
                                 } catch (_e) { /* ignore */ }
                             }
                         }
-                    } else {
+                    } else if (forced) {
                         console.error('[DAVID] Forced completion failed:', forced.status);
                     }
                 }

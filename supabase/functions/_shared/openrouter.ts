@@ -24,6 +24,7 @@ export interface CallOpenRouterOpts {
   title?: string;
   timeoutMs?: number; // per-attempt abort (default 30s)
   maxRetriesPerModel?: number; // transient retries before moving to the next model
+  extraBody?: Record<string, unknown>; // merged into the request body (e.g. tools, usage)
 }
 
 export interface CallOpenRouterResult {
@@ -54,6 +55,7 @@ export async function callOpenRouter(opts: CallOpenRouterOpts): Promise<CallOpen
     title = 'SBD',
     timeoutMs = 30000,
     maxRetriesPerModel = 2,
+    extraBody,
   } = opts;
 
   if (!apiKey) throw new Error('callOpenRouter: OPENROUTER_API_KEY missing');
@@ -83,6 +85,7 @@ export async function callOpenRouter(opts: CallOpenRouterOpts): Promise<CallOpen
             ...(maxTokens != null ? { max_tokens: maxTokens } : {}),
             ...(temperature != null ? { temperature } : {}),
             ...(stream ? { stream: true } : {}),
+            ...(extraBody || {}),
           }),
         });
         clearTimeout(timer);
