@@ -1041,7 +1041,10 @@ function beginPSTrack(staffId, tid){
   ensurePSTracks(s);
   const status = getTrackStatus(s, tid);
   if(status !== 'eligible') return;
-  s.ps.tracks[tid] = {status:'active', promptedAt: s.ps.tracks[tid]?.promptedAt||new Date().toISOString().slice(0,10), startedAt: new Date().toISOString().slice(0,10), completedAt: null};
+  // Spread the existing track — a rebuilt object here used to wipe the
+  // override grant (override/overrideBy/overrideReason), re-locking the track
+  // the moment an override-granted staff member pressed Begin.
+  s.ps.tracks[tid] = { ...(s.ps.tracks[tid]||{}), status:'active', promptedAt: s.ps.tracks[tid]?.promptedAt||new Date().toISOString().slice(0,10), startedAt: new Date().toISOString().slice(0,10), completedAt: null};
   s.ps.enrolled = true;
   toast('Position School track started. Complete all 5 criteria to earn your star.');
   if (IS_LIVE && typeof SB !== 'undefined' && SB.updateStaff) {
@@ -1061,16 +1064,20 @@ function overrideAssignPSTrack(staffId, tid){
   const prev = s.ps.tracks[tid] || {};
   if(prev.status === 'complete'){ toast('This track is already completed.','err'); return; }
   if(getTrackStatus(s, tid) !== 'locked'){ toast('This track is not locked — no override needed.','err'); return; }
-  if(!confirm(`Override-assign ${t.name} to ${fullName(s)}?\n\nThis bypasses the belt/prerequisite lock and activates the track immediately, including in the staff member's own portal. It still requires ${PS_PASSES_REQUIRED} practice passes per test and observation sign-off to complete.\n\nThe override is recorded on the staff record.`)) return;
+  // Override waives the BELT gate only (client spec 2026-07-10): the sequential
+  // prerequisite chain still applies, so a track whose prereq is not complete
+  // cannot be override-granted.
+  if(t.prereq && getTrackStatus(s, t.prereq) !== 'complete'){ toast('Override waives the belt requirement only. '+(PS_TRACKS[t.prereq]?.name||'The prerequisite school')+' must be completed first.','err'); return; }
+  const reason = (prompt(`Override-grant ${t.name} to ${fullName(s)}?\n\nThis waives the BELT requirement only. The school becomes available for ${fullName(s)} to start (it does not start by itself), still requires ${PS_PASSES_REQUIRED} passes per test, and the star is still awarded by an assessor.\n\nEnter a short reason for the grant (required):`)||'').trim();
+  if(!reason){ toast('Override cancelled — a reason is required.','err'); return; }
   const today = new Date().toISOString().slice(0,10);
   s.ps.tracks[tid] = { ...prev,                    // spread — never partial-write a track
-    status:'active', override:true,
-    overrideBy: ST.user.id, overrideAt: today,
+    status:'eligible', override:true,              // granted = STARTABLE, not auto-active
+    overrideBy: ST.user.id, overrideAt: today, overrideReason: reason,
     promptedAt: prev.promptedAt || today,
-    startedAt: prev.startedAt || today,
+    startedAt: prev.startedAt || null,
     completedAt: prev.completedAt || null };
-  s.ps.enrolled = true;
-  toast(t.name + ' override-assigned to ' + fullName(s) + '.');
+  toast(t.name + ' granted to ' + fullName(s) + ' — it now shows as available to start in their portal.');
   if (IS_LIVE && typeof SB !== 'undefined' && SB.updateStaff) {
     SB.updateStaff(s.id, mapStaffPSToBackend(s)).catch(e=>{ console.warn('PS sync failed:', e); toast('Saved on screen, but syncing to the server failed — please refresh to confirm.','err'); });
   }
@@ -1087,7 +1094,7 @@ function readyToTestPS(staffId, tid){
   s.ps.tracks[tid].status = 'testing';
   // Passes may already be banked from practicing while active
   const advanced = maybeAdvancePSObservation(s, tid);
-  toast(advanced ? 'All practice passes complete. You are now in Observation — awaiting leader sign-off.' : 'Marked as ready to test. Your assessor has been notified.');
+  toast(advanced ? 'All practice passes complete — ready for your assessor to award the star.' : 'Marked as ready to test. Your assessor has been notified.');
   if (IS_LIVE && typeof SB !== 'undefined' && SB.updateStaff) {
     SB.updateStaff(staffId, mapStaffPSToBackend(s)).catch(e=>{ console.warn('PS sync failed:', e); toast('Saved on screen, but syncing to the server failed — please refresh to confirm.','err'); });
   }
@@ -1104,7 +1111,7 @@ function getPSPassCounts(td){
 function psOverrideMark(td){
   if(!td || !td.override) return '';
   const by = DB.users?.find(u => u.id === td.overrideBy);
-  return `<span style="font-size:11px;margin-left:4px;cursor:help" title="Override-assigned by ${(by && (by.name || by.email)) || 'admin'} on ${td.overrideAt || '--'}">&#9889;</span>`;
+  return `<span style="font-size:11px;margin-left:4px;cursor:help" title="Override-granted by ${(by && (by.name || by.email)) || 'admin'} on ${td.overrideAt || '--'}${td.overrideReason ? ' — ' + td.overrideReason : ''}">&#9889;</span>`;
 }
 
 // Advance testing → observation once both modes have PS_PASSES_REQUIRED passes.
@@ -1130,7 +1137,7 @@ function recordPSPass(s, tid, mode){
   t.passes = passes;
   s.ps.tracks[tid] = t;
   if(maybeAdvancePSObservation(s, tid)){
-    toast('All practice passes complete. You are now in Observation — awaiting leader sign-off.', 'ok');
+    toast('All practice passes complete — ready for your assessor to award the star.', 'ok');
   }
   if (IS_LIVE && typeof SB !== 'undefined' && SB.updateStaff) {
     SB.updateStaff(s.id, mapStaffPSToBackend(s)).catch(e=>{ console.warn('PS sync failed:', e); toast('Saved on screen, but syncing to the server failed — please refresh to confirm.','err'); });
@@ -1145,6 +1152,13 @@ function completePSTrack(staffId, tid){
   const ts = getTrackStatus(s, tid);
   if(ts === 'locked' || ts === 'complete') return;
   if(!s.ps.tracks[tid]) s.ps.tracks[tid] = {};
+  // Star is gated on the 3-pass counters (client spec): no award until
+  // 3 Knowledge + 3 Simulation passes are recorded on the track.
+  { const _p = getPSPassCounts(s.ps.tracks[tid]);
+    if(_p.knowledge < PS_PASSES_REQUIRED || _p.simulation < PS_PASSES_REQUIRED){
+      toast('Star locked: needs '+PS_PASSES_REQUIRED+' Knowledge and '+PS_PASSES_REQUIRED+' Simulation passes first (K '+_p.knowledge+'/'+PS_PASSES_REQUIRED+', S '+_p.simulation+'/'+PS_PASSES_REQUIRED+').','err');
+      return;
+    } }
   if(ts === 'observation'){
     s.ps.tracks[tid].observationBy = ST.user?.id || null;
     if(!s.ps.tracks[tid].observationAt) s.ps.tracks[tid].observationAt = new Date().toISOString().slice(0,10);
@@ -4914,7 +4928,7 @@ function pSection(title, badge){
 
 // PS status for print
 function pPSStatus(status){
-  const map={complete:'<span class="badge badge-green">Complete ★</span>',observation:'<span class="badge badge-blue">In Observation</span>',testing:'<span class="badge badge-blue">Ready to Test</span>',active:'<span class="badge badge-warn">In Progress</span>',eligible:'<span class="badge badge-gold">Available</span>',locked:'<span class="badge badge-muted">Locked</span>'};
+  const map={complete:'<span class="badge badge-green">Complete ★</span>',observation:'<span class="badge badge-blue">Ready for Star</span>',testing:'<span class="badge badge-blue">Ready to Test</span>',active:'<span class="badge badge-warn">In Progress</span>',eligible:'<span class="badge badge-gold">Available</span>',locked:'<span class="badge badge-muted">Locked</span>'};
   return map[status]||'–';
 }
 
@@ -5976,7 +5990,7 @@ async function renderSReport(){
           <td style="font-size:12px;font-weight:600">${t.name}</td>
           <td><span style="font-size:9.5px;font-weight:700;color:${t.tier==='green'?'var(--blt-gr)':'var(--blue)'}">
             ${t.tier==='green'?'GREEN':'BLUE'} TIER</span></td>
-          <td>${status==='complete'?'<span class="pill p-ok">Complete ★</span>':status==='observation'?'<span class="pill" style="background:rgba(168,85,247,.12);color:#a855f7;border:1px solid rgba(168,85,247,.3)">In Observation</span>':status==='testing'?'<span class="pill p-blue">Ready to Test</span>':status==='active'?'<span class="pill p-warn">In Progress</span>':'<span class="pill p-gold">Available</span>'}</td>
+          <td>${status==='complete'?'<span class="pill p-ok">Complete ★</span>':status==='observation'?'<span class="pill" style="background:rgba(168,85,247,.12);color:#a855f7;border:1px solid rgba(168,85,247,.3)">Ready for Star</span>':status==='testing'?'<span class="pill p-blue">Ready to Test</span>':status==='active'?'<span class="pill p-warn">In Progress</span>':'<span class="pill p-gold">Available</span>'}</td>
           <td style="font-size:11px;color:var(--txt3)">${td.promptedAt||'--'}</td>
           <td style="font-size:11px;color:var(--txt3)">${td.startedAt||'--'}</td>
           <td style="font-size:11px;color:${status==='complete'?'var(--ok)':'var(--txt3)'};font-weight:${status==='complete'?'600':'400'}">${td.completedAt||'--'}</td>
@@ -6157,7 +6171,7 @@ function openPSTrackDetail(tid, staffId){
     const practiceSection = bank ? `
       <div style="background:var(--s2);border:1px solid var(--bdr);border-radius:var(--r);padding:14px;margin-top:14px">
         <div style="font-size:11px;font-weight:700;color:var(--txt);letter-spacing:.05em;margin-bottom:10px">SIPS INTELLIGENCE – PRACTICE TESTS</div>
-        <div style="font-size:11.5px;color:var(--txt2);margin-bottom:10px">Score 80%+ on both tests ${PS_PASSES_REQUIRED} times each to enter Observation and unlock leader sign-off.</div>
+        <div style="font-size:11.5px;color:var(--txt2);margin-bottom:10px">Score 80%+ on both tests ${PS_PASSES_REQUIRED} times each — your assessor then awards the star.</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
           <div style="background:${kScore>=80?'rgba(34,197,94,.06)':'var(--bg)'};border:1px solid ${kScore>=80?'rgba(34,197,94,.2)':'var(--bdr)'};border-radius:var(--rs);padding:10px;text-align:center;cursor:pointer" onclick="startPSPracticeTest('${tid}','knowledge')">
             <div style="font-size:11px;font-weight:700;color:var(--txt3);margin-bottom:4px">KNOWLEDGE</div>
@@ -6178,7 +6192,7 @@ function openPSTrackDetail(tid, staffId){
 
     if(status==='eligible') actionBtn=practiceSection + `<button class="btn btn-gold" style="margin-top:10px;width:100%" onclick="beginPSTrack('${s.id}','${tid}');closeModal()">Begin ${t.name}</button>`;
     else if(status==='active') actionBtn=practiceSection + `<button class="btn btn-gold" style="margin-top:10px;width:100%" onclick="readyToTestPS('${s.id}','${tid}');closeModal()">Mark Ready to Test</button>`;
-    else if(status==='observation') actionBtn=`<div style="display:flex;align-items:center;gap:8px;margin-top:12px;padding:12px 14px;background:rgba(168,85,247,.08);border:1px solid rgba(168,85,247,.25);border-radius:var(--rs)"><span style="color:#a855f7;font-size:16px">&#128065;</span><span style="font-size:13px;font-weight:700;color:#a855f7">In Observation${td.observationAt?' since '+td.observationAt:''} – awaiting leader sign-off</span></div>` + practiceSection;
+    else if(status==='observation') actionBtn=`<div style="display:flex;align-items:center;gap:8px;margin-top:12px;padding:12px 14px;background:rgba(168,85,247,.08);border:1px solid rgba(168,85,247,.25);border-radius:var(--rs)"><span style="color:#a855f7;font-size:16px">&#128065;</span><span style="font-size:13px;font-weight:700;color:#a855f7">All passes complete${td.observationAt?' since '+td.observationAt:''} – your assessor awards the star</span></div>` + practiceSection;
     else if(status==='complete') actionBtn=`<div style="display:flex;align-items:center;gap:8px;margin-top:12px;padding:12px 14px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:var(--rs)"><span style="color:var(--ok);font-size:18px">★</span><span style="font-size:13px;font-weight:700;color:var(--ok)">Track Complete – Star Earned</span></div>`;
     else actionBtn = practiceSection;
   }
@@ -6525,9 +6539,9 @@ function renderPSPracticeView(el) {
           </div>
         </div>
         ${_inObs ? `<div style="background:rgba(168,85,247,.06);border:1.5px solid rgba(168,85,247,.3);border-radius:var(--r);padding:12px 16px;margin-bottom:14px">
-          <div style="font-size:12.5px;font-weight:700;color:#a855f7;margin-bottom:4px">You Are In Observation</div>
-          <div style="font-size:12px;color:var(--txt2)">All required practice passes are complete for ${track ? track.name : 'this track'} (${_passProg}). A leader will now observe and sign off your track completion.</div>
-        </div>` : pct >= 80 ? `<div style="background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.2);border-radius:var(--rs);padding:11px 14px;margin-bottom:14px;font-size:12px;color:var(--txt2)"><strong style="color:var(--ok)">This attempt passed.</strong> Progress: ${_passProg}. Pass both tests ${PS_PASSES_REQUIRED} times each to enter Observation.</div>` : `<div style="background:rgba(239,68,68,.05);border:1px solid rgba(239,68,68,.15);border-radius:var(--rs);padding:11px 14px;margin-bottom:14px;font-size:12px;color:var(--txt2)">Review the questions you missed and retake. <strong style="color:var(--err)">80% required</strong> to bank a pass &mdash; progress: ${_passProg}.</div>`}
+          <div style="font-size:12.5px;font-weight:700;color:#a855f7;margin-bottom:4px">All Passes Complete</div>
+          <div style="font-size:12px;color:var(--txt2)">All required practice passes are complete for ${track ? track.name : 'this track'} (${_passProg}). Your assessor now awards the star.</div>
+        </div>` : pct >= 80 ? `<div style="background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.2);border-radius:var(--rs);padding:11px 14px;margin-bottom:14px;font-size:12px;color:var(--txt2)"><strong style="color:var(--ok)">This attempt passed.</strong> Progress: ${_passProg}. Pass both tests ${PS_PASSES_REQUIRED} times each — your assessor then awards the star.</div>` : `<div style="background:rgba(239,68,68,.05);border:1px solid rgba(239,68,68,.15);border-radius:var(--rs);padding:11px 14px;margin-bottom:14px;font-size:12px;color:var(--txt2)">Review the questions you missed and retake. <strong style="color:var(--err)">80% required</strong> to bank a pass &mdash; progress: ${_passProg}.</div>`}
         ${wrongs.length ? `<div class="card mb14">
           <div class="card-hd"><div class="card-ttl">Review These</div><span class="pill p-err">${wrongs.length} missed</span></div>
           <div style="max-height:340px;overflow-y:auto">
@@ -6665,7 +6679,7 @@ function renderSPosSchool(){
           <button class="btn btn-ghost btn-sm" onclick="openPSTrackDetail('${tid}','${s.id}')">Review Curriculum</button>
         </div>`}
       </div>`;
-      timeline=`<div style="font-size:10.5px;color:var(--txt3);margin-top:4px">In Observation${td.observationAt?' since '+td.observationAt:''} &bull; awaiting leader sign-off.</div>`;
+      timeline=`<div style="font-size:10.5px;color:var(--txt3);margin-top:4px">All passes complete${td.observationAt?' since '+td.observationAt:''} &bull; star award pending.</div>`;
     } else if(isTesting){
       badge=`<span style="background:rgba(59,130,246,.12);color:var(--blue);border:1px solid rgba(59,130,246,.25);border-radius:20px;padding:3px 10px;font-size:10px;font-weight:700">READY TO TEST</span>`;
       actionBtns=`<div style="margin-top:10px">
@@ -9611,8 +9625,8 @@ function renderHProfile(sid,context){
   return allT.map(tid=>{
     const t=PS_TRACKS[tid]; const st2=getTrackStatus(s,tid); const td=s.ps&&s.ps.tracks?s.ps.tracks[tid]||{}:{};
     const _p=getPSPassCounts(td);
-    const statusBadge=st2==='complete'?'<span class="pill p-ok">Complete ★</span>':st2==='observation'?'<span class="pill" style="background:rgba(168,85,247,.12);color:#a855f7;border:1px solid rgba(168,85,247,.3)">In Observation</span>':st2==='testing'?'<span class="pill p-blue">Ready to Test</span>':st2==='active'?'<span class="pill p-warn">In Progress</span>':st2==='eligible'?'<span class="pill p-gold">Available</span>':'<span class="pill p-muted">Locked</span>';
-    const action=st2==='observation'?`<button class="btn btn-ok btn-xs" style="margin-left:8px" onclick="completePSTrack('${s.id}','${tid}'); event.stopPropagation()">Confirm Observation & Award Star</button>`:st2==='testing'?`<span style="font-size:10.5px;color:var(--txt3);margin-left:8px">K ${_p.knowledge}/${PS_PASSES_REQUIRED} &bull; S ${_p.simulation}/${PS_PASSES_REQUIRED}</span><button class="btn btn-ok btn-xs" style="margin-left:8px" onclick="completePSTrack('${s.id}','${tid}'); event.stopPropagation()">Award Star</button>`:st2==='active'?`<span style="font-size:10.5px;color:var(--txt3);margin-left:8px">Since ${td.startedAt||'--'}</span>`:st2==='locked'&&isOverrideAdmin?`<button class="btn btn-ghost btn-xs" style="margin-left:8px;border-color:var(--gold-bd);color:var(--gold)" onclick="overrideAssignPSTrack('${s.id}','${tid}')">Override Assign</button>`:'';
+    const statusBadge=st2==='complete'?'<span class="pill p-ok">Complete ★</span>':st2==='observation'?'<span class="pill" style="background:rgba(168,85,247,.12);color:#a855f7;border:1px solid rgba(168,85,247,.3)">Ready for Star</span>':st2==='testing'?'<span class="pill p-blue">Ready to Test</span>':st2==='active'?'<span class="pill p-warn">In Progress</span>':st2==='eligible'?'<span class="pill p-gold">Available</span>':'<span class="pill p-muted">Locked</span>';
+    const action=st2==='observation'?`<button class="btn btn-ok btn-xs" style="margin-left:8px" onclick="completePSTrack('${s.id}','${tid}'); event.stopPropagation()">Award Star</button>`:st2==='testing'?`<span style="font-size:10.5px;color:var(--txt3);margin-left:8px">K ${_p.knowledge}/${PS_PASSES_REQUIRED} &bull; S ${_p.simulation}/${PS_PASSES_REQUIRED}</span>`:st2==='active'?`<span style="font-size:10.5px;color:var(--txt3);margin-left:8px">Since ${td.startedAt||'--'}</span>`:st2==='locked'&&isOverrideAdmin?`<button class="btn btn-ghost btn-xs" style="margin-left:8px;border-color:var(--gold-bd);color:var(--gold)" onclick="overrideAssignPSTrack('${s.id}','${tid}')">Override Assign</button>`:'';
     const canClick = st2 !== 'locked';
     return `<div class="irow" style="${st2==='locked'?(isOverrideAdmin?'':'opacity:.5'):'cursor:pointer'}" ${canClick?`onclick="openPSTrackDetail('${tid}','${s.id}')"`:''}><div class="ilbl" style="font-size:11.5px;flex:1">${t.name}${psOverrideMark(td)}</div><div class="ival" style="display:flex;align-items:center;gap:6px">${statusBadge}${action}</div></div>`;
   }).join('')+'<div class="irow" style="border:none"><div class="ilbl">Promotion Eligible</div><div class="ival">'+( s.promo?'<span class="pill p-gold">Yes</span>':'<span style="color:var(--txt3);font-size:12px">Not yet</span>' )+'</div></div>';
@@ -11093,9 +11107,9 @@ function renderHPosSchool(){
           <td class="fw7" onclick="openHProfile('${s.id}')" style="cursor:pointer">${fullName(s)}</td>
           <td>${beltBadge(s.belt,s)}</td>
           <td style="font-size:12px">${PS_TRACKS[tid].name}${psOverrideMark(td)}</td>
-          <td>${status==='observation'?'<span class="pill" style="background:rgba(168,85,247,.12);color:#a855f7;border:1px solid rgba(168,85,247,.3)">In Observation</span>':`<span class="pill p-blue">Ready to Test</span><div style="font-size:10px;color:var(--txt3);margin-top:2px">K ${passes.knowledge}/${PS_PASSES_REQUIRED} &bull; S ${passes.simulation}/${PS_PASSES_REQUIRED}</div>`}</td>
+          <td>${status==='observation'?'<span class="pill" style="background:rgba(168,85,247,.12);color:#a855f7;border:1px solid rgba(168,85,247,.3)">Ready for Star</span>':`<span class="pill p-blue">Ready to Test</span><div style="font-size:10px;color:var(--txt3);margin-top:2px">K ${passes.knowledge}/${PS_PASSES_REQUIRED} &bull; S ${passes.simulation}/${PS_PASSES_REQUIRED}</div>`}</td>
           <td style="font-size:11.5px;color:var(--txt3)">${startedAt||'--'}</td>
-          <td><button class="btn btn-ok btn-xs" onclick="completePSTrack('${s.id}','${tid}')">${status==='observation'?'Confirm Observation & Award Star':'Award Star'}</button></td>
+          <td><button class="btn btn-ok btn-xs" onclick="completePSTrack('${s.id}','${tid}')">Award Star</button></td>
         </tr>`).join('')}</tbody>
       </table></div>
     </div>`:''}
