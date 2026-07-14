@@ -1,6 +1,18 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.6";
 
+// ─── Inlined from supabase/functions/_shared/models.ts (#47) ─────────────────
+// This function is deployed via the Supabase dashboard (copy-paste), which cannot
+// resolve the `../_shared` import. The active-model slugs surfaced by GET_METRICS
+// (the Command Center indicator) therefore live inline here. Keep in sync with
+// _shared/models.ts if that file changes.
+const MODELS = {
+  chatDefault: 'anthropic/claude-sonnet-4.5',
+  chatCheap: 'anthropic/claude-haiku-4.5',
+  assessmentScorer: 'anthropic/claude-haiku-4.5',
+  grader: 'anthropic/claude-sonnet-4.5',
+} as const;
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -246,7 +258,10 @@ serve(async (req) => {
         mtd[k].cost += Number(r.cost || 0);
       });
 
-      return new Response(JSON.stringify({ success: true, data: { analytics, access, mtd } }), {
+      // #47: surface the models currently serving David chat + assessment grading so
+      // the Command Center can show which model is live (a retired slug once broke
+      // grading unnoticed). Slugs come from the inlined MODELS constant above.
+      return new Response(JSON.stringify({ success: true, data: { analytics, access, mtd, models: MODELS } }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }

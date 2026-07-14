@@ -199,7 +199,7 @@ function btNext(){
 function btPrev(){ if(BT.currentQ<=1) return; BT.currentQ--; saveBTState(); renderBTScreen(); }
 
 // ── Submit + score ───────────────────────────────────────────────────────────
-async function submitBeltTest(){
+async function submitBeltTest(trigger){
   if(BT.submitting) return;
   BT.submitting = true; saveBTState();
   document.getElementById('placement-content').innerHTML = _btLoading('Scoring your responses…');
@@ -246,7 +246,7 @@ async function submitBeltTest(){
     if(!DB.beltTestResults) DB.beltTestResults = [];
     DB.beltTestResults.push({ staffId: BT.staffId, fid: s?s.fid:null, targetBelt: BT.targetBelt, status:'PENDING_REVIEW', submittedAt });
     BT.submitted = true; BT.submitting = false; BT.active = false; saveBTState();
-    renderBTComplete();
+    renderBTComplete(trigger === 'timer');
   } catch(e){
     BT.submitting = false; saveBTState();
     if(typeof handleSyncError==='function') handleSyncError(e, 'Belt test submit');
@@ -270,9 +270,14 @@ async function _btScoreSims(simItems, answers){
 }
 
 // Completion screen — candidate does NOT see the suggested belt (spec §11).
-function renderBTComplete(){
+// timedOut=true prepends the shared "time ran out" notice (#20); it's only passed as
+// true when the expiry timer auto-submitted, never on a manual submit or a resume redraw.
+function renderBTComplete(timedOut){
+  const timeoutNotice = (typeof assessmentTimedOutNoticeHTML === 'function')
+    ? assessmentTimedOutNoticeHTML(timedOut) : '';
   document.getElementById('placement-content').innerHTML = `
     <div style="text-align:center;padding:20px 0 32px">
+      ${timeoutNotice}
       <div style="width:72px;height:72px;background:rgba(34,197,94,.12);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:32px">&#10003;</div>
       <div style="font-size:24px;font-weight:800;color:#f1f5f9;margin-bottom:10px">Belt Test Submitted</div>
       <div style="font-size:14px;color:#94a3b8;line-height:1.65;max-width:480px;margin:0 auto 28px">

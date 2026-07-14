@@ -61,7 +61,22 @@ const FOUNDATIONS_MODULES = [
     {q:'Which standard is the primary reference for steam sterilization?',opts:['OSHA 1910','AAMI ST79','FDA 510(k)','CDC HICPAC'],ans:1},
     {q:'Why must manufacturer IFUs be followed?',opts:['They are optional recommendations','Following them is required by law','They only apply to new instruments','They are facility-specific'],ans:1},
     {q:'Which SBD pillar requires real-time records, not end-of-shift?',opts:['Standardization','Verification','Documentation','Communication'],ans:2},
-    {q:'What is biofilm?',opts:['A protective colony of bacteria resistant to killing','A type of sterilization packaging','A cleaning solution for ultrasonics','A quality test for washers'],ans:0}
+    {q:'What is biofilm?',opts:['A protective colony of bacteria resistant to killing','A type of sterilization packaging','A cleaning solution for ultrasonics','A quality test for washers'],ans:0},
+    {q:'What can result when sterile processing fails?',opts:['Healthcare-Associated Infections or Surgical Site Infections','Longer surgical case times','Increased instrument inventory costs','Delayed OR scheduling'],ans:0},
+    {q:'Which set of qualities does the module say this job requires?',opts:['Speed, multitasking, and improvisation','Attention to detail, consistency, integrity, humility, and pride','Physical strength and endurance','Salesmanship and negotiation'],ans:1},
+    {q:'According to the module, sterilization cannot be effective on instruments that are:',opts:['Made of stainless steel','Still wet from rinsing','Dirty or soiled','Recently purchased'],ans:2},
+    {q:'Which of the following is listed as a type of microorganism?',opts:['Enzymes','Detergents','Surfactants','Fungi'],ans:3},
+    {q:'How many links make up the Chain of Infection?',opts:['Four','Five','Six','Seven'],ans:2},
+    {q:'What is the final link in the Chain of Infection?',opts:['Infectious Agent','Portal of Exit','Reservoir','Susceptible Host'],ans:3},
+    {q:'Which link comes immediately after Portal of Exit?',opts:['Susceptible Host','Portal of Entry','Mode of Transmission','Reservoir'],ans:2},
+    {q:'Semi-critical items come into contact with which type of tissue?',opts:['Sterile tissue','Mucous membranes','Intact skin','Bone'],ans:1},
+    {q:'Which Spaulding category contacts intact skin and needs only low-level disinfection?',opts:['Non-critical','Semi-critical','Critical','High-risk'],ans:0},
+    {q:'Which organization is responsible for worker safety in the SPD?',opts:['OSHA','FDA','AORN','TJC'],ans:0},
+    {q:'Which organization provides accreditation to healthcare facilities?',opts:['CDC','The Joint Commission (TJC)','AAMI','CMS'],ans:1},
+    {q:'Which SBD pillar reduces variability?',opts:['Verification','Communication','Documentation','Standardization'],ans:3},
+    {q:'Which SBD pillar is described as catching errors before they reach patients?',opts:['Standardization','Verification','Documentation','Communication'],ans:1},
+    {q:'Which certification is offered through HSPA?',opts:['CRCST','CSPDT','CBSPD','ST79'],ans:0},
+    {q:'Professional ethics in sterile processing include:',opts:['Following procedures only when a supervisor is watching','Prioritizing speed over accuracy','Deferring all decisions to the OR','Making patient-first decisions and reporting honestly'],ans:3},
   ],
   simulations:[
     {s:'A surgeon tells you that sterile processing is "just cleaning." How do you understand your role?',opts:['They are correct, it is mostly cleaning','SPD ensures every reusable device is safe through cleaning, inspection, sterilization, and verified processes','SPD only handles sterilization, not cleaning','Cleaning is housekeeping, SPD does packaging'],ans:1},
@@ -73,7 +88,22 @@ const FOUNDATIONS_MODULES = [
     {s:'You notice a coworker documenting sterilization load records at the end of their shift from memory. What SBD pillar does this violate?',opts:['Standardization','Verification','Documentation','Communication'],ans:2},
     {s:'You find an error in your own work. Nobody saw it. What do you do?',opts:['Fix it quietly and move on','Report it through proper channels because integrity requires honest reporting','Wait to see if anyone notices','Only report if it involves an implant'],ans:1},
     {s:'A new tech asks why there are so many rules in SPD. What is the best explanation?',opts:['Because management likes paperwork','Each rule exists to break a link in the chain of infection and protect patients','The rules are mostly for accreditation purposes','Most rules are outdated but still enforced'],ans:1},
-    {s:'Which of the following would be classified as a critical item under Spaulding?',opts:['A stethoscope','A bed rail','A surgical scalpel that enters sterile tissue','A blood pressure cuff'],ans:2}
+    {s:'Which of the following would be classified as a critical item under Spaulding?',opts:['A stethoscope','A bed rail','A surgical scalpel that enters sterile tissue','A blood pressure cuff'],ans:2},
+    {s:'You are tempted to skip a small step because you are behind schedule. Which principle from the module should guide your decision?',opts:['The work requires consistency and attention to detail because patient safety depends on it','Speed matters more than thoroughness when busy','Skipping minor steps is fine if no one notices','Only critical instruments require full attention'],ans:0},
+    {s:'A colleague says mistakes in SPD do not really affect patients. Based on the module\'s mission, how do you respond?',opts:['They are right, the OR catches everything','SPD failures can lead to Healthcare-Associated Infections or Surgical Site Infections, so our work directly affects patients','Mistakes only matter for implants','Errors are the OR\'s responsibility, not ours'],ans:1},
+    {s:'An instrument still has visible soil but a coworker wants to run it through the sterilizer anyway. What is the microbiology problem?',opts:['Nothing, the sterilizer handles soil','Only spores matter, so soil is fine','Sterilization cannot work on dirty instruments, so soil must be removed first','Soil helps the sterilant penetrate'],ans:2},
+    {s:'You need to explain to a new tech why spores matter for sterilization. What is the correct point?',opts:['Spores are harmless','Spores are easier to kill than viruses','Spores are a type of packaging','Spores are the most resistant form of microbial life, so they are the sterilization benchmark'],ans:3},
+    {s:'A student asks you to name the six links of the Chain of Infection in order. Which sequence is correct?',opts:['Infectious Agent, Reservoir, Portal of Exit, Mode of Transmission, Portal of Entry, Susceptible Host','Reservoir, Infectious Agent, Portal of Entry, Mode of Transmission, Portal of Exit, Susceptible Host','Susceptible Host, Portal of Entry, Mode of Transmission, Portal of Exit, Reservoir, Infectious Agent','Infectious Agent, Portal of Exit, Reservoir, Portal of Entry, Mode of Transmission, Susceptible Host'],ans:0},
+    {s:'A patient with a weakened immune system is best described as which link in the Chain of Infection?',opts:['Reservoir','Susceptible Host','Portal of Exit','Infectious Agent'],ans:1},
+    {s:'A reusable device will enter a patient\'s sterile tissue during surgery. What Spaulding processing does it require?',opts:['Low-level disinfection','High-level disinfection','Sterilization','No processing'],ans:2},
+    {s:'A vaginal speculum contacts a mucous membrane. What is the minimum processing under Spaulding?',opts:['Low-level disinfection','Only rinsing','No processing needed','High-level disinfection'],ans:3},
+    {s:'A stethoscope only touches intact skin. What Spaulding category and processing apply?',opts:['Non-critical, low-level disinfection','Semi-critical, high-level disinfection','Critical, sterilization','Critical, high-level disinfection'],ans:0},
+    {s:'An auditor asks which organization ties your facility to Medicare conditions of participation. Which do you name?',opts:['CDC','CMS','AORN','AAMI'],ans:1},
+    {s:'A new employee asks who sets worker-safety rules such as wearing PPE. Which organization?',opts:['FDA','TJC','OSHA','CDC'],ans:2},
+    {s:'Your department wants every tech to build a given tray the same way to reduce errors. Which SBD pillar is this?',opts:['Verification','Documentation','Communication','Standardization'],ans:3},
+    {s:'During a second check you catch a wrong instrument in a tray before it reaches the OR. Which SBD pillar does this represent?',opts:['Verification','Standardization','Communication','Documentation'],ans:0},
+    {s:'A shift handoff leads to confusion about an incomplete load. Which SBD pillar would have prevented this?',opts:['Standardization','Communication','Verification','Documentation'],ans:1},
+    {s:'You want a nationally recognized credential to validate your knowledge. Which certification could you pursue through HSPA?',opts:['ST79','A0','CRCST','CSPDT'],ans:2},
   ],
   observations:[
     {id:'o1-1',text:'Can state the primary purpose of the SPD in their own words'},
@@ -106,7 +136,22 @@ const FOUNDATIONS_MODULES = [
     {q:'When loading an automated washer, hinged instruments must be:',opts:['Closed and locked','Open with box locks unlocked','In peel pouches first','Stacked to maximize capacity'],ans:1},
     {q:'What does the A0 concept measure?',opts:['Detergent concentration','Thermal disinfection exposure (time and temperature)','Water pressure','Number of instruments per load'],ans:1},
     {q:'What is the most important decontamination verification step?',opts:['ATP testing','Protein residual testing','Visual inspection with magnification','Washer printout review'],ans:2},
-    {q:'Why should dissimilar metals NOT be placed together in ultrasonics?',opts:['Too much noise','Electrolytic corrosion and damage','Cannot handle mixed weights','OSHA regulation'],ans:1}
+    {q:'Why should dissimilar metals NOT be placed together in ultrasonics?',opts:['Too much noise','Electrolytic corrosion and damage','Cannot handle mixed weights','OSHA regulation'],ans:1},
+    {q:'What is the purpose of a proper doffing sequence with hand hygiene between steps?',opts:['To prevent self-contamination','To save time','To conserve PPE','To meet dress code'],ans:0},
+    {q:'What type of gown is required PPE in decontamination?',opts:['Cloth gown','Fluid-resistant gown','Disposable paper apron','Lead gown'],ans:1},
+    {q:'What forms when dried bioburden is left on instruments?',opts:['Rust','Patina','Biofilm','Cavitation'],ans:2},
+    {q:'Which of the following is an appropriate point-of-use pre-treatment?',opts:['Air drying the instruments','Wrapping in a dry towel for overnight storage','Leaving instruments to dry before transport','Applying enzymatic foam or gel'],ans:3},
+    {q:'How should contaminated and clean items be routed?',opts:['Kept on separate routes','On the same cart to save trips','Clean first, then contaminated on the same path','Route does not matter if items are covered'],ans:0},
+    {q:'Contaminated transport containers must be labeled as:',opts:['Fragile','Biohazardous','Clean','Do not stack'],ans:1},
+    {q:'What must you always check for when sorting instruments?',opts:['Serial numbers','Manufacturer date','Sharps','Color coding'],ans:2},
+    {q:'What must be done to multi-part instruments before cleaning?',opts:['Label them','Weigh them','Wrap them','Disassemble them'],ans:3},
+    {q:'Serrations should be brushed:',opts:['In the direction of the ridges','Against the ridges','In a circular motion only','With a dry brush'],ans:0},
+    {q:'The three elements of manual cleaning are:',opts:['Heat, pressure, and steam','Water, detergent, and mechanical action','Enzyme, rinse, and dry','Soak, spray, and wipe'],ans:1},
+    {q:'How long should the aluminum foil test for an ultrasonic cleaner run?',opts:['5-10 seconds','1-2 minutes','20-30 seconds','5 minutes'],ans:2},
+    {q:'Ultrasonic solution concentration and temperature should follow:',opts:['Whatever is convenient','The hottest available setting','Personal preference','The manufacturer IFU'],ans:3},
+    {q:'Lumened instruments in an automated washer must be:',opts:['Connected to flushing ports','Laid flat on the shelf','Placed in a peel pouch','Left disassembled in a pile'],ans:0},
+    {q:'What magnification is recommended for visual inspection?',opts:['10x-20x','2x-5x','50x','No magnification needed'],ans:1},
+    {q:'Which is an additional cleaning verification method beyond visual inspection?',opts:['Weight testing','Color testing','ATP testing','Sound testing'],ans:2},
   ],
   simulations:[
     {s:'You arrive at your decontam station and realize your face shield has a crack. What do you do?',opts:['Use it anyway, the crack is small','Replace it before handling any contaminated items','Tape over the crack','Skip face protection for this shift'],ans:1},
@@ -118,7 +163,22 @@ const FOUNDATIONS_MODULES = [
     {s:'The automated washer completes a cycle but the printout shows the thermal disinfection temperature was 5 degrees below target. What do you do?',opts:['Accept it since it was close enough','Do not release the load; the thermal disinfection parameters were not met; reprocess or report','Check if any instruments look clean and release those','Ignore printout, they look clean'],ans:1},
     {s:'A new tech asks if they really need to wear all PPE components since decontam "is not that dirty." What do you tell them?',opts:['They can skip shoe covers','All PPE components are required because every item in decontam is contaminated with potentially infectious material','Gloves alone are enough','PPE is optional for experienced staff'],ans:1},
     {s:'You finish manually cleaning a set and visually inspect it. Under magnification, you see residual soil in a box lock. What do you do?',opts:['It is sterilization-ready','The item is not clean; re-clean the box lock area until soil is removed','Mark it and move on','Soil in box locks is acceptable'],ans:1},
-    {s:'Two different metal types (stainless and aluminum) need ultrasonic cleaning. Can you put them in together?',opts:['Yes, the cleaner handles everything','No, dissimilar metals can cause galvanic corrosion; process them separately','Only if they are the same size','Yes, if you add extra detergent'],ans:1}
+    {s:'Two different metal types (stainless and aluminum) need ultrasonic cleaning. Can you put them in together?',opts:['Yes, the cleaner handles everything','No, dissimilar metals can cause galvanic corrosion; process them separately','Only if they are the same size','Yes, if you add extra detergent'],ans:1},
+    {s:'You are about to enter decontam and realize you forgot your hair cover. What should you do?',opts:['Put on the hair cover before starting, it is required PPE','Proceed, hair cover is optional','Only wear it if handling lumens','Tie your hair back instead'],ans:0},
+    {s:'You finished decontam work and need to remove PPE. What should you do between steps?',opts:['Remove all PPE at once','Perform hand hygiene between steps to prevent self-contamination','Spray gloves with disinfectant only','Remove gloves last with no hand hygiene'],ans:1},
+    {s:'A tray sat in the OR for an hour with no pre-treatment before coming to you. What is the concern?',opts:['No concern, cleaning removes anything','The instruments are now sterile','Blood and tissue dry within minutes and can form biofilm, making cleaning harder','They only need a quick rinse'],ans:2},
+    {s:'OR staff ask what they should do to instruments right after a procedure. What point-of-use guidance do you give?',opts:['Let them air dry on the back table','Wrap them dry and send them tomorrow','Rinse with tap water and store','Apply enzymatic foam or saline-moistened towels and transport promptly'],ans:3},
+    {s:'You need to move contaminated instruments to decontam but the only cover you can find is torn. What do you do?',opts:['Find a proper covered, leak-proof container before transporting','Transport uncovered since it is a short trip','Use the torn cover anyway','Carry them by hand'],ans:0},
+    {s:'A coworker wants to use the same cart for clean and contaminated items to save time. What is your response?',opts:['That is fine if the cart is wiped between','Contaminated and clean routes must be kept separate','Only an issue for lumened instruments','Acceptable during busy periods'],ans:1},
+    {s:'While sorting a returned set, you are unsure whether an instrument has multiple parts. What should you do before cleaning?',opts:['Clean it assembled to be safe','Send it to the washer as is','Disassemble multi-part instruments per IFU before cleaning','Skip it'],ans:2},
+    {s:'You receive a mixed bin of instruments to sort. What is the safest first action?',opts:['Grab handfuls quickly to sort by type','Weigh the bin','Photograph the contents','Check for sharps before handling to avoid injury'],ans:3},
+    {s:'You are manually cleaning a hemostat with serrations. In which direction should you brush?',opts:['In the direction of the ridges','Across the ridges randomly','Only along the handle','It does not matter'],ans:0},
+    {s:'A cannulated instrument needs cleaning but you cannot find the correct brush accessory. What should you do?',opts:['Use any brush that fits loosely','Obtain the manufacturer-specific accessory before cleaning the cannula','Skip the cannula and clean the outside only','Run it through ultrasonic instead'],ans:1},
+    {s:'You are setting up the ultrasonic cleaner and are unsure of the solution concentration. Where do you find the correct setting?',opts:['Guess based on experience','Use the maximum concentration','Follow the manufacturer IFU for concentration and temperature','Ask a coworker\'s opinion'],ans:2},
+    {s:'You need to verify the ultrasonic unit is generating cavitation. Which test do you perform?',opts:['Listen for a humming sound','Feel the water temperature','Count the instruments','Run the aluminum foil test and check for even pitting'],ans:3},
+    {s:'You are loading hinged instruments into the automated washer. How should they be positioned?',opts:['Open so all surfaces are exposed to cleaning','Closed and stacked tightly','In peel pouches','Locked to protect the hinges'],ans:0},
+    {s:'A tray of lumened instruments is going into the washer. What must you do to ensure the lumens get cleaned?',opts:['Lay them flat and hope for the best','Connect them to the washer\'s flushing ports','Cap the lumen ends','Place them in the ultrasonic instead'],ans:1},
+    {s:'After cleaning, you inspect an instrument and see a small amount of soil in a serration under magnification. What is your decision?',opts:['It is clean enough to sterilize','Package it and note the soil','It is not clean; re-clean until no soil is visible','Soil in serrations is acceptable'],ans:2},
   ],
   observations:[
     {id:'o2-1',text:'Correctly dons and doffs PPE in the proper sequence'},
@@ -151,7 +211,22 @@ const FOUNDATIONS_MODULES = [
     {q:'Kellys, Kochers, and Mosquitos belong to which category?',opts:['Cutting','Grasping','Clamping and Occluding','Retracting'],ans:2},
     {q:'When you encounter an unrecognized instrument?',opts:['Discard it','Set it aside','Ask an experienced colleague or use identification resources','Guess and place in nearest tray'],ans:2},
     {q:'Correct procedure when an instrument fails inspection?',opts:['Place back in tray','Separate, tag, document, repair area, notify supervisor','Clean again and retest','Send to OR with warning'],ans:1},
-    {q:'Pitting on an instrument surface indicates:',opts:['Normal wear','Corrosion creating small holes in metal','Safe manufacturing defect','Recent sharpening'],ans:1}
+    {q:'Pitting on an instrument surface indicates:',opts:['Normal wear','Corrosion creating small holes in metal','Safe manufacturing defect','Recent sharpening'],ans:1},
+    {q:'When is inspection a primary responsibility in the processing workflow?',opts:['Only during annual instrument audits','After decontamination and during assembly','Only at the point of use in the OR','During transport to sterile storage'],ans:1},
+    {q:'What type of lighting should be used for instrument inspection?',opts:['Direct bright shadow-free light','Dim indirect lighting to reduce glare','Ultraviolet light only','Colored surgical spotlights'],ans:0},
+    {q:'What is checked first in the SIPS Inspection Sequence?',opts:['Markings and labels','Lumens and channels','Overall condition','Joints and hinges'],ans:2},
+    {q:'What is examined last in the SIPS Inspection Sequence?',opts:['Working surfaces','Handles and shafts','Overall condition','Markings and labels'],ans:3},
+    {q:'Which area is included in the SIPS Inspection Sequence?',opts:['Lumens and channels','Sterilizer chamber walls','Packaging materials','Count sheet revision dates'],ans:0},
+    {q:'During a box lock test, which finding indicates a problem?',opts:['Smooth opening and closing','Quiet movement through the full range','Grinding during open and close','No looseness at the joint'],ans:2},
+    {q:'What confirms proper jaw alignment on a hinged instrument?',opts:['Tips overlap slightly when closed','Tips meet evenly with no gaps and jaws are parallel','One jaw sits higher to improve grip','Tips touch only under firm pressure'],ans:1},
+    {q:'Which result means a needle holder passes the grip test?',opts:['The needle rotates slightly under pressure','The jaws are polished smooth','The ratchet releases on its own','The needle does not rotate and the cross-hatching is intact'],ans:3},
+    {q:'Which list correctly names types of instrument corrosion?',opts:['Surface rust, pitting, stress cracking, galvanic','Bent tips, cracked handles, loose joints, worn serrations','Fatigue, creep, shear, torsion','Staining, fading, dulling, warping'],ans:0},
+    {q:'Which finding is an example of physical damage rather than corrosion?',opts:['Surface rust','Galvanic corrosion','Worn serrations','Pitting'],ans:2},
+    {q:'Which of the following is listed as an instrument identification resource?',opts:['Sterilizer cycle printouts','Manufacturer catalogs','Biological indicator logs','Water quality reports'],ans:1},
+    {q:'How many basic instrument categories does the module describe?',opts:['Five','Six','Seven','Nine'],ans:2},
+    {q:'Which of the following is one of the basic instrument categories?',opts:['Cauterizing/Sealing','Suturing/Stapling','Drilling/Boring','Dilating/Expanding'],ans:1},
+    {q:'Which finding requires immediate removal from service?',opts:['Severe corrosion','Legible manufacturer markings','Intact cross-hatching on jaw surfaces','A ratchet that clicks and holds at each position'],ans:0},
+    {q:'After a failed instrument is separated, tagged, and documented, where is it sent?',opts:['Back to the decontamination sink','Directly to sterile storage','The OR core for evaluation','The repair area'],ans:3},
   ],
   simulations:[
     {s:'You are inspecting a hemostat. The ratchet holds at positions 1 and 3 but slips at position 2. What do you do?',opts:['Use it, two positions work','Remove from service; ratchet must engage securely at every position','Oil the ratchet and retest','Only report if it slips at all positions'],ans:1},
@@ -163,7 +238,22 @@ const FOUNDATIONS_MODULES = [
     {s:'An instrument has brown discoloration on the shaft. How do you determine if it is staining or active rust?',opts:['All discoloration is rust','Staining is cosmetic and does not progress; active rust shows pitting and will worsen. Evaluate and consult lead if uncertain','Ignore discoloration on shafts','All discoloration requires removal from service'],ans:1},
     {s:'You are inspecting forceps. When closed, you can see light between the tips. What does this mean?',opts:['Normal for all forceps','Tips are misaligned; the forceps cannot grip properly and should be removed for repair','Only a problem for toothed forceps','Acceptable if the gap is small'],ans:1},
     {s:'A tray arrives from decontam and under magnification you see residual soil in several serration grooves. What do you do?',opts:['Sterilization will handle it','Return the instruments for re-cleaning; residual soil means decontamination was not effective','Wipe them with alcohol','Only re-clean if soil is on more than half the instruments'],ans:1},
-    {s:'You need to identify an instrument but the etched markings on the shaft are illegible. What resources do you use?',opts:['Give up and discard it','Use count sheets, manufacturer catalogs, digital tools, or ask an experienced colleague','Guess based on the shape','Leave it for the next shift'],ans:1}
+    {s:'You need to identify an instrument but the etched markings on the shaft are illegible. What resources do you use?',opts:['Give up and discard it','Use count sheets, manufacturer catalogs, digital tools, or ask an experienced colleague','Guess based on the shape','Leave it for the next shift'],ans:1},
+    {s:'The light at your inspection station burns out, leaving only dim overhead lighting. A coworker says the trays are due and you should keep working. What do you do?',opts:['Keep inspecting; the deadline matters more than lighting','Inspect by feel instead of sight until the light is fixed','Restore direct bright shadow-free lighting before continuing inspection','Skip inspection for small instruments only'],ans:2},
+    {s:'You cannot find the magnifier at your station and the instruments look clean to the naked eye. What is the correct practice?',opts:['Naked-eye inspection is acceptable when instruments look clean','Locate 2x-5x magnification before inspecting; the naked eye misses fine defects','Ask a coworker to double-check with their naked eye','Only use magnification for electrosurgical instruments'],ans:1},
+    {s:'A coworker thoroughly inspects the exterior of a suction instrument but skips the lumen because it is hard to see inside. What is the problem?',opts:['Nothing; exterior inspection is sufficient for suction devices','Lumens only need inspection once a month','Lumens and channels are part of the SIPS Inspection Sequence and must be checked','Only the OR is responsible for checking lumens'],ans:2},
+    {s:'While opening and closing a clamp through its full range, you feel it catch and grind midway even though it appears clean. What do you do?',opts:['Remove it from service; grinding means it fails the box lock test','Work the joint back and forth until it loosens','Pass it since it opens and closes fully','Send it to the OR with a note about the stiffness'],ans:0},
+    {s:'During a grip test, a needle held in a needle holder rotates under light pressure even though the cross-hatching looks intact. What is your action?',opts:['Pass it; intact cross-hatching is what matters','Use it only with larger needles','Squeeze harder next time it is used','Remove it from service; the needle must not rotate in the jaws'],ans:3},
+    {s:'A hemostat\'s ratchet engages and holds at every position, but you have to wrench it forcefully to release it. What does this mean?',opts:['It passes; holding at each position is the only requirement','It fails the ratchet test; the ratchet must also release cleanly','It should be lubricated at the station and returned to the tray','It is acceptable for large hemostats'],ans:1},
+    {s:'You spot a hairline crack in the handle ring of a pair of scissors that still cuts cleanly to the tips. What do you do?',opts:['Keep it in service since it cuts properly','Monitor the crack over the next few cycles','Remove it from service; cracks require immediate removal regardless of function','Fill the crack and continue processing'],ans:2},
+    {s:'A clamp\'s tips are slightly bent, and a coworker offers to bend them back into shape with pliers at the workstation. What is the correct response?',opts:['Remove the clamp from service; bent instruments go to the repair area, not station fixes','Let the coworker straighten them if they are experienced','Straighten them only if the bend is small','Sterilize it first, then straighten the tips'],ans:0},
+    {s:'An instrument shows deep corrosion with pitting across its working surface. A coworker suggests polishing it at the station and returning it to the tray. What do you do?',opts:['Polish it as suggested and inspect again','Return it to the tray and flag it for the next quarterly review','Soak it in water to loosen the corrosion','Remove it from service immediately; severe corrosion is a removal criterion'],ans:3},
+    {s:'You find no marking on an instrument\'s shank while trying to identify it. Where else should you look before turning to other resources?',opts:['The shaft, handle, or blade','The tray liner','The count sheet header only','Nowhere; markings are always on the shank'],ans:0},
+    {s:'A trainee sorting loose instruments places a suction tip with the cutting instruments. Based on the module\'s categories, where does it belong?',opts:['Grasping/Holding','Irrigation/Suctioning','Measuring/Probing','Retracting/Exposing'],ans:1},
+    {s:'You find a cracked instrument, set it on the counter without a tag, and plan to deal with it after finishing your tray. What is the risk?',opts:['None, as long as you remember where you put it','It might be discarded by housekeeping','The counter may not be clean enough for it','An untagged instrument can be returned to service by mistake; separate and tag it immediately'],ans:3},
+    {s:'A coworker removes a broken instrument and carries it straight to the repair area without recording anything. What step was missed?',opts:['Nothing; delivery to repair is all that is required','The removal must be documented and the appropriate person notified','The instrument should have been sterilized first','The instrument should have gone to storage instead'],ans:1},
+    {s:'A coworker says inspection is decontam\'s job and assembly should just count instruments quickly. How do you respond?',opts:['Agree; assembly is only about counting','Inspection matters only when the OR reports problems','Inspection is a primary responsibility both after decontamination and during assembly','Only leads are responsible for inspection'],ans:2},
+    {s:'Under time pressure, a coworker suggests checking only that instruments are clean and skipping function checks. What is wrong with this?',opts:['Inspection must verify cleanliness, function, and condition, not cleanliness alone','Nothing; function testing is optional when busy','Function checks are needed only for new instruments','Cleanliness checks can be skipped instead since decontam already washed them'],ans:0},
   ],
   observations:[
     {id:'o3-1',text:'Uses magnification during instrument inspection (not naked eye only)'},
@@ -194,7 +284,22 @@ const FOUNDATIONS_MODULES = [
     {q:'Heaviest instruments placed where in tray?',opts:['On top','In the middle','On the bottom','Wherever space allows'],ans:2},
     {q:'Critical step when assembling rigid containers?',opts:['Verify gaskets are intact and properly seated','Tape the lid','Add extra padding','Stack containers'],ans:0},
     {q:'Concave surfaces (bowls) placed face down because:',opts:['Protect the rim','Allow water to drain and not pool','Save space','They are lighter'],ans:1},
-    {q:'What goes inside every package before sterilization?',opts:['Patient label','Internal chemical indicator','Biological indicator','Expiration sticker'],ans:1}
+    {q:'What goes inside every package before sterilization?',opts:['Patient label','Internal chemical indicator','Biological indicator','Expiration sticker'],ans:1},
+    {q:'What relative humidity range is required in the assembly area?',opts:['10-20%','30-60%','65-80%','Above 80%'],ans:1},
+    {q:'Which attire is correct for working in the assembly area?',opts:['Clean scrubs, bouffant cap, and lint-free gloves','Sterile gown and double gloves','Street clothes with a lab coat','Scrubs with a wristwatch and rings'],ans:0},
+    {q:'Besides temperature and humidity control, which conditions apply to the assembly area?',opts:['Negative pressure and open access','Unfiltered ventilation with restricted access','Filtered air and restricted access','Positive pressure with public access'],ans:2},
+    {q:'What do count sheets specify?',opts:['General guidelines for similar trays','Only the total number of instruments','Exactly which instruments belong in the set','The sterilization cycle to use'],ans:2},
+    {q:'What is the final step of the SIPS count sheet process?',opts:['Gather the instruments','Perform the final count','Sign and date','Check the revision date'],ans:2},
+    {q:'As each instrument is verified during assembly, what should happen?',opts:['It is checked off on the count sheet','It is set aside for a batch check at the end','A second tech logs it separately','It is recorded in the sterilizer log'],ans:0},
+    {q:'How should instruments be arranged in the tray?',opts:['Stacked in two layers','Nested inside each other','Piled by category','In a single layer'],ans:3},
+    {q:'Which of the following is a stated goal of tray organization?',opts:['Reducing instrument inventory','OR usability','Faster decontamination','Fewer count sheet revisions'],ans:1},
+    {q:'Where do blade guards belong?',opts:['On cutting edges','On ratchet teeth','On container latches','On instrument handles'],ans:0},
+    {q:'Which padding materials does the module identify for protecting instruments?',opts:['Paper towels','Gauze sponges','Foam or silicone','Bubble wrap'],ans:2},
+    {q:'When building a general surgery tray, which instruments are placed first after the liner?',opts:['Needle holders','Scissors','Clamps','Retractors'],ans:3},
+    {q:'How are clamps organized in a general surgery tray?',opts:['On stringers','Loose in the tray bottom','In individual peel pouches','Wrapped in towels'],ans:0},
+    {q:'What is a critical consideration specific to orthopedic trays?',opts:['Color-coded handles','Weight limits','Alphabetical ordering','Extra chemical indicators'],ans:1},
+    {q:'Which of the following is a component of a rigid container system?',opts:['Muslin wrapper','Peel pouch window','Autoclave tape strip','Filter/retention plate'],ans:3},
+    {q:'During container assembly, when is the internal chemical indicator placed?',opts:['Before the filter is installed','After loading the instruments and before closing the lid','After the container is latched','Only when requested by the OR'],ans:1},
   ],
   simulations:[
     {s:'You begin assembling a tray and notice the count sheet is dated 6 months ago but has a handwritten correction. What do you do?',opts:['Use it with the correction','Stop work; verify you have the current revision before proceeding','Cross out the correction and continue','Count from memory instead'],ans:1},
@@ -206,7 +311,22 @@ const FOUNDATIONS_MODULES = [
     {s:'While assembling a tray, you find an instrument with a manufacturer marking you do not recognize. What do you do?',opts:['Leave it out','Include it anyway','Use identification resources to verify it belongs in this set before including it','Throw it away'],ans:2},
     {s:'A coworker asks you to sign off on a tray count you did not personally verify. What is your response?',opts:['Sign it as a favor','Never sign for something you did not personally verify','Sign if you trust the coworker','Only refuse for implant trays'],ans:1},
     {s:'You drop a sterile tip protector on the floor. What do you do?',opts:['Wipe it and use it','Discard it and get a new sterile one','Five-second rule applies','Rinse under water'],ans:1},
-    {s:'During container assembly, you install the filter and notice it has a small tear at the edge. What is your action?',opts:['It is small, proceed','Replace the filter; any compromise prevents proper sterilization','Tape over the tear','Use the container without a filter'],ans:1}
+    {s:'During container assembly, you install the filter and notice it has a small tear at the edge. What is your action?',opts:['It is small, proceed','Replace the filter; any compromise prevents proper sterilization','Tape over the tear','Use the container without a filter'],ans:1},
+    {s:'The assembly room thermometer reads 78F and the area feels warm. A coworker says it is fine as long as everyone is comfortable. What do you do?',opts:['Agree; comfort is the standard','Report it; the assembly area must be maintained at 68-73F','Open the door to decontam to balance the temperature','Only report it if instruments feel hot'],ans:1},
+    {s:'A coworker in assembly is wearing a bracelet and has long polished nails. What is the concern?',opts:['None, as long as gloves are worn over them','Bracelets are fine but nails must be short','Assembly attire requires no jewelry and short clean nails','Only rings are prohibited in assembly'],ans:2},
+    {s:'You notice the door between assembly and the decontamination area propped open for convenience. What should happen?',opts:['Close it; the pressure relationship keeps contaminated air out of the clean area','Leave it; the positive pressure works either way','Prop it only during shift change','Ask decontam staff if they mind the airflow'],ans:0},
+    {s:'To save time, a coworker gathers all instruments first and plans to check everything off from memory at the end. What is wrong?',opts:['Nothing; the final count catches any errors','Each instrument must be verified and checked off as part of the process, then final counted','Memory checks are fine for small trays','Only implant trays require item-by-item verification'],ans:1},
+    {s:'Your final count shows 25 instruments but the count sheet lists 24. Everything on the sheet is present plus one extra clamp. What do you do?',opts:['Leave the extra clamp in; more is safer than fewer','Remove the extra instrument; the count sheet specifies exactly what belongs in the set','Update the count sheet by hand to 25','Send the tray and let the OR remove it'],ans:1},
+    {s:'A coworker says the final count is unnecessary because every instrument was already checked off individually. How do you respond?',opts:['Agree and sign the sheet','Skip it only when trays are behind schedule','Ask the lead to waive it','The final count is a required step before signing and dating the sheet'],ans:3},
+    {s:'A coworker places a metal bowl face-up in a set so small items can rest inside it. What is the problem?',opts:['Concave items must face down so water drains instead of pooling','Nothing; bowls are convenient holders','Bowls should be wrapped separately, never in sets','Face-up is fine if the bowl is dried afterward'],ans:0},
+    {s:'To fit everything into one tray, a tech stacks instruments in two layers. What is the correct practice?',opts:['Two layers are fine if the tray closes','Stack heavier items on the upper layer','Instruments belong in a single layer; use an appropriate tray or configuration','Add extra padding between layers'],ans:2},
+    {s:'Running behind, a coworker scoops up several clamps in a handful and drops them into the tray. What is the correct handling?',opts:['Handfuls are acceptable for sturdy clamps','One at a time, held by the body, placed gently','Two at a time if held carefully','Handling speed does not affect instruments'],ans:1},
+    {s:'No tip protectors in the right size are available for delicate scissors, so a coworker suggests wrapping the tips in autoclave tape. What do you do?',opts:['Use the tape; it survives sterilization','Leave the tips unprotected this once','Wrap the tips in a paper towel instead','Get proper sterilization-compatible tip protectors before proceeding'],ans:3},
+    {s:'An orthopedic tray closes properly but feels extremely heavy after you add every listed instrument. A coworker says to send it on. What do you consider?',opts:['Weight limits are critical for orthopedic trays; verify the tray is within limits before it advances','Weight only matters for wrapped trays, not containers','Heavy trays just need two-person lifting','If it closes, it complies'],ans:0},
+    {s:'While building a general surgery tray, a coworker piles loose clamps in a corner of the tray instead of loading them on stringers. What is the issue?',opts:['No issue; clamps are durable','Piling is fine if the ratchets are open','Clamps belong on stringers in a general tray','Stringers are only for needle holders'],ans:2},
+    {s:'In a laparoscopic tray, instruments are positioned with their lumen openings pressed flat against the liner. What is the concern?',opts:['None; the liner is clean','The shafts might scratch the liner','Lumens stay cleaner when sealed against a surface','Lumen access must be ensured when assembling laparoscopic trays'],ans:3},
+    {s:'Preparing a rigid container, a coworker skips inspecting it and checking the gaskets because it was fine last week. What is the correct practice?',opts:['Container assembly starts with inspection and gasket checks every time','Weekly inspection is sufficient for containers','Only new containers need inspection','Gaskets are checked by the repair vendor, not techs'],ans:0},
+    {s:'You latch a container closed and then cannot remember whether you installed the filter. The tray is due at the sterilizer. What do you do?',opts:['Send it; filters rarely matter','Shake the container and listen for the filter','Open the container and verify the filter is installed before it advances','Attach a note asking the sterilizer operator to check'],ans:2},
   ],
   observations:[
     {id:'o4-1',text:'Verifies count sheet is current revision before beginning assembly'},
@@ -238,7 +358,22 @@ const FOUNDATIONS_MODULES = [
     {q:'Event-related sterility means?',opts:['Items expire on fixed date','Items remain sterile until event compromises package','Depends on season','Must re-sterilize after every event'],ans:1},
     {q:'Where to write on a peel pouch?',opts:['Paper side','Plastic side','Separate label inside','Anywhere'],ans:1},
     {q:'Double pouching orientation?',opts:['Paper-to-paper or plastic-to-plastic','Paper-to-plastic','Any orientation','Upside down'],ans:0},
-    {q:'Can CIs replace BIs as proof of sterility?',opts:['Yes, Class 5 equivalent','Yes with two indicators','No, only BIs verify sterilization killed microorganisms','Yes for routine loads'],ans:2}
+    {q:'Can CIs replace BIs as proof of sterility?',opts:['Yes, Class 5 equivalent','Yes with two indicators','No, only BIs verify sterilization killed microorganisms','Yes for routine loads'],ans:2},
+    {q:'What term describes the complete package that maintains sterility of the contents?',opts:['Chemical indicator system','Sterilization assurance level','Sterile barrier system (SBS)','Packaging envelope'],ans:2},
+    {q:'In addition to protecting contents, packaging must allow what to reach the item?',opts:['Sterilant penetration','Room humidity','Ambient dust','Body heat'],ans:0},
+    {q:'How are woven wraps best described?',opts:['Disposable bonded fiber','Single-use plastic film','Aluminum foil','Reusable fabric'],ans:3},
+    {q:'Nonwoven wraps are made of which material?',opts:['Reusable cotton','Disposable bonded fiber','Aluminum foil','Woven polyester'],ans:1},
+    {q:'Which factor should guide wrap selection?',opts:['Sterilization compatibility','Color preference','Brand popularity','Cost alone'],ans:0},
+    {q:'The envelope (parallel) fold is most commonly used for which items?',opts:['Small odd-shaped items','Lumened devices','Rectangular items','Single loose instruments'],ans:2},
+    {q:'The square fold is best suited for which items?',opts:['Large rectangular trays','Smaller or odd-shaped items','Rigid containers','Peel pouches'],ans:1},
+    {q:'Sequential (double) wrapping provides what?',opts:['A single barrier layer','No barrier at all','Only a dust cover','Two barrier layers'],ans:3},
+    {q:'In a peel pouch, which side is intended to face the sterilant?',opts:['The paper/film side','The plastic side','Neither side','Both block equally'],ans:0},
+    {q:'Why is the plastic side of a peel pouch important?',opts:['It absorbs the sterilant','It allows visibility of the contents','It blocks all steam','It is stronger than paper'],ans:1},
+    {q:'How much larger than the item should a peel pouch be?',opts:['Exactly the item size','One-half inch larger','One inch larger on all sides','Three inches larger'],ans:2},
+    {q:'A Class 4 chemical indicator is classified as which type?',opts:['Process indicator','Integrating indicator','Emulating indicator','Multi-parameter indicator'],ans:3},
+    {q:'A Class 6 chemical indicator is which type?',opts:['Emulating (cycle-specific) indicator','Process indicator','Multi-parameter indicator','Integrating indicator'],ans:0},
+    {q:'Which is a required labeling element on a sterile package?',opts:['Patient name','Sterilization date','Ambient humidity','Surgeon\'s preference'],ans:1},
+    {q:'Which of the following is an event that compromises package sterility?',opts:['Passage of time alone','Correct storage conditions','A passing external indicator','A tear or hole in the wrap'],ans:3},
   ],
   simulations:[
     {s:'You wrap a tray and realize you forgot the internal CI. The wrap is already sealed. What do you do?',opts:['It is fine, external indicator is enough','Open the package, add the internal indicator, and rewrap','Note it on the label','Add it to the next tray instead'],ans:1},
@@ -250,7 +385,22 @@ const FOUNDATIONS_MODULES = [
     {s:'The external indicator tape on a wrapped tray did not change color after sterilization. What does this mean?',opts:['The tray is sterile anyway','The package may not have been exposed to the sterilization process; do not use, investigate','The tape was expired, ignore','Only matters if internal CI also failed'],ans:1},
     {s:'An instrument is too large for available peel pouches. What is your alternative?',opts:['Force it into the largest pouch','Use a wrap or rigid container appropriate for the item size','Cut a pouch to make it larger','Leave it unwrapped'],ans:1},
     {s:'You notice a wrapped tray has a small tear in the outer wrap layer but the inner wrap appears intact (sequential wrapping). Is it OK to use?',opts:['Yes, the inner wrap is the sterile barrier','No; both wraps are part of the sterile barrier system. Repackage and reprocess','Only if the tear is on top','Tape over the tear'],ans:1},
-    {s:'A package arrives at point of use and the CI inside shows incomplete color change. What action?',opts:['Use it if the external indicator passed','Do not use; incomplete CI change means sterilization conditions may not have been met inside the package','Use it for non-critical items only','Re-incubate the CI'],ans:1}
+    {s:'A package arrives at point of use and the CI inside shows incomplete color change. What action?',opts:['Use it if the external indicator passed','Do not use; incomplete CI change means sterilization conditions may not have been met inside the package','Use it for non-critical items only','Re-incubate the CI'],ans:1},
+    {s:'A colleague argues that as long as the wrap looks clean, the packaging job is done. What do you tell them packaging must actually accomplish?',opts:['They are right, appearance alone is sufficient','Packaging only needs to hold the tray together','Packaging must allow sterilant penetration, provide a sterile barrier, protect contents, and enable aseptic opening','Only the label matters'],ans:2},
+    {s:'During in-service training a tech asks what the \'sterile barrier system\' is for a wrapped tray. What is the correct answer?',opts:['The complete package that maintains sterility','Only the internal CI','The label alone','The sterilizer chamber'],ans:0},
+    {s:'The department runs out of validated wrap and a coworker suggests substituting a household material not intended for sterilization. What is your response?',opts:['Use it, wrap is wrap','It is fine for gravity cycles only','Double it up to be safe','Only use packaging validated and compatible with the sterilization method per IFU'],ans:3},
+    {s:'You must choose a wrap for a heavy orthopedic tray. Which considerations should drive the choice?',opts:['Color only','Sterilization compatibility, item size and weight, storage conditions, and IFU','The cheapest option available','Whatever wrap is closest'],ans:1},
+    {s:'You are about to wrap a large rectangular tray. Which fold technique is most appropriate?',opts:['Envelope (parallel) fold','Square fold','No fold is needed','A twist closure'],ans:0},
+    {s:'You need to wrap a small, odd-shaped item. Which fold is best suited for it?',opts:['Envelope fold','Sequential fold only','Square fold','No wrap is needed'],ans:2},
+    {s:'Your facility requires two barrier layers on wrapped trays. Which technique achieves this?',opts:['A single square fold','One layer with extra tape','A single peel pouch','Sequential (double) wrapping'],ans:3},
+    {s:'A tech double-pouches an instrument placing the inner pouch paper side against the outer pouch plastic side. Is this correct?',opts:['Yes, any orientation is acceptable','No; double pouches must be oriented paper-to-paper or plastic-to-plastic','It only matters in H2O2 systems','Remove the inner pouch entirely'],ans:1},
+    {s:'A tech places an instrument in a pouch that is exactly the same size as the item, with no clearance. Why should this be redone?',opts:['The pouch should be about one inch larger than the item on all sides to seal properly and allow sterilant flow','Exact-size pouches save material and are preferred','Smaller is always better','Only large items need clearance'],ans:0},
+    {s:'A hinged instrument is inserted tip-first into a peel pouch. What correction do you make?',opts:['No correction is needed','Tips should always go in first','Insert the handle end first so it can be grasped aseptically at the opening','Cut the pouch open at both ends'],ans:2},
+    {s:'A supervisor asks you to declare a load sterile based on the internal Class 5 CI alone. What do you clarify?',opts:['A Class 5 CI confirms the load is sterile','Class 5 fully replaces the BI','Use the external tape as proof instead','CIs do not prove sterility; they show critical parameters were met, but a BI verifies the microbial kill'],ans:3},
+    {s:'Your department wants an indicator designed to react to the parameters of one specific cycle. Which CI class fits?',opts:['Class 1 process indicator','Class 6 emulating (cycle-specific) indicator','Class 4 multi-parameter indicator','Class 5 integrating for all cycles'],ans:1},
+    {s:'You are labeling a wrapped tray but write only the contents name. Which required elements are you missing?',opts:['Sterilization date, sterilizer ID, load/lot number, expiration if applicable, and operator initials','Nothing else is required','Only the patient name','Only the room number'],ans:0},
+    {s:'A tech grabs a random ballpoint pen to label a peel pouch. What is the concern?',opts:['Any pen works fine on plastic','Just write on the paper side instead','Use only approved markers, since other writing instruments may damage the pouch or fail to stay legible','No labeling is needed if the tray is used today'],ans:2},
+    {s:'During pre-sterilization inspection you find a wrapped package with a broken seal. What is your action?',opts:['Release it; seals are cosmetic','Tape over the broken seal','Only reject it if it looks dirty','A broken seal is an event that compromises the barrier; repackage and reprocess'],ans:3},
   ],
   observations:[
     {id:'o5-1',text:'Wraps a tray using correct envelope fold technique with proper cuffs'},
@@ -282,7 +432,22 @@ const FOUNDATIONS_MODULES = [
     {q:'Positive BI means?',opts:['Success','Spores survived, sterilization failed','BI expired','Incubator malfunction'],ans:1},
     {q:'Response to positive BI?',opts:['Re-incubate','Quarantine, do not use, recall if distributed, investigate','Run another load','Ignore if CI passed'],ans:1},
     {q:'What packaging NOT for H2O2 systems?',opts:['Tyvek','Nonwoven polypropylene','Cellulose/paper','Rigid containers with compatible filters'],ans:2},
-    {q:'After every cycle, review:',opts:['Supply inventory','Cycle printout verifying all parameters met','OR schedule','Washer log'],ans:1}
+    {q:'After every cycle, review:',opts:['Supply inventory','Cycle printout verifying all parameters met','OR schedule','Washer log'],ans:1},
+    {q:'How does heat sterilization kill microorganisms?',opts:['It freezes cells','It removes all oxygen','It denatures proteins','It only dries surfaces'],ans:2},
+    {q:'How do chemical sterilizing agents act on microorganisms?',opts:['They alkylate DNA or oxidize cells','They cool cells below freezing','They add nutrients','They only dry them out'],ans:0},
+    {q:'Which set of key factors determines sterilization effectiveness?',opts:['Package color','Operator height','Shelf location','Contact, time, temperature, and concentration'],ans:3},
+    {q:'What are typical gravity steam parameters?',opts:['270F/132C for 4 min','250F/121C for 30 min','212F/100C for 15 min','300F/149C for 10 min'],ans:1},
+    {q:'In a gravity cycle, how is air removed from the chamber?',opts:['A vacuum pump','Compressed nitrogen','Air exits by gravity','It is not removed'],ans:2},
+    {q:'How does the SFPP method remove air?',opts:['A single deep vacuum','Gravity alone','Chemical scrubbers','Steam and pressure pulses without a deep vacuum'],ans:3},
+    {q:'What is the approximate temperature range for H2O2 plasma sterilization?',opts:['100-130F','250-270F','300-350F','60-80F'],ans:0},
+    {q:'Which low-temperature method is noted for processing longer lumens?',opts:['Ozone','VHP','Gravity steam','Immediate-use steam'],ans:1},
+    {q:'Ethylene oxide (EO) sterilization requires which additional step?',opts:['A deep vacuum only','No monitoring at all','Aeration','Immediate release'],ans:2},
+    {q:'What minimum spacing is recommended between packages in the sterilizer?',opts:['No spacing is needed','Packages should touch','At least 6 inches','At least 1 inch'],ans:3},
+    {q:'Packages in the chamber should be kept away from what?',opts:['The chamber walls','Each other only','The door gasket only','The printout'],ans:0},
+    {q:'An external chemical indicator is which class?',opts:['Class 1','Class 4','Class 5','Class 6'],ans:0},
+    {q:'Which monitoring method is considered the gold standard?',opts:['Physical gauges','Chemical indicators','Biological indicators','Visual inspection'],ans:2},
+    {q:'A biological indicator contains what?',opts:['Chemical dye only','Live spores','Distilled water','Class 5 strips'],ans:1},
+    {q:'Which of the following must be recorded in sterilization documentation?',opts:['Only the operator\'s name','Sterilizer ID, cycle type, load number, parameters, and BI results','The room temperature outside','The next patient\'s name'],ans:1},
   ],
   simulations:[
     {s:'A prevacuum cycle printout shows 270F was reached but exposure time was only 2 minutes instead of 4. What do you do?',opts:['Close enough, release the load','Do not release; sterilization parameters were not met. The load must be reprocessed','Release items that look dry','Only holds for implant loads'],ans:1},
@@ -294,7 +459,22 @@ const FOUNDATIONS_MODULES = [
     {s:'The sterilizer alarm goes off mid-cycle indicating a fault. What do you do?',opts:['Reset and continue','Do not open until safe. Record the fault code. The load is not sterile. Follow manufacturer troubleshooting and report','Open the door to check','Ignore if the alarm stops'],ans:1},
     {s:'An implant tray has been sterilized. The BI for the load is still incubating. Can you release the implant tray?',opts:['Yes, CIs passed','No; implant loads must be quarantined until BI results are negative, unless emergency release protocol applies','Implants do not need BI testing','Release after 30 minutes of incubation'],ans:1},
     {s:'After unloading, you notice a tray is still hot and wet. Can you place it in storage?',opts:['Yes, it will cool in storage','No; wet items compromise sterility (wet pack). Allow proper cooling time and verify items are dry before storage','Fan it to speed drying','Place in plastic bag to contain moisture'],ans:1},
-    {s:'The digital printout for a gravity cycle shows 250F for 30 minutes. All indicators passed. Is this load acceptable?',opts:['Yes, parameters were met for a gravity cycle','Review all parameters holistically: temp, time, pressure, and check for any alarms. If all confirm, the load meets requirements','Only if it was unwrapped items','Gravity cycles are never acceptable'],ans:1}
+    {s:'The digital printout for a gravity cycle shows 250F for 30 minutes. All indicators passed. Is this load acceptable?',opts:['Yes, parameters were met for a gravity cycle','Review all parameters holistically: temp, time, pressure, and check for any alarms. If all confirm, the load meets requirements','Only if it was unwrapped items','Gravity cycles are never acceptable'],ans:1},
+    {s:'A trainee says sterilization only needs to kill bacteria, not spores. How do you correct them?',opts:['Sterilization means complete elimination of all microbial life, including spores','They are right, only bacteria matter','Spores are harmless','Only viruses need to be killed'],ans:0},
+    {s:'You must sterilize a wrapped instrument set and want the best steam penetration with active air removal. Which cycle type do you choose?',opts:['Gravity','Prevacuum','Ozone','Ethylene oxide'],ans:1},
+    {s:'A gravity load will run at 250F and a coworker sets the timer for 10 minutes. What is the concern?',opts:['10 minutes is fine at 250F','Time does not matter for gravity','Gravity at 250F/121C requires about 30 minutes; 10 minutes is insufficient','5 minutes is enough'],ans:2},
+    {s:'A heat-sensitive device with a long lumen cannot go through steam. Which low-temperature method is noted for processing longer lumens?',opts:['Gravity steam','Ozone','H2O2 plasma','VHP'],ans:3},
+    {s:'An EO-sterilized load has finished its exposure phase and a tech wants to release it immediately. What is missing?',opts:['EO requires an aeration phase before the load can be released','Nothing, release it now','Just wipe it down','Only implants need aeration'],ans:0},
+    {s:'You need a low-temperature cycle running around 100-130F using hydrogen peroxide. Which method matches these parameters?',opts:['Gravity steam','H2O2 plasma','Ethylene oxide','Ozone'],ans:1},
+    {s:'To fit more in one cycle, a tech packs packages tightly together with no gaps. What is the problem?',opts:['It is more efficient','It only matters for gravity cycles','Packages need at least 1 inch of space between them for steam circulation','Tighter is always better'],ans:2},
+    {s:'A large basin is placed flat in the chamber so water could pool inside it. How should it be positioned?',opts:['Lay it flat, it is fine','Fill it with water first','Cover it tightly','Position it on edge for drainage so condensate can drain'],ans:3},
+    {s:'A tech overloads the sterilizer cart to save running an extra cycle. What guidance applies?',opts:['Do not overload; allow room for expansion and steam circulation','Overloading saves cycles and is fine','Only gravity cycles can be overloaded','Overloading improves drying'],ans:0},
+    {s:'You want to confirm the cycle physically reached its parameters. Which monitoring provides gauges, displays, and printouts?',opts:['Chemical indicators','Physical monitoring (gauges, displays, printouts)','Biological indicators','No monitoring is needed'],ans:1},
+    {s:'A load has a passing external Class 1 indicator, but you need internal verification of critical parameters. Which indicators go inside packages?',opts:['The external Class 1 tape','No internal indicator exists','Internal chemical indicators (Class 4, 5, or 6) placed inside packages','Physical gauges only'],ans:2},
+    {s:'A steam BI is incubated and the result is negative. What does this indicate?',opts:['It failed, reprocess the load','The BI expired','Re-incubate to be sure','A pass; the spores were killed, indicating effective sterilization'],ans:3},
+    {s:'You are selecting a biological indicator for an ethylene oxide cycle. Which organism is used?',opts:['Bacillus atrophaeus','Geobacillus stearothermophilus','E. coli','Staphylococcus aureus'],ans:0},
+    {s:'After a cycle you realize the load number was never recorded. Why does this matter?',opts:['It does not matter','Documentation such as load number is required for traceability and recall','Only the date is needed','Load numbers are optional'],ans:1},
+    {s:'A chemical sterilant is used, but its concentration was diluted below specification. Which key sterilization factor was compromised?',opts:['Contact','Temperature','Concentration','Package color'],ans:2},
   ],
   observations:[
     {id:'o6-1',text:'Can state the difference between gravity and prevacuum sterilization cycles'},
@@ -326,7 +506,22 @@ const FOUNDATIONS_MODULES = [
     {q:'Case cart verification checks:',opts:['Item name and quantity only','Correct item, quantity, intact package, valid date','Expiration only','That package looks clean'],ans:0},
     {q:'Why no cardboard in sterile storage?',opts:['Takes too much space','Harbors dust, pests, moisture','Too heavy','No restriction'],ans:1},
     {q:'Case cart organization?',opts:['Alphabetical','Heavy top','Heavy bottom, lighter top, packages protected','All peel packs bottom'],ans:2},
-    {q:'A par level is?',opts:['Minimum quality score','Minimum and maximum quantity to maintain','Staff per shift','Sterilization parameter'],ans:1}
+    {q:'A par level is?',opts:['Minimum quality score','Minimum and maximum quantity to maintain','Staff per shift','Sterilization parameter'],ans:1},
+    {q:'Recommended temperature range for a sterile storage area?',opts:['32-40F','50-60F','80-90F','68-73F'],ans:3},
+    {q:'Maximum relative humidity for sterile storage?',opts:['Below 70%','Below 90%','Below 30%','Exactly 100%'],ans:0},
+    {q:'Minimum distance stored items should be from the ceiling?',opts:['2 inches','8 inches','18 inches','36 inches'],ans:2},
+    {q:'Which shelving type is preferred for sterile storage?',opts:['Solid steel','Open wire','Cardboard shelving','Wooden shelving'],ans:1},
+    {q:'Which of the following is an event that compromises package sterility?',opts:['Reaching a labeled shelf date','A changed external indicator','Storage on an upper shelf','Moisture on the package'],ans:3},
+    {q:'Which is part of the post-sterilization inspection checklist?',opts:['The package feels warm','The external indicator has changed and seals are intact','The lot number is even','The package is heavier than usual'],ans:1},
+    {q:'Correct handling sequence for items that fail post-sterilization inspection?',opts:['Segregate, identify, correct, document','Discard immediately without a record','Return them to circulation','Re-label and store'],ans:0},
+    {q:'The inventory principle of storing \'like with like\' means?',opts:['Match quantities to staff count','Always use the oldest items first','Store similar items together','Keep two of everything'],ans:2},
+    {q:'Where should frequently used items be located?',opts:['On the highest shelves','In a locked cabinet','Mixed with rarely used items','In accessible locations'],ans:3},
+    {q:'How should sterile items be handled during transport?',opts:['Carried by hand uncovered','Covered on dedicated carts','Mixed on any available cart','Left uncovered for ventilation'],ans:1},
+    {q:'What is the rule about sterile and contaminated items during distribution?',opts:['They may share a cart if bagged','They can be mixed on clean corridors','They should never be mixed','They can be mixed when carts are short'],ans:2},
+    {q:'Which practice reduces contamination risk during distribution?',opts:['Minimize handling','Maximize rehandling','Use uncovered carts','Route through soiled areas'],ans:0},
+    {q:'What is the first step when preparing a case cart?',opts:['Organize the cart heavy on top','Receive the schedule and verify surgeon, procedure, and date','Document and deliver','Skip the pick list'],ans:1},
+    {q:'During a recall, how are affected items identified?',opts:['By color only','By shelf position','By lot number and dates','By weight'],ans:2},
+    {q:'What should be done with recalled items pending resolution?',opts:['Quarantine them','Continue using them','Discard them without documentation','Return them to the OR'],ans:0},
   ],
   simulations:[
     {s:'You find a wrapped tray on a bottom shelf with the bottom of the wrap touching the floor. What do you do?',opts:['It is fine since it is wrapped','Remove from service; shelf items must be 8-10 inches from the floor. This package may be compromised','Move it up one shelf','Only a problem if the floor is wet'],ans:1},
@@ -338,7 +533,22 @@ const FOUNDATIONS_MODULES = [
     {s:'Sterile storage humidity reads 75% RH, above the 70% maximum. What is your action?',opts:['It is only 5% over, ignore','Report the environmental excursion. Elevated humidity can compromise packaging integrity. Follow corrective action protocol','Open a window','Move items to another room'],ans:1},
     {s:'A case cart is ready but the pick list shows a biological indicator result is still pending for one of the trays. What do you do?',opts:['Send the cart, results are usually fine','Hold the tray until the BI result is confirmed negative. Document the hold. Include the tray only after confirmation','Send it with a note to check later','Ask OR if they want to wait'],ans:1},
     {s:'You drop a sterile peel-packed instrument during transport. The package appears intact when you pick it up. What do you do?',opts:['If it looks intact, put it on the cart','Carefully inspect all surfaces of the package. A dropped item is an event. If any compromise is found, remove from service. Document the drop either way','Wipe it off','Only a concern if it landed on a dirty floor'],ans:1},
-    {s:'A sprinkler head in sterile storage is leaking slightly, and droplets have landed on several stored packages. What do you do?',opts:['Move the packages and wipe them dry','Remove all affected packages from service. Water exposure is an event that compromises sterility. Report the leak for facility maintenance. Document all affected items','Only remove packages that are visibly wet','Wait until maintenance fixes it'],ans:1}
+    {s:'A sprinkler head in sterile storage is leaking slightly, and droplets have landed on several stored packages. What do you do?',opts:['Move the packages and wipe them dry','Remove all affected packages from service. Water exposure is an event that compromises sterility. Report the leak for facility maintenance. Document all affected items','Only remove packages that are visibly wet','Wait until maintenance fixes it'],ans:1},
+    {s:'The sterile storage room thermometer reads 80F, above the recommended range. What is the appropriate action?',opts:['Ignore it since the packages look fine','Report the environmental excursion and follow corrective action; storage must stay within 68-73F','Open the door for a few minutes','Act only if it passes 90F'],ans:1},
+    {s:'A coworker sets a cardboard shipping carton of supplies on a sterile storage shelf. What should you do?',opts:['Leave it, cardboard is fine indoors','Only remove it if it looks dusty','Cover it with plastic','Remove the cardboard; it can harbor dust, pests, and moisture and is not permitted in sterile storage'],ans:3},
+    {s:'You find a technician has left a coffee cup and a jacket on a sterile storage shelf. What is the correct response?',opts:['Personal items are not allowed in sterile storage; remove them','Personal items are permitted on lower shelves','Only remove the coffee cup','Allow it if the shelf is otherwise empty'],ans:0},
+    {s:'Trays are stacked so high they sit only a few inches below the ceiling. Why is this a problem?',opts:['It is not a problem if they fit','It is only a concern near sprinklers','Stored items must be at least 18 inches from the ceiling','Height does not matter for wrapped items'],ans:2},
+    {s:'While stocking shelves, you notice a peel pouch with a broken seal. What do you do?',opts:['Store it, the contents look fine','A broken seal is an event that compromises sterility; remove it from service and reprocess','Tape the seal shut','Store it separately for later use'],ans:1},
+    {s:'During pre-storage inspection, the label on a wrapped tray is smeared and illegible. What is the correct action?',opts:['Store it, the wrap is intact','Guess the contents and hand-write a label','Store it and fix the label later','It fails inspection; segregate the item, identify and correct the problem, and document it'],ans:3},
+    {s:'A package ready for storage has an external chemical indicator that did not change color. What do you do?',opts:['Do not store it; a failed indicator means the package must be segregated, investigated, documented, and reprocessed','Store it since the wrap is dry','Assume the indicator is defective and store it','Only worry if several packages fail'],ans:0},
+    {s:'You notice an item has dropped below its established par minimum. What should happen?',opts:['Wait until it runs out completely','Remove the par label','Reorder to bring the item back to its par level','Permanently double the maximum'],ans:2},
+    {s:'Instruments are kept in random, changing spots, making picking slow and error-prone. Which inventory practice addresses this?',opts:['Storing everything by weight','Assigning consistent locations and grouping like with like','Rotating locations every week','Removing all labels'],ans:1},
+    {s:'A transporter offers to move a soiled instrument cart and a sterile supply cart together in one trip to save time. What is correct?',opts:['Allow it if the sterile items are on top','Allow it if the trip is short','Allow it if both carts are covered','Do not mix sterile and contaminated items; they must be transported separately'],ans:3},
+    {s:'Sterile trays are about to be moved through the hallway on an open, uncovered cart. What should you do?',opts:['Cover the load before transport; sterile items must be covered during transport','Proceed, the hallways are clean','Cover it only if it is raining outside','Move quickly to reduce exposure'],ans:0},
+    {s:'While building a case cart you verify each item against the pick list but do not inspect the packages. A colleague reminds you. Why does this matter?',opts:['Inspection is only needed at sterilization','The pick list alone is sufficient','Each package must be inspected for integrity before it goes on the cart','Inspection is the OR staff\'s responsibility'],ans:2},
+    {s:'The pick list you are working from lists a different surgeon and date than the schedule you received. What do you do?',opts:['Use the pick list, it is usually right','Stop and verify surgeon, procedure, and date, resolving the discrepancy before building the cart','Use whichever is closer to today','Build both carts to be safe'],ans:1},
+    {s:'A recall notice arrives. You immediately stop use and complete the documentation, but leave the affected items on the shelf. What key step is missing?',opts:['Quarantine the affected items so they cannot be used','Nothing, documentation is enough','Re-sterilize them right away','Notify the manufacturer only'],ans:0},
+    {s:'A recall affects a lot of items, some already delivered to the OR on case carts. What is the correct response?',opts:['Only address items still in SPD','Wait until the cases are finished','Identify affected items by lot and dates, communicate to stop their use, quarantine them, and follow the facility recall protocol','Assume the OR will notice'],ans:2},
   ],
   observations:[
     {id:'o7-1',text:'Can identify correct shelving distances (8-10 inches floor, 18 inches ceiling, 2 inches walls)'},
@@ -370,7 +580,22 @@ const FOUNDATIONS_MODULES = [
     {q:'Why remove valves during storage?',opts:['Prevent theft','Allow air circulation and prevent moisture','Make scope lighter','Valves are single-use'],ans:1},
     {q:'AER cycle failure response:',opts:['Use if looks clean','Scope may not be disinfected; do not use, reprocess from manual cleaning','Run AER again without cleaning','Notify manufacturer only'],ans:1},
     {q:'When test HLD solution concentration?',opts:['Weekly','Monthly','Per manufacturer, typically daily or before each use','Annually'],ans:2},
-    {q:'Why moisture in channels creates risk?',opts:['Electrical shorts','Residual water supports bacterial growth and biofilm','Degrades disinfectant','Makes scope heavy'],ans:1}
+    {q:'Why moisture in channels creates risk?',opts:['Electrical shorts','Residual water supports bacterial growth and biofilm','Degrades disinfectant','Makes scope heavy'],ans:1},
+    {q:'HLD is used to process which category of items?',opts:['Critical items','Semi-critical items','Non-critical items','Environmental surfaces'],ans:1},
+    {q:'Correct cleaning removes up to what percentage of bioburden?',opts:['50%','75%','90%','99.9%'],ans:3},
+    {q:'Which of the following is a channel found in a flexible endoscope?',opts:['Cooling channel','Optical fiber channel','Suction channel','Battery channel'],ans:2},
+    {q:'What makes flexible endoscope reprocessing especially complex?',opts:['Their multiple internal channels','Their large size','Their metal construction','Their disposable design'],ans:0},
+    {q:'Which of the following is a part of a flexible endoscope?',opts:['Rigid hinge','Steam port','Cutting jaw','Bending section'],ans:3},
+    {q:'When should bedside pre-cleaning of an endoscope be performed?',opts:['Immediately after the procedure at the bedside','The next morning','Only if the scope looks soiled','After leak testing'],ans:0},
+    {q:'How thoroughly should endoscope channels be brushed?',opts:['One quick pass','Brushed completely through, with multiple passes until clean','Only the suction channel','Brushing is optional if the channel is flushed'],ans:1},
+    {q:'Typical soak time for OPA high-level disinfectant?',opts:['1 minute','5 minutes','12 minutes','60 minutes'],ans:2},
+    {q:'Which HLD agent is known for a strong odor and longer contact time?',opts:['OPA','Glutaraldehyde','Peracetic acid','Isopropyl alcohol'],ans:1},
+    {q:'Which HLD agent is described as rapid and automated?',opts:['Glutaraldehyde','OPA','Peracetic acid','Hydrogen peroxide gas'],ans:2},
+    {q:'What must be verified before starting an AER cycle?',opts:['The disinfectant level and concentration','The room temperature','The scope color','The technician schedule'],ans:0},
+    {q:'How many scope channels must be connected in an AER?',opts:['Only the instrument channel','Only the main channel','As many as convenient','All channels, per the IFU'],ans:3},
+    {q:'What is the first drying step after HLD?',opts:['Store the scope immediately','Purge the channels with air','Coil the scope in a drawer','Apply lubricant'],ans:1},
+    {q:'Who sets the maximum hang time for stored endoscopes?',opts:['The facility','The manufacturer only','The physician','There is no limit'],ans:0},
+    {q:'Which item must be documented after endoscope reprocessing?',opts:['The weather that day','The number of people in the room','The leak test result','The scope purchase price'],ans:2},
   ],
   simulations:[
     {s:'You perform a leak test on an endoscope and observe a single small bubble coming from the bending section. What do you do?',opts:['One bubble is acceptable','A bubble indicates a leak. Do not proceed with immersion. Remove the scope from service and report','Run the test again without looking closely','Submerge it to see if more bubbles appear'],ans:1},
@@ -382,7 +607,22 @@ const FOUNDATIONS_MODULES = [
     {s:'You connect a scope to the AER but are unsure if all channels are properly connected. What should you do?',opts:['Start the cycle and hope it works','Verify every channel connection per the scope and AER IFU before starting. Unconnected channels will not be disinfected','Only the main channel matters','Ask someone else to check later'],ans:1},
     {s:'Two different scope models need reprocessing. Can you use the same brushes for both?',opts:['Yes, brushes are universal','No; use the brush size and type specified in each scope IFU. Wrong brush size means inadequate cleaning','Only if they are the same brand','Clean the brush between scopes'],ans:1},
     {s:'The HLD solution was opened 20 days ago. The manufacturer says maximum reuse life is 14 days. MEC test still shows adequate concentration. Can you use it?',opts:['Yes, MEC passed','No; the solution has exceeded its maximum reuse life regardless of MEC result. Discard and replace','Use for one more day','Only discard if MEC fails'],ans:1},
-    {s:'After reprocessing, you store a scope in the cabinet but forget to remove the valves. A coworker points this out. What is the risk?',opts:['No risk','Valves left on prevent air circulation through channels, allowing moisture to remain and bacteria to grow','Only matters for storage over 24 hours','Valves protect the channels'],ans:1}
+    {s:'After reprocessing, you store a scope in the cabinet but forget to remove the valves. A coworker points this out. What is the risk?',opts:['No risk','Valves left on prevent air circulation through channels, allowing moisture to remain and bacteria to grow','Only matters for storage over 24 hours','Valves protect the channels'],ans:1},
+    {s:'A new technician tells you that high-level disinfection sterilizes an endoscope and kills every microorganism, including all spores. How should you respond?',opts:['She is correct, HLD is the same as sterilization','HLD destroys all microorganisms except high numbers of spores; it is not the same as sterilization','HLD only kills viruses','Spores are not a concern with scopes'],ans:1},
+    {s:'The schedule is running behind, so a colleague suggests skipping thorough manual cleaning and going straight to HLD. What is the correct response?',opts:['Skip cleaning to save time','Do a light rinse only','Cleaning is the most important step and removes up to 99.9% of bioburden; it cannot be skipped before HLD','HLD compensates for missed cleaning'],ans:2},
+    {s:'A technician manually cleans only the instrument channel and ignores the suction and air/water channels. Why is this inadequate?',opts:['All channels must be cleaned and brushed; untreated channels remain contaminated','Only the instrument channel matters','The AER will clean the rest','Air/water channels do not get soiled'],ans:0},
+    {s:'A used endoscope was not pre-cleaned at the bedside and has sat for several hours with dried secretions. What is the concern?',opts:['No concern, cleaning is cleaning','It can go straight to HLD','It should be discarded','Pre-cleaning should occur immediately at the bedside; dried soil is harder to remove, so follow the manufacturer cleaning protocol carefully'],ans:3},
+    {s:'A technician is about to immerse an endoscope in cleaning solution without performing a leak test. A colleague stops them. Why?',opts:['Leak testing is only needed monthly','The leak test must be performed before immersion to detect leaks and prevent fluid damage to a compromised scope','Leak testing is done after HLD','It is fine to skip if the scope looks intact'],ans:1},
+    {s:'While brushing a channel, debris is still visible on the brush after the first pass. What should the technician do?',opts:['Move on to HLD','One pass is always sufficient','Continue brushing the channel completely through with multiple passes until it comes clean','Rinse only and proceed'],ans:2},
+    {s:'A technician plans to use OPA from a freshly opened container and says testing the concentration is unnecessary because it is new. What is correct?',opts:['MEC must be tested before each use, regardless of whether the container is new','A new container never needs testing','Test the concentration only weekly','Testing is optional for OPA'],ans:0},
+    {s:'A technician soaking an item in glutaraldehyde removes it well before the required contact time to speed things up. What is the problem?',opts:['Contact time does not matter','Glutaraldehyde works instantly','Any soak time is acceptable','Glutaraldehyde requires a longer contact time; the full required contact time must be met for effective disinfection'],ans:3},
+    {s:'A technician loads a scope into the AER and starts the cycle without checking the disinfectant. What pre-cycle step was missed?',opts:['Checking the room lights','Verifying the disinfectant level and concentration before the cycle','Coiling the scope','Removing the printout'],ans:1},
+    {s:'An AER cycle finishes, but the technician leaves the wet scope sitting on the counter for an hour before drying. Why is this a problem?',opts:['Wet storage is fine after AER','The scope is already sterile','Drying should begin immediately after the cycle; residual moisture supports bacterial growth','Air drying on the counter is preferred'],ans:2},
+    {s:'A technician stores a reprocessed endoscope coiled in a closed drawer with the caps and valves still attached. What is the correct storage method?',opts:['Store vertically in a ventilated cabinet with valves removed and caps off','Coiling in a drawer is acceptable','Leave valves on to protect the channels','Any dry location works'],ans:0},
+    {s:'Facility protocol calls for an alcohol flush during drying, but a technician skips it to save time. What is correct?',opts:['An alcohol flush is never needed','Skipping it is fine if the scope looks dry','Only the final air purge matters','If protocol calls for an alcohol flush, it must be performed, followed by a final air purge'],ans:3},
+    {s:'After reprocessing, a technician records most steps but forgets the disinfectant lot number and expiration. What must be done?',opts:['Complete the record; disinfectant lot and expiration are required documentation','Leave it blank, it is minor','Documentation is optional','Record it only if a problem arises later'],ans:0},
+    {s:'An infection-control investigation needs to determine which patient a specific scope was used on. Why is complete reprocessing documentation critical?',opts:['It is only for billing','Records including scope ID and patient ID provide the traceability needed for such investigations','Documentation is unrelated to patient tracing','Only the AER cares about it'],ans:1},
+    {s:'The ventilation fan in the endoscope storage cabinet is broken. What is the appropriate action?',opts:['Keep using it, ventilation is optional','Cover the scopes with plastic instead','Report the problem and store scopes in a properly ventilated cabinet; ventilation helps keep channels dry','Store the scopes horizontally until it is fixed'],ans:2},
   ],
   observations:[
     {id:'o8-1',text:'Performs leak test on an endoscope before immersion'},
@@ -414,7 +654,22 @@ const FOUNDATIONS_MODULES = [
     {q:'Wet pack discovered after release is what type of event?',opts:['Near-miss','Adverse event','Sentinel event','Minor inconvenience'],ans:1},
     {q:'TJC surveyors check in SPD:',opts:['Only sterilizer records','Only certification status','Policies, documentation, competency, equipment, storage, IFU compliance, and more','Only infection logs'],ans:2},
     {q:'In quality culture, errors lead to:',opts:['Termination','Learning and process improvement, not blame','Cover-up','Private management action'],ans:1},
-    {q:'Benchmarking is?',opts:['Setting a timer','Comparing performance to standards or peers','Counting instruments on bench','Marking instruments for ID'],ans:1}
+    {q:'Benchmarking is?',opts:['Setting a timer','Comparing performance to standards or peers','Counting instruments on bench','Marking instruments for ID'],ans:1},
+    {q:'How does the module define quality in SPD?',opts:['Processing trays as quickly as possible','Consistently delivering instruments safe for patient use','Passing the annual survey with no findings','Using the newest equipment available'],ans:1},
+    {q:'Which of the following is a quality indicator tracked in SPD?',opts:['Cafeteria satisfaction scores','Employee commute times','Case cart accuracy','Vendor pricing trends'],ans:2},
+    {q:'What are the four steps of the quality data cycle?',opts:['Collect, Analyze, Act, Monitor','Plan, Do, Check, Act','Observe, Record, File, Archive','Report, Review, Retrain, Repeat'],ans:0},
+    {q:'An error that reaches the patient is classified as what type of event?',opts:['Near-miss','Sentinel event','Process variance','Adverse event'],ans:3},
+    {q:'What defines a sentinel event?',opts:['Any error caught before reaching the patient','Death or serious harm','A failed Bowie-Dick test','Any event that requires documentation'],ans:1},
+    {q:'Which events should be reported in SPD?',opts:['Only sentinel events','Only events that harmed a patient','All events, including near-misses','Only events witnessed by a supervisor'],ans:2},
+    {q:'Contributing factors examined in root cause analysis include human, equipment, process, environmental, communication, and which other category?',opts:['Organizational','Budgetary','Legal','Promotional'],ans:0},
+    {q:'Root cause analysis is designed to identify:',opts:['The individual who should be disciplined','The cost of the error','The fastest available workaround','The underlying causes of a problem'],ans:3},
+    {q:'In the PDCA cycle, what does the Do step involve?',opts:['Implementing the change department-wide at once','Implementing the change on a small scale','Documenting the original problem','Delegating the problem to leadership'],ans:1},
+    {q:'In the PDCA cycle, what happens during the Check step?',opts:['Results of the change are measured','Staff schedules are verified','The budget is approved','The policy manual is signed'],ans:0},
+    {q:'During the Act step of PDCA, the options are to:',opts:['Assign, approve, or announce the change','Audit, archive, or appeal the change','Adopt, modify, or abandon the change','Approve, fund, or outsource the change'],ans:2},
+    {q:'Which of the following is listed among the key organizations for SPD standards and oversight?',opts:['AARP','AMA','ADA','AAMI'],ans:3},
+    {q:'In addition to policies and documentation, surveyors check which of the following?',opts:['Water quality and BI/Bowie-Dick testing','Employee salary records','Department marketing materials','Patient billing accuracy'],ans:0},
+    {q:'Which of the following is a characteristic of a quality culture?',opts:['Blame-focused error reviews','Keeping concerns private until proven','Open communication','Competition between shifts'],ans:2},
+    {q:'Which set of daily actions supports a quality culture?',opts:['Work fast, stay quiet, cover for teammates','Do your job right, speak up, support the team, keep learning','Focus only on your own assigned tasks','Report only errors that reach patients'],ans:1},
   ],
   simulations:[
     {s:'You catch a tray with a missing instrument before it leaves SPD. The tray is corrected and released complete. Should you still report this?',opts:['No, it was fixed','Yes; this is a near-miss and should be reported. It reveals a process gap that could lead to an error reaching the OR next time','Only if it involved an implant','Only report actual errors'],ans:1},
@@ -426,7 +681,22 @@ const FOUNDATIONS_MODULES = [
     {s:'You are asked to participate in a root cause analysis meeting about a wrong-instrument event. What is your role?',opts:['Defend your shift','Provide honest, factual information about what happened without blame. Focus on identifying process and system factors that contributed','Point out who made the error','Avoid participating'],ans:1},
     {s:'The department achieves a 99.8% BI pass rate for the quarter. Is there room for improvement?',opts:['No, that is perfect','Yes; investigate the 0.2% failure rate to understand root causes and prevent recurrence. Continuous improvement means always looking for better','Only improve if below 95%','Celebrate and stop tracking'],ans:1},
     {s:'A new policy requires double-checking case cart contents before release. Some staff resist because "it slows us down." How do you support the change?',opts:['Agree that it is unnecessary','Explain that verification catches errors before they reach patients. Speed without accuracy is not quality. Support the policy consistently','Only follow it when supervisors watch','Suggest eliminating it at the next meeting'],ans:1},
-    {s:'You notice the same type of instrument keeps failing inspection across multiple trays. What quality action should you take?',opts:['Keep removing them one at a time','Report the pattern. Recurring failures suggest a systemic issue: vendor quality, cleaning process, or handling problem. Pattern identification prevents future failures','It is just coincidence','Only report after 10 failures'],ans:1}
+    {s:'You notice the same type of instrument keeps failing inspection across multiple trays. What quality action should you take?',opts:['Keep removing them one at a time','Report the pattern. Recurring failures suggest a systemic issue: vendor quality, cleaning process, or handling problem. Pattern identification prevents future failures','It is just coincidence','Only report after 10 failures'],ans:1},
+    {s:'A tray that was improperly sterilized was used in surgery, and the patient suffered serious harm as a result. How is this event classified?',opts:['Near-miss, because SPD did not intend the error','Adverse event, because the patient was involved','Sentinel event, because it resulted in serious harm','It is not classified until legal review is complete'],ans:2},
+    {s:'Last month your team began a new drying protocol on a single sterilizer to reduce wet packs, the Do step of PDCA. What should happen next?',opts:['Roll the protocol out to all sterilizers immediately','Check: measure wet pack results on that sterilizer before deciding anything','Abandon the protocol since one month is enough time','Skip to Act and write the new policy'],ans:1},
+    {s:'Your PDCA Check step shows the small-scale change cut wet packs in half but created turnaround delays. Under the Act step, what are your options?',opts:['Adopt, modify, or abandon the change; here modifying it to address the delays may be appropriate','Adopt it unchanged since wet packs improved','Abandon it entirely since delays occurred','Restart the whole cycle and discard the data'],ans:0},
+    {s:'Three months of case cart accuracy data has been collected, but no one has reviewed it. According to the quality data cycle, what is the missing step?',opts:['Collect more data first','Archive the data for the next survey','Analyze the data so the department can act on it','Delete data older than 30 days'],ans:2},
+    {s:'An RCA into a set error finds the technician was new, the count sheet was outdated, and the assembly area lighting was poor. What does this finding illustrate?',opts:['The new technician was the root cause','Problems usually stem from multiple contributing factors: human, process, and environmental','Only equipment factors matter in RCA','The RCA should be repeated until one person is identified'],ans:1},
+    {s:'During a 5 Whys exercise, the team stops after two whys at \'the tech was rushed.\' What should you suggest?',opts:['Accept the answer; two whys is the standard','Discipline the tech for rushing','Move straight to writing a new policy','Keep asking why until the true root cause is found, such as why the tech was rushed'],ans:3},
+    {s:'You learn that several staff members have each quietly corrected the same labeling mistake without reporting it. Why does this matter?',opts:['It does not matter because each error was fixed','Labeling mistakes are too minor to report','Reporting would embarrass the staff involved','Multiple reports of the same issue would reveal a systemic problem that can be fixed at the process level'],ans:3},
+    {s:'During a survey, an inspector asks a technician to demonstrate how they verify the cleaning steps for a specific device. What is the surveyor assessing?',opts:['The technician\'s seniority','Staff competency and IFU compliance, which surveyors routinely check','Whether the device is under warranty','The department\'s staffing budget'],ans:1},
+    {s:'Before an upcoming survey, a coworker asks why water quality records matter to SPD. What is the best answer?',opts:['Water quality is one of the items surveyors check in SPD','They do not; water quality is a facilities issue only','They only matter if a sterilizer has failed','Water quality records are optional documentation'],ans:0},
+    {s:'You observe a practice on another shift that you believe creates a patient safety risk. It is not your shift or your assignment. What does a quality culture expect of you?',opts:['Stay out of it; it is not your responsibility','Mention it only if someone asks you directly','Speak up through open communication; quality culture is patient-centered','Wait to see if an error actually occurs'],ans:2},
+    {s:'A newer technician is struggling with assembly accuracy. How does a quality culture respond?',opts:['Report them to management for discipline','Reassign them to decontamination permanently','Let them figure it out on their own','Support the teammate and treat the struggle as a learning opportunity, not a blame situation'],ans:3},
+    {s:'Your department meets every baseline quality requirement each month. A colleague says that means no further changes are needed. How do you respond?',opts:['Agree; meeting the baseline is the end goal','Improvement is only needed after a failure','Only leadership decides whether to improve','QA ensures the baseline, but QI means continuously improving beyond it'],ans:3},
+    {s:'Your manager wants to know whether tray assembly quality is improving. Which indicator most directly measures this?',opts:['BI pass rate','IUSS rate','Set error rate','Instrument repair turnaround'],ans:2},
+    {s:'A contaminated instrument was used during a procedure, but the patient has shown no harm so far. A coworker calls it a near-miss. Is that correct?',opts:['No; it reached the patient, so it is an adverse event. A near-miss is caught before the patient','Yes; no harm means it is a near-miss','It automatically becomes a sentinel event','It is not reportable unless harm develops'],ans:0},
+    {s:'You realize you made an assembly error yesterday on a tray that has already gone to sterile storage. No one else knows. What do you do?',opts:['Report it immediately so the tray can be pulled and corrected; accountability means owning your errors','Quietly fix it if the tray comes back to SPD','Say nothing; it will probably be caught downstream','Wait to see if the OR complains'],ans:0},
   ],
   observations:[
     {id:'o9-1',text:'Can explain the difference between a near-miss and an adverse event'},
@@ -458,7 +728,22 @@ const FOUNDATIONS_MODULES = [
     {q:'Career level after Senior/Lead Tech?',opts:['Director','Educator/Preceptor or Supervisor','CEO','Consultant'],ans:1},
     {q:'SMART stands for?',opts:['Simple, Meaningful, Accurate, Relevant, Tested','Specific, Measurable, Achievable, Relevant, Time-bound','Surgical, Medical, Administrative, Regulatory, Technical','Standard, Managed, Assigned, Recorded, Tracked'],ans:1},
     {q:'HSPA official publication?',opts:['Lancet','JAMA','Communique','NEJM'],ans:2},
-    {q:'First step in your development plan?',opts:['Wait for supervisor','Write down goals and share with supervisor','Apply for most advanced cert','Transfer departments'],ans:1}
+    {q:'First step in your development plan?',opts:['Wait for supervisor','Write down goals and share with supervisor','Apply for most advanced cert','Transfer departments'],ans:1},
+    {q:'According to the module, SPD has evolved from a support function into:',opts:['A fully automated service','A recognized healthcare profession','A clerical support role','An outsourced hospital function'],ans:1},
+    {q:'Which of the following is listed as a professional characteristic?',opts:['Seniority','Physical strength','Accountability','Popularity'],ans:2},
+    {q:'Which organization offers the CSPDT certification?',opts:['CBSPD','HSPA','AAMI','AORN'],ans:0},
+    {q:'The CER certification focuses on which area?',opts:['Leadership','Instrument repair','Quality auditing','Endoscope reprocessing'],ans:3},
+    {q:'The CHL certification is intended for which role?',opts:['Entry-level technicians','Leaders','Endoscope technicians','Vendors'],ans:1},
+    {q:'What does the module say about state requirements for certification?',opts:['No states require certification','Certification is only required federally','Many states mandate certification','Only managers must be certified'],ans:2},
+    {q:'Which exam-day practice does the module recommend?',opts:['Arrive early and manage your time','Stay up late for a final review','Skip questions that look long','Leave as soon as you finish'],ans:0},
+    {q:'Which exam preparation strategy is listed in the module?',opts:['Study only unofficial summaries','Avoid practice tests to reduce anxiety','Study alone to avoid distraction','Connect your study material to daily practice'],ans:3},
+    {q:'Which of the following is listed as a source of continuing education credits?',opts:['Webinars and journals','Overtime hours worked','Years of experience','Employee evaluations'],ans:0},
+    {q:'When must CE credits be earned to maintain certification?',opts:['Only before the initial exam','During each renewal cycle','Once every ten years','Only when changing employers'],ans:1},
+    {q:'Which of the following is a specialty path listed in the module?',opts:['Radiology','Phlebotomy','Consulting','Respiratory therapy'],ans:2},
+    {q:'What is the highest position on the career ladder described in the module?',opts:['Manager','Supervisor','Educator/Preceptor','Director'],ans:3},
+    {q:'Which of the following is a networking opportunity mentioned in the module?',opts:['Local chapters and conferences','Hospital board meetings','Patient support groups','Vendor sales presentations'],ans:0},
+    {q:'Which three organizations are listed as professional resources for SPD?',opts:['TJC, FDA, CDC','HSPA, CBSPD, AAMI','OSHA, CMS, EPA','AMA, ANA, ACS'],ans:1},
+    {q:'After writing down your goals and sharing them with your supervisor, what does the module say to do?',opts:['Wait for your annual review to revisit them','Keep the goals private until achieved','Identify resources and take the first step today','Set entirely new goals each month'],ans:2},
   ],
   simulations:[
     {s:'A coworker says certification "does not matter because I have been doing this for 20 years." How do you view this?',opts:['They are right, experience is everything','Experience is valuable but certification validates current knowledge against a national standard. The field evolves and certification ensures you stay current','Certification is only for new people','Agree and do not pursue certification'],ans:1},
@@ -470,7 +755,22 @@ const FOUNDATIONS_MODULES = [
     {s:'Your department has an opening for a Lead Tech position. You are a certified tech with strong performance. What strengthens your candidacy?',opts:['Seniority alone','Certification, demonstrated competency, additional training (like CIS), leadership initiative, and a track record of quality work','Asking the most times','Being the only applicant'],ans:1},
     {s:'You are offered overtime on a day you planned to attend a professional conference. What do you consider?',opts:['Always take the overtime','Weigh both: overtime meets immediate needs but professional development builds long-term career value. Make an informed decision based on your goals','Conferences are a waste of time','Your supervisor should decide for you'],ans:1},
     {s:'A new AAMI standard is published that changes a procedure your facility has been doing for years. What is the correct response?',opts:['Ignore it, the old way works','Review the new standard, discuss with leadership, and update facility procedures to align with current evidence-based practice','Standards change too often to follow','Only change if TJC makes you'],ans:1},
-    {s:'You set a SMART goal: "Get better at my job." Is this a good goal?',opts:['Yes, it covers everything','No; it is not specific, measurable, or time-bound. A SMART goal would be: "Pass the CIS exam within 12 months by studying 30 minutes daily and completing 2 practice tests monthly"','Goals do not need to be specific','Only managers need SMART goals'],ans:1}
+    {s:'You set a SMART goal: "Get better at my job." Is this a good goal?',opts:['Yes, it covers everything','No; it is not specific, measurable, or time-bound. A SMART goal would be: "Pass the CIS exam within 12 months by studying 30 minutes daily and completing 2 practice tests monthly"','Goals do not need to be specific','Only managers need SMART goals'],ans:1},
+    {s:'You have registered for the CRCST exam eight months from now. A coworker advises waiting until the final month to begin studying. What is the better approach per the module?',opts:['Wait; studying early just leads to forgetting','Start early with official study materials and practice tests','Skip studying; work experience is enough','Study only the topics you already know well'],ans:1},
+    {s:'It is the night before your certification exam and you feel unprepared, so you consider reviewing all night. What does the module recommend for exam day readiness?',opts:['Stay up and cram; every hour counts','Review until 3 a.m. and then sleep in','Sleep well, arrive early, read carefully, and manage your time','Arrive at the last minute to reduce nerves'],ans:2},
+    {s:'You hold a CRCST and spend most of your time in endoscope reprocessing, which you enjoy. Which advanced certification best aligns with this interest?',opts:['CER','CHL','CIS','CSPDT'],ans:0},
+    {s:'You cannot travel to any conferences this year but still need CE credits for renewal. What options does the module identify?',opts:['None; conferences are the only source','Ask your certifying body for an exemption','Carry over next year\'s credits','Online courses, webinars, journals, and in-service education'],ans:3},
+    {s:'A recruiter from an instrument manufacturer approaches you about a role supporting hospital SPD departments. Does the module recognize this career direction?',opts:['Yes; vendor/industry is a listed specialty path','No; leaving the hospital ends an SPD career','Only Directors can move to industry roles','SPD skills do not transfer outside hospitals'],ans:0},
+    {s:'A technician tells you they want to become a Director someday. Based on the career ladder in the module, what path should they expect?',opts:['Move directly from Technician to Director with certification','Progress through roles such as Senior/Lead, Supervisor, and Manager on the way to Director','Directors are hired only from nursing','Wait for the current Director to retire'],ans:1},
+    {s:'A coworker sets this goal: \'Earn the CER within 18 months by completing one endoscope study module per month and a practice exam each quarter.\' Why does this qualify as a SMART goal?',opts:['It sounds ambitious','It is written down somewhere','It requires no supervisor involvement','It is specific, measurable, achievable, relevant, and time-bound'],ans:3},
+    {s:'A friend describes your job as \'just washing instruments.\' Based on the module, what is an accurate response?',opts:['Agree; SPD is only a support function','SPD is a recognized healthcare profession built on knowledge, competence, ethics, and certification','It is unskilled work but pays well','Only nurses do professional work in hospitals'],ans:1},
+    {s:'You are asked to sign a competency checklist for a skill you have not actually demonstrated. Which professional characteristics are at stake if you sign?',opts:['None; checklists are a formality','Ethics and accountability','Speed and efficiency','Networking and visibility'],ans:1},
+    {s:'You are the only certified technician at a small facility and feel disconnected from the profession. What does the module suggest?',opts:['Accept isolation as part of the job','Change careers to a larger field','Rely only on your original training','Network through local chapters, conferences, and professional groups'],ans:3},
+    {s:'You keep losing focus while studying alone for the CSPDT exam. Which module-recommended strategy could help?',opts:['Join a study group','Postpone the exam indefinitely','Study only during work shifts','Memorize practice test answers without review'],ans:0},
+    {s:'A technician with strong data skills enjoys tracking department metrics more than bench work. Which listed specialty fits this interest?',opts:['Endoscope specialist','Vendor sales','QA','Anesthesia technology'],ans:2},
+    {s:'A new hire with two months of experience wants to sit the CRCST exam right away. What should they understand?',opts:['They can test immediately with no requirements','Only supervisors may take the CRCST','The CRCST requires 400+ hours of experience','They must first earn the CHL'],ans:2},
+    {s:'You have a written SMART goal, supervisor support, and identified resources, but you keep postponing the start. What does the module advise?',opts:['Wait until the next performance cycle','Rewrite the goal to be easier','Delegate the goal to a coworker','Take the first step today'],ans:3},
+    {s:'A technician says, \'I finished orientation, so my learning is done.\' Based on the professional characteristics in the module, what is wrong with this view?',opts:['Nothing; orientation covers everything','Learning is only required for managers','Continuous learning is a core characteristic of the profession','Learning ends once you are certified'],ans:2},
   ],
   observations:[
     {id:'o10-1',text:'Can name the two primary certification organizations (HSPA and CBSPD) and their entry-level certifications'},
@@ -522,8 +822,10 @@ function saveGateScore(staffId,moduleId,gate,score){
  if(!p){p={staffId,moduleId,g1:{status:'open',score:0,attempts:[]},g2:{status:'open',score:0,attempts:[]},g3:{status:'open',items:[]},complete:false};DB.foundationsProgress.push(p);}
  const g=p[gate];
  g.attempts.push({date:new Date().toISOString().slice(0,10),score});
- g.score=score;
- g.status=score>=80?'pass':'attempted';
+ // Best score wins; a passed gate never regresses from a practice retake
+ g.score=Math.max(g.score||0,score);
+ if(score>=80) g.status='pass';
+ else if(g.status!=='pass') g.status='attempted';
  // Check if all 3 gates pass
  if(p.g1.status==='pass'&&p.g2.status==='pass'&&p.g3.status==='pass'){
    p.complete=true;
@@ -677,29 +979,50 @@ function renderFndModuleTab(m,s,gates,tab){
  el.scrollTop=0;
 }
  
+// Per-attempt shuffled question order + practice-retake flags, keyed moduleId+gateKey.
+// The order array maps display index -> original item index; submitFndGate scores
+// against it so answers always line up with what the user saw. Each attempt draws
+// FND_GATE_DRAW questions from the module's full bank, so attempts vary once the
+// bank is larger than the draw.
+const FND_GATE_DRAW=10;
+let FND_GATE_ORDER={};
+let FND_GATE_RETAKE={};
+function retakeFndGate(moduleId,gateKey){
+ FND_GATE_RETAKE[moduleId+gateKey]=true;
+ ST._fndTab=gateKey==='g1'?'gate1':'gate2';
+ openFndModule(moduleId);
+}
 function renderFndGateAssessment(m,s,gateKey,items,title,desc){
  const gates=getModuleGates(s.id,m.id);
  const g=gates[gateKey];
+ const retake=!!FND_GATE_RETAKE[m.id+gateKey];
+ const locked=g.status==='pass'&&!retake;
+ const order=shuffleArray(items.map((_,i)=>i)).slice(0,FND_GATE_DRAW);
+ FND_GATE_ORDER[m.id+gateKey]=order;
  let h='<div class="fnd-kc">';
  h+='<div style="font-size:16px;font-weight:700;color:#e2e8f0;margin-bottom:4px">'+title+'</div>';
  h+='<div style="font-size:12px;color:#94a3b8;margin-bottom:16px">'+desc+'</div>';
- if(g.status==='pass'){
+ if(locked){
    h+='<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--r);padding:14px;text-align:center;margin-bottom:16px">';
    h+='<div style="font-size:20px;font-weight:700;color:#4ade80">'+g.score+'%</div>';
-   h+='<div style="font-size:13px;color:#4ade80;font-weight:600">Passed</div></div>';
+   h+='<div style="font-size:13px;color:#4ade80;font-weight:600">Passed</div>';
+   h+='<button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="retakeFndGate(\''+m.id+'\',\''+gateKey+'\')">Retake (practice)</button></div>';
+ } else if(retake&&g.status==='pass'){
+   h+='<div style="background:rgba(196,154,32,.08);border:1px solid rgba(196,154,32,.25);border-radius:var(--r);padding:10px 14px;margin-bottom:16px;font-size:12px;color:#94a3b8">Practice retake &mdash; your passed status and best score ('+g.score+'%) are kept even if you score lower.</div>';
  }
  h+='<div id="fnd-gate-questions">';
  const qKey=gateKey==='g1'?'q':'s';
- items.forEach((item,qi)=>{
+ order.forEach((origIdx,qi)=>{
+   const item=items[origIdx];
    h+='<div class="fnd-q" data-qi="'+qi+'">';
    h+='<div class="fnd-q-text">'+(qi+1)+'. '+(item[qKey]||item.q||item.s)+'</div>';
    item.opts.forEach((opt,oi)=>{
-     h+='<label class="fnd-q-opt"><input type="radio" name="fnd-'+gateKey+'-'+m.id+'-'+qi+'" value="'+oi+'"'+(g.status==='pass'?' disabled':'')+'><span class="fnd-q-lbl">'+opt+'</span></label>';
+     h+='<label class="fnd-q-opt"><input type="radio" name="fnd-'+gateKey+'-'+m.id+'-'+qi+'" value="'+oi+'"'+(locked?' disabled':'')+'><span class="fnd-q-lbl">'+opt+'</span></label>';
    });
    h+='</div>';
  });
  h+='</div>';
- if(g.status!=='pass'){
+ if(!locked){
    h+='<button class="btn btn-gold" style="margin-top:16px;width:100%" onclick="submitFndGate(\''+m.id+'\',\''+gateKey+'\')">Submit</button>';
  }
  h+='<div id="fnd-gate-result"></div></div>';
@@ -735,27 +1058,31 @@ function submitFndGate(moduleId,gateKey){
  const m=FOUNDATIONS_MODULES.find(x=>x.id===moduleId);if(!m) return;
  const s=getStaff(ST.staffId);if(!s) return;
  const items=gateKey==='g1'?m.questions:m.simulations;
+ // Score against the shuffled draw the user actually saw (display idx -> item idx)
+ const order=FND_GATE_ORDER[m.id+gateKey]||items.map((_,i)=>i).slice(0,FND_GATE_DRAW);
+ delete FND_GATE_RETAKE[m.id+gateKey];
  let correct=0;
- items.forEach((item,qi)=>{
+ order.forEach((origIdx,qi)=>{
    const sel=document.querySelector('input[name="fnd-'+gateKey+'-'+m.id+'-'+qi+'"]:checked');
-   if(sel&&parseInt(sel.value)===item.ans) correct++;
+   if(sel&&parseInt(sel.value)===items[origIdx].ans) correct++;
  });
- const score=Math.round((correct/items.length)*100);
+ const score=Math.round((correct/order.length)*100);
  saveGateScore(s.id,m.id,gateKey,score);
  const passed=score>=80;
  const gateLabel=gateKey==='g1'?'Knowledge':'Simulation';
  // Highlight answers
- items.forEach((item,qi)=>{
+ order.forEach((origIdx,qi)=>{
+   const item=items[origIdx];
    const opts=document.querySelectorAll('input[name="fnd-'+gateKey+'-'+m.id+'-'+qi+'"]');
    opts.forEach((opt,oi)=>{const lbl=opt.closest('.fnd-q-opt');if(!lbl)return;opt.disabled=true;if(oi===item.ans)lbl.classList.add('fnd-q-correct');else if(opt.checked&&oi!==item.ans)lbl.classList.add('fnd-q-wrong');});
  });
  const rEl=document.getElementById('fnd-gate-result');
  if(rEl){
    if(passed){
-     rEl.innerHTML='<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--r);padding:14px 16px;text-align:center;margin-top:12px"><div style="font-size:24px;font-weight:700;color:#4ade80">'+score+'%</div><div style="font-size:13px;color:#4ade80;font-weight:600;margin:4px 0">'+gateLabel+' Gate Passed</div><div style="font-size:12px;color:#94a3b8">'+correct+' of '+items.length+' correct.</div></div>';
+     rEl.innerHTML='<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--r);padding:14px 16px;text-align:center;margin-top:12px"><div style="font-size:24px;font-weight:700;color:#4ade80">'+score+'%</div><div style="font-size:13px;color:#4ade80;font-weight:600;margin:4px 0">'+gateLabel+' Gate Passed</div><div style="font-size:12px;color:#94a3b8">'+correct+' of '+order.length+' correct.</div></div>';
      toast(gateLabel+' gate passed: '+score+'%','ok');
    } else {
-     rEl.innerHTML='<div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:var(--r);padding:14px 16px;text-align:center;margin-top:12px"><div style="font-size:24px;font-weight:700;color:#f87171">'+score+'%</div><div style="font-size:13px;color:#f87171;font-weight:600;margin:4px 0">Not Yet Passing</div><div style="font-size:12px;color:#94a3b8">'+correct+' of '+items.length+' correct. 80% required.</div><button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="openFndModule(\''+moduleId+'\')">Try Again</button></div>';
+     rEl.innerHTML='<div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:var(--r);padding:14px 16px;text-align:center;margin-top:12px"><div style="font-size:24px;font-weight:700;color:#f87171">'+score+'%</div><div style="font-size:13px;color:#f87171;font-weight:600;margin:4px 0">Not Yet Passing</div><div style="font-size:12px;color:#94a3b8">'+correct+' of '+order.length+' correct. 80% required.</div><button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="openFndModule(\''+moduleId+'\')">Try Again</button></div>';
      toast('Score: '+score+'%. 80% required.','err');
    }
  }
