@@ -1356,8 +1356,6 @@ const PLACEMENT_QUESTIONS = [
    options:['To describe the operational history and naming conventions of the department','To provide documented standards for consistent, safe, and compliant practice','To track daily employee attendance and shift rotation coverage patterns','To list every specific piece of physical equipment currently owned by the unit'],correct:1},
   {id:'p51',level:5,type:'knowledge',q:'Which of the following best indicates a quality management system failure in SPD?',
    options:['A single defective instrument found in a heavily loaded specialty tray','Repeated sterilization failures without documented root cause analysis','A surgical nurse who prefers a different tray layout than the standard','A new staff member who requires additional training on complex devices'],correct:1},
-  {id:'p52',level:5,type:'knowledge',q:'What does AAMI TIR34 address?',
-   options:['Staff credentialing requirements','Water quality for the reprocessing of medical devices','Personal protective equipment standards','Surgical count procedures'],correct:1},
   {id:'p53',level:5,type:'knowledge',q:'What is a corrective action in SPD and when is it required?',
    options:['A verbal warning given to an individual employee following a minor error','A documented response to a deviation that identifies root cause and prevents recurrence','A standardized procedure for replacing damaged instruments with new sets','A formal request for additional staff members during high-volume periods'],correct:1},
   {id:'p54',level:5,type:'knowledge',q:'Why is instrument tracking important at a systems level?',
@@ -2013,7 +2011,7 @@ function renderPAIntro(){
       <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:20px 24px;text-align:left;max-width:480px;margin:0 auto 32px">
         <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:14px;letter-spacing:.05em">WHAT TO EXPECT</div>
         <div style="display:flex;flex-direction:column;gap:10px">
-          <div style="display:flex;align-items:flex-start;gap:10px"><div style="width:24px;height:24px;background:rgba(139,92,246,.15);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#a78bfa;flex-shrink:0">60</div><div style="font-size:13px;color:#cbd5e1;line-height:1.5">60 questions covering SPD knowledge and practical scenarios</div></div>
+          <div style="display:flex;align-items:flex-start;gap:10px"><div style="width:24px;height:24px;background:rgba(139,92,246,.15);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#a78bfa;flex-shrink:0">${PLACEMENT_QUESTIONS.length}</div><div style="font-size:13px;color:#cbd5e1;line-height:1.5">${PLACEMENT_QUESTIONS.length} questions covering SPD knowledge and practical scenarios</div></div>
           <div style="display:flex;align-items:flex-start;gap:10px"><div style="width:24px;height:24px;background:rgba(139,92,246,.15);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#a78bfa;flex-shrink:0">90</div><div style="font-size:13px;color:#cbd5e1;line-height:1.5">Takes about 90 minutes to complete thoughtfully</div></div>
           <div style="display:flex;align-items:flex-start;gap:10px"><div style="width:24px;height:24px;background:rgba(139,92,246,.15);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#a78bfa;flex-shrink:0">&#128274;</div><div style="font-size:13px;color:#cbd5e1;line-height:1.5">Your responses are reviewed by a certified SIPS assessor before placement is confirmed</div></div>
         </div>
@@ -6972,7 +6970,7 @@ function renderSDashboard(){
           <div style="width:28px;height:28px;background:#7c3aed;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:13px;font-weight:800;color:#fff">1</div>
           <div style="flex:1">
             <div style="font-size:12.5px;font-weight:700;color:#e2e8f0">Placement Assessment</div>
-            <div style="font-size:11px;color:#94a3b8;margin-top:2px">60 questions, ~90 minutes. Helps your assessor confirm your starting point.</div>
+            <div style="font-size:11px;color:#94a3b8;margin-top:2px">${PLACEMENT_QUESTIONS.length} questions, ~90 minutes. Helps your assessor confirm your starting point.</div>
           </div>
           <div style="background:#8b5cf6;border-radius:6px;padding:5px 12px;font-size:11.5px;font-weight:700;color:#fff;white-space:nowrap">Start</div>
         </div>

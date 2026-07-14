@@ -209,7 +209,7 @@
   // (off by default), >=80% silent. Sync — reads already-loaded rows, never fetches. Suggestion
   // only: no write tool exists for David to act on this.
   const PLACEMENT_MODULE_MAP = {
-    p1:1,p2:1,p6:1,p7:1,p16:1,p27:1,p28:1,p38:1,p50:1,p52:1,p55:1,p56:1,
+    p1:1,p2:1,p6:1,p7:1,p16:1,p27:1,p28:1,p38:1,p50:1,p55:1,p56:1,
     p3:2,p4:2,p5:2,p9:2,p10:2,p12:2,p14:2,p17:2,p21:2,p39:2,
     p18:3,p20:3,p23:3,p24:3,p31:3,p34:3,p36:3,p48:3,
     p8:4,p11:4,p60:4,
