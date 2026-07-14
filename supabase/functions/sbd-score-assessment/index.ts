@@ -1,6 +1,135 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { callOpenRouter } from '../_shared/openrouter.ts';
-import { MODEL_CHAINS } from '../_shared/models.ts';
+
+// ─── Inlined from supabase/functions/_shared/models.ts (#47) ─────────────────
+// This function is deployed via the Supabase dashboard (copy-paste), which cannot
+// resolve the `../_shared` import, so the model slugs + fallback chains live inline
+// here. Keep in sync with _shared/models.ts if that file changes.
+const MODELS = {
+  chatDefault: 'anthropic/claude-sonnet-4.5',
+  chatCheap: 'anthropic/claude-haiku-4.5',
+  assessmentScorer: 'anthropic/claude-haiku-4.5',
+  grader: 'anthropic/claude-sonnet-4.5',
+} as const;
+
+// Primary first. Each chain crosses the Haiku/Sonnet tiers so a retired slug or a
+// single-tier outage still yields a graded result rather than a 502.
+const MODEL_CHAINS = {
+  assessmentScorer: [MODELS.assessmentScorer, MODELS.chatDefault], // haiku → sonnet
+  grader: [MODELS.grader, MODELS.chatCheap],                       // sonnet → haiku
+} as const;
+// ─── end inlined models ──────────────────────────────────────────────────────
+
+// ─── Inlined from supabase/functions/_shared/openrouter.ts (#47) ─────────────
+// Same reason as above — the resilient OpenRouter caller lives inline for the
+// dashboard deploy. Tries the primary model; on a RETRYABLE failure (HTTP 429/5xx,
+// network/timeout) it retries with backoff, then falls back to the next model in
+// the chain. On a DEAD-SLUG failure (404/400 naming an unknown model) it skips
+// straight to the next. On success the Response is returned with its body UNREAD.
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+
+interface CallOpenRouterOpts {
+  apiKey: string;
+  models: readonly string[]; // [primary, ...fallbacks]
+  messages: unknown[];
+  maxTokens?: number;
+  temperature?: number;
+  stream?: boolean;
+  referer?: string;
+  title?: string;
+  timeoutMs?: number; // per-attempt abort (default 30s)
+  maxRetriesPerModel?: number; // transient retries before moving to the next model
+  extraBody?: Record<string, unknown>; // merged into the request body (e.g. tools, usage)
+}
+
+interface CallOpenRouterResult {
+  res: Response; // ok response, body unread
+  servedModel: string; // the model that answered
+  attempts: number; // total network attempts made
+}
+
+function isDeadSlug(status: number, body: string): boolean {
+  if (status !== 404 && status !== 400) return false;
+  return /no endpoints|not a valid model|no allowed providers|model.*not found|is not a valid/i.test(body);
+}
+
+const isRetryableStatus = (s: number) => s === 429 || (s >= 500 && s <= 599);
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function callOpenRouter(opts: CallOpenRouterOpts): Promise<CallOpenRouterResult> {
+  const {
+    apiKey,
+    models,
+    messages,
+    maxTokens,
+    temperature,
+    stream = false,
+    referer = 'https://belt.sterilebydesign.ai',
+    title = 'SBD',
+    timeoutMs = 30000,
+    maxRetriesPerModel = 2,
+    extraBody,
+  } = opts;
+
+  if (!apiKey) throw new Error('callOpenRouter: OPENROUTER_API_KEY missing');
+  if (!models || models.length === 0) throw new Error('callOpenRouter: no models provided');
+
+  let attempts = 0;
+  let lastError = 'no attempt made';
+
+  for (const model of models) {
+    for (let retry = 0; retry <= maxRetriesPerModel; retry++) {
+      attempts++;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const res = await fetch(OPENROUTER_URL, {
+          method: 'POST',
+          signal: controller.signal,
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': referer,
+            'X-Title': title,
+          },
+          body: JSON.stringify({
+            model,
+            messages,
+            ...(maxTokens != null ? { max_tokens: maxTokens } : {}),
+            ...(temperature != null ? { temperature } : {}),
+            ...(stream ? { stream: true } : {}),
+            ...(extraBody || {}),
+          }),
+        });
+        clearTimeout(timer);
+
+        if (res.ok) return { res, servedModel: model, attempts };
+
+        const body = await res.text();
+        lastError = `model=${model} status=${res.status} ${body.slice(0, 300)}`;
+        console.error('[openrouter]', lastError);
+
+        if (isDeadSlug(res.status, body)) break; // permanent → next model
+        if (isRetryableStatus(res.status) && retry < maxRetriesPerModel) {
+          await sleep(300 * (retry + 1));
+          continue; // transient → retry same model
+        }
+        break; // non-retryable (e.g. 401/403) → next model
+      } catch (err) {
+        clearTimeout(timer);
+        lastError = `model=${model} network/timeout: ${err instanceof Error ? err.message : String(err)}`;
+        console.error('[openrouter]', lastError);
+        if (retry < maxRetriesPerModel) {
+          await sleep(300 * (retry + 1));
+          continue; // transient network → retry same model
+        }
+        break; // exhausted retries → next model
+      }
+    }
+  }
+
+  throw new Error(`OpenRouter failed for all models [${models.join(', ')}]. Last error: ${lastError}`);
+}
+// ─── end inlined openrouter ──────────────────────────────────────────────────
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -100,8 +229,8 @@ No markdown, no preamble.`;
         // #47: resilient call. Primary is the cheap Haiku tier, falling back to Sonnet
         // on a dead slug (a retired slug — e.g. the old `claude-3.5-haiku` that 404'd —
         // once dropped every grade to the keyword fallback), a provider 5xx, or a
-        // timeout. The chain lives in _shared/models.ts so the active model is
-        // reportable from one place.
+        // timeout. The chain is defined at the top of this file (inlined from
+        // _shared/models.ts) so the active model is reportable from one place.
         let orRes: Response;
         let servedModel: string;
         try {
