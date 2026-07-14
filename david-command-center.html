@@ -34,6 +34,8 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
 .header-sub{font-size:14px;color:var(--txt3);font-weight:400}
 .system-pulse{display:flex;align-items:center;gap:8px;margin-left:auto;padding:8px 16px;border-radius:20px;background:var(--glass);border:1px solid var(--glass-border);font-size:12px;color:var(--green);font-weight:500}
 .pulse-dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green-glow);animation:pulse 2s ease-in-out infinite}
+.system-pulse.killswitch-engaged{color:var(--red);border-color:var(--red-glow);background:var(--red-glow);font-weight:700}
+.system-pulse.killswitch-engaged .pulse-dot{background:var(--red);box-shadow:0 0 8px var(--red-glow)}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.6;transform:scale(.85)}}
 
 /* ── Hero Stats ── */
@@ -110,7 +112,7 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
 .dot-amber{background:var(--amber);box-shadow:0 0 8px var(--amber-glow)}
 
 /* ── Card Body ── */
-.card-meta{display:flex;align-items:center;gap:16px;position:relative;z-index:1}
+.card-meta{display:flex;flex-wrap:wrap;align-items:flex-start;gap:16px;position:relative;z-index:1}
 .meta-item{display:flex;flex-direction:column;gap:2px}
 .meta-lbl{font-size:10px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--txt3)}
 .meta-val{font-size:14px;font-weight:600}
@@ -119,7 +121,7 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
 .token-bar-fill{height:6px;border-radius:3px;background:linear-gradient(90deg,var(--blue),var(--purple));transition:width 1s ease-out}
 .token-label{display:flex;justify-content:space-between;margin-top:4px}
 .token-label span{font-size:10px;color:var(--txt3);font-weight:500}
-.platform-split{grid-column:1/-1}
+.platform-split{flex:1 1 100%}
 .platform-rows{display:flex;flex-direction:column;gap:4px;margin-top:4px}
 .platform-row{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .platform-name{font-size:11px;font-weight:600;color:var(--txt2)}
@@ -236,7 +238,7 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
       <button class="btn btn-ghost" id="global-killswitch" style="border-color:var(--red); color:var(--red); padding:4px 10px; font-size:11px; margin-left:12px;" onclick="toggleGlobalKillswitch()">
         🚨 GLOBAL KILLSWITCH
       </button>
-      <div class="system-pulse"><div class="pulse-dot"></div>All Systems Nominal</div>
+      <div class="system-pulse" id="system-pulse"><div class="pulse-dot"></div><span id="system-pulse-txt">All Systems Nominal</span></div>
     </div>
     <div class="header-sub">Enterprise Operational Intelligence Management</div>
   </div>
@@ -712,6 +714,18 @@ function updateDeployCount(){
   const active=FACILITIES.filter(f=>f.active).length;
   const total=FACILITIES.length||1;
   document.getElementById('deploy-count').textContent=active;
+  // ── Killswitch-engaged indicator ──
+  // Engaged when at least one deployable (non-archived) facility exists and none
+  // of them are active — the exact state GLOBAL_KILLSWITCH leaves the network in
+  // (david-admin-api sets every david_facility_access.is_active=false).
+  const deployable=FACILITIES.filter(f=>!f.archived);
+  const engaged=deployable.length>0 && deployable.every(f=>!f.active);
+  const pulse=document.getElementById('system-pulse');
+  const pulseTxt=document.getElementById('system-pulse-txt');
+  if(pulse&&pulseTxt){
+    pulse.classList.toggle('killswitch-engaged',engaged);
+    pulseTxt.textContent=engaged?'🚨 KILLSWITCH ENGAGED':'All Systems Nominal';
+  }
   document.querySelector('.hero-unit').textContent='/ '+total+' facilities';
   const pct=active/total;
   document.getElementById('gauge-arc').style.strokeDashoffset=188.5*(1-pct);

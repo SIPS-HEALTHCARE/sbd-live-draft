@@ -1993,7 +1993,9 @@ window.onload = function(){
   });
 
   const overlay = document.getElementById('modal-overlay');
-  if(overlay) overlay.addEventListener('touchmove', e => e.preventDefault(), {passive:false});
+  // Block touch-scroll only on the backdrop itself; touchmove bubbles up from the
+  // scrollable .modal box, so an unconditional preventDefault kills modal scrolling.
+  if(overlay) overlay.addEventListener('touchmove', e => { if(e.target === overlay) e.preventDefault(); }, {passive:false});
 
   // Note: Session restoration is handled exclusively by restoreSessionOnLoad on DOMContentLoaded to avoid duplicate race conditions.
 
