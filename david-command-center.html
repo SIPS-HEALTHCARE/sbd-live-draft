@@ -239,6 +239,7 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
         🚨 GLOBAL KILLSWITCH
       </button>
       <div class="system-pulse" id="system-pulse"><div class="pulse-dot"></div><span id="system-pulse-txt">All Systems Nominal</span></div>
+      <div id="active-model" style="display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:20px;background:var(--glass);border:1px solid var(--glass-border);font-size:12px;font-weight:500" title="Models currently serving David chat and assessment grading">🤖 <span id="active-model-txt">—</span></div>
     </div>
     <div class="header-sub">Enterprise Operational Intelligence Management</div>
   </div>
@@ -477,6 +478,17 @@ async function adminAPI(action, payload={}, isRetry=false){
   return json.data;
 }
 
+// #47: show which OpenRouter model is currently serving chat + grading. Slugs come
+// from GET_METRICS (shared source of truth); refreshes on load and after each action.
+function setActiveModelBadge(models){
+  const el = document.getElementById('active-model-txt');
+  if(!el) return;
+  if(!models){ el.textContent = 'model info unavailable'; return; }
+  const short = s => String(s||'').split('/').pop() || '—';
+  const chat = short(models.chatDefault), grader = short(models.grader);
+  el.textContent = (chat === grader) ? `Model: ${chat}` : `Chat: ${chat} · Grader: ${grader}`;
+}
+
 // ── Load live data ──
 async function loadFacilities(){
   const token = getToken();
@@ -494,7 +506,8 @@ async function loadFacilities(){
     const metrics = await adminAPI('GET_METRICS');
     (metrics.access||[]).forEach(a => accessMap[a.facility_id] = a);
     (metrics.analytics||[]).forEach(a => analyticsMap[a.facility_id] = a);
-  } catch(e){ console.warn('Metrics load:', e.message); }
+    setActiveModelBadge(metrics.models);
+  } catch(e){ console.warn('Metrics load:', e.message); setActiveModelBadge(null); }
 
   // Month-to-date usage split by platform (sbd = belt app, psop = SOP tool), per
   // facility. Ignacio 2026-07-02: usage must be visible per platform while still

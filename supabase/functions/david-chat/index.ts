@@ -2,6 +2,121 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.6';
 import { verifyUserAndFacility } from './auth.ts';
 
+// ─── Inlined from supabase/functions/_shared/openrouter.ts (#47) ─────────────
+// This function is deployed via the Supabase dashboard (copy-paste), which cannot
+// resolve the `../_shared` import, so the resilient OpenRouter caller lives inline
+// here. If _shared/openrouter.ts ever changes, mirror the change into this block.
+//
+// Tries the primary model; on a RETRYABLE failure (HTTP 429/5xx, network/timeout)
+// it retries the same model with backoff, then falls back to the next model in the
+// chain. On a DEAD-SLUG failure (404/400 naming an unknown model) it skips straight
+// to the next model. On success the Response is returned with its body UNREAD.
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+
+interface CallOpenRouterOpts {
+  apiKey: string;
+  models: readonly string[]; // [primary, ...fallbacks]
+  messages: unknown[];
+  maxTokens?: number;
+  temperature?: number;
+  stream?: boolean;
+  referer?: string;
+  title?: string;
+  timeoutMs?: number; // per-attempt abort (default 30s)
+  maxRetriesPerModel?: number; // transient retries before moving to the next model
+  extraBody?: Record<string, unknown>; // merged into the request body (e.g. tools, usage)
+}
+
+interface CallOpenRouterResult {
+  res: Response; // ok response, body unread
+  servedModel: string; // the model that answered
+  attempts: number; // total network attempts made
+}
+
+function isDeadSlug(status: number, body: string): boolean {
+  if (status !== 404 && status !== 400) return false;
+  return /no endpoints|not a valid model|no allowed providers|model.*not found|is not a valid/i.test(body);
+}
+
+const isRetryableStatus = (s: number) => s === 429 || (s >= 500 && s <= 599);
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function callOpenRouter(opts: CallOpenRouterOpts): Promise<CallOpenRouterResult> {
+  const {
+    apiKey,
+    models,
+    messages,
+    maxTokens,
+    temperature,
+    stream = false,
+    referer = 'https://belt.sterilebydesign.ai',
+    title = 'SBD',
+    timeoutMs = 30000,
+    maxRetriesPerModel = 2,
+    extraBody,
+  } = opts;
+
+  if (!apiKey) throw new Error('callOpenRouter: OPENROUTER_API_KEY missing');
+  if (!models || models.length === 0) throw new Error('callOpenRouter: no models provided');
+
+  let attempts = 0;
+  let lastError = 'no attempt made';
+
+  for (const model of models) {
+    for (let retry = 0; retry <= maxRetriesPerModel; retry++) {
+      attempts++;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const res = await fetch(OPENROUTER_URL, {
+          method: 'POST',
+          signal: controller.signal,
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': referer,
+            'X-Title': title,
+          },
+          body: JSON.stringify({
+            model,
+            messages,
+            ...(maxTokens != null ? { max_tokens: maxTokens } : {}),
+            ...(temperature != null ? { temperature } : {}),
+            ...(stream ? { stream: true } : {}),
+            ...(extraBody || {}),
+          }),
+        });
+        clearTimeout(timer);
+
+        if (res.ok) return { res, servedModel: model, attempts };
+
+        const body = await res.text();
+        lastError = `model=${model} status=${res.status} ${body.slice(0, 300)}`;
+        console.error('[openrouter]', lastError);
+
+        if (isDeadSlug(res.status, body)) break; // permanent → next model
+        if (isRetryableStatus(res.status) && retry < maxRetriesPerModel) {
+          await sleep(300 * (retry + 1));
+          continue; // transient → retry same model
+        }
+        break; // non-retryable (e.g. 401/403) → next model
+      } catch (err) {
+        clearTimeout(timer);
+        lastError = `model=${model} network/timeout: ${err instanceof Error ? err.message : String(err)}`;
+        console.error('[openrouter]', lastError);
+        if (retry < maxRetriesPerModel) {
+          await sleep(300 * (retry + 1));
+          continue; // transient network → retry same model
+        }
+        break; // exhausted retries → next model
+      }
+    }
+  }
+
+  throw new Error(`OpenRouter failed for all models [${models.join(', ')}]. Last error: ${lastError}`);
+}
+// ─── end inlined openrouter ──────────────────────────────────────────────────
+
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -40,6 +155,10 @@ serve(async (req) => {
             'anthropic/claude-haiku-4.5',
         ]);
         const chosenModel = (typeof model === 'string' && ALLOWED_MODELS.has(model)) ? model : DEFAULT_MODEL;
+        // #47: model fallback chain for every engine call. A routed (cheaper) model
+        // that dies falls to Sonnet; transient 5xx/timeouts on either are retried by
+        // the shared helper. Supersedes the old one-shot recursive self-heal.
+        const modelChain = chosenModel === DEFAULT_MODEL ? [DEFAULT_MODEL] : [chosenModel, DEFAULT_MODEL];
 
         const authHeader = req.headers.get('Authorization') || '';
         let authResult;
@@ -191,43 +310,31 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
         let usageCompletionTokens = 0;
         let usageCost = 0;
 
-        async function runAutonomousLoop(messageChain: any[], depth: number = 0, modelOverride: string | null = null) {
+        async function runAutonomousLoop(messageChain: any[], depth: number = 0) {
             if (depth > 8) return;
 
-            const orRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${openRouterKey}`,
-                    'Content-Type': 'application/json',
-                    'HTTP-Referer': 'https://belt.sterilebydesign.ai',
-                    'X-Title': 'DAVID Intelligence - SBD Belt Platform',
-                },
-                body: JSON.stringify({
-                    model: modelOverride || chosenModel,
+            // #47: resilient engine call. The shared helper walks modelChain
+            // (routed model → Sonnet), retries transient 5xx/timeouts with backoff,
+            // and skips a dead slug — replacing the prior one-shot recursive self-heal.
+            let orRes: Response;
+            try {
+                const call = await callOpenRouter({
+                    apiKey: openRouterKey,
+                    models: modelChain,
                     messages: messageChain,
-                    // Omit `tools` entirely when the caller has none (base tier) — an empty
-                    // tools array is rejected by some providers.
-                    ...(tools.length > 0 ? { tools } : {}),
-                    max_tokens: 4000,
+                    maxTokens: 4000,
                     temperature: 0.7,
                     stream: true,
-                    // Ask the provider to return token accounting + real generation cost in the
-                    // final stream chunk, so metering uses ground-truth cost (not a formula).
-                    usage: { include: true },
-                }),
-            });
-
-            if (!orRes.ok) {
-                const errBody = await orRes.text();
-                console.error('[DAVID] OpenRouter error:', errBody);
-                // M.3 self-heal: if a routed (non-default) model failed, retry once on the default
-                // model with the same (unmutated) message chain — so a bad cheap-model slug can
-                // never break a turn; it just falls back to Sonnet.
-                if (!modelOverride && chosenModel !== DEFAULT_MODEL) {
-                    console.warn('[DAVID] Model', chosenModel, 'failed; retrying on', DEFAULT_MODEL);
-                    return runAutonomousLoop(messageChain, depth, DEFAULT_MODEL);
-                }
-                await writer.write(encoder.encode(`data: ${JSON.stringify({ error: `AI service error: ${errBody}` })}\n\n`));
+                    title: 'DAVID Intelligence - SBD Belt Platform',
+                    // Omit `tools` entirely when the caller has none (base tier) — an empty
+                    // tools array is rejected by some providers. `usage` asks the provider
+                    // for token accounting + real generation cost in the final chunk.
+                    extraBody: { ...(tools.length > 0 ? { tools } : {}), usage: { include: true } },
+                });
+                orRes = call.res;
+            } catch (err: any) {
+                console.error('[DAVID] OpenRouter error (all models failed):', err?.message || err);
+                await writer.write(encoder.encode(`data: ${JSON.stringify({ error: 'AI service error' })}\n\n`));
                 return;
             }
 
@@ -341,12 +448,24 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
 
                 if (!visibleAnswer) {
                     messages.push({ role: 'system', content: 'Your previous turn produced no visible answer. Respond NOW with your full answer in plain conversational text only. Do NOT use <thinking>, <chips>, <chart>, or <citation>. Do NOT call tools. Coach from any knowledge base results you already have.' });
-                    const forced = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-                        method: 'POST',
-                        headers: { 'Authorization': `Bearer ${openRouterKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://belt.sterilebydesign.ai', 'X-Title': 'DAVID' },
-                        body: JSON.stringify({ model: DEFAULT_MODEL, messages, max_tokens: 3000, temperature: 0.7, stream: true, usage: { include: true } }),
-                    });
-                    if (forced.ok && forced.body) {
+                    // #47: same resilient path for the forced-completion recovery.
+                    let forced: Response | null = null;
+                    try {
+                        const fcall = await callOpenRouter({
+                            apiKey: openRouterKey,
+                            models: [DEFAULT_MODEL],
+                            messages,
+                            maxTokens: 3000,
+                            temperature: 0.7,
+                            stream: true,
+                            title: 'DAVID',
+                            extraBody: { usage: { include: true } },
+                        });
+                        forced = fcall.res;
+                    } catch (err: any) {
+                        console.error('[DAVID] Forced completion failed:', err?.message || err);
+                    }
+                    if (forced && forced.ok && forced.body) {
                         const fReader = forced.body.getReader();
                         const fDecoder = new TextDecoder('utf-8');
                         let fBuffer = '';
@@ -375,7 +494,7 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
                                 } catch (_e) { /* ignore */ }
                             }
                         }
-                    } else {
+                    } else if (forced) {
                         console.error('[DAVID] Forced completion failed:', forced.status);
                     }
                 }

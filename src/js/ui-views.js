@@ -687,7 +687,7 @@ function renderADavidDashboardView() {
   const container = document.getElementById('a-daviddashboard');
   if (!container) return;
   // Load the premium Command Center UI directly
-  container.innerHTML = `<iframe src="/david-command-center.html?v=8" style="width:100%;height:calc(100vh - 64px);border:none;border-radius:12px;background:var(--bg);" allowfullscreen></iframe>`;
+  container.innerHTML = `<iframe src="/david-command-center.html?v=9" style="width:100%;height:calc(100vh - 64px);border:none;border-radius:12px;background:var(--bg);" allowfullscreen></iframe>`;
 }
 
 window.refreshDashboard = function() {
