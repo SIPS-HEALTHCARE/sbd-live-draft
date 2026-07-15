@@ -68,10 +68,14 @@ function getWindowStatus(staff){
   const cur = staff.cur || {};
   const allPass = belt === 'White' || (cur.c==='pass' && cur.s==='pass' && cur.o==='pass');
   if(!allPass) return {status:'locked', label:'Complete current belt assessments first', pct:0};
-  // Calculate from belt earn date
-  const earnDate = new Date(staff.since);
+  // Calculate from belt earn date.
+  // Guard a missing/invalid `since`: without it the date math below evaluates to NaN,
+  // which rendered "Window closed. Reopens in NaNd" and a false CLOSED window for any
+  // staffer with no belt-earned date on file.
+  const earnMs = staff.since ? new Date(staff.since).getTime() : NaN;
+  if(!Number.isFinite(earnMs)) return {status:'open', label:'Window Open', pct:100};
   const now = new Date();
-  const daysSince = Math.floor((now - earnDate)/(1000*60*60*24));
+  const daysSince = Math.floor((now.getTime() - earnMs)/(1000*60*60*24));
   const cycleDays = (cfg.open + cfg.closed) * 7;
   const posInCycle = daysSince % cycleDays;
   const openDays   = cfg.open * 7;
