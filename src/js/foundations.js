@@ -826,8 +826,9 @@ function saveGateScore(staffId,moduleId,gate,score){
  g.score=Math.max(g.score||0,score);
  if(score>=80) g.status='pass';
  else if(g.status!=='pass') g.status='attempted';
- // Check if all 3 gates pass
- if(p.g1.status==='pass'&&p.g2.status==='pass'&&p.g3.status==='pass'){
+ // Module complete = 3 passes on G1 AND 3 on G2 (3-pass rule) AND G3 confirmed.
+ // Already-complete rows are never demoted here (completion only moves forward).
+ if(fndGatePasses(p.g1)>=FND_PASSES_REQUIRED&&fndGatePasses(p.g2)>=FND_PASSES_REQUIRED&&p.g3.status==='pass'){
    p.complete=true;
    const a=(DB.foundationsAssignments||[]).find(x=>x.staffId===staffId&&x.moduleId===moduleId);
    if(a) a.status='completed';
@@ -840,6 +841,12 @@ function markG3Item(staffId,moduleId,itemId,confirmed,confirmedBy){
  if(!DB.foundationsProgress) DB.foundationsProgress=[];
  let p=DB.foundationsProgress.find(x=>x.staffId===staffId&&x.moduleId===moduleId);
  if(!p) return;
+ // 3-pass rule: G3 items cannot be CONFIRMED until 3 Knowledge + 3 Simulation
+ // passes are in (unchecking/revoking stays allowed; complete modules exempt).
+ if(confirmed&&!p.complete&&!fndObsReady(p)){
+   if(typeof toast==='function') toast('Observation is locked: needs 3 Knowledge and 3 Simulation passes first (K '+fndGatePasses(p.g1)+'/'+FND_PASSES_REQUIRED+', S '+fndGatePasses(p.g2)+'/'+FND_PASSES_REQUIRED+').','err');
+   return;
+ }
  const existing=p.g3.items.find(i=>i.id===itemId);
  if(existing){existing.confirmed=confirmed;existing.confirmedBy=confirmedBy;existing.date=new Date().toISOString().slice(0,10);}
  else{p.g3.items.push({id:itemId,confirmed,confirmedBy,date:new Date().toISOString().slice(0,10)});}
@@ -853,7 +860,7 @@ function markG3Item(staffId,moduleId,itemId,confirmed,confirmedBy){
    else if(p.g3.status==='pass'){p.g3.status='open';p.g3.score=0;}
  }
  const a=(DB.foundationsAssignments||[]).find(x=>x.staffId===staffId&&x.moduleId===moduleId);
- if(p.g1.status==='pass'&&p.g2.status==='pass'&&p.g3.status==='pass'){
+ if(fndGatePasses(p.g1)>=FND_PASSES_REQUIRED&&fndGatePasses(p.g2)>=FND_PASSES_REQUIRED&&p.g3.status==='pass'){
    p.complete=true; if(a)a.status='completed';
  } else if(p.complete){
    p.complete=false; if(a)a.status='assigned';
@@ -903,7 +910,7 @@ function renderSFoundations(){
  
    if(assigned){
      html+='<div style="display:flex;gap:4px;align-items:center" title="Gate 1: Knowledge | Gate 2: Simulation | Gate 3: Observation">';
-     html+=fndGateBadge(gates.g1.status)+fndGateBadge(gates.g2.status)+fndGateBadge(gates.g3.status);
+     html+=fndGateBadge(gates.g1.status)+fndGateBadge(gates.g2.status)+fndGateBadge(gates.g3.status)+'<span style="margin-left:6px">'+fndPassChip(gates)+'</span>';
      html+='</div>';
    } else {
      html+='<span class="pill p-muted" style="opacity:.5"><svg viewBox="0 0 14 14" width="11" height="11" fill="none" style="margin-right:3px;vertical-align:-1px"><rect x="1" y="5" width="12" height="8" rx="2" stroke="#64748b" stroke-width="1.3"/><path d="M4 5V4a3 3 0 016 0v1" stroke="#64748b" stroke-width="1.3" stroke-linecap="round"/></svg>Locked</span>';
@@ -915,8 +922,8 @@ function renderSFoundations(){
    if(assigned){
      // Gate status bar
      html+='<div style="display:flex;gap:12px;flex-wrap:wrap;margin:10px 0">';
-     html+='<div class="fnd-gate-lbl">'+fndGateBadge(gates.g1.status)+'<span>Knowledge'+(gates.g1.score>0?' ('+gates.g1.score+'%)':'')+'</span></div>';
-     html+='<div class="fnd-gate-lbl">'+fndGateBadge(gates.g2.status)+'<span>Simulation'+(gates.g2.score>0?' ('+gates.g2.score+'%)':'')+'</span></div>';
+     html+='<div class="fnd-gate-lbl">'+fndGateBadge(gates.g1.status)+'<span>Knowledge '+Math.min(fndGatePasses(gates.g1),FND_PASSES_REQUIRED)+'/'+FND_PASSES_REQUIRED+(gates.g1.score>0?' ('+gates.g1.score+'%)':'')+'</span></div>';
+     html+='<div class="fnd-gate-lbl">'+fndGateBadge(gates.g2.status)+'<span>Simulation '+Math.min(fndGatePasses(gates.g2),FND_PASSES_REQUIRED)+'/'+FND_PASSES_REQUIRED+(gates.g2.score>0?' ('+gates.g2.score+'%)':'')+'</span></div>';
      html+='<div class="fnd-gate-lbl">'+fndGateBadge(gates.g3.status)+'<span>Observation'+(gates.g3.status==='pass'?' (Confirmed)':'')+'</span></div>';
      html+='</div>';
      html+='<button class="btn btn-gold btn-sm" style="margin-top:8px" onclick="openFndModule(\''+m.id+'\')">'+( complete?'Review':'Open Module')+'</button>';
@@ -950,8 +957,8 @@ function renderFndModuleTab(m,s,gates,tab){
  html+='<div style="font-size:13px;color:#94a3b8;margin-top:2px">'+m.subtitle+'</div>';
  // Gate indicators
  html+='<div style="display:flex;gap:14px;margin:12px 0">';
- html+='<div class="fnd-gate-lbl">'+fndGateBadge(gates.g1.status)+'<span>Knowledge</span></div>';
- html+='<div class="fnd-gate-lbl">'+fndGateBadge(gates.g2.status)+'<span>Simulation</span></div>';
+ html+='<div class="fnd-gate-lbl">'+fndGateBadge(gates.g1.status)+'<span>Knowledge '+Math.min(fndGatePasses(gates.g1),FND_PASSES_REQUIRED)+'/'+FND_PASSES_REQUIRED+'</span></div>';
+ html+='<div class="fnd-gate-lbl">'+fndGateBadge(gates.g2.status)+'<span>Simulation '+Math.min(fndGatePasses(gates.g2),FND_PASSES_REQUIRED)+'/'+FND_PASSES_REQUIRED+'</span></div>';
  html+='<div class="fnd-gate-lbl">'+fndGateBadge(gates.g3.status)+'<span>Observation</span></div>';
  html+='</div>';
  // Tabs
@@ -987,6 +994,19 @@ function renderFndModuleTab(m,s,gates,tab){
 const FND_GATE_DRAW=10;
 let FND_GATE_ORDER={};
 let FND_GATE_RETAKE={};
+// ── 3-pass rule (client-confirmed 2026-07-13): a G1/G2 gate is DONE after THREE
+// passing attempts (>=80%), fresh random questions each attempt; Observation (G3)
+// only opens after 3 Knowledge + 3 Simulation passes. Pass counts derive from the
+// attempts history already stored on every progress row (no schema change), so
+// passes earned before this shipped still count. Instruments reuses these helpers.
+const FND_PASSES_REQUIRED=3;
+function fndGatePasses(g){return (((g||{}).attempts)||[]).filter(a=>(a.score||0)>=80).length;}
+function fndObsReady(gates){return fndGatePasses(gates.g1)>=FND_PASSES_REQUIRED&&fndGatePasses(gates.g2)>=FND_PASSES_REQUIRED;}
+function fndPassChip(gates){
+ const k=Math.min(fndGatePasses(gates.g1),FND_PASSES_REQUIRED),s2=Math.min(fndGatePasses(gates.g2),FND_PASSES_REQUIRED);
+ const c=n=>n>=FND_PASSES_REQUIRED?'#4ade80':'#94a3b8';
+ return '<span style="font-size:10.5px;font-weight:700;white-space:nowrap"><span style="color:'+c(k)+'">K '+k+'/'+FND_PASSES_REQUIRED+'</span> <span style="color:'+c(s2)+'">S '+s2+'/'+FND_PASSES_REQUIRED+'</span></span>';
+}
 function retakeFndGate(moduleId,gateKey){
  FND_GATE_RETAKE[moduleId+gateKey]=true;
  ST._fndTab=gateKey==='g1'?'gate1':'gate2';
@@ -996,7 +1016,9 @@ function renderFndGateAssessment(m,s,gateKey,items,title,desc){
  const gates=getModuleGates(s.id,m.id);
  const g=gates[gateKey];
  const retake=!!FND_GATE_RETAKE[m.id+gateKey];
- const locked=g.status==='pass'&&!retake;
+ const passes=fndGatePasses(g);
+ const gateDone=passes>=FND_PASSES_REQUIRED;
+ const locked=gateDone&&!retake;
  const order=shuffleArray(items.map((_,i)=>i)).slice(0,FND_GATE_DRAW);
  FND_GATE_ORDER[m.id+gateKey]=order;
  let h='<div class="fnd-kc">';
@@ -1004,11 +1026,13 @@ function renderFndGateAssessment(m,s,gateKey,items,title,desc){
  h+='<div style="font-size:12px;color:#94a3b8;margin-bottom:16px">'+desc+'</div>';
  if(locked){
    h+='<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--r);padding:14px;text-align:center;margin-bottom:16px">';
-   h+='<div style="font-size:20px;font-weight:700;color:#4ade80">'+g.score+'%</div>';
-   h+='<div style="font-size:13px;color:#4ade80;font-weight:600">Passed</div>';
+   h+='<div style="font-size:20px;font-weight:700;color:#4ade80">'+passes+' of '+FND_PASSES_REQUIRED+' passes</div>';
+   h+='<div style="font-size:13px;color:#4ade80;font-weight:600">Gate Complete &mdash; best score '+g.score+'%</div>';
    h+='<button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="retakeFndGate(\''+m.id+'\',\''+gateKey+'\')">Retake (practice)</button></div>';
- } else if(retake&&g.status==='pass'){
-   h+='<div style="background:rgba(196,154,32,.08);border:1px solid rgba(196,154,32,.25);border-radius:var(--r);padding:10px 14px;margin-bottom:16px;font-size:12px;color:#94a3b8">Practice retake &mdash; your passed status and best score ('+g.score+'%) are kept even if you score lower.</div>';
+ } else if(retake&&gateDone){
+   h+='<div style="background:rgba(196,154,32,.08);border:1px solid rgba(196,154,32,.25);border-radius:var(--r);padding:10px 14px;margin-bottom:16px;font-size:12px;color:#94a3b8">Practice retake &mdash; your completed gate and best score ('+g.score+'%) are kept even if you score lower.</div>';
+ } else if(passes>0){
+   h+='<div style="background:rgba(196,154,32,.08);border:1px solid rgba(196,154,32,.25);border-radius:var(--r);padding:10px 14px;margin-bottom:16px;font-size:12px;color:#94a3b8"><b style="color:#fbbf24">Pass '+passes+' of '+FND_PASSES_REQUIRED+'.</b> Take the test again with a fresh set of questions &mdash; every score of 80% or higher counts as a pass. Your best score ('+g.score+'%) is kept.</div>';
  }
  h+='<div id="fnd-gate-questions">';
  const qKey=gateKey==='g1'?'q':'s';
@@ -1033,6 +1057,9 @@ function renderFndG3View(m,s,gates){
  let h='<div class="fnd-kc">';
  h+='<div style="font-size:16px;font-weight:700;color:#e2e8f0;margin-bottom:4px">Observation / Demonstration</div>';
  h+='<div style="font-size:12px;color:#94a3b8;margin-bottom:16px">Your educator or manager confirms each item below after observing you demonstrate the skill in the work environment. You cannot self-confirm these items.</div>';
+ if(!gates.complete&&!fndObsReady(gates)){
+   h+='<div style="background:rgba(148,163,184,.08);border:1px solid rgba(148,163,184,.25);border-radius:var(--r);padding:12px 14px;margin-bottom:16px;font-size:12px;color:#94a3b8">Observation unlocks after <b style="color:#e2e8f0">3 Knowledge</b> and <b style="color:#e2e8f0">3 Simulation</b> passes (fresh questions each attempt). Current: '+fndPassChip(gates)+'</div>';
+ }
  if(gates.g3.status==='pass'){
    h+='<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--r);padding:14px;text-align:center;margin-bottom:16px">';
    h+='<div style="font-size:16px;font-weight:700;color:#4ade80">All Items Confirmed</div></div>';
@@ -1079,8 +1106,12 @@ function submitFndGate(moduleId,gateKey){
  const rEl=document.getElementById('fnd-gate-result');
  if(rEl){
    if(passed){
-     rEl.innerHTML='<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--r);padding:14px 16px;text-align:center;margin-top:12px"><div style="font-size:24px;font-weight:700;color:#4ade80">'+score+'%</div><div style="font-size:13px;color:#4ade80;font-weight:600;margin:4px 0">'+gateLabel+' Gate Passed</div><div style="font-size:12px;color:#94a3b8">'+correct+' of '+order.length+' correct.</div></div>';
-     toast(gateLabel+' gate passed: '+score+'%','ok');
+     const _g2=getModuleGates(s.id,m.id);
+     const _n=Math.min(fndGatePasses(_g2[gateKey]),FND_PASSES_REQUIRED);
+     const _done=_n>=FND_PASSES_REQUIRED;
+     const _obsNow=_done&&fndObsReady(_g2)&&_g2.g3.status!=='pass';
+     rEl.innerHTML='<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--r);padding:14px 16px;text-align:center;margin-top:12px"><div style="font-size:24px;font-weight:700;color:#4ade80">'+score+'%</div><div style="font-size:13px;color:#4ade80;font-weight:600;margin:4px 0">'+(_done?gateLabel+' Gate Complete &mdash; '+_n+' of '+FND_PASSES_REQUIRED+' passes':gateLabel+' pass '+_n+' of '+FND_PASSES_REQUIRED)+'</div><div style="font-size:12px;color:#94a3b8">'+correct+' of '+order.length+' correct.'+(_done?(_obsNow?' Observation is now unlocked.':''):' Take it again with a fresh set of questions; 80%+ counts as a pass.')+'</div>'+(_done?'':'<button class="btn btn-gold btn-sm" style="margin-top:8px" onclick="openFndModule(\''+moduleId+'\')">Take Again (fresh questions)</button>')+'</div>';
+     toast(_done?gateLabel+' gate complete ('+_n+'/'+FND_PASSES_REQUIRED+')':gateLabel+' pass '+_n+' of '+FND_PASSES_REQUIRED,'ok');
    } else {
      rEl.innerHTML='<div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:var(--r);padding:14px 16px;text-align:center;margin-top:12px"><div style="font-size:24px;font-weight:700;color:#f87171">'+score+'%</div><div style="font-size:13px;color:#f87171;font-weight:600;margin:4px 0">Not Yet Passing</div><div style="font-size:12px;color:#94a3b8">'+correct+' of '+order.length+' correct. 80% required.</div><button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="openFndModule(\''+moduleId+'\')">Try Again</button></div>';
      toast('Score: '+score+'%. 80% required.','err');
@@ -1173,6 +1204,7 @@ function hFndStaffDetail(staffId){
    html+='<div style="display:flex;align-items:center;gap:8px"><div class="fnd-num'+(gates.complete?' fnd-num-done':'')+'">'+m.num+'</div>';
    html+='<div class="card-ttl" style="font-size:14px;margin:0">'+m.title+'</div></div>';
    html+='<div style="display:flex;gap:4px;align-items:center">'+fndGateBadge(gates.g1.status)+fndGateBadge(gates.g2.status)+fndGateBadge(gates.g3.status);
+   html+='<span style="margin-left:6px">'+fndPassChip(gates)+'</span>';
    // Unassign: RLS Addendum matrix -- delete assignments is Master Admin ONLY.
    if(ST.user&&ST.user.role==='master_admin') html+='<button class="btn btn-ghost btn-xs" style="margin-left:8px;border-color:rgba(239,68,68,.4);color:#f87171" onclick="hUnassignFnd(\''+s.id+'\',\''+m.id+'\')">Unassign</button>';
    html+='</div>';

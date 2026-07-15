@@ -380,13 +380,20 @@ function saveInstGateScore(sid,mid,gate,score){
  // Best score wins; a passed gate never regresses from a practice retake
  g.score=Math.max(g.score||0,score);
  if(score>=80) g.status='pass'; else if(g.status!=='pass') g.status='attempted';
- if(p.g1.status==='pass'&&p.g2.status==='pass'&&p.g3.status==='pass'){p.complete=true;const a=(DB.instrumentAssignments||[]).find(x=>x.staffId===sid&&x.moduleId===mid);if(a)a.status='completed';}
+ // 3-pass rule: complete = 3 passes on G1 AND 3 on G2 AND G3 confirmed.
+ if(fndGatePasses(p.g1)>=FND_PASSES_REQUIRED&&fndGatePasses(p.g2)>=FND_PASSES_REQUIRED&&p.g3.status==='pass'){p.complete=true;const a=(DB.instrumentAssignments||[]).find(x=>x.staffId===sid&&x.moduleId===mid);if(a)a.status='completed';}
  _instSaveProgress(p);
  if(p.complete) _instSaveAssignmentStatus(sid,mid,'completed');
  return p;
 }
 function markInstG3Item(sid,mid,itemId,confirmed,by){
  let p=(DB.instrumentProgress||[]).find(x=>x.staffId===sid&&x.moduleId===mid);if(!p) return;
+ // 3-pass rule: G3 items cannot be CONFIRMED until 3 Knowledge + 3 Simulation
+ // passes are in (unchecking/revoking stays allowed; complete modules exempt).
+ if(confirmed&&!p.complete&&!fndObsReady(p)){
+   if(typeof toast==='function') toast('Observation is locked: needs 3 Knowledge and 3 Simulation passes first (K '+fndGatePasses(p.g1)+'/'+FND_PASSES_REQUIRED+', S '+fndGatePasses(p.g2)+'/'+FND_PASSES_REQUIRED+').','err');
+   return;
+ }
  const ex=p.g3.items.find(i=>i.id===itemId);
  if(ex){ex.confirmed=confirmed;ex.confirmedBy=by;ex.date=new Date().toISOString().slice(0,10);}
  else{p.g3.items.push({id:itemId,confirmed,confirmedBy:by,date:new Date().toISOString().slice(0,10)});}
@@ -399,7 +406,7 @@ function markInstG3Item(sid,mid,itemId,confirmed,by){
    else if(p.g3.status==='pass'){p.g3.status='open';p.g3.score=0;}
  }
  const a=(DB.instrumentAssignments||[]).find(x=>x.staffId===sid&&x.moduleId===mid);
- if(p.g1.status==='pass'&&p.g2.status==='pass'&&p.g3.status==='pass'){
+ if(fndGatePasses(p.g1)>=FND_PASSES_REQUIRED&&fndGatePasses(p.g2)>=FND_PASSES_REQUIRED&&p.g3.status==='pass'){
    p.complete=true; if(a)a.status='completed';
  } else if(p.complete){
    p.complete=false; if(a)a.status='assigned';
@@ -423,10 +430,10 @@ function renderSInstruments(){
  INSTRUMENT_MODULES.forEach(m=>{
    const assigned=isInstModuleAssigned(s.id,m.id),gates=getInstModuleGates(s.id,m.id),complete=gates.complete;
    html+='<div class="card mb16 fnd-card'+(assigned?' fnd-unlocked':' fnd-locked')+'"><div class="card-hd" style="flex-wrap:wrap;gap:8px"><div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1"><div class="fnd-num'+(complete?' fnd-num-done':'')+'">'+m.num+'</div><div style="min-width:0"><div class="card-ttl" style="font-size:14px;margin:0">'+m.title+'</div><div style="font-size:11px;color:#64748b;margin-top:2px">'+m.subtitle+'</div></div></div>';
-   if(assigned){html+='<div style="display:flex;gap:4px;align-items:center" title="G1: Knowledge | G2: Simulation | G3: Observation">'+fndGateBadge(gates.g1.status)+fndGateBadge(gates.g2.status)+fndGateBadge(gates.g3.status)+'</div>';}
+   if(assigned){html+='<div style="display:flex;gap:4px;align-items:center" title="G1: Knowledge | G2: Simulation | G3: Observation">'+fndGateBadge(gates.g1.status)+fndGateBadge(gates.g2.status)+fndGateBadge(gates.g3.status)+'<span style="margin-left:6px">'+fndPassChip(gates)+'</span></div>';}
    else{html+='<span class="pill p-muted" style="opacity:.5"><svg viewBox="0 0 14 14" width="11" height="11" fill="none" style="margin-right:3px;vertical-align:-1px"><rect x="1" y="5" width="12" height="8" rx="2" stroke="#64748b" stroke-width="1.3"/><path d="M4 5V4a3 3 0 016 0v1" stroke="#64748b" stroke-width="1.3" stroke-linecap="round"/></svg>Locked</span>';}
    html+='</div><div class="card-body" style="padding-top:0"><p style="font-size:12.5px;color:#94a3b8;line-height:1.5;margin:0 0 8px">'+m.desc+'</p>';
-   if(assigned){html+='<div style="display:flex;gap:12px;flex-wrap:wrap;margin:10px 0"><div class="fnd-gate-lbl">'+fndGateBadge(gates.g1.status)+'<span>Knowledge'+(gates.g1.score>0?' ('+gates.g1.score+'%)':'')+'</span></div><div class="fnd-gate-lbl">'+fndGateBadge(gates.g2.status)+'<span>Simulation'+(gates.g2.score>0?' ('+gates.g2.score+'%)':'')+'</span></div><div class="fnd-gate-lbl">'+fndGateBadge(gates.g3.status)+'<span>Observation'+(gates.g3.status==='pass'?' (Confirmed)':'')+'</span></div></div><button class="btn btn-gold btn-sm" style="margin-top:8px" onclick="openInstModule(\''+m.id+'\')">'+(complete?'Review':'Open Module')+'</button>';}
+   if(assigned){html+='<div style="display:flex;gap:12px;flex-wrap:wrap;margin:10px 0"><div class="fnd-gate-lbl">'+fndGateBadge(gates.g1.status)+'<span>Knowledge '+Math.min(fndGatePasses(gates.g1),FND_PASSES_REQUIRED)+'/'+FND_PASSES_REQUIRED+(gates.g1.score>0?' ('+gates.g1.score+'%)':'')+'</span></div><div class="fnd-gate-lbl">'+fndGateBadge(gates.g2.status)+'<span>Simulation '+Math.min(fndGatePasses(gates.g2),FND_PASSES_REQUIRED)+'/'+FND_PASSES_REQUIRED+(gates.g2.score>0?' ('+gates.g2.score+'%)':'')+'</span></div><div class="fnd-gate-lbl">'+fndGateBadge(gates.g3.status)+'<span>Observation'+(gates.g3.status==='pass'?' (Confirmed)':'')+'</span></div></div><button class="btn btn-gold btn-sm" style="margin-top:8px" onclick="openInstModule(\''+m.id+'\')">'+(complete?'Review':'Open Module')+'</button>';}
    else{html+='<div class="fnd-sections">';m.sections.forEach(sec=>{html+='<div class="fnd-sec-item" style="font-size:12px;color:#64748b;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04)">'+sec+'</div>';});html+='</div>';}
    html+='</div></div>';
  });
@@ -445,7 +452,7 @@ function openInstModule(mid){
  let html='<div class="fnd-reader"><button class="btn btn-ghost btn-sm" onclick="renderSInstruments()" style="margin-bottom:12px">&larr; Back</button>';
  html+='<div style="font-size:11px;color:#c49a20;font-weight:600;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">'+m.belt.toUpperCase()+' BELT</div>';
  html+='<div style="font-size:20px;font-weight:700;color:#e2e8f0">'+m.title+'</div><div style="font-size:13px;color:#94a3b8;margin-top:2px">'+m.subtitle+'</div>';
- html+='<div style="display:flex;gap:14px;margin:12px 0"><div class="fnd-gate-lbl">'+fndGateBadge(gates.g1.status)+'<span>Knowledge</span></div><div class="fnd-gate-lbl">'+fndGateBadge(gates.g2.status)+'<span>Simulation</span></div><div class="fnd-gate-lbl">'+fndGateBadge(gates.g3.status)+'<span>Observation</span></div></div>';
+ html+='<div style="display:flex;gap:14px;margin:12px 0"><div class="fnd-gate-lbl">'+fndGateBadge(gates.g1.status)+'<span>Knowledge '+Math.min(fndGatePasses(gates.g1),FND_PASSES_REQUIRED)+'/'+FND_PASSES_REQUIRED+'</span></div><div class="fnd-gate-lbl">'+fndGateBadge(gates.g2.status)+'<span>Simulation '+Math.min(fndGatePasses(gates.g2),FND_PASSES_REQUIRED)+'/'+FND_PASSES_REQUIRED+'</span></div><div class="fnd-gate-lbl">'+fndGateBadge(gates.g3.status)+'<span>Observation</span></div></div>';
  html+='<div class="tab-bar" style="margin-bottom:16px">'+tabBtn('content','Instruments',tab==='content')+tabBtn('gate1','Gate 1',tab==='gate1')+tabBtn('gate2','Gate 2',tab==='gate2')+tabBtn('gate3','Gate 3',tab==='gate3')+'</div>';
  if(tab==='content'){m.sections.forEach((sec,i)=>{html+='<div class="fnd-section"><div class="fnd-section-title">'+sec+'</div><div class="fnd-section-body">'+m.sectionContent[i]+'</div></div>';});}
  else if(tab==='gate1'){html+=renderInstGate(m,s,'g1',m.questions,'Knowledge Check','Identify instruments, categories, functions, and inspection points. 80% required.');}
@@ -468,12 +475,15 @@ function retakeInstGate(mid,gk){
 function renderInstGate(m,s,gk,items,title,desc){
  const gates=getInstModuleGates(s.id,m.id),g=gates[gk];
  const retake=!!INST_GATE_RETAKE[m.id+gk];
- const locked=g.status==='pass'&&!retake;
+ const passes=fndGatePasses(g);
+ const gateDone=passes>=FND_PASSES_REQUIRED;
+ const locked=gateDone&&!retake;
  const order=shuffleArray(items.map((_,i)=>i)).slice(0,INST_GATE_DRAW);
  INST_GATE_ORDER[m.id+gk]=order;
  let h='<div class="fnd-kc"><div style="font-size:16px;font-weight:700;color:#e2e8f0;margin-bottom:4px">'+title+'</div><div style="font-size:12px;color:#94a3b8;margin-bottom:16px">'+desc+'</div>';
- if(locked){h+='<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--r);padding:14px;text-align:center;margin-bottom:16px"><div style="font-size:20px;font-weight:700;color:#4ade80">'+g.score+'%</div><div style="font-size:13px;color:#4ade80;font-weight:600">Passed</div><button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="retakeInstGate(\''+m.id+'\',\''+gk+'\')">Retake (practice)</button></div>';}
- else if(retake&&g.status==='pass'){h+='<div style="background:rgba(196,154,32,.08);border:1px solid rgba(196,154,32,.25);border-radius:var(--r);padding:10px 14px;margin-bottom:16px;font-size:12px;color:#94a3b8">Practice retake &mdash; your passed status and best score ('+g.score+'%) are kept even if you score lower.</div>';}
+ if(locked){h+='<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--r);padding:14px;text-align:center;margin-bottom:16px"><div style="font-size:20px;font-weight:700;color:#4ade80">'+passes+' of '+FND_PASSES_REQUIRED+' passes</div><div style="font-size:13px;color:#4ade80;font-weight:600">Gate Complete &mdash; best score '+g.score+'%</div><button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="retakeInstGate(\''+m.id+'\',\''+gk+'\')">Retake (practice)</button></div>';}
+ else if(retake&&gateDone){h+='<div style="background:rgba(196,154,32,.08);border:1px solid rgba(196,154,32,.25);border-radius:var(--r);padding:10px 14px;margin-bottom:16px;font-size:12px;color:#94a3b8">Practice retake &mdash; your completed gate and best score ('+g.score+'%) are kept even if you score lower.</div>';}
+ else if(passes>0){h+='<div style="background:rgba(196,154,32,.08);border:1px solid rgba(196,154,32,.25);border-radius:var(--r);padding:10px 14px;margin-bottom:16px;font-size:12px;color:#94a3b8"><b style="color:#fbbf24">Pass '+passes+' of '+FND_PASSES_REQUIRED+'.</b> Take the test again with a fresh set of questions &mdash; every score of 80% or higher counts as a pass. Your best score ('+g.score+'%) is kept.</div>';}
  const qk=gk==='g1'?'q':'s';
  order.forEach((origIdx,qi)=>{const item=items[origIdx];h+='<div class="fnd-q" data-qi="'+qi+'"><div class="fnd-q-text">'+(qi+1)+'. '+(item[qk]||item.q||item.s)+'</div>';item.opts.forEach((opt,oi)=>{h+='<label class="fnd-q-opt"><input type="radio" name="inst-'+gk+'-'+m.id+'-'+qi+'" value="'+oi+'"'+(locked?' disabled':'')+'><span class="fnd-q-lbl">'+opt+'</span></label>';});h+='</div>';});
  if(!locked) h+='<button class="btn btn-gold" style="margin-top:16px;width:100%" onclick="submitInstGate(\''+m.id+'\',\''+gk+'\')">Submit</button>';
@@ -481,6 +491,7 @@ function renderInstGate(m,s,gk,items,title,desc){
 }
 function renderInstG3(m,s,gates){
  let h='<div class="fnd-kc"><div style="font-size:16px;font-weight:700;color:#e2e8f0;margin-bottom:4px">Observation / Demonstration</div><div style="font-size:12px;color:#94a3b8;margin-bottom:16px">Your educator confirms each item after observing you demonstrate the skill with real instruments.</div>';
+ if(!gates.complete&&!fndObsReady(gates)){h+='<div style="background:rgba(148,163,184,.08);border:1px solid rgba(148,163,184,.25);border-radius:var(--r);padding:12px 14px;margin-bottom:16px;font-size:12px;color:#94a3b8">Observation unlocks after <b style="color:#e2e8f0">3 Knowledge</b> and <b style="color:#e2e8f0">3 Simulation</b> passes (fresh questions each attempt). Current: '+fndPassChip(gates)+'</div>';}
  if(gates.g3.status==='pass') h+='<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--r);padding:14px;text-align:center;margin-bottom:16px"><div style="font-size:16px;font-weight:700;color:#4ade80">All Items Confirmed</div></div>';
  m.observations.forEach(obs=>{const conf=gates.g3.items.find(i=>i.id===obs.id&&i.confirmed);h+='<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.06)">';if(conf){h+='<svg viewBox="0 0 18 18" width="16" height="16" fill="none" style="flex-shrink:0;margin-top:2px"><circle cx="9" cy="9" r="8" fill="rgba(74,222,128,.15)" stroke="#4ade80" stroke-width="1.3"/><path d="M5.5 9.5l2.5 2.5L13 7" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><div><div style="font-size:13px;color:#4ade80">'+obs.text+'</div><div style="font-size:11px;color:#64748b;margin-top:2px">Confirmed by '+Security.sanitize(conf.confirmedBy||'—')+' on '+Security.sanitize(conf.date||'')+'</div></div>';}else{h+='<svg viewBox="0 0 18 18" width="16" height="16" fill="none" style="flex-shrink:0;margin-top:2px"><circle cx="9" cy="9" r="8" stroke="#475569" stroke-width="1.3"/></svg><div style="font-size:13px;color:#94a3b8">'+obs.text+'</div>';}h+='</div>';});
  h+='</div>';return h;
@@ -496,7 +507,7 @@ function submitInstGate(mid,gk){
  const score=Math.round((correct/order.length)*100);saveInstGateScore(s.id,m.id,gk,score);
  order.forEach((origIdx,qi)=>{const item=items[origIdx];const opts=document.querySelectorAll('input[name="inst-'+gk+'-'+m.id+'-'+qi+'"]');opts.forEach((opt,oi)=>{const lbl=opt.closest('.fnd-q-opt');if(!lbl)return;opt.disabled=true;if(oi===item.ans)lbl.classList.add('fnd-q-correct');else if(opt.checked&&oi!==item.ans)lbl.classList.add('fnd-q-wrong');});});
  const rEl=document.getElementById('inst-gate-result');const gateLabel=gk==='g1'?'Knowledge':'Simulation';
- if(rEl){if(score>=80){rEl.innerHTML='<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--r);padding:14px 16px;text-align:center;margin-top:12px"><div style="font-size:24px;font-weight:700;color:#4ade80">'+score+'%</div><div style="font-size:13px;color:#4ade80;font-weight:600;margin:4px 0">'+gateLabel+' Gate Passed</div><div style="font-size:12px;color:#94a3b8">'+correct+' of '+order.length+' correct.</div></div>';toast(gateLabel+' passed: '+score+'%','ok');}
+ if(rEl){if(score>=80){const _g2=getInstModuleGates(s.id,m.id);const _n=Math.min(fndGatePasses(_g2[gk]),FND_PASSES_REQUIRED);const _done=_n>=FND_PASSES_REQUIRED;const _obsNow=_done&&fndObsReady(_g2)&&_g2.g3.status!=='pass';rEl.innerHTML='<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--r);padding:14px 16px;text-align:center;margin-top:12px"><div style="font-size:24px;font-weight:700;color:#4ade80">'+score+'%</div><div style="font-size:13px;color:#4ade80;font-weight:600;margin:4px 0">'+(_done?gateLabel+' Gate Complete &mdash; '+_n+' of '+FND_PASSES_REQUIRED+' passes':gateLabel+' pass '+_n+' of '+FND_PASSES_REQUIRED)+'</div><div style="font-size:12px;color:#94a3b8">'+correct+' of '+order.length+' correct.'+(_done?(_obsNow?' Observation is now unlocked.':''):' Take it again with a fresh set of questions; 80%+ counts as a pass.')+'</div>'+(_done?'':'<button class="btn btn-gold btn-sm" style="margin-top:8px" onclick="openInstModule(\''+mid+'\')">Take Again (fresh questions)</button>')+'</div>';toast(_done?gateLabel+' gate complete ('+_n+'/'+FND_PASSES_REQUIRED+')':gateLabel+' pass '+_n+' of '+FND_PASSES_REQUIRED,'ok');}
  else{rEl.innerHTML='<div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:var(--r);padding:14px 16px;text-align:center;margin-top:12px"><div style="font-size:24px;font-weight:700;color:#f87171">'+score+'%</div><div style="font-size:13px;color:#f87171;font-weight:600;margin:4px 0">Not Yet Passing</div><div style="font-size:12px;color:#94a3b8">'+correct+' of '+order.length+' correct. 80% required.</div><button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="openInstModule(\''+mid+'\')">Try Again</button></div>';toast('Score: '+score+'%. 80% required.','err');}}
 }
  
