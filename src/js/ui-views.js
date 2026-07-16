@@ -7188,7 +7188,8 @@ function renderSWindow(){
       <div class="card-hd"><div class="card-ttl">Assessment Window: ${s.belt} Belt</div></div>
       <div class="card-body" style="text-align:center;padding:28px">
         <div style="font-size:48px;font-weight:800;color:${win.status==='open'?'var(--ok)':win.status==='closed'?'var(--err)':'var(--txt3)'};margin-bottom:8px">${win.status==='open'?'OPEN':win.status==='max'?'MAX':win.status==='locked'?'LOCKED':'CLOSED'}</div>
-        <div style="font-size:14px;color:var(--txt2);margin-bottom:20px">${win.label||'No window applicable'}</div>
+        <div style="font-size:14px;color:var(--txt2);margin-bottom:${win.manual?'6px':'20px'}">${win.label||'No window applicable'}</div>
+        ${win.manual?`<div style="font-size:11.5px;color:var(--gold);margin-bottom:18px">Opened early by ${win.openedBy||'an assessor'}</div>`:''}
         ${win.cfg?`
         <div class="prog" style="height:12px;margin-bottom:8px"><div class="prog-fill" style="width:${win.pct||0}%;background:${win.status==='open'?'var(--ok)':'var(--warn)'}"></div></div>
         <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--txt3);margin-bottom:20px"><span>Cycle start</span><span>${cycleDays}-day cycle</span></div>
@@ -9596,6 +9597,11 @@ function renderHProfile(sid,context){
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         ${context==='admin'?`<button class="btn btn-gold btn-sm" onclick="openRecordModal('${s.id}')">${ICO.record} Record Assessment</button>`:''}
+        ${((ST.user&&(ST.user.role==='master_admin'||ST.user.role==='staff_admin')) && (typeof BELT_WINDOWS!=='undefined') && BELT_WINDOWS[s.belt]) ? (
+          (s.windowOverride && s.windowOverride.until && new Date(s.windowOverride.until).getTime() >= Date.now())
+            ? `<span class="pill p-ok" style="align-self:center;font-size:11px">Window open early &middot; exp ${s.windowOverride.until}</span><button class="btn btn-ghost btn-sm" onclick="adminCloseWindow('${s.id}','${context}')" title="Close the manually-opened window now">Close Window</button>`
+            : `<button class="btn btn-ghost btn-sm" onclick="adminOpenWindow('${s.id}','${context}')" style="border-color:var(--gold-bd);color:var(--gold)" title="Open this staffer's assessment window ahead of the automatic cycle"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg> Open Window Early</button>`
+        ) : ''}
         ${context==='admin'||context==='h'?`<button class="btn btn-blue btn-sm" onclick="openPromoteModal('${s.id}','${context}')">&#x2B06; Promote</button>`:''}
         <button class="btn btn-ghost btn-sm" onclick="downloadStaffReport('${s.id}')">${ICO.dl} Report</button>
         ${(ST.user&&ST.user.role==='master_admin')?`<button class="btn btn-ghost btn-sm" onclick="openBeltOverrideModal('${s.id}','${context}')" style="border-color:var(--gold-bd);color:var(--gold)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Override Belt</button>`:''}
@@ -12864,6 +12870,90 @@ function generateObserverPin(sid, context){
   }
   toast(`${fullName(s)}'s observer PIN: ${pin}`,'ok');
   if(typeof renderHProfile==='function') renderHProfile(sid,context);
+}
+
+// ── MANUAL ASSESSMENT-WINDOW OVERRIDE ─────────────────────────────────────────
+// master_admin / staff_admin (SIPS assessor) can open a staffer's assessment
+// window ahead of the automatic cycle. Timing-only (the current-belt gate-lock in
+// getWindowStatus() still applies), lasts the belt's NORMAL open period, then
+// auto-reverts. Writes only the window_override column (targeted PATCH, cannot
+// touch oip/history/ps_tracks). Decisions: docs/decisions/2026-07-16-manual-window-override.md.
+function _canOverrideWindow(){
+  return !!(ST.user && (ST.user.role==='master_admin' || ST.user.role==='staff_admin'));
+}
+
+function adminOpenWindow(staffId, context){
+  if(!_canOverrideWindow()){ toast('Not permitted.','err'); return; }
+  const s=getStaff(staffId);
+  if(!s){ toast('Staff not found.','err'); return; }
+  const cfg=(typeof BELT_WINDOWS!=='undefined') ? BELT_WINDOWS[s.belt] : null;
+  if(!cfg){ toast('No assessment window applies to this belt (max level or unconfigured).','err'); return; }
+  const wk=cfg.open;
+  openModal(`Open Assessment Window — ${fullName(s)}`,`
+    <div class="modal-body">
+      <div style="font-size:12.5px;color:var(--txt2);margin-bottom:14px;line-height:1.5">
+        This opens ${fullName(s)}'s window now, ahead of the automatic cycle. It stays open for their
+        belt's normal window (<strong>${wk} week${wk===1?'':'s'}</strong>), then closes on its own and
+        the regular cadence resumes. It does <strong>not</strong> skip any current-belt gate requirements.
+      </div>
+      <label class="form-label">Reason (optional)</label>
+      <input id="ow-reason" class="form-input" placeholder="e.g. ready early / assessor scheduling" />
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-gold" onclick="confirmOpenWindow('${s.id}','${context||'admin'}')">Open Window</button>
+    </div>`,'modal-md');
+}
+
+async function confirmOpenWindow(staffId, context){
+  if(!_canOverrideWindow()){ toast('Not permitted.','err'); return; }
+  const s=getStaff(staffId);
+  if(!s) return;
+  const cfg=(typeof BELT_WINDOWS!=='undefined') ? BELT_WINDOWS[s.belt] : null;
+  if(!cfg){ toast('No assessment window applies to this belt.','err'); return; }
+  const reason=(document.getElementById('ow-reason')?.value || '').trim();
+  const untilMs=Date.now() + cfg.open*7*86400000;            // belt's NORMAL open period
+  const until=new Date(untilMs).toISOString().slice(0,10);
+  const prev=s.windowOverride || null;
+  s.windowOverride={
+    until,
+    by: (ST.user && ST.user.id) || null,
+    byName: (ST.user && (ST.user.name || ST.user.email)) || ST.name || 'Admin',
+    at: new Date().toISOString(),
+    reason
+  };
+  if(IS_LIVE && typeof SB!=='undefined' && SB.updateStaff){
+    try { await SB.updateStaff(s.id, { window_override: s.windowOverride }); }  // targeted single-column write
+    catch(e){
+      s.windowOverride=prev;
+      if(typeof handleSyncError==='function') handleSyncError(e,'Open window'); else toast('Could not save — please retry.','err');
+      return;
+    }
+  }
+  if(typeof logActivity==='function') logActivity('window_override_open', {staffId:s.id, until, weeks:cfg.open, reason});
+  closeModal();
+  toast(`${fullName(s)}: assessment window opened for ${cfg.open} week${cfg.open===1?'':'s'}.`,'ok');
+  if(typeof renderHProfile==='function') renderHProfile(s.id, context||'admin');
+}
+
+async function adminCloseWindow(staffId, context){
+  if(!_canOverrideWindow()){ toast('Not permitted.','err'); return; }
+  const s=getStaff(staffId);
+  if(!s || !s.windowOverride) return;
+  if(!confirm(`Close ${fullName(s)}'s manually-opened window now? It will revert to the normal cadence.`)) return;
+  const prev=s.windowOverride;
+  s.windowOverride=null;
+  if(IS_LIVE && typeof SB!=='undefined' && SB.updateStaff){
+    try { await SB.updateStaff(s.id, { window_override: null }); }
+    catch(e){
+      s.windowOverride=prev;
+      if(typeof handleSyncError==='function') handleSyncError(e,'Close window'); else toast('Could not save — please retry.','err');
+      return;
+    }
+  }
+  if(typeof logActivity==='function') logActivity('window_override_close', {staffId:s.id});
+  toast(`${fullName(s)}: manual window closed.`,'ok');
+  if(typeof renderHProfile==='function') renderHProfile(s.id, context||'admin');
 }
 
 // ============================================================ A ASSESSMENTS (global)
