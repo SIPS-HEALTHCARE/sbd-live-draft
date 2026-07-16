@@ -68,6 +68,29 @@ function getWindowStatus(staff){
   const cur = staff.cur || {};
   const allPass = belt === 'White' || (cur.c==='pass' && cur.s==='pass' && cur.o==='pass');
   if(!allPass) return {status:'locked', label:'Complete current belt assessments first', pct:0};
+
+  // ── Manual override (master_admin / staff_admin opened this window early) ──────────
+  //    Timing-only: the gate-lock above still applies. On open we stored `until` =
+  //    open-time + this belt's NORMAL open period (cfg.open weeks). While `until` is in
+  //    the future the window shows OPEN; once it passes we fall straight through to the
+  //    regular since-based cadence below. We never touch `since`, so the normal schedule
+  //    simply resumes on its own. See docs/decisions/2026-07-16-manual-window-override.md.
+  const ov = staff.windowOverride;
+  if(ov && ov.until){
+    const untilMs = new Date(ov.until).getTime();
+    if(Number.isFinite(untilMs) && untilMs >= Date.now()){
+      const openDays = cfg.open * 7;
+      const daysLeft = Math.max(0, Math.ceil((untilMs - Date.now())/86400000));
+      return {
+        status:'open', manual:true, openedBy: ov.byName || null,
+        label:`Window open (opened early): ${daysLeft}d remaining`,
+        daysLeft,
+        pct: Math.round(Math.min(100, Math.max(0, ((openDays - daysLeft)/openDays)*100))),
+        cfg
+      };
+    }
+  }
+
   // Calculate from belt earn date.
   // Guard a missing/invalid `since`: without it the date math below evaluates to NaN,
   // which rendered "Window closed. Reopens in NaNd" and a false CLOSED window for any
