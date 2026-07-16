@@ -2610,6 +2610,13 @@ async function scoreSimulationWithAI(question, answer, answerKey, failIndicator)
     const body = { question, answer };
     if(answerKey) body.answer_key = answerKey;
     if(failIndicator) body.fail_indicator = failIndicator;
+    // #14: attribute grading cost to the current session's facility + auth uid so the
+    // edge function can log a source='assessment' row in david_usage_logs. Attribution
+    // only (not auth); the row is written server-side. Signature unchanged so both callers
+    // (paPersistSubmission here + belt-test-flow.js) need no edit.
+    const _u = (typeof ST !== 'undefined' && ST.user) ? ST.user : null;
+    if(_u && _u.fid) body.facility_id = _u.fid;
+    if(_u && _u.authUid) body.user_id = _u.authUid;
     const result = await sbFetch('/functions/v1/sbd-score-assessment', {
       method: 'POST',
       body

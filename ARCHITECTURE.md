@@ -174,6 +174,7 @@ Every view has this pattern:
 | `sbd_free_agents` | Released/unassigned staff | — |
 | `david_chat_sessions` | DAVID AI conversation history | `user_id` → `auth.users` |
 | `david_facility_access` | Per-facility DAVID AI access control | `facility_id` → `facilities` |
+| `david_usage_logs` | AI usage metering (tokens + ground-truth cost). **`source` col (#14):** `'chat'` = David chat, `'assessment'` = grading. Chat readers filter `source='chat'`. | `facility_id` → `facilities`, `user_id` → `auth.users` |
 | `sbd_facility_trends` | Analytics trend data | `facility_id` → `facilities` |
 | `sbd_report_audit_log` | Report download audit trail | — |
 | `sbd_onboarding_state` | Tour/walkthrough completion state | — |
@@ -208,7 +209,9 @@ Located in `supabase/functions/`. Each is a Deno serverless function.
 | Function | Purpose | Called By |
 |---|---|---|
 | `david-chat` | DAVID AI chat (SSE streaming via Anthropic API) | `DavidChat.js` |
-| `david-admin-api` | DAVID admin dashboard API (facility access, tiers) | `DavidAdminDashboard.js` |
+| `david-admin-api` | DAVID admin dashboard API (facility access, tiers). `GET_METRICS` reads `david_usage_logs`/`david_analytics_summary` scoped to `source='chat'` (#14). | `DavidAdminDashboard.js` |
+| `david-anomaly-detector` | Background chat-abuse burn detector (#59). Reads `david_usage_logs` where `source='chat'` (#14); enforcement gated by `ANOMALY_ENFORCE_ENABLED` (default OFF). | Scheduled/background |
+| `sbd-score-assessment` | AI simulation-response grader (OpenRouter). Logs a `source='assessment'` row in `david_usage_logs` for cost tracking (#14) — never touches the chat question allowance. | `scoreSimulationWithAI()` (ui-views.js, belt-test-flow.js) |
 | `sbd-approve-registration` | Approve new facility registration (creates auth user + facility + profile) | `renderARegistrations()` |
 | `sbd-record-assessment` | Record assessment result (atomic: updates staff + creates history + audit) | `submitAssessment()` |
 | `sbd-sync-user-claims` | Sync user profile data to JWT custom claims | User management flows |
