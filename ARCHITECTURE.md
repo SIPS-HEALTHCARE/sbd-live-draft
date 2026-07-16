@@ -178,6 +178,8 @@ Every view has this pattern:
 | `sbd_facility_trends` | Analytics trend data | `facility_id` → `facilities` |
 | `sbd_report_audit_log` | Report download audit trail | — |
 | `sbd_onboarding_state` | Tour/walkthrough completion state | — |
+| `foundations_assignments` / `foundations_progress` | Foundations curriculum: one assignment + one 3-gate progress row per staff+module. RLS via `sbd_fi_leader_scope`. See §16A. | `staff_id` → `staff`, `facility_id` → `facilities` |
+| `instrument_assignments` / `instrument_progress` | Instruments curriculum (mirror of Foundations, same 3-gate engine). RLS via `sbd_fi_leader_scope`. See §16A. | `staff_id` → `staff`, `facility_id` → `facilities` |
 
 ### Row Level Security (RLS)
 Every table uses RLS. Access is controlled via JWT claims:
@@ -398,6 +400,21 @@ Position School is a training/certification track system.
 - Per-staff tracking via `staff.ps_tracks` (JSONB column)
 - Functions: `ensurePSTracks()`, `getTrackStatus()`, `beginPSTrack()`, `completePSTrack()`
 - Completion requests stored in `DB.psCompletionRequests`
+
+---
+
+## 16A. Foundations & Instruments (F&I)
+
+Two parallel curriculum systems that share **one 3-gate engine** (mirrors of each other).
+
+- **Files:** `src/js/foundations.js` (owns the shared engine), `src/js/instruments.js` (mirror; reuses foundations' gate helpers `fndGatePasses` / `FND_PASSES_REQUIRED`). Loaded before `ui-views.js`.
+- **Modules:** `FOUNDATIONS_MODULES` / `INSTRUMENT_MODULES` (content + MCQ/simulation banks + observation checklist).
+- **Tables:** `foundations_assignments`/`foundations_progress`, `instrument_assignments`/`instrument_progress` — one assignment + one progress row per (staff, module).
+- **In-memory:** `DB.foundationsAssignments`/`DB.foundationsProgress`, `DB.instrumentAssignments`/`DB.instrumentProgress` (hydrated at login in `auth-init.js`). Accessors: `getFoundationsAssignments()`/`getInstrumentAssignments()`, `getModuleGates()`/`getInstModuleGates()`, `isModuleComplete()`.
+- **3-gate model:** G1 Knowledge + G2 Simulation each need **3 passing attempts (≥80%)** (`FND_PASSES_REQUIRED=3`, best score kept); G3 Observation is a leader-confirmed checklist that unlocks only after 3+3 K/S passes. A module is `complete` at 3 K + 3 S + G3 pass. **"In Progress" is derived** (assigned & not complete) — never stored.
+- **RLS:** `sbd_fi_leader_scope(target_staff)` (migration `20260702130000`): master_admin/SIPS-email → all; `staff_admin` (Assessor) → `assigned_facility_ids` (empty = all); `facility_admin`/`hospital` → own facility. ⚠️ **`system_admin` is NOT in this helper** (those users get zero F&I rows) and all live `staff_admin` are facility-scoped — so multi-facility/network reports viewed by those roles under-populate F&I. Network/system F&I must use a **server-side scoped fetch**, not the in-memory arrays (open Ph.2c risk — see `docs/decisions/2026-07-17-ph2-development-plan.md` §2).
+- **#55 (`20260707120000`):** blocks `staff_admin`/staff from INSERT/UPDATE on the two *assignment* tables at the RLS layer. Do not re-open it (see the Preceptor decision doc).
+- **Reporting (Ph.2b):** pure read helpers `fiModuleSummary()` / `fiDomainSummaryForStaff()` / `fndSummaryForStaff()` / `fiSummaryForStaff()` / `fiFacilityRollup()` (foundations.js) + `instSummaryForStaff()` (instruments.js). Rendered by `fiStaffSectionHTML`/`fiStaffSectionPDF` + `fiFacilitySectionHTML`/`fiFacilitySectionPDF` (ui-views.js), wired into `renderSReport`/`downloadStaffReport` (personal), `renderHReports`/`downloadFacilityReportV2` (facility), and an F&I completion card in `renderHDashboard`. Completion date shown is **derived/approximate** (no `completed_at` column yet — Ph.3a).
 
 ---
 
