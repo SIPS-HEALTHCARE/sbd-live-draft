@@ -251,6 +251,14 @@ After earning a belt, staff have a timed window to apply for the next:
 - White: 2 weeks open / 2 weeks closed
 - Yellow: 4/4, Green: 6/6, Blue: 8/8, Brown: 12/12
 
+**Manual override (added 2026-07-16):** `master_admin` / `staff_admin` (SIPS assessor) can open a
+staffer's window early via the "Open Window Early" button on the admin staffer profile
+(`renderHProfile`, admin context). Stored in `staff.window_override` (jsonb, nullable):
+`{until, by, byName, at, reason}`. `getWindowStatus()` honors it **only after** the current-belt
+gate-lock passes and **only while** `until` is in the future, then reverts to the normal
+since-based cadence. Timing-only — it never skips gates and never touches `staff.since`.
+See `docs/decisions/2026-07-16-manual-window-override.md`.
+
 ### Points System
 ```
 Belt earned:    White=100, Yellow=250, Green=500, Blue=1000, Brown=2000, Black=5000
@@ -487,7 +495,7 @@ JS files use `?v=N` query params (e.g., `ui-views.js?v=40`). **Bump version afte
 | Bulk upload | `ui-views.js` | 10536–10565, 13220–13295 |
 | Role change inline | `ui-views.js` | 14378+ |
 | Points calculation | `logic.js` | 98–128 |
-| Window status | `logic.js` | 60–96 |
+| Window status (+ manual override) | `logic.js` | 60–120 |
 | Projection engine | `logic.js` | 130–172 |
 | DAVID AI chat | `DavidChat.js` | Full file |
 | DAVID admin panel | `DavidAdminDashboard.js` | Full file |
