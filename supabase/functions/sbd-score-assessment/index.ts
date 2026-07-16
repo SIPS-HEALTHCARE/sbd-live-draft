@@ -1,4 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+// URL import (esm.sh, not a relative ../_shared path) so it still resolves under the
+// dashboard copy-paste deploy — same import david-chat/david-anomaly-detector use.
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.6';
 
 // ─── Inlined from supabase/functions/_shared/models.ts (#47) ─────────────────
 // This function is deployed via the Supabase dashboard (copy-paste), which cannot
@@ -193,7 +196,10 @@ serve(async (req) => {
             });
         }
 
-        const { question, answer, answer_key, fail_indicator } = await req.json();
+        // facility_id + user_id are for #14 cost attribution only (not a security boundary):
+        // the assessment usage row is written server-side below. Both are optional so any
+        // existing {question, answer} caller keeps working (the row just logs 'unknown').
+        const { question, answer, answer_key, fail_indicator, facility_id, user_id } = await req.json();
         if (!question || !answer) {
             return new Response(JSON.stringify({ error: 'Missing question or answer' }), {
                 status: 400,
@@ -244,6 +250,9 @@ No markdown, no preamble.`;
                 maxTokens: keyAware ? 240 : 180,
                 temperature: 0.3,
                 title: 'SBD Assessment Scorer',
+                // #14: ask OpenRouter to return generation accounting so we store the
+                // provider's ground-truth cost (not a token×rate estimate). Same as david-chat.
+                extraBody: { usage: { include: true } },
             });
             orRes = call.res;
             servedModel = call.servedModel;
@@ -257,6 +266,35 @@ No markdown, no preamble.`;
 
         const data = await orRes.json();
         const text = data.choices?.[0]?.message?.content || '';
+
+        // ── #14 Assessment grading cost tracking (tagged-rows model) ──────────────────
+        // Log ONE usage row per grade into david_usage_logs with source='assessment', so
+        // grading spend is metered per-facility SEPARATELY from David chat. `cost` is the
+        // provider's ground-truth generation cost (usage.include above). This never calls
+        // david_consume_question, so the facility's chat question allowance is untouched.
+        // Fire-and-forget with a service-role client: a logging failure never affects the
+        // candidate's grade. Chat readers filter source='chat' so they are unchanged.
+        try {
+            const usage = data.usage || {};
+            const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+            const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+            if (supabaseUrl && serviceKey && (facility_id || user_id)) {
+                const admin = createClient(supabaseUrl, serviceKey);
+                admin.from('david_usage_logs').insert({
+                    facility_id: facility_id || 'assessment-unknown',
+                    user_id: user_id || '00000000-0000-0000-0000-000000000000',
+                    prompt_tokens: usage.prompt_tokens || 0,
+                    completion_tokens: usage.completion_tokens || 0,
+                    cost: typeof usage.cost === 'number' ? usage.cost : 0,
+                    source: 'assessment',
+                }).then(({ error }: { error: any }) => {
+                    if (error) console.warn('[SBD_SCORE] assessment usage log skipped:', error.message);
+                });
+            }
+        } catch (logErr: any) {
+            console.warn('[SBD_SCORE] assessment usage log error (ignored):', logErr?.message || logErr);
+        }
+        // ──────────────────────────────────────────────────────────────────────────────
 
         // The model sometimes wraps its JSON in a ```json code fence despite the
         // no-markdown instruction. Strip any fences, then prefer the first {...}

@@ -2610,6 +2610,13 @@ async function scoreSimulationWithAI(question, answer, answerKey, failIndicator)
     const body = { question, answer };
     if(answerKey) body.answer_key = answerKey;
     if(failIndicator) body.fail_indicator = failIndicator;
+    // #14: attribute grading cost to the current session's facility + auth uid so the
+    // edge function can log a source='assessment' row in david_usage_logs. Attribution
+    // only (not auth); the row is written server-side. Signature unchanged so both callers
+    // (paPersistSubmission here + belt-test-flow.js) need no edit.
+    const _u = (typeof ST !== 'undefined' && ST.user) ? ST.user : null;
+    if(_u && _u.fid) body.facility_id = _u.fid;
+    if(_u && _u.authUid) body.user_id = _u.authUid;
     const result = await sbFetch('/functions/v1/sbd-score-assessment', {
       method: 'POST',
       body
@@ -4933,6 +4940,105 @@ function pPSStatus(status){
 }
 
 
+// ── Foundations & Instruments report sections (Ph.2b) ─────────────────────────
+// Report-domain rendering over the pure helpers in foundations.js
+// (fiSummaryForStaff / fiFacilityRollup). On-screen (rpt*/pill) and print (p*/badge)
+// variants share the same data, different markup. Each section self-hides when there
+// is nothing assigned. See docs/decisions/2026-07-17-ph2-development-plan.md §2.
+// ⚠️ These read the RLS-filtered in-memory arrays — correct for self/own-facility
+//    reports (this Ph.2b), NOT cross-facility network rollups (Ph.2c server fetch).
+
+// A staffer's ASSIGNED F&I modules as one list, each tagged by domain.
+function _fiAssignedRows(sum){
+  return [
+    ...sum.foundations.modules.filter(m=>m.assigned).map(m=>Object.assign({domain:'Foundations'},m)),
+    ...sum.instruments.modules.filter(m=>m.assigned).map(m=>Object.assign({domain:'Instruments'},m))
+  ];
+}
+// Compact gate-progress cell text, e.g. "K 2/3 (90%) · S 3/3 (88%) · Obs ✓".
+function _fiGateText(m){
+  const g=m.gates, r=m.passesRequired;
+  const ks=g.knowledge.score?` (${g.knowledge.score}%)`:'';
+  const ss=g.simulation.score?` (${g.simulation.score}%)`:'';
+  return `K ${g.knowledge.passes}/${r}${ks} · S ${g.simulation.passes}/${r}${ss} · Obs ${g.observation.status==='pass'?'✓':'–'}`;
+}
+
+// Personal report — on-screen (renderSReport).
+function fiStaffSectionHTML(staffId){
+  const sum=fiSummaryForStaff(staffId);
+  const rows=_fiAssignedRows(sum);
+  if(!rows.length) return '';
+  return `${rptSection('Foundations & Instruments', sum.completeCount+'/'+sum.assignedCount+' complete ('+sum.completionPct+'%)')}
+    <div class="card mb16">
+      <div style="overflow-x:auto"><table class="tbl" style="min-width:520px">
+        <thead><tr><th>Module</th><th>Type</th><th>Status</th><th>Gate Progress (K/S/Obs)</th><th>Started</th><th>Completed*</th></tr></thead>
+        <tbody>${rows.map(m=>`<tr>
+          <td style="font-size:12px;font-weight:600">${m.title}</td>
+          <td><span style="font-size:9.5px;font-weight:700;color:${m.domain==='Foundations'?'var(--blue)':'var(--gold)'}">${m.domain==='Foundations'?'FND':'INST'}</span></td>
+          <td>${m.complete?'<span class="pill p-ok">Complete</span>':'<span class="pill p-warn">In Progress</span>'}</td>
+          <td style="font-size:11.5px;color:var(--txt2)">${_fiGateText(m)}</td>
+          <td style="font-size:11px;color:var(--txt3)">${m.assignedDate||'--'}</td>
+          <td style="font-size:11px;color:${m.complete?'var(--ok)':'var(--txt3)'};font-weight:${m.complete?'600':'400'}">${m.completedDateApprox||'--'}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+      <div style="font-size:10px;color:var(--txt3);margin-top:6px;padding:0 2px">* Completion date is derived from the observation sign-off and is approximate.</div>
+    </div>`;
+}
+
+// Personal report — PDF (downloadStaffReport).
+function fiStaffSectionPDF(staffId){
+  const sum=fiSummaryForStaff(staffId);
+  const rows=_fiAssignedRows(sum);
+  if(!rows.length) return '';
+  return `${pSection('Foundations & Instruments', sum.completeCount+'/'+sum.assignedCount+' complete ('+sum.completionPct+'%)')}
+    <table class="no-break"><thead><tr><th>Module</th><th>Type</th><th>Status</th><th>Gate Progress (K/S/Obs)</th><th>Started</th><th>Completed*</th></tr></thead>
+    <tbody>${rows.map(m=>`<tr>
+      <td style="font-weight:600">${m.title}</td>
+      <td style="font-size:7.5pt;font-weight:700;color:${m.domain==='Foundations'?'#2563eb':'#d97706'}">${m.domain==='Foundations'?'FND':'INST'}</td>
+      <td><span class="badge ${m.complete?'badge-green':'badge-warn'}">${m.complete?'Complete':'In Progress'}</span></td>
+      <td style="font-size:8pt">${_fiGateText(m)}</td>
+      <td style="color:#64748b">${m.assignedDate||'–'}</td>
+      <td style="color:${m.complete?'#16a34a':'#64748b'};font-weight:${m.complete?'700':'400'}">${m.completedDateApprox||'–'}</td>
+    </tr>`).join('')}</tbody></table>
+    <div style="font-size:7.5pt;color:#64748b;margin-top:4px">* Completion date is derived from the observation sign-off and is approximate.</div>`;
+}
+
+// Facility report — on-screen (renderHReports). rollup = fiFacilityRollup(fid).
+function fiFacilitySectionHTML(rollup, profileFn){
+  if(!rollup || rollup.assignedCount===0) return '';
+  const opener=profileFn||'openHProfile'; // manager view uses openHProfile; admin view passes openAdminProfile
+  const rows=rollup.perStaff.filter(p=>p.summary.assignedCount>0).sort((a,b)=>b.summary.completionPct-a.summary.completionPct);
+  return `${rptSection('Foundations & Instruments', rollup.completeCount+'/'+rollup.assignedCount+' modules complete ('+rollup.completionPct+'%)')}
+    <div class="card mb16">
+      <div style="overflow-x:auto"><table class="tbl" style="min-width:460px">
+        <thead><tr><th>Staff</th><th>Assigned</th><th>Complete</th><th>In Progress</th><th>Completion</th></tr></thead>
+        <tbody>${rows.map(p=>`<tr onclick="${opener}('${p.staffId}')" style="cursor:pointer">
+          <td class="fw7">${p.name||'--'}</td>
+          <td>${p.summary.assignedCount}</td>
+          <td style="color:var(--ok);font-weight:600">${p.summary.completeCount}</td>
+          <td style="color:var(--warn)">${p.summary.inProgressCount}</td>
+          <td><span style="font-weight:700;color:${p.summary.completionPct>=80?'var(--ok)':p.summary.completionPct>=50?'var(--warn)':'var(--err)'}">${p.summary.completionPct}%</span></td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+    </div>`;
+}
+
+// Facility report — PDF (downloadFacilityReportV2). rollup = fiFacilityRollup(facId).
+function fiFacilitySectionPDF(rollup){
+  if(!rollup || rollup.assignedCount===0) return '';
+  const rows=rollup.perStaff.filter(p=>p.summary.assignedCount>0).sort((a,b)=>b.summary.completionPct-a.summary.completionPct);
+  return `${pSection('Foundations & Instruments', rollup.completeCount+'/'+rollup.assignedCount+' modules complete ('+rollup.completionPct+'%)')}
+    <table class="no-break"><thead><tr><th>Staff</th><th>Assigned</th><th>Complete</th><th>In Progress</th><th>Completion</th></tr></thead>
+    <tbody>${rows.map(p=>`<tr>
+      <td style="font-weight:700">${p.name||'–'}</td>
+      <td>${p.summary.assignedCount}</td>
+      <td style="color:#16a34a;font-weight:700">${p.summary.completeCount}</td>
+      <td style="color:#d97706">${p.summary.inProgressCount}</td>
+      <td><span class="badge ${p.summary.completionPct>=80?'badge-green':p.summary.completionPct>=60?'badge-warn':'badge-err'}">${p.summary.completionPct}%</span></td>
+    </tr>`).join('')}</tbody></table>`;
+}
+
+
 // ============================================================ USER PROMOTION ENGINE
 // Roles hierarchy: staff_member → hospital (manager) → system_admin → staff_admin → master_admin
 // Position levels for staff records
@@ -5462,6 +5568,8 @@ function downloadStaffReport(staffId){
       <td style="color:${status==='complete'?'#16a34a':'#64748b'};font-weight:${status==='complete'?'700':'400'}">${td.completedAt||'–'}</td>
     </tr>`).join('')}</tbody></table>`:''}
 
+    ${fiStaffSectionPDF(s.id)}
+
     ${oipSection}
 
     ${pSection('Full Assessment Log', (s.history||[]).length+' entries')}
@@ -5589,6 +5697,8 @@ function downloadFacilityReportV2(fid){
         <td style="color:#d97706">${elig}</td>
       </tr>`;
     }).join('')}</tbody></table>
+
+    ${fiFacilitySectionPDF(fiFacilityRollup(facId))}
 
     ${pSection('OIP Team Composition')}
     <div class="grid-4 no-break" style="gap:10px;margin-bottom:14px">
@@ -5997,6 +6107,9 @@ async function renderSReport(){
         </tr>`).join('')}</tbody>
       </table></div>
     </div>`:''}
+
+    <!-- Foundations & Instruments -->
+    ${fiStaffSectionHTML(s.id)}
 
     <!-- Belt Progression Timeline -->
     ${rptSection('Belt Progression Timeline')}
@@ -9282,11 +9395,13 @@ function renderHDashboard(){
   const pending=DB.queue.filter(q=>q.fid===fid).length;
   const beltCounts=BELT_ORDER.map(b=>st.filter(s=>s.belt===b).length);
   const hs=buildHealthScore(fid);
+  const fiRoll=(typeof fiFacilityRollup==='function')?fiFacilityRollup(fid):null;
 
   document.getElementById('h-dashboard').innerHTML=`
     <div class="stat-grid">
       <div class="stat-card"><div class="stat-accent" style="background:var(--blue)"></div><div class="stat-lbl">Total Staff</div><div class="stat-val" style="color:var(--blue)">${n}</div><div class="stat-sub">Department members</div></div>
       <div class="stat-card"><div class="stat-accent" style="background:var(--ok)"></div><div class="stat-lbl">Green Belt Compliance</div><div class="stat-val" style="color:var(--ok)">${pct}%</div><div class="stat-sub">${aboveGreen} of ${n} at Green+</div></div>
+      <div class="stat-card"><div class="stat-accent" style="background:var(--gold)"></div><div class="stat-lbl">F&amp;I Completion</div><div class="stat-val" style="color:var(--gold)">${fiRoll&&fiRoll.assignedCount?fiRoll.completionPct+'%':'--'}</div><div class="stat-sub">${fiRoll&&fiRoll.assignedCount?fiRoll.completeCount+' of '+fiRoll.assignedCount+' modules':'No modules assigned'}</div></div>
       <div class="stat-card"><div class="stat-accent" style="background:${hs.gradeColor}"></div>
         <div class="stat-lbl">Health Grade</div>
         <div class="stat-val" style="color:${hs.gradeColor};font-size:26px">${hs.grade} <span style="font-size:14px;font-weight:700">${hs.totalScore}/100</span></div>
@@ -11307,6 +11422,8 @@ function renderHReports(){
       </div>
     </div>
 
+    ${fiFacilitySectionHTML(fiFacilityRollup(fid))}
+
     ${rptSection('OIP Team Composition')}
     <div class="card mb16">
       <div class="card-body">
@@ -12781,6 +12898,7 @@ function renderFacReports(el){
         ${Object.keys(PS_TRACKS).map(tid=>{const t=PS_TRACKS[tid];const done=st.filter(s=>getTrackStatus(s,tid)==='complete').length;const act=st.filter(s=>['active','testing','observation'].includes(getTrackStatus(s,tid))).length;const elig=st.filter(s=>getTrackStatus(s,tid)==='eligible').length;return`<div style="background:var(--s2);border:1px solid var(--bdr);border-radius:var(--rs);padding:10px"><div style="font-size:9.5px;color:${t.tier==='green'?'var(--blt-gr)':'var(--blue)'};font-weight:700;margin-bottom:3px">${tid}</div><div style="font-size:11.5px;font-weight:700;margin-bottom:6px">${t.name}</div><div style="font-size:10.5px;display:flex;justify-content:space-between"><span style="color:var(--ok)">${done}✓</span><span style="color:var(--warn)">${act} act</span><span style="color:var(--gold)">${elig} avail</span></div></div>`;}).join('')}
       </div>
     </div>
+    ${fiFacilitySectionHTML(fiFacilityRollup(fid), 'openAdminProfile')}
     ${stagnation.length?`${rptSection('Stagnation Alerts',stagnation.length+' flagged')}
     <div class="card mb16"><div style="overflow-x:auto"><table class="tbl" style="min-width:360px"><thead><tr><th>Name</th><th>Belt</th><th>Days at Belt</th><th>Expected</th><th>Overage</th></tr></thead>
     <tbody>${stagnation.slice(0,8).map(({s,actual,expected,over})=>`<tr onclick="openAdminProfile('${s.id}')" style="cursor:pointer"><td class="fw7">${fullName(s)}</td><td>${beltBadge(s.belt)}</td><td style="color:var(--err);font-weight:600">${actual}d</td><td style="color:var(--txt3)">${expected}d</td><td><span class="pill p-err" style="font-size:9px">+${over}d</span></td></tr>`).join('')}</tbody></table></div></div>`:''}

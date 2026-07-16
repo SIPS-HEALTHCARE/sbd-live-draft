@@ -1007,6 +1007,131 @@ function fndPassChip(gates){
  const c=n=>n>=FND_PASSES_REQUIRED?'#4ade80':'#94a3b8';
  return '<span style="font-size:10.5px;font-weight:700;white-space:nowrap"><span style="color:'+c(k)+'">K '+k+'/'+FND_PASSES_REQUIRED+'</span> <span style="color:'+c(s2)+'">S '+s2+'/'+FND_PASSES_REQUIRED+'</span></span>';
 }
+// ── F&I Reporting Helpers (Ph.2a) ────────────────────────────────────────────
+// Pure, READ-ONLY aggregation over the in-memory F&I arrays. No writes, no DB
+// calls, no DOM — safe to call from any report/dashboard path (Ph.2b/2c wire
+// them in). Foundations and Instruments share the same 3-gate engine, so the
+// per-module + per-domain cores live here (foundations loads first) and
+// instruments.js adds only a thin data wrapper (instSummaryForStaff). See
+// docs/decisions/2026-07-17-fi-assessment-reporting-scope.md and
+// docs/decisions/2026-07-17-ph2-development-plan.md §2.
+//
+// ⚠️ SCOPE: these read DB.foundations*/DB.instrument*, which are RLS-filtered at
+//   hydration (sbd_fi_leader_scope). Correct for self/own-facility reports
+//   (Ph.2b). A network/system caller must supply scope-correct data via the
+//   server-side scoped fetch (Ph.2c) — do NOT trust these for cross-facility
+//   rollups. See plan §2 (system_admin gets zero rows; staff_admin is
+//   facility-scoped live).
+// ⚠️ DATES: there is no completed_at column yet (Ph.3a). completedDateApprox is
+//   DERIVED from the latest G3 confirm date — treat it as approximate.
+
+// Summarize ONE (module, assignment, progress) triple into a report-ready row.
+// Domain-agnostic: pass a Foundations OR Instruments triple.
+function fiModuleSummary(mod, assignment, progress){
+ const g1=(progress&&progress.g1)||{status:'locked',score:0,attempts:[]};
+ const g2=(progress&&progress.g2)||{status:'locked',score:0,attempts:[]};
+ const g3=(progress&&progress.g3)||{status:'locked',score:0,items:[]};
+ const complete=!!((progress&&progress.complete)||(assignment&&assignment.status==='completed'));
+ // 'In Progress' is DERIVED — it is never stored as a value (assigned & !complete).
+ let status; if(complete) status='complete'; else if(assignment) status='in_progress'; else status='not_assigned';
+ const dates=[];
+ (g1.attempts||[]).forEach(a=>{if(a&&a.date)dates.push(a.date);});
+ (g2.attempts||[]).forEach(a=>{if(a&&a.date)dates.push(a.date);});
+ (g3.items||[]).forEach(i=>{if(i&&i.date)dates.push(i.date);});
+ dates.sort();
+ const lastActivityDate=dates.length?dates[dates.length-1]:null;
+ const confirmDates=complete?(g3.items||[]).filter(i=>i&&i.confirmed&&i.date).map(i=>i.date).sort():[];
+ const completedDateApprox=complete?(confirmDates.length?confirmDates[confirmDates.length-1]:lastActivityDate):null;
+ return {
+  moduleId: mod?mod.id:(assignment?assignment.moduleId:(progress?progress.moduleId:null)),
+  num: mod?mod.num:null,
+  title: mod?mod.title:'',
+  assigned: !!assignment,
+  complete,
+  status,                       // 'complete' | 'in_progress' | 'not_assigned'
+  gates:{
+   knowledge:  {status:g1.status, score:g1.score||0, passes:fndGatePasses(g1)},
+   simulation: {status:g2.status, score:g2.score||0, passes:fndGatePasses(g2)},
+   observation:{status:g3.status, score:g3.score||0}
+  },
+  passesRequired: FND_PASSES_REQUIRED,
+  assignedDate: assignment?(assignment.assignedDate||null):null,
+  lastActivityDate,
+  completedDateApprox           // ⚠️ derived, not authoritative (Ph.3a adds completed_at)
+ };
+}
+
+// Roll up all modules of ONE domain for ONE staffer. Percentages are over ASSIGNED
+// modules (matches the existing "N/M completed" convention in renderSFoundations).
+function fiDomainSummaryForStaff(staffId, modules, assignments, progressList){
+ const asg={}, prog={};
+ (assignments||[]).forEach(a=>{asg[a.moduleId]=a;});
+ (progressList||[]).forEach(p=>{prog[p.moduleId]=p;});
+ const rows=(modules||[]).map(m=>fiModuleSummary(m, asg[m.id]||null, prog[m.id]||null));
+ const assignedRows=rows.filter(r=>r.assigned);
+ const completeCount=assignedRows.filter(r=>r.complete).length;
+ return {
+  modules: rows,
+  assignedCount: assignedRows.length,
+  completeCount,
+  inProgressCount: assignedRows.length-completeCount,
+  completionPct: assignedRows.length?Math.round(completeCount/assignedRows.length*100):0
+ };
+}
+
+// Foundations-only summary for one staffer.
+function fndSummaryForStaff(staffId){
+ return fiDomainSummaryForStaff(
+  staffId, FOUNDATIONS_MODULES,
+  getFoundationsAssignments(staffId),
+  (DB.foundationsProgress||[]).filter(p=>p.staffId===staffId)
+ );
+}
+
+// Combined F&I summary for one staffer (Foundations + Instruments). instSummaryForStaff
+// is defined in instruments.js, which loads AFTER this file; this is called at render
+// time (after all scripts load) so the reference resolves, and the typeof guard keeps
+// it safe if instruments.js is ever absent.
+function fiSummaryForStaff(staffId){
+ const f=fndSummaryForStaff(staffId);
+ const i=(typeof instSummaryForStaff==='function')?instSummaryForStaff(staffId)
+         :{modules:[],assignedCount:0,completeCount:0,inProgressCount:0,completionPct:0};
+ const assignedCount=f.assignedCount+i.assignedCount;
+ const completeCount=f.completeCount+i.completeCount;
+ return {
+  foundations:f, instruments:i,
+  assignedCount, completeCount,
+  inProgressCount: f.inProgressCount+i.inProgressCount,
+  completionPct: assignedCount?Math.round(completeCount/assignedCount*100):0
+ };
+}
+
+// Roll up combined F&I completion across every staffer in a facility (or the whole
+// visible roster when facilityId is falsy). READ-ONLY; see the SCOPE note above —
+// this operates on the RLS-filtered in-memory arrays, so it is trustworthy only for
+// the viewer's own scope (Ph.2b), not cross-facility network rollups (Ph.2c).
+function fiFacilityRollup(facilityId){
+ const roster=(typeof staffOf==='function')?staffOf(facilityId)
+             :(DB.staff||[]).filter(s=>!facilityId||s.fid===facilityId);
+ let assignedCount=0, completeCount=0, inProgressCount=0, staffWithAssignments=0;
+ const perStaff=roster.map(s=>{
+  const summary=fiSummaryForStaff(s.id);
+  assignedCount+=summary.assignedCount;
+  completeCount+=summary.completeCount;
+  inProgressCount+=summary.inProgressCount;
+  if(summary.assignedCount>0) staffWithAssignments++;
+  return {staffId:s.id, name:s.name, summary};
+ });
+ return {
+  facilityId: facilityId||null,
+  staffCount: roster.length,
+  staffWithAssignments,
+  assignedCount, completeCount, inProgressCount,
+  completionPct: assignedCount?Math.round(completeCount/assignedCount*100):0,
+  perStaff
+ };
+}
+
 function retakeFndGate(moduleId,gateKey){
  FND_GATE_RETAKE[moduleId+gateKey]=true;
  ST._fndTab=gateKey==='g1'?'gate1':'gate2';
