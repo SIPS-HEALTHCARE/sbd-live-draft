@@ -72,9 +72,12 @@ serve(async (req) => {
 
         // 1. Fetch recent usage logs within the window.
         const windowStart = new Date(Date.now() - WINDOW_MINUTES * 60 * 1000).toISOString();
+        // #14: chat-only. This detector guards against David chat-abuse burn; bounded,
+        // legitimate assessment-grading spend (source='assessment') must not trip it.
         const { data: usageLogs, error: logError } = await supabase
             .from('david_usage_logs')
             .select('facility_id, user_id, prompt_tokens, completion_tokens, created_at')
+            .eq('source', 'chat')
             .gte('created_at', windowStart);
 
         if (logError) throw logError;

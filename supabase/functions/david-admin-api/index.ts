@@ -244,9 +244,13 @@ serve(async (req) => {
       const monthStart = new Date();
       monthStart.setUTCDate(1);
       monthStart.setUTCHours(0, 0, 0, 0);
+      // #14: chat-only. Assessment-grading rows (source='assessment') are metered
+      // separately and must not inflate the Command Center's David chat cost tiles.
+      // (The david_analytics_summary view above is already scoped to source='chat'.)
       const { data: mtdRows, error: mtdErr } = await adminSupabase
         .from('david_usage_logs')
         .select('facility_id, prompt_tokens, completion_tokens, cost')
+        .eq('source', 'chat')
         .gte('created_at', monthStart.toISOString());
       if (mtdErr) throw mtdErr;
 
