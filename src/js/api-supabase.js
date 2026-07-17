@@ -209,7 +209,7 @@ const SB = {
     return sbFetch(`/rest/v1/sbd_assessment_queue?id=eq.${id}`, { method:'PATCH', body });
   },
   // ── Dynamic Belt Test (A4) ──
-  generateBeltTest(staffId, targetBelt){ return sbFetch('/functions/v1/sbd-generate-belt-test', { method:'POST', body:{ staff_id:staffId, target_belt:targetBelt } }); },
+  generateBeltTest(staffId, targetBelt, component){ return sbFetch('/functions/v1/sbd-generate-belt-test', { method:'POST', body:{ staff_id:staffId, target_belt:targetBelt, component: component || undefined } }); },
   getMyBeltTest(staffId, targetBelt){ return sbFetch(`/rest/v1/sbd_belt_tests?staff_id=eq.${staffId}&target_belt=eq.${encodeURIComponent(targetBelt)}&status=eq.active&select=*&limit=1`); },
   insertBeltTestResult(data){ return sbFetch('/rest/v1/sbd_belt_test_results', { method:'POST', body:data }); },
   getBeltTestResults(fid){ const f=fid?`&facility_id=eq.${encodeURIComponent(fid)}`:''; return sbFetch(`/rest/v1/sbd_belt_test_results?select=*&order=submitted_at.desc${f}`); },
@@ -757,6 +757,7 @@ function mapBeltTestResultFromBackend(row){
     staffId:          row.staff_id,
     fid:              row.facility_id,
     targetBelt:       row.target_belt,
+    component:        row.component || 'combined',
     submittedAt:      row.submitted_at,
     scoredAt:         row.scored_at,
     kLevelScores:     row.k_level_scores || {},
@@ -782,6 +783,8 @@ function mapBeltTestResultFromBackend(row){
     overrideBy:       row.override_by,
     overrideJustification: row.override_justification,
     overrideAt:       row.override_at,
+    notes:            row.notes || null,
+    componentDetail:  row.component_detail || null,
     status:           row.status,
     createdAt:        row.created_at
   };
@@ -794,6 +797,7 @@ function mapBeltTestResultToBackend(engineResult, ctx){
     staff_id:                ctx.staffId,
     facility_id:             ctx.fid || null,
     target_belt:             engineResult.target_belt || ctx.targetBelt,
+    component:               engineResult.component || ctx.component || 'combined',
     submitted_at:            ctx.submittedAt || new Date().toISOString(),
     scored_at:               engineResult._scored_at || new Date().toISOString(),
     k_level_scores:          engineResult.k_level_scores || {},
@@ -814,6 +818,8 @@ function mapBeltTestResultToBackend(engineResult, ctx){
     conditions:              engineResult.conditions || [],
     watch_flags:             engineResult.watch_flags || [],
     remediation_flags:       engineResult.remediation_flags || [],
+    component_detail:        engineResult.component_detail || null,
+    notes:                   ctx.notes != null ? ctx.notes : (engineResult.notes || null),
     status:                  engineResult.status || 'PENDING_REVIEW'
   };
 }

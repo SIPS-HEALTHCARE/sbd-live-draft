@@ -1,12 +1,16 @@
 // ============================================================================
 // sbd-generate-belt-test — Dynamic Belt Test generation (Track A4)
 //
-// POST { staff_id, target_belt }
+// POST { staff_id, target_belt, component? }
+//   component: 'knowledge' | 'simulation' | 'combined' (Ph.2b, per-gate).
+//     Omitted → 'combined' (legacy both-gate test), so a not-yet-updated
+//     frontend keeps working during the migration→edge→frontend rollout.
 //   1. JWT auth (service-role client, same pattern as sbd-assessor-pin)
-//   2. Idempotency — return the existing ACTIVE test if one exists
-//   3. Queue gate — require APPROVED Competency AND Simulation queue rows
+//   2. Idempotency — return the existing ACTIVE test for this (staff,belt,component)
+//   3. Queue gate — require the APPROVED gate(s) the component needs
+//      (knowledge→Competency, simulation→Simulation, combined→both)
 //   4. Seeded sampling — one variant per competency slot, MCQ options shuffled
-//   5. Persist the skeleton (variant_status:'fallback') and return the stored row
+//   5. Persist the skeleton (only the component's half) and return the stored row
 //
 // ⚠️ SOURCE-OF-TRUTH NOTE — this file mirrors the SELF-CONTAINED version that is
 // actually DEPLOYED to Supabase:
@@ -171,11 +175,24 @@ serve(async (req) => {
 
     if (authError || !user) return json({ error: 'Unauthorized' }, 401);
 
-    const { staff_id, target_belt } = await req.json();
+    const { staff_id, target_belt, component: rawComponent } = await req.json();
 
     if (!staff_id || !target_belt) {
       return json({ error: 'staff_id and target_belt are required' }, 400);
     }
+
+    // Per-component generation (Ph.2b). Omitted → legacy 'combined' (both gates).
+    const component = rawComponent == null ? 'combined' : String(rawComponent);
+    if (!['knowledge', 'simulation', 'combined'].includes(component)) {
+      return json({ error: "component must be 'knowledge', 'simulation', or 'combined'" }, 400);
+    }
+    // component → the approved queue gate(s) it requires
+    const COMPONENT_GATE: Record<string, string[]> = {
+      knowledge: ['Competency'],
+      simulation: ['Simulation'],
+      combined: ['Competency', 'Simulation'],
+    };
+    const requiredGates = COMPONENT_GATE[component];
 
     const bank = await loadBank(admin);
 
@@ -193,39 +210,49 @@ serve(async (req) => {
 
     const facility_id = staffRow.fid;
 
-    // ── 2. Idempotency — return existing ACTIVE test ──
+    // ── 2. Idempotency — return existing ACTIVE test for this component ──
     const { data: existing } = await admin
       .from('sbd_belt_tests')
       .select('*')
       .eq('staff_id', staff_id)
       .eq('target_belt', target_belt)
+      .eq('component', component)
       .eq('status', 'active')
       .maybeSingle();
 
     if (existing) return json({ test: existing, idempotent: true });
 
-    // ── 3. Queue gate — approved Competency AND Simulation for this belt ──
+    // ── 3. Queue gate — approved gate(s) the component requires ──
     const { data: approved } = await admin
       .from('sbd_assessment_queue')
       .select('id, assessment_type')
       .eq('staff_id', staff_id)
       .eq('target_belt', target_belt)
       .eq('status', 'approved')
-      .in('assessment_type', ['Competency', 'Simulation']);
+      .in('assessment_type', requiredGates);
 
     const types = new Set((approved || []).map((r: any) => r.assessment_type));
 
-    if (!types.has('Competency') || !types.has('Simulation')) {
+    const missing = requiredGates.filter((g) => !types.has(g));
+    if (missing.length) {
       return json({
-        error: 'Belt test requires an approved Competency AND Simulation request for this belt.',
+        error: `Belt test requires an approved ${requiredGates.join(' AND ')} request for this belt.`,
         code: 'QUEUE_NOT_APPROVED',
+        component,
+        required: requiredGates,
         found: Array.from(types),
       }, 403);
     }
 
-    const queue_ids = (approved || []).map((r: any) => r.id);
+    // Only the queue row(s) this component test satisfies.
+    const queue_ids = (approved || [])
+      .filter((r: any) => requiredGates.includes(r.assessment_type))
+      .map((r: any) => r.id);
 
     // ── 4. Seeded sampling ──
+    // Compute the FULL skeleton (seed unchanged) so a component test's questions
+    // are byte-identical to the combined test's corresponding half, then persist
+    // only the half the component needs (§5). Seed determinism preserved.
     const test_date = new Date().toISOString().slice(0, 10);
     const seed = deriveSeed(staff_id, target_belt, test_date);
     const skeleton = sampleSkeleton(bank, target_belt, seed);
@@ -249,11 +276,13 @@ serve(async (req) => {
         facility_id,
         queue_ids,
         target_belt,
+        component,
         seed,
         test_date,
         questions: {
-          knowledge: skeleton.knowledge,
-          simulation: skeleton.simulation,
+          // Only the component's half is served; the other half stays empty.
+          knowledge: component === 'simulation' ? [] : skeleton.knowledge,
+          simulation: component === 'knowledge' ? [] : skeleton.simulation,
         },
         variant_status: 'fallback',
         status: 'active',
@@ -268,6 +297,7 @@ serve(async (req) => {
         .select('*')
         .eq('staff_id', staff_id)
         .eq('target_belt', target_belt)
+        .eq('component', component)
         .eq('status', 'active')
         .maybeSingle();
 
