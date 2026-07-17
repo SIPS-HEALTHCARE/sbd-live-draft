@@ -15000,15 +15000,12 @@ async function denyReg(rid){
   r.status='denied';
   if(IS_LIVE){ 
     SB.denyRegistration(rid, window.ST?.user?.id).catch(e => handleSyncError(e, 'Deny sync'));
-    // Queue denial notification email
+    // Queue denial notification email — server-side via sbd-emails (P0-2, 2026-07-18).
+    // sbd_email_queue is now service-role-only; the browser no longer writes it directly.
     if(r.email){
-      sbFetch('/rest/v1/sbd_email_queue', { method:'POST', prefer:'return=minimal', body:{
-        recipient_email: r.email,
-        template: 'registration_denied',
-        body_data: { contact_name: r.name||r.contact||'Applicant', facility_name: facilityName },
-        status: 'pending',
-        attempts: 0,
-        created_at: new Date().toISOString()
+      sbFetch('/functions/v1/sbd-emails', { method:'POST', body:{
+        type: 'registration_denied',
+        data: { recipient_email: r.email, contact_name: r.name||r.contact||'Applicant', facility_name: facilityName }
       }}).catch(e=>console.warn('Denial email queue failed:', e));
     }
   }
