@@ -282,6 +282,46 @@ New hires take a placement assessment to determine starting belt. This is a mult
 4. Creates a `placement_review` for admin approval
 5. Admin reviews and confirms or adjusts the recommended belt
 
+### Dynamic Belt Test (Track A4) — per-gate (added 2026-07-17)
+
+The proctored belt test for the two **written** gates. **Observation is separate**
+(`ovsUnlock`, a distinct two-PIN handshake — not part of this system).
+
+**Files:** candidate delivery `belt-test-flow.js`; scoring engine `belt-test-engine.js`
+(spec-governed, dual-exported for the Node harness `scripts/verify-belt-test-generation.js`);
+generation edge fn `supabase/functions/sbd-generate-belt-test`; tables `sbd_belt_tests`
+(generated test) + `sbd_belt_test_results` (persisted `AssessmentResult`, never recomputed on
+read) + `sbd_belt_bank` (answer key, service-role only). Mappers `mapBeltTestResult{To,From}Backend`.
+
+**Per-gate model (`2026-07-17-belt-test-per-gate-ph2a-implementation-design.md`).** Each written
+component populates, delivers, and scores on its **own** approved gate:
+
+| `component` | Gate (`sbd_assessment_queue.type`) | Staff gate | Bank half |
+|---|---|---|---|
+| `'knowledge'` | `Competency` (`s.cur/nxt.c`) | Knowledge (40 MCQ) | `questions.knowledge` |
+| `'simulation'` | `Simulation` (`s.cur/nxt.s`) | Situational (20 scenarios) | `questions.simulation` |
+| `'combined'` | both (legacy single-pass) | — | both |
+
+- **PIN:** single-use assessor **`'belt'`** PIN (same pattern as placement); the component is
+  set by which card the candidate starts, NOT the PIN — so `sbd-assessor-pin` is unchanged.
+- **Candidate:** `btComponentEligible()` gates each card; `startBeltTest(staffId,belt,component)`
+  → PIN → `SB.generateBeltTest(staffId,belt,component)` (server samples only that half; test row
+  carries `component`; unique index is `(staff_id,target_belt,component) WHERE status='active'`)
+  → deliver → `submitBeltTest()` scores that half via `scoreComponentKnowledge` /
+  `scoreComponentSimulation` → one `sbd_belt_test_results` row per component (`component`,
+  per-gate `outcome` PASS/REMEDIATION, and a private `component_detail` reconstruction blob).
+- **Scoring:** each gate reports its own **pass/fail** at the target belt; the **combined belt
+  recommendation** (blended 0.60·K + 0.40·S → suggested belt) is **deferred** until BOTH
+  components exist and is computed assessor-side by `combineComponents(kDetail,sDetail,belt)` —
+  byte-identical to the legacy single-pass `scoreBeltTest` (asserted by the harness).
+- **Assessor** (`renderBeltTestReviewSection`, `renderBeltPinAuthBlock` in `ui-views.js`):
+  reviews each gate on its own row (score, pass/fail, conditions, the combined recommendation
+  once both are in, and an **assessor notes** field → `sbd_belt_test_results.notes`); `Accept`
+  (`acceptBeltTestGate`) records ONLY that gate via the atomic `recordAssessment` path — never a
+  partial staff PATCH. Legacy `combined` rows keep `acceptBeltTestCombined`.
+- **Migration:** `20260717140000_belt_tests_per_component.sql` (adds `component`/`notes` to both
+  tables + `component_detail` to results, amends the unique index). Applied by the user.
+
 ---
 
 ## 11. DAVID AI System
