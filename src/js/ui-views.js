@@ -2216,10 +2216,10 @@ function prSuggestion(pr){
   // Blend the RAW averages, then round once — same as rptComputeModel(). Rounding the
   // component scores BEFORE blending (e.g. 87.5 -> 88) used to flip belts at a threshold
   // boundary (Bond: 77.5 read as 78 = Yellow), which made the card disagree with the report.
-  const kRaw = avg(kR.map(r => r.score));
-  const simRaw = avg(simR.map(r => r.aiScore));
+  const kRaw = avg(kR.map(r => Number(r.score) || 0));
+  const simRaw = avg(simR.map(r => Number(r.aiScore) || 0));
   const kOverall = Math.round(kRaw);
-  const kL1 = Math.round(avg(kR.filter(r => r.level === 1).map(r => r.score)));
+  const kL1 = Math.round(avg(kR.filter(r => r.level === 1).map(r => Number(r.score) || 0)));
   const simOverall = Math.round(simRaw);
   const blended = Math.round(kRaw * 0.6 + simRaw * 0.4);
   const dangerous = kR.some(r => r.isDangerous && !r.correct);
@@ -2332,7 +2332,7 @@ async function paPersistSubmission({ staffId, answers, questions, sessionId, ses
     let aiFeedback = keywordFeedback;
     const settled = aiResults[i];
     if(settled.status === 'fulfilled' && settled.value && settled.value.score !== undefined){
-      aiScore = settled.value.score;
+      const _s = Number(settled.value.score); aiScore = Number.isFinite(_s) ? _s : aiScore;
       aiFeedback = settled.value.feedback || aiFeedback;
     }
     responses.push({qId:q.id, level:q.level, type:'simulation', question:q.q, answer:ans||'', aiScore, aiFeedback});
@@ -2347,10 +2347,10 @@ async function paPersistSubmission({ staffId, answers, questions, sessionId, ses
   const _avg = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
   // Blend the RAW averages, then round once (matches rptComputeModel + prSuggestion). Do NOT
   // round the component scores before blending -- that flips belts at threshold boundaries.
-  const _kRaw = _avg(_kResp.map(r => r.score));
-  const _simRaw = _avg(_simResp.map(r => r.aiScore));
+  const _kRaw = _avg(_kResp.map(r => Number(r.score) || 0));
+  const _simRaw = _avg(_simResp.map(r => Number(r.aiScore) || 0));
   const kOverall = Math.round(_kRaw);
-  const kL1 = Math.round(_avg(_kResp.filter(r => r.level === 1).map(r => r.score)));
+  const kL1 = Math.round(_avg(_kResp.filter(r => r.level === 1).map(r => Number(r.score) || 0)));
   const simOverall = Math.round(_simRaw);
   const blended = Math.round(_kRaw * 0.6 + _simRaw * 0.4);
   // Dangerous-answer block is wired but stays inert until SIPS supplies the per-question
@@ -3530,7 +3530,7 @@ function renderAPlacementReviews(){
     ${total === 0 ? '' : `<div class="stat-grid" style="margin-bottom:16px">
       <div class="stat-card"><div class="stat-accent" style="background:#a78bfa"></div><div class="stat-lbl">Awaiting Review</div><div class="stat-val" style="color:#a78bfa">${pendCount}</div><div class="stat-sub">pending placement</div></div>
       <div class="stat-card"><div class="stat-accent" style="background:var(--ok)"></div><div class="stat-lbl">Reviewed</div><div class="stat-val" style="color:var(--ok)">${total-pendCount}</div><div class="stat-sub">confirmed</div></div>
-      <div class="stat-card"><div class="stat-accent" style="background:var(--gold)"></div><div class="stat-lbl">Avg Blended Score</div><div class="stat-val" style="color:var(--gold)">${(()=>{const bs=pool.map(r=>r._blended).filter(x=>x!=null);return bs.length?Math.round(bs.reduce((a,b)=>a+b,0)/bs.length)+'%':'--';})()}</div><div class="stat-sub">across ${total}</div></div>
+      <div class="stat-card"><div class="stat-accent" style="background:var(--gold)"></div><div class="stat-lbl">Avg Blended Score</div><div class="stat-val" style="color:var(--gold)">${(()=>{const bs=pool.map(r=>r._blended).filter(x=>x!=null).map(Number).filter(x=>Number.isFinite(x));return bs.length?Math.round(bs.reduce((a,b)=>a+b,0)/bs.length)+'%':'--';})()}</div><div class="stat-sub">across ${total}</div></div>
     </div>`}
     ${total === 0 ? '' : reviewTabs({pending:pendCount, reviewed:total-pendCount, all:total}, 'renderAPlacementReviews')}
     ${total === 0 ? '' : reviewFilterBar('renderAPlacementReviews')}
@@ -3603,7 +3603,7 @@ function rptComputeModel(pr){
     const correct = ks.filter(q=>q.correct).length;
     kCorrect += correct; kTotal += ks.length;
     const kPct = ks.length ? r1(correct/ks.length*100) : null;
-    const scores = ss.map(q=>q.aiScore||0);
+    const scores = ss.map(q=>Number(q.aiScore)||0);
     scores.forEach(s=>{ simSum+=s; simN++; });
     const simPct = scores.length ? r1(scores.reduce((a,b)=>a+b,0)/scores.length) : null;
     const sFloor = RPT_STANDARDS.simLevelFloors[l];
@@ -4235,7 +4235,7 @@ function deriveOutcome(pr) {
   const kCorrect = knowledge.filter(r => r.correct).length;
   const knowledgeOverall = kTotal ? (kCorrect / kTotal) * 100 : 0;
   const simScored = simulation.filter(r => r.aiScore != null);
-  const simOverall = simScored.length ? simScored.reduce((a, r) => a + r.aiScore, 0) / simScored.length : 0;
+  const simOverall = simScored.length ? simScored.reduce((a, r) => a + (Number(r.aiScore) || 0), 0) / simScored.length : 0;
   // 60% knowledge / 40% simulation -- the governed blend (matches rptComputeModel + the
   // card). This was a 50/50 average, which made the confirmed report disagree with the card.
   const blended = (knowledgeOverall * 0.6) + (simOverall * 0.4);
@@ -13223,7 +13223,7 @@ function adaptBeltResultToReview(r){
   else if (outcome === 'KNOWLEDGE FOUNDATION') timeframe = '30 days recommended';
   const levelScores = {};
   Object.keys(r.kLevelScores || {}).forEach(k => { const n = k.replace('L', ''); if (r.kLevelScores[k] != null) levelScores[n] = Math.round(r.kLevelScores[k]); });
-  const responses = (r.simResponses || []).map(sr => ({ qId: sr.question_id, level: sr.level, type: 'simulation', question: sr.question || '', answer: sr.answer || '', aiScore: sr.score }));
+  const responses = (r.simResponses || []).map(sr => ({ qId: sr.question_id, level: sr.level, type: 'simulation', question: sr.question || '', answer: sr.answer || '', aiScore: Number(sr.score) || 0 }));
   const _precomputed = {
     outcome, classification, tone, conditions, timeframe,
     blended: r.blendedScore, knowledgeOverall: r.kOverall, simOverall: r.simOverall,
