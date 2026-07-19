@@ -224,6 +224,33 @@ async function main() {
     flag('SPEC §14 INCOMPLETE CONDITION SET: step 4 enumerates only the 45, 55, and two L5 "65"s as individual-floor failures, concluding "2 REQUIRED". But the §14.1 simulation L1 scores are "65, 75, 75, 75" — that L1 "65" is also below the Yellow individual floor of 68 (§6.5), so it is a 3rd REQUIRED individual failure the worked example omits. The engine reports it (correct per §6.5 "no single response may score below the floor"). Spec §8.4 mandates collecting EVERY floor failure; the §14 example does not. Confirm with Dr. Jake.');
   }
 
+  /* ============ Per-component split (Ph.2b) ============ */
+  // Each gate scores in isolation; the deferred combineComponents(k,s) must
+  // reproduce the single-pass scoreBeltTest exactly (the "recommendation layer
+  // stays" — Iggie/Dr. Jake, 2026-07-17). Also: no field leakage across halves.
+  head('Per-component split (Ph.2b) — combineComponents ≡ scoreBeltTest');
+  {
+    const strip = (o) => { const c = JSON.parse(JSON.stringify(o)); delete c._scored_at; delete c.status; delete c.component; return c; };
+    const cases = [
+      { belt: 'Green',  k: { 1: 8, 2: 7, 3: 6, 4: 8, 5: 7 }, s: { 1: [85, 80, 78, 90], 2: [80, 82, 79, 77], 3: [75, 80, 72, 70], 4: [88, 84, 80, 79], 5: [82, 80, 78, 81] } },
+      { belt: 'Yellow', k: { 1: 6, 2: 5, 3: 8, 4: 7, 5: 6 }, s: { 1: [70, 68, 72, 60], 2: [75, 70, 55, 74], 3: [80, 78, 79, 72], 4: [70, 72, 68, 66], 5: [65, 70, 72, 74] } },
+      { belt: 'Black',  k: { 1: 8, 2: 8, 3: 8, 4: 8, 5: 8 }, s: { 1: [95, 92, 90, 96], 2: [91, 90, 88, 93], 3: [89, 90, 87, 92], 4: [90, 88, 85, 91], 5: [86, 88, 84, 90] } }
+    ];
+    cases.forEach((cfg) => {
+      const b = buildTest(cfg.belt, cfg.k, cfg.s);
+      const combined = engine.scoreBeltTest(b.test, b.answers, b.scores);
+      const kRow = engine.scoreComponentKnowledge(b.test, b.answers);
+      const sRow = engine.scoreComponentSimulation(b.test, b.scores);
+      const recombined = engine.combineComponents(kRow.component_detail, sRow.component_detail, cfg.belt);
+      ok(JSON.stringify(strip(recombined)) === JSON.stringify(strip(combined)), `${cfg.belt}: combineComponents reproduces scoreBeltTest`);
+      ok(kRow.outcome === 'PASS' || kRow.outcome === 'REMEDIATION', `${cfg.belt}: knowledge gate PASS/REMEDIATION (got ${kRow.outcome})`);
+      ok(sRow.outcome === 'PASS' || sRow.outcome === 'REMEDIATION', `${cfg.belt}: simulation gate PASS/REMEDIATION (got ${sRow.outcome})`);
+      ok(kRow.sim_overall === null && kRow.blended_score === null, `${cfg.belt}: knowledge row carries no sim/blended fields`);
+      ok(sRow.k_overall === null && sRow.blended_score === null, `${cfg.belt}: simulation row carries no knowledge/blended fields`);
+      ok(recombined.blended_score === Math.round((kRow.k_overall * 0.6 + sRow.sim_overall * 0.4) * 10) / 10, `${cfg.belt}: combined blended = 0.6·K + 0.4·S`);
+    });
+  }
+
   /* ================= SUMMARY ================= */
   head('Summary');
   console.log(`  ${passed} passed, ${failed} failed, ${flags.length} flag(s) for Dr. Jake.`);

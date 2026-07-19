@@ -13242,17 +13242,102 @@ function adaptBeltResultToReview(r){
 function downloadBeltTestReport(id){
   const r = (DB.beltTestResults || []).find(x => x.id === id);
   if (!r) { toast('Result not found', 'err'); return; }
-  const pr = adaptBeltResultToReview(r);
+  // Per-gate rows carry only one half; a full report needs both gates. Pair them
+  // into the combined shape when the sibling exists, else defer.
+  let reviewRow = r;
+  if ((r.component || 'combined') !== 'combined') {
+    const combo = btComponentRows(r.staffId, r.targetBelt);
+    if (!combo.combined) { toast('Full report is available once both gates are scored.', 'warn'); return; }
+    reviewRow = _btCombinedRowShape(combo);
+  }
+  const pr = adaptBeltResultToReview(reviewRow);
   const staff = getStaff(r.staffId) || { first: pr.staffName, last: '', role: pr.staffTitle };
   const fac = getFac(r.fid) || { name: 'Facility' };
   openPrintWindow('SBD Belt Assessment Report', buildAssessmentReportHTML(pr, staff, fac));
 }
 
+// ── Per-gate belt test (Ph.2b) assessor helpers ──────────────────────────────
+// The two per-component result rows for a candidate+belt, plus the deferred
+// combined recommendation (null until BOTH are scored). combineComponents reads
+// the persisted component_detail blobs — the same inputs the candidate scored.
+function btComponentRows(staffId, targetBelt){
+  const rows = (DB.beltTestResults || []).filter(r => r.staffId === staffId && r.targetBelt === targetBelt);
+  const pick = (c) => rows.filter(r => (r.component || 'combined') === c)
+    .sort((a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0))[0] || null;
+  const k = pick('knowledge'), s = pick('simulation');
+  let combined = null;
+  if (k && s && k.componentDetail && s.componentDetail && window.BeltTestEngine) {
+    combined = BeltTestEngine.combineComponents(k.componentDetail, s.componentDetail, targetBelt);
+  }
+  return { k, s, combined };
+}
+function _btNotesValue(id){ const el = document.getElementById('bt-notes-' + id); return el ? el.value.trim() : ''; }
+// Merge the two component rows + the combined engine result into the camelCase
+// shape adaptBeltResultToReview expects, for a full (both-gate) report.
+function _btCombinedRowShape(combo){
+  const e = combo.combined, k = combo.k, s = combo.s;
+  return {
+    id: k.id, staffId: k.staffId, fid: k.fid, targetBelt: k.targetBelt,
+    submittedAt: s.submittedAt || k.submittedAt,
+    kLevelScores: e.k_level_scores || {}, kOverall: e.k_overall, kFloorResults: e.k_floor_results || [], kOverallPassed: e.k_overall_passed,
+    simResponses: s.simResponses || [], simLevelAvgs: e.sim_level_avgs || {}, simOverall: e.sim_overall,
+    simFloorResults: e.sim_floor_results || [], simIndividualMin: e.sim_individual_min, simOverallPassed: e.sim_overall_passed,
+    blendedScore: e.blended_score, blendedPassed: e.blended_passed,
+    systemSuggestion: e.system_suggestion, outcome: e.outcome,
+    reasonCodes: e.suggestion_reason_codes || [], conditions: e.conditions || [], watchFlags: e.watch_flags || [], remediationFlags: e.remediation_flags || [],
+    finalBelt: null, status: 'PENDING_REVIEW'
+  };
+}
+
+// Accept: dispatch on component. Per-gate rows record ONLY their own gate;
+// legacy 'combined' rows keep the atomic both-gate path.
 async function acceptBeltTestResult(id){
   const r = (DB.beltTestResults || []).find(x => x.id === id);
   if (!r) return;
   const s = getStaff(r.staffId);
   if (!s) { toast('Staff member not found.', 'err'); return; }
+  const component = r.component || 'combined';
+  if (component === 'knowledge' || component === 'simulation') return acceptBeltTestGate(r, s, component);
+  return acceptBeltTestCombined(r, s);
+}
+
+// Record ONE gate (Competency ← knowledge / Simulation ← simulation) at the
+// target belt, with optional assessor notes. §B11: recordAssessment spreads the
+// full staff record (mapStaffToBackend) — never a partial PATCH.
+async function acceptBeltTestGate(r, s, component){
+  const gateType = component === 'knowledge' ? 'Competency' : 'Simulation';
+  const gateKey  = component === 'knowledge' ? 'c' : 's';
+  const gateLabel = component === 'knowledge' ? 'Knowledge' : 'Situational';
+  const pass = r.outcome === 'PASS';
+  const targetBelt = r.targetBelt;
+  const notes = _btNotesValue(r.id) || `Dynamic Belt Test — ${gateLabel} ${pass ? 'PASS' : 'FAIL'} (assessor accepted)`;
+  if (!confirm(`Record ${gateType} = ${pass ? 'PASS' : 'FAIL'} for ${fullName(s)} at ${targetBelt} Belt?\n\nThis gate stands on its own. The other gate and Observation remain separate.`)) return;
+  try {
+    const curIdx = beltIdx(s.belt), tgtIdx = beltIdx(targetBelt);
+    if (tgtIdx === curIdx) s.cur[gateKey] = pass ? 'pass' : 'fail';
+    else if (tgtIdx === curIdx + 1) s.nxt[gateKey] = pass ? 'pass' : 'fail';
+    s.history = s.history || [];
+    s.history.push({ dt: new Date().toISOString().slice(0, 10), type: gateType, belt: targetBelt, res: pass ? 'pass' : 'fail' });
+    if (IS_LIVE) {
+      await SB.recordAssessment(mapStaffToBackend(s), gateType, targetBelt, pass ? 'pass' : 'fail', notes, ST.user?.id, new Date().toISOString());
+      DB.queue.filter(q => q.sid === s.id && q.targetBelt === targetBelt && q.type === gateType && q.status === 'approved').forEach(q => {
+        SB.resolveAssessmentQueue(q.id, 'resolved').catch(() => {});
+        q.status = pass ? 'pass' : 'fail';
+      });
+      await SB.updateBeltTestResult(r.id, { status: 'ACCEPTED', notes, override_at: new Date().toISOString(), override_by: ST.user?.id || null });
+    }
+    r.status = 'ACCEPTED'; r.notes = notes;
+    DB.queue = DB.queue.filter(q => !(q.sid === s.id && q.targetBelt === targetBelt && q.type === gateType && (q.status === 'pass' || q.status === 'fail')));
+    const combo = btComponentRows(s.id, targetBelt).combined;
+    toast(`${fullName(s)}: ${gateType} recorded (${pass ? 'PASS' : 'FAIL'}) for ${targetBelt} Belt.` +
+      (combo ? ` Both gates in — recommendation: ${combo.system_suggestion}.` : ''), 'ok');
+    if (ST.aView === 'a-assessments') renderAAssessments();
+  } catch (e) {
+    if (typeof handleSyncError === 'function') handleSyncError(e, 'Belt gate accept'); else toast('Accept failed: ' + (e.message || e), 'err');
+  }
+}
+
+async function acceptBeltTestCombined(r, s){
   const targetBelt = (r.systemSuggestion && r.systemSuggestion !== 'REMEDIATION') ? r.systemSuggestion : r.targetBelt;
   const remediation = r.outcome === 'REMEDIATION';
   const kPass = !remediation && r.kOverallPassed;
@@ -13290,10 +13375,11 @@ async function remediateBeltTestResult(id){
   const r = (DB.beltTestResults || []).find(x => x.id === id);
   if (!r) return;
   const s = getStaff(r.staffId);
+  const notes = _btNotesValue(id);
   if (!confirm(`Send ${s ? fullName(s) : 'this candidate'} to remediation? No belt is recorded; the result is marked REMEDIATION_REQUIRED.`)) return;
   try {
-    if (IS_LIVE) await SB.updateBeltTestResult(r.id, { status: 'REMEDIATION_REQUIRED' });
-    r.status = 'REMEDIATION_REQUIRED';
+    if (IS_LIVE) await SB.updateBeltTestResult(r.id, notes ? { status: 'REMEDIATION_REQUIRED', notes } : { status: 'REMEDIATION_REQUIRED' });
+    r.status = 'REMEDIATION_REQUIRED'; if (notes) r.notes = notes;
     toast(`${s ? fullName(s) : 'Candidate'}: marked for remediation.`, 'warn');
     if (ST.aView === 'a-assessments') renderAAssessments();
   } catch (e) { if (typeof handleSyncError === 'function') handleSyncError(e, 'Belt remediation'); }
@@ -13323,7 +13409,7 @@ function renderBeltPinAuthBlock(assignedFids){
       </div>
       <div class="card">
         <div style="padding:10px 14px;background:rgba(139,92,246,.06);border-bottom:1px solid var(--bdr2);font-size:11.5px;color:var(--txt3);line-height:1.5">
-          These staff have approved Competency + Simulation gates and can take their proctored belt test. Generate a one-time PIN (valid 10 min) and enter it on the candidate's device to begin.
+          These staff have at least one approved gate (Competency and/or Simulation) and can take that proctored belt test. Generate a one-time PIN (valid 10 min) and enter it on the candidate's device to begin whichever gate is ready.
         </div>
         <div style="overflow-x:auto">
           <table class="tbl tbl-static" style="min-width:560px">
@@ -13349,13 +13435,27 @@ function renderBeltTestReviewSection(assignedFids){
     (asmFilter === 'all' || r.fid === asmFilter)
   );
   if (!pending.length) return '';
-  const sugBadge = (r) => {
-    const o = r.outcome;
-    const c = o === 'PASS' ? 'p-ok' : o === 'CONDITIONAL_PASS' ? 'p-blue' : 'p-err';
-    const label = o === 'REMEDIATION' ? 'Remediation' : `${r.systemSuggestion} · ${o === 'PASS' ? 'Pass' : 'Conditional'}`;
-    return `<span class="pill ${c}">${label}</span>`;
-  };
   const num = (v) => v == null ? '--' : (Math.round(v * 10) / 10) + '%';
+  const compLabel = { knowledge: 'Knowledge', simulation: 'Situational', combined: 'Combined' };
+  // Per-gate score + its own pass/fail. Legacy 'combined' rows show blended.
+  const scoreOf = (r) => { const c = r.component || 'combined'; return c === 'knowledge' ? r.kOverall : c === 'simulation' ? r.simOverall : r.blendedScore; };
+  const scorePass = (r) => { const c = r.component || 'combined'; return c === 'knowledge' ? r.kOverallPassed : c === 'simulation' ? r.simOverallPassed : r.blendedPassed; };
+  const resultBadge = (r) => {
+    const c = r.component || 'combined';
+    if (c === 'combined') {
+      const o = r.outcome, cls = o === 'PASS' ? 'p-ok' : o === 'CONDITIONAL_PASS' ? 'p-blue' : 'p-err';
+      return `<span class="pill ${cls}">${o === 'REMEDIATION' ? 'Remediation' : `${r.systemSuggestion} · ${o === 'PASS' ? 'Pass' : 'Conditional'}`}</span>`;
+    }
+    return r.outcome === 'PASS' ? '<span class="pill p-ok">Pass</span>' : '<span class="pill p-err">Fail</span>';
+  };
+  const comboBadge = (r) => {
+    if ((r.component || 'combined') === 'combined') return '<span style="color:var(--txt3);font-size:11px">--</span>';
+    const combo = btComponentRows(r.staffId, r.targetBelt).combined;
+    if (!combo) return '<span style="color:var(--txt3);font-size:11px">awaiting other gate</span>';
+    const o = combo.outcome, cls = o === 'PASS' ? 'p-ok' : o === 'CONDITIONAL_PASS' ? 'p-blue' : 'p-err';
+    return `<span class="pill ${cls}">${o === 'REMEDIATION' ? 'Remediation' : `${combo.system_suggestion} · ${o === 'PASS' ? 'Pass' : 'Conditional'}`}</span>`;
+  };
+  const esc = (t) => String(t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const floorFailCount = (r) => (r.conditions || []).length;
   return `
     <div style="margin-bottom:20px">
@@ -13365,13 +13465,13 @@ function renderBeltTestReviewSection(assignedFids){
       </div>
       <div class="card">
         <div style="padding:10px 14px;background:rgba(139,92,246,.06);border-bottom:1px solid var(--bdr2);font-size:11.5px;color:var(--txt3);line-height:1.5">
-          System suggestion is advisory. Review the report, then Accept (records Competency + Simulation gates) or send to remediation. Observation remains a separate manual gate.
+          Each gate stands on its own &mdash; Accept records just that gate. A combined belt recommendation appears once both gates are scored. Add optional notes per gate. Observation remains a separate manual gate.
         </div>
         <div style="overflow-x:auto">
-          <table class="tbl tbl-static" style="min-width:760px">
+          <table class="tbl tbl-static" style="min-width:940px">
             <thead><tr>
-              <th>Candidate</th><th>Facility</th><th>Target</th><th>Suggestion</th>
-              <th>Knowledge</th><th>Simulation</th><th>Blended</th><th>Conditions</th><th>Submitted</th><th>Action</th>
+              <th>Candidate</th><th>Facility</th><th>Target</th><th>Gate</th>
+              <th>Score</th><th>Result</th><th>Conditions</th><th>Combined Rec.</th><th>Assessor Notes</th><th>Action</th>
             </tr></thead>
             <tbody>
               ${pending.map(r => {
@@ -13381,12 +13481,12 @@ function renderBeltTestReviewSection(assignedFids){
                   <td class="fw7">${s ? fullName(s) : 'Candidate'}</td>
                   <td style="font-size:11.5px;color:var(--txt3)">${fac ? fac.name : (r.fid || '--')}</td>
                   <td>${beltBadge(r.targetBelt)}</td>
-                  <td>${sugBadge(r)}</td>
-                  <td style="text-align:center;font-weight:700;color:${r.kOverallPassed ? 'var(--ok)' : 'var(--err)'}">${num(r.kOverall)}</td>
-                  <td style="text-align:center;font-weight:700;color:${r.simOverallPassed ? 'var(--ok)' : 'var(--err)'}">${num(r.simOverall)}</td>
-                  <td style="text-align:center;font-weight:700;color:${r.blendedPassed ? 'var(--ok)' : 'var(--err)'}">${num(r.blendedScore)}</td>
+                  <td><span class="pill p-slate">${compLabel[r.component || 'combined']}</span></td>
+                  <td style="text-align:center;font-weight:700;color:${scorePass(r) ? 'var(--ok)' : 'var(--err)'}">${num(scoreOf(r))}</td>
+                  <td style="text-align:center">${resultBadge(r)}</td>
                   <td style="text-align:center">${floorFailCount(r) ? `<span class="pill p-warn">${floorFailCount(r)}</span>` : '<span style="color:var(--txt3)">0</span>'}</td>
-                  <td style="font-size:11px;color:var(--txt3)">${r.submittedAt ? new Date(r.submittedAt).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '--'}</td>
+                  <td style="text-align:center">${comboBadge(r)}</td>
+                  <td><textarea id="bt-notes-${r.id}" rows="2" placeholder="Optional notes for this gate…" style="width:170px;min-width:150px;background:var(--bg2,#0e1328);border:1px solid var(--bdr2);border-radius:6px;padding:6px 8px;color:var(--txt1);font-size:11.5px;font-family:inherit;resize:vertical;box-sizing:border-box">${esc(r.notes)}</textarea></td>
                   <td><div style="display:flex;gap:5px;flex-wrap:wrap">
                     <button class="btn btn-ghost btn-xs" onclick="downloadBeltTestReport('${r.id}')">Report</button>
                     <button class="btn btn-ok btn-xs" onclick="acceptBeltTestResult('${r.id}')">Accept</button>
@@ -14900,15 +15000,12 @@ async function denyReg(rid){
   r.status='denied';
   if(IS_LIVE){ 
     SB.denyRegistration(rid, window.ST?.user?.id).catch(e => handleSyncError(e, 'Deny sync'));
-    // Queue denial notification email
+    // Queue denial notification email — server-side via sbd-emails (P0-2, 2026-07-18).
+    // sbd_email_queue is now service-role-only; the browser no longer writes it directly.
     if(r.email){
-      sbFetch('/rest/v1/sbd_email_queue', { method:'POST', prefer:'return=minimal', body:{
-        recipient_email: r.email,
-        template: 'registration_denied',
-        body_data: { contact_name: r.name||r.contact||'Applicant', facility_name: facilityName },
-        status: 'pending',
-        attempts: 0,
-        created_at: new Date().toISOString()
+      sbFetch('/functions/v1/sbd-emails', { method:'POST', body:{
+        type: 'registration_denied',
+        data: { recipient_email: r.email, contact_name: r.name||r.contact||'Applicant', facility_name: facilityName }
       }}).catch(e=>console.warn('Denial email queue failed:', e));
     }
   }

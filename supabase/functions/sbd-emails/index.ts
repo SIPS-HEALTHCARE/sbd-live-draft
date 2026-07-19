@@ -94,6 +94,56 @@ serve(async (req) => {
       return new Response(JSON.stringify({ success: true, emailType: template, queued: emailsQueued }), { headers: corsHeaders });
     }
 
+    // ── Registration denied (admin action from the frontend, authenticated via user JWT) ──
+    // Moved server-side 2026-07-18 (P0-2): the browser previously inserted directly into
+    // sbd_email_queue, which is exactly the injection vector closed by
+    // 20260718120100_p0_2_sbd_email_queue_rls.sql (table is now service-role-only). The
+    // enqueue happens here under the service role, gated by a JWT + admin check.
+    if (payload.type === 'registration_denied') {
+      const authHeader = req.headers.get("Authorization") || '';
+      const jwt = authHeader.replace(/^Bearer\s+/i, '');
+      if (!jwt) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), { headers: corsHeaders, status: 403 });
+      }
+      const { data: { user }, error: authErr } = await supabaseAdmin.auth.getUser(jwt);
+      if (authErr || !user) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), { headers: corsHeaders, status: 403 });
+      }
+      // Authorize: caller must be an admin (SIPS fallback list, or a master_admin/staff_admin/
+      // admin row in sbd_portal_users). Matches sbd_is_admin()'s intent.
+      const callerEmail = (user.email || '').toLowerCase();
+      const adminEmails = (await getMasterAdminEmails(supabaseAdmin)).map(e => e.toLowerCase());
+      const { data: portalRows } = await supabaseAdmin
+        .from('sbd_portal_users')
+        .select('role')
+        .ilike('email', callerEmail);
+      const isAdmin =
+        adminEmails.includes(callerEmail) ||
+        (portalRows || []).some((r: { role?: string }) =>
+          ['master_admin', 'staff_admin', 'admin'].includes(r.role || ''));
+      if (!isAdmin) {
+        return new Response(JSON.stringify({ error: "Forbidden" }), { headers: corsHeaders, status: 403 });
+      }
+
+      const d = payload.data || {};
+      const recipient = d.recipient_email || d.email;
+      if (recipient) {
+        await supabaseAdmin.from('sbd_email_queue').insert({
+          recipient_email: recipient,
+          template: 'registration_denied',
+          body_data: {
+            contact_name: d.contact_name || d.applicant_name || 'Applicant',
+            facility_name: d.facility_name || 'your facility',
+          },
+          status: 'pending',
+          attempts: 0,
+          created_at: new Date().toISOString(),
+        });
+        emailsQueued.push(`registration_denied → ${recipient}`);
+      }
+      return new Response(JSON.stringify({ success: true, emailType: 'registration_denied', queued: emailsQueued }), { headers: corsHeaders });
+    }
+
     // ── Webhook events (DB triggers, verified via WEBHOOK_SECRET if configured) ──
     const WEBHOOK_SECRET = Deno.env.get("WEBHOOK_SECRET");
     if (WEBHOOK_SECRET) {

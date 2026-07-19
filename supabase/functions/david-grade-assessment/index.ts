@@ -169,6 +169,17 @@ serve(async (req) => {
     if (jwt !== serviceKey) {
       const { data: { user }, error: authErr } = await supabase.auth.getUser(jwt);
       if (authErr || !user) return json({ error: 'Unauthorized: invalid or expired session.' }, 401);
+      // Role gate (2026-07-18 security sweep): grading writes authoritative
+      // is_correct/partial_score/passed onto an attempt. Without a role check any
+      // authenticated user (incl. a candidate) could re-grade an arbitrary attempt_id
+      // (IDOR). Restrict user-JWT callers to assessor/admin roles; the service-key path
+      // above stays exempt. Role set mirrors sbd-record-assessment.
+      const { data: profile } = await supabase
+        .from('sbd_portal_users').select('role').eq('auth_uid', user.id).single();
+      const allowedRoles = ['master_admin', 'staff_admin', 'system_admin', 'admin', 'master', 'educator', 'preceptor', 'facility_admin'];
+      if (!profile || !allowedRoles.includes(profile.role)) {
+        return json({ error: `Unauthorized role (${profile?.role || 'none'}): grading is assessor/admin only.` }, 403);
+      }
     }
 
     const { attempt_id, dry_run = false } = await req.json();

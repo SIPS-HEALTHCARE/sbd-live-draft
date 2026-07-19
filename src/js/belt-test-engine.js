@@ -237,16 +237,25 @@
   // Returns the structured floor results + the complete condition set +
   // reason codes + remediation/watch flags for THAT belt. Never short-circuits
   // — collects every failure (spec §8.4 "Collecting All Conditions").
-  function evaluateAtBelt(kScore, sScore, belt) {
+  // scope (default 'both') gates which component's checks run. 'knowledge' or
+  // 'simulation' evaluate that half ALONE — the other half's floors/overall/
+  // criticals are treated as passed and produce no conditions — so a per-gate
+  // belt test scores in isolation (Ph.2b per-component). 'both' is byte-identical
+  // to the pre-split behavior (the combined path + the acceptance harness).
+  function evaluateAtBelt(kScore, sScore, belt, scope) {
+    scope = scope || 'both';
+    var doK = scope === 'both' || scope === 'knowledge';
+    var doS = scope === 'both' || scope === 'simulation';
+    kScore = kScore || {}; sScore = sScore || {};
     var cfg = BELT_TEST_CONFIG.belts[belt];
 
-    var kFloors = evaluateKnowledgeFloors(kScore.levelScores, belt);
-    var sFloors = evaluateSimulationFloors(sScore.levelAvgs, belt);
-    var indFloor = evaluateIndividualSim(sScore.perResponse, belt);
-    var crit = checkCriticals(kScore.perQuestion, sScore.perResponse, belt);
+    var kFloors = doK ? evaluateKnowledgeFloors(kScore.levelScores, belt) : { passed: true, failures: [] };
+    var sFloors = doS ? evaluateSimulationFloors(sScore.levelAvgs, belt) : { passed: true, failures: [] };
+    var indFloor = doS ? evaluateIndividualSim(sScore.perResponse, belt) : { passed: true, min: cfg.simIndividualMin, groups: [] };
+    var crit = checkCriticals(doK ? kScore.perQuestion : [], doS ? sScore.perResponse : [], belt);
 
-    var kOverallPassed = kScore.overall >= cfg.kOverallMin;
-    var sOverallPassed = sScore.overall >= cfg.simOverallMin;
+    var kOverallPassed = doK ? (kScore.overall >= cfg.kOverallMin) : true;
+    var sOverallPassed = doS ? (sScore.overall >= cfg.simOverallMin) : true;
 
     var conditions = [];
     var reasonCodes = [];
@@ -311,8 +320,8 @@
 
     return {
       belt: belt,
-      kFloorResults: floorRows(kScore.levelScores, cfg.kLevelFloors),
-      sFloorResults: floorRows(sScore.levelAvgs, cfg.simLevelFloors),
+      kFloorResults: doK ? floorRows(kScore.levelScores, cfg.kLevelFloors) : [],
+      sFloorResults: doS ? floorRows(sScore.levelAvgs, cfg.simLevelFloors) : [],
       kOverallPassed: kOverallPassed,
       sOverallPassed: sOverallPassed,
       individualFloorPassed: indFloor.passed,
@@ -366,7 +375,15 @@
     var questions = test.questions || {};
     var kScore = scoreKnowledge(questions.knowledge || [], mcqAnswers);
     var sScore = scoreSimulation(questions.simulation || [], simScores);
+    return composeResult(kScore, sScore, test);
+  }
 
+  // composeResult: the shared blend + suggested-belt + floors-at-suggested-belt
+  // core (spec §8). Both the single-pass scoreBeltTest AND the deferred
+  // combineComponents feed it kScore/sScore objects, so the combined
+  // recommendation is identical however the two halves were collected.
+  function composeResult(kScore, sScore, test) {
+    test = test || {};
     var blended = (kScore.overall * BELT_TEST_CONFIG.weights.knowledge) +
                   (sScore.overall * BELT_TEST_CONFIG.weights.simulation);
 
@@ -396,6 +413,7 @@
     var systemSuggestion = (outcome === 'REMEDIATION') ? 'REMEDIATION' : suggestedBelt;
 
     return {
+      component: 'combined',
       // Knowledge
       k_level_scores: roundLevels(kScore.levelScores),
       k_overall: round1(kScore.overall),
@@ -433,6 +451,86 @@
     };
   }
 
+  /* ---- Per-component scoring (Ph.2b — each gate stands on its own) --------- */
+  // Score ONE half in isolation against the target belt's floors, with its own
+  // pass/fail (outcome PASS | REMEDIATION). No blend, no suggested belt — the
+  // recommendation is deferred to combineComponents once both halves exist. Each
+  // row carries a component_detail blob (raw per-level/per-question scores) so
+  // the deferred combine is byte-identical to a single-pass score even across
+  // separate sessions.
+  function componentShell(component, belt) {
+    return {
+      component: component,
+      target_belt: belt || null,
+      k_level_scores: {}, k_overall: null, k_floor_results: [], k_overall_passed: null,
+      sim_responses: [], sim_level_avgs: {}, sim_overall: null,
+      sim_floor_results: [], sim_individual_min: null, sim_overall_passed: null,
+      blended_score: null, blended_passed: null, system_suggestion: null,
+      outcome: null, suggestion_reason_codes: [], conditions: [],
+      watch_flags: [], remediation_flags: [], component_detail: null,
+      final_belt: null, override_applied: false, override_by: null,
+      override_justification: null, override_at: null,
+      status: 'PENDING_REVIEW',
+      _engine_version: '2.0', _scored_at: new Date().toISOString()
+    };
+  }
+
+  function scoreComponentKnowledge(test, mcqAnswers) {
+    test = test || {};
+    var belt = test.target_belt;
+    var kScore = scoreKnowledge((test.questions || {}).knowledge || [], mcqAnswers);
+    var ev = evaluateAtBelt(kScore, {}, belt, 'knowledge');
+    var outcome = ev.allFloorsPass ? 'PASS' : 'REMEDIATION';
+    var reasonCodes = ev.reasonCodes.slice(); reasonCodes.unshift(outcome);
+    var row = componentShell('knowledge', belt);
+    row.k_level_scores = roundLevels(kScore.levelScores);
+    row.k_overall = round1(kScore.overall);
+    row.k_floor_results = ev.kFloorResults;
+    row.k_overall_passed = ev.kOverallPassed;
+    row.outcome = outcome;                     // per-gate pass/fail
+    row.suggestion_reason_codes = dedupe(reasonCodes);
+    row.conditions = ev.conditions;
+    row.remediation_flags = ev.remediationFlags;
+    row.watch_flags = buildWatchFlags(kScore, { levelAvgs: {} }, belt); // knowledge watch only
+    row.component_detail = { levelScores: kScore.levelScores, overall: kScore.overall, perQuestion: kScore.perQuestion };
+    return row;
+  }
+
+  function scoreComponentSimulation(test, simScores) {
+    test = test || {};
+    var belt = test.target_belt;
+    var sScore = scoreSimulation((test.questions || {}).simulation || [], simScores);
+    var ev = evaluateAtBelt({}, sScore, belt, 'simulation');
+    var outcome = ev.allFloorsPass ? 'PASS' : 'REMEDIATION';
+    var reasonCodes = ev.reasonCodes.slice(); reasonCodes.unshift(outcome);
+    var row = componentShell('simulation', belt);
+    row.sim_responses = sScore.perResponse.map(function (r) { return { question_id: r.id, level: r.level, score: r.score }; });
+    row.sim_level_avgs = roundLevels(sScore.levelAvgs);
+    row.sim_overall = round1(sScore.overall);
+    row.sim_floor_results = ev.sFloorResults;
+    row.sim_individual_min = round1(sScore.individualMin);
+    row.sim_overall_passed = ev.sOverallPassed;
+    row.outcome = outcome;                     // per-gate pass/fail
+    row.suggestion_reason_codes = dedupe(reasonCodes);
+    row.conditions = ev.conditions;
+    row.remediation_flags = ev.remediationFlags;
+    row.watch_flags = buildWatchFlags({ levelScores: {} }, sScore, belt); // sim watch only
+    row.component_detail = { levelAvgs: sScore.levelAvgs, overall: sScore.overall, individualMin: sScore.individualMin, perResponse: sScore.perResponse };
+    return row;
+  }
+
+  // combineComponents: the deferred blended recommendation — run once BOTH
+  // component rows exist. Reconstructs the kScore/sScore objects from the two
+  // component_detail blobs and feeds composeResult, so the result equals what a
+  // single-pass scoreBeltTest would have produced. Returns a component='combined'
+  // row (blended_*, system_suggestion, outcome PASS/CONDITIONAL_PASS/REMEDIATION).
+  function combineComponents(kDetail, sDetail, targetBelt) {
+    kDetail = kDetail || {}; sDetail = sDetail || {};
+    var kScore = { levelScores: kDetail.levelScores || {}, overall: kDetail.overall || 0, perQuestion: kDetail.perQuestion || [] };
+    var sScore = { levelAvgs: sDetail.levelAvgs || {}, overall: sDetail.overall || 0, individualMin: sDetail.individualMin || 0, perResponse: sDetail.perResponse || [] };
+    return composeResult(kScore, sScore, { target_belt: targetBelt });
+  }
+
   function roundLevels(obj) {
     var out = {};
     LEVELS.forEach(function (L) { out['L' + L] = obj[L] == null ? null : round1(obj[L]); });
@@ -458,6 +556,10 @@
     suggestBeltFromBlended: suggestBeltFromBlended,
     evaluateAtBelt: evaluateAtBelt,
     buildWatchFlags: buildWatchFlags,
+    composeResult: composeResult,
+    scoreComponentKnowledge: scoreComponentKnowledge,
+    scoreComponentSimulation: scoreComponentSimulation,
+    combineComponents: combineComponents,
     scoreBeltTest: scoreBeltTest
   };
 

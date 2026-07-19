@@ -77,6 +77,40 @@ serve(async (req) => {
   }
 
   try {
+    // ── SECURITY GUARD (2026-07-18 security sweep) ─────────────────────────────
+    // This is a TEST-DATA seeder: it creates real, loginable auth users — including
+    // two master_admin accounts (agent01/agent02) with a shared hardcoded password —
+    // plus fake systems/facilities. Before this guard it had ZERO auth: any holder of
+    // the public anon key could POST it and mint prod master-admin accounts, directly
+    // violating the CLAUDE.md CRITICAL DIRECTIVE ("NEVER inject demo data / fake
+    // accounts into prod"). Fail closed on BOTH conditions:
+    //   (1) an explicit opt-in flag ALLOW_SEED=true — never set in production, and
+    //   (2) the caller is an authenticated master_admin.
+    // Preferred remediation is still to DELETE this function from the prod project
+    // (supabase functions delete sbd-matrix-seeder); this guard makes it safe if kept.
+    const jsonHeaders = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' };
+    if (Deno.env.get('ALLOW_SEED') !== 'true') {
+      return new Response(JSON.stringify({ error: 'Seeder disabled. Set ALLOW_SEED=true in a non-prod environment only.' }),
+        { status: 403, headers: jsonHeaders });
+    }
+    const authClient = createClient(
+      Deno.env.get('SUPABASE_URL') || '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+    );
+    const seedJwt = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+    const { data: { user: seedUser } = { user: null } } = seedJwt
+      ? await authClient.auth.getUser(seedJwt)
+      : { data: { user: null } };
+    if (!seedUser) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: jsonHeaders });
+    }
+    const { data: seedProfile } = await authClient
+      .from('sbd_portal_users').select('role').eq('auth_uid', seedUser.id).single();
+    if (!seedProfile || seedProfile.role !== 'master_admin') {
+      return new Response(JSON.stringify({ error: 'Forbidden: master_admin only.' }), { status: 403, headers: jsonHeaders });
+    }
+    // ───────────────────────────────────────────────────────────────────────────
+
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') || '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
