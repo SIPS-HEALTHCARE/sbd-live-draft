@@ -196,6 +196,40 @@ serve(async (req) => {
             });
         }
 
+        // ── Anti-abuse rate limit (per client IP) ─────────────────────────────────────
+        // This endpoint stays anon-callable ON PURPOSE (the auth note above): a hard JWT check
+        // 401s candidates whose session went stale mid-assessment and drops the whole batch to
+        // the keyword fallback. The remaining risk is LLM-cost abuse — the privileged call is
+        // OpenRouter on a server-side key. Throttle by source IP: a real candidate (a few dozen
+        // sims/session) never hits the ceiling; a scripted abuser does. DB-backed (fixed window)
+        // so it holds across Fluid Compute instances. FAIL-OPEN: a limiter error must never deny
+        // a legitimate candidate a grade (mirrors the #14 metering philosophy).
+        const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+        const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+        const admin = (supabaseUrl && serviceKey) ? createClient(supabaseUrl, serviceKey) : null;
+
+        const clientIp = (req.headers.get('x-forwarded-for') || '').split(',')[0].trim()
+            || (req.headers.get('cf-connecting-ip') || '')
+            || 'unknown';
+        if (admin && clientIp !== 'unknown') {
+            try {
+                const [perMin, perHour] = await Promise.all([
+                    admin.rpc('sbd_rate_limit_check', { p_key: `score:min:${clientIp}`, p_limit: 60, p_window_seconds: 60 }),
+                    admin.rpc('sbd_rate_limit_check', { p_key: `score:hr:${clientIp}`,  p_limit: 600, p_window_seconds: 3600 }),
+                ]);
+                // Blocked only on a definitive `false` from either window; any error fails open.
+                const blocked = perMin.data === false || perHour.data === false;
+                if (blocked) {
+                    return new Response(JSON.stringify({ error: 'Rate limit exceeded. Please wait a moment and try again.' }), {
+                        status: 429,
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    });
+                }
+            } catch (rlErr: any) {
+                console.warn('[SBD_SCORE] rate-limit check errored (failing open):', rlErr?.message || rlErr);
+            }
+        }
+
         // facility_id + user_id are for #14 cost attribution only (not a security boundary):
         // the assessment usage row is written server-side below. Both are optional so any
         // existing {question, answer} caller keeps working (the row just logs 'unknown').
@@ -276,10 +310,8 @@ No markdown, no preamble.`;
         // candidate's grade. Chat readers filter source='chat' so they are unchanged.
         try {
             const usage = data.usage || {};
-            const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
-            const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-            if (supabaseUrl && serviceKey && (facility_id || user_id)) {
-                const admin = createClient(supabaseUrl, serviceKey);
+            // Reuse the service-role client created for the rate-limit check above.
+            if (admin && (facility_id || user_id)) {
                 admin.from('david_usage_logs').insert({
                     facility_id: facility_id || 'assessment-unknown',
                     user_id: user_id || '00000000-0000-0000-0000-000000000000',
