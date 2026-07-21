@@ -62,7 +62,7 @@ create table if not exists public.preceptor_assignments (
   id           uuid primary key default gen_random_uuid(),
   staff_id     uuid not null,
   module_id    text not null,
-  assigned_by  uuid,
+  assigned_by  text,          -- assigner's display name (e.g. 'J. Jacobs'), matches foundations_assignments.assigned_by
   type         text not null default 'certification',
   trigger      text,
   assigned_date date not null default current_date,
