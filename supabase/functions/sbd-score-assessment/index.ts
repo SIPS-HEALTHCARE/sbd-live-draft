@@ -277,8 +277,15 @@ No markdown, no preamble.`;
             const call = await callOpenRouter({
                 apiKey: openRouterKey,
                 models: MODEL_CHAINS.assessmentScorer,
+                // #16 prompt caching: mark the stable evaluator rubric as an ephemeral cache
+                // breakpoint so grading many candidates against the same rubric reads it from cache
+                // (only the per-candidate `userTask` differs). NOTE: EVALUATOR_SYSTEM_PROMPT_V2 is
+                // ~950 tokens, below Haiku 4.5's 4,096-token minimum cacheable length, so today this
+                // is a no-op the provider silently ignores — it becomes effective if the rubric grows
+                // past the threshold (or the scorer moves to a model with a lower minimum). Harmless
+                // and correct to send now so the plumbing is uniform with david-chat.
                 messages: [
-                    { role: 'system', content: EVALUATOR_SYSTEM_PROMPT_V2 },
+                    { role: 'system', content: [{ type: 'text', text: EVALUATOR_SYSTEM_PROMPT_V2, cache_control: { type: 'ephemeral' } }] },
                     { role: 'user', content: userTask }
                 ],
                 maxTokens: keyAware ? 240 : 180,
@@ -319,6 +326,10 @@ No markdown, no preamble.`;
                     completion_tokens: usage.completion_tokens || 0,
                     cost: typeof usage.cost === 'number' ? usage.cost : 0,
                     source: 'assessment',
+                    // #16: cache split (subset of prompt_tokens). 0 today — the rubric is below the
+                    // model's minimum cacheable length; see the messages[] note above.
+                    cached_tokens: usage.prompt_tokens_details?.cached_tokens ?? usage.cache_read_input_tokens ?? 0,
+                    cache_creation_tokens: usage.prompt_tokens_details?.cache_write_tokens ?? usage.cache_creation_input_tokens ?? 0,
                 }).then(({ error }: { error: any }) => {
                     if (error) console.warn('[SBD_SCORE] assessment usage log skipped:', error.message);
                 });

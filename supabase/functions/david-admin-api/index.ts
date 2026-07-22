@@ -249,23 +249,34 @@ serve(async (req) => {
       // (The david_analytics_summary view above is already scoped to source='chat'.)
       const { data: mtdRows, error: mtdErr } = await adminSupabase
         .from('david_usage_logs')
-        .select('facility_id, prompt_tokens, completion_tokens, cost')
+        .select('facility_id, prompt_tokens, completion_tokens, cost, cached_tokens, cache_creation_tokens')
         .eq('source', 'chat')
         .gte('created_at', monthStart.toISOString());
       if (mtdErr) throw mtdErr;
 
       const mtd: Record<string, { tokens: number; cost: number }> = {};
+      // #16: network-wide prompt-cache split (chat, month-to-date). `cached` = input tokens read
+      // from cache; `creation` = input tokens written on a miss; `uncached` = the remaining input.
+      // These are a subset of prompt_tokens, so uncached is derived, not summed. Surfaced by the
+      // Command Center's Prompt Cache panel to show how much input is being served from cache.
+      const cacheSavings = { promptTokens: 0, cached: 0, creation: 0, uncached: 0, completionTokens: 0, cost: 0 };
       (mtdRows || []).forEach((r: any) => {
         const k = r.facility_id;
         if (!mtd[k]) mtd[k] = { tokens: 0, cost: 0 };
         mtd[k].tokens += (r.prompt_tokens || 0) + (r.completion_tokens || 0);
         mtd[k].cost += Number(r.cost || 0);
+        cacheSavings.promptTokens += r.prompt_tokens || 0;
+        cacheSavings.completionTokens += r.completion_tokens || 0;
+        cacheSavings.cached += r.cached_tokens || 0;
+        cacheSavings.creation += r.cache_creation_tokens || 0;
+        cacheSavings.cost += Number(r.cost || 0);
       });
+      cacheSavings.uncached = Math.max(0, cacheSavings.promptTokens - cacheSavings.cached - cacheSavings.creation);
 
       // #47: surface the models currently serving David chat + assessment grading so
       // the Command Center can show which model is live (a retired slug once broke
       // grading unnoticed). Slugs come from the inlined MODELS constant above.
-      return new Response(JSON.stringify({ success: true, data: { analytics, access, mtd, models: MODELS } }), {
+      return new Response(JSON.stringify({ success: true, data: { analytics, access, mtd, cacheSavings, models: MODELS } }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
