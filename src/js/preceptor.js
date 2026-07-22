@@ -1671,17 +1671,11 @@ const PRC_LEVEL_GATES = [
      "title": "Placement review and module assignment",
      "scenario": "A new learner has just been placed at White Belt. Their weak domains are packaging (34%) and sterilization (48%). Their profile is Sentinel. They are aiming for Yellow. Build their initial module plan and explain your reasoning.",
      "scoringGuide": [
-      "| Pts",
-      "Reads the profile (Sentinel) and plans a clear, standard-cited, step-based approach",
-      "| 20",
-      "Sequences the worst gap first: fm-05 Packaging, then fm-06 Sterilization",
-      "| 25",
-      "Adds the Yellow-required modules (e.g. fm-09 Quality) and the Yellow instrument module",
-      "| 20",
-      "Aims the sequence at the Yellow gate, with practice to 90% before assessment",
-      "| 20",
-      "Frames placement as a starting point, not a judgment",
-      "| 15"
+      "Reads the profile (Sentinel) and plans a clear, standard-cited, step-based approach — 20",
+      "Sequences the worst gap first: fm-05 Packaging, then fm-06 Sterilization — 25",
+      "Adds the Yellow-required modules (e.g. fm-09 Quality) and the Yellow instrument module — 20",
+      "Aims the sequence at the Yellow gate, with practice to 90% before assessment — 20",
+      "Frames placement as a starting point, not a judgment — 15"
      ]
     },
     {
@@ -1689,17 +1683,11 @@ const PRC_LEVEL_GATES = [
      "title": "Stuck-learner intervention",
      "scenario": "David flags a learner stuck five days in a module, two failed knowledge attempts, and now inactive for two days. Profile: Steward. Conduct the intervention (role-played by the assessor).",
      "scoringGuide": [
-      "| Pts",
-      "Opens with empathy and the person (Steward), not pressure",
-      "| 20",
-      "Diagnoses the real barrier together, using the domain data",
-      "| 20",
-      "Correctly identifies this as confidence/discouragement, not a knowledge gap",
-      "| 20",
-      "Shrinks the problem to one small, winnable next step",
-      "| 20",
-      "Closes on a concrete commitment and a scheduled follow-up",
-      "| 20"
+      "Opens with empathy and the person (Steward), not pressure — 20",
+      "Diagnoses the real barrier together, using the domain data — 20",
+      "Correctly identifies this as confidence/discouragement, not a knowledge gap — 20",
+      "Shrinks the problem to one small, winnable next step — 20",
+      "Closes on a concrete commitment and a scheduled follow-up — 20"
      ]
     },
     {
@@ -1707,15 +1695,10 @@ const PRC_LEVEL_GATES = [
      "title": "Assessment-readiness determination",
      "scenario": "A learner insists they are “not ready” for their Yellow assessment. Their practice scores have been at 92% knowledge and 91% simulation for two weeks. Determine and communicate readiness.",
      "scoringGuide": [
-      "| Pts",
-      "Uses the 90% practice threshold as the objective readiness signal, not gut feel",
-      "| 30",
-      "Correctly concludes the learner IS ready",
-      "| 20",
-      "Recognizes the block is confidence, and applies the confidence-boost approach",
-      "| 25",
-      "Makes scheduling easy and reframes the risk of the gate",
-      "| 25"
+      "Uses the 90% practice threshold as the objective readiness signal, not gut feel — 30",
+      "Correctly concludes the learner IS ready — 20",
+      "Recognizes the block is confidence, and applies the confidence-boost approach — 25",
+      "Makes scheduling easy and reframes the risk of the gate — 25"
      ]
     },
     {
@@ -1723,17 +1706,11 @@ const PRC_LEVEL_GATES = [
      "title": "Gate 3 observation planning",
      "scenario": "You are about to run a Gate 3 module observation for a learner you have coached closely and like. Walk through your plan for all three phases, before, during, after.",
      "scoringGuide": [
-      "| Pts",
-      "Before: reviews brief, sets scenario, opens rubric, sets expectations",
-      "| 20",
-      "During: assesses summatively, silent, no coaching or rescue",
-      "| 25",
-      "Names and guards against the halo effect explicitly",
-      "| 20",
-      "Applies safety-critical overrides correctly",
-      "| 15",
-      "After: SBI feedback opening with a strength, immediate documentation",
-      "| 20"
+      "Before: reviews brief, sets scenario, opens rubric, sets expectations — 20",
+      "During: assesses summatively, silent, no coaching or rescue — 25",
+      "Names and guards against the halo effect explicitly — 20",
+      "Applies safety-critical overrides correctly — 15",
+      "After: SBI feedback opening with a strength, immediate documentation — 20"
      ]
     },
     {
@@ -1741,22 +1718,38 @@ const PRC_LEVEL_GATES = [
      "title": "Leadership reporting",
      "scenario": "Your Director asks, with no warning, “How is the department doing?” You have this month's David data. Deliver a two-minute answer.",
      "scoringGuide": [
-      "| Pts",
-      "Frames outcomes (competency, advancement), not activity",
-      "| 30",
-      "Shows efficiency: learners carried per facilitator hour",
-      "| 20",
-      "Names the risks honestly, with a plan for each",
-      "| 30",
-      "Concise and something leadership can act on",
-      "| 20"
+      "Frames outcomes (competency, advancement), not activity — 30",
+      "Shows efficiency: learners carried per facilitator hour — 20",
+      "Names the risks honestly, with a plan for each — 30",
+      "Concise and something leadership can act on — 20"
      ]
     }
    ]
   },
   "gate3": {
    "passPct": 85,
-   "rubric": [],
+   "rubric": [
+    {
+     "category": "David OG proficiency",
+     "weight": 20
+    },
+    {
+     "category": "Coaching effectiveness",
+     "weight": 20
+    },
+    {
+     "category": "Observation technique",
+     "weight": 25
+    },
+    {
+     "category": "Assessment accuracy",
+     "weight": 20
+    },
+    {
+     "category": "Operational excellence",
+     "weight": 15
+    }
+   ],
    "autoFail": [
     "coach during a summative gate, commit a halo-effect pass of work below standard, miss a safety-critical override, or falsify or omit required documentation"
    ]
@@ -1769,11 +1762,69 @@ const PRC_LEVEL_GATES = [
   },
   "gate2": {
    "passPct": 85,
-   "simulations": []
+   "simulations": [
+    {
+     "n": 1,
+     "title": "The network read",
+     "scenario": "Monday's network view: Facility A is thriving, Facility B's advancement has stalled, Facility C's new champion just passed a learner on a Gate 3 you suspect was soft. Prioritize your week across the three.",
+     "scoringGuide": [
+      "Prioritizes the suspected soft pass at C first, it is a standard-integrity risk — 30",
+      "Reads B's stall as facility-specific and plans a root-cause visit or review — 20",
+      "Leaves thriving Facility A to run, allocating attention by need — 20",
+      "Frames the week around holding the standard while developing the network — 30"
+     ]
+    },
+    {
+     "n": 2,
+     "title": "The champion audit",
+     "scenario": "You pull Facility C's champion's recent observations. One clearly passed a learner who skipped a safety-critical step. Handle it.",
+     "scoringGuide": [
+      "Recognizes this as a safety-critical miss that should have been an automatic fail — 30",
+      "Coaches the champion with SBI, honestly, without destroying the relationship — 25",
+      "Re-audits to confirm recalibration rather than assuming it — 25",
+      "Does not simply revoke or ignore; develops the champion while protecting the standard — 20"
+     ]
+    },
+    {
+     "n": 3,
+     "title": "The leadership ask",
+     "scenario": "Midweek, the VP of Perioperative Services asks for a state-of-the-network briefing by end of day.",
+     "scoringGuide": [
+      "Uses David to assemble outcomes across all three facilities quickly — 20",
+      "Frames outcomes and efficiency, not activity — 30",
+      "Names the C standard-integrity risk honestly, with the plan to fix it — 30",
+      "Gives leadership something to act on, concisely — 20"
+     ]
+    },
+    {
+     "n": 4,
+     "title": "The resistance flare",
+     "scenario": "A senior tech at Facility B publicly declares the program pointless in front of the team. Respond in the moment and afterward.",
+     "scoringGuide": [
+      "Does not argue the program publicly or escalate the confrontation — 25",
+      "Reads the fear under the resistance and addresses status and legacy — 30",
+      "Follows up privately to attempt to convert the veteran into a champion — 25",
+      "Protects team morale and the standard simultaneously — 20"
+     ]
+    }
+   ]
   },
   "gate3": {
    "passPct": 90,
-   "rubric": [],
+   "rubric": [
+    {
+     "category": "Blue Belt observation",
+     "weight": 35
+    },
+    {
+     "category": "Coaching a facilitator",
+     "weight": 30
+    },
+    {
+     "category": "Program design defense",
+     "weight": 35
+    }
+   ],
    "autoFail": [
     "pass a Blue Belt observation with a safety-critical miss (halo effect at the leadership level)",
     "coach a facilitator toward lowering the standard",
@@ -1788,12 +1839,49 @@ const PRC_LEVEL_GATES = [
   },
   "gate2": {
    "passPct": 90,
-   "simulations": []
+   "simulations": [
+    {
+     "n": 1,
+     "title": "Event 1",
+     "scenario": "Design and deliver a training session that develops a specific facilitator competency in a real or role-played new facilitator, then assess whether they reached it. You will be observed on both the teaching and the assessment, and asked to justify your judgments afterward.",
+     "scoringGuide": [
+      "Designs backward from a clear target competency — 15",
+      "Uses teach, model, practice, reflect, not lecture — 20",
+      "Beats the expert's curse: surfaces the invisible steps for the learner — 15",
+      "Assesses the facilitator against the standard, not personal style — 20",
+      "Correctly identifies whether the competency was reached, with evidence — 20",
+      "Gives developmental feedback (SBI), honest and motivating — 10"
+     ]
+    }
+   ]
   },
   "gate3": {
    "passPct": 95,
-   "rubric": [],
-   "autoFail": []
+   "rubric": [
+    {
+     "category": "Developing facilitators",
+     "weight": 25
+    },
+    {
+     "category": "Leading at scale",
+     "weight": 25
+    },
+    {
+     "category": "Standard & data stewardship",
+     "weight": 20
+    },
+    {
+     "category": "Improvement study",
+     "weight": 15
+    },
+    {
+     "category": "Capstone defense",
+     "weight": 15
+    }
+   ],
+   "autoFail": [
+    "certify a facilitator who should have failed, bend or configure away any part of the standard, falsify or inflate study or program data, or defend a decision that traded rigor for reach"
+   ]
   }
  }
 ];
@@ -1846,6 +1934,48 @@ function getPrcModuleGates(sid,mid){
  return p||{g1:{status:'locked',score:0,attempts:[]},g2:{status:'locked',score:0,attempts:[]},g3:{status:'locked',items:[]},complete:false};
 }
 function isPrcModuleComplete(sid,mid){const p=getPrcModuleGates(sid,mid);return p.complete===true;}
+
+// ── Ph3: master-admin access control ──────────────────────────────────────────
+// An explicit preceptor_access row (granted|revoked|default) overrides belt in both
+// directions. Absence of a row = 'default' = belt-based (Educator/Preceptor 02B is a
+// Green-Belt-tier track, so default eligibility = Green Belt or above, beltIdx>=2).
+function prcAccessRow(staffId){ return (DB.preceptorAccess||[]).find(r=>r.staffId===staffId)||null; }
+// Display state: 'granted' | 'revoked' | 'default' (no row -> 'default').
+function prcAccessState(staffId){ const r=prcAccessRow(staffId); return (r&&r.state)||'default'; }
+// Reads the access record FIRST, belt SECOND. revoked -> false; granted -> true (any
+// belt); default/no-row -> belt eligibility (Green+, the existing 02B gate).
+function prcHasAccess(staffId){
+ const st=prcAccessState(staffId);
+ if(st==='revoked') return false;
+ if(st==='granted') return true;
+ const s=(typeof getStaff==='function')?getStaff(staffId):(DB.staff||[]).find(x=>x.id===staffId);
+ return !!(s && typeof beltIdx==='function' && beltIdx(s.belt)>=2);
+}
+// Ph3 L2/L3 prerequisite: a level unlocks only when the PRIOR level is fully complete
+// (every ASSIGNED module of that level complete, and at least one assigned). Uses the
+// existing prcSummaryForStaff byLevel rollup ({level:{a,c}}). Level 1 is always open.
+function prcLevelUnlocked(staffId,level){
+ if(!level||level<=1) return true;
+ const bl=prcSummaryForStaff(staffId).byLevel[level-1];
+ return !!(bl && bl.a>0 && bl.c===bl.a);
+}
+// Reason a module cannot be assigned (access + level prereq), or '' if assignable.
+function prcAssignBlockReason(staffId,mid){
+ if(!prcHasAccess(staffId)) return (prcAccessState(staffId)==='revoked'?'Preceptor access is revoked for this staff member':'Not eligible: reach Green Belt or have a Master Admin grant preceptor access');
+ const m=PRECEPTOR_MODULES.find(x=>x.id===mid);
+ if(m && !prcLevelUnlocked(staffId,m.level)) return 'Level '+m.level+' is locked until all Level '+(m.level-1)+' modules are complete';
+ return '';
+}
+// Gate-3 confirmer qualification (Ph3): master_admin/staff_admin/assessor always
+// qualify; any other confirmer must themself hold a completed preceptor pathway
+// (any complete preceptor module — a pragmatic proxy for certification).
+function prcConfirmerQualified(user){
+ if(!user) return false;
+ if(['master_admin','staff_admin','assessor'].indexOf(user.role)>=0) return true;
+ const sid=user.sid||user.staffId||user.id;
+ if(!sid) return false;
+ return (DB.preceptorProgress||[]).some(p=>p.staffId===sid&&p.complete===true);
+}
 
 // ── Preceptor Certification Reporting Helpers (Ph.2) ─────────────────────────
 // Pure, READ-ONLY aggregation over the in-memory preceptor arrays, mirroring the
@@ -2033,11 +2163,53 @@ function _prcSaveProgress(p){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeo
 function _prcSaveAssignment(a){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.createPreceptorAssignment){SB.createPreceptorAssignment({staff_id:a.staffId,module_id:a.moduleId,assigned_by:a.assignedBy||null,type:a.type,trigger:a.trigger,facility_id:a.facilityId||null,assigned_date:a.assignedDate,status:a.status}).catch(e=>{if(typeof handleSyncError==='function')handleSyncError(e,'Preceptor assignment');else console.warn('[prc] assignment sync',e&&e.message);});}}catch(e){console.warn('[prc] assignment sync',e);}}
 function _prcSaveAssignmentStatus(sid,mid,status){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.updatePreceptorAssignmentStatus){SB.updatePreceptorAssignmentStatus(sid,mid,status).catch(e=>{if(typeof handleSyncError==='function')handleSyncError(e,'Preceptor status');else console.warn('[prc] status sync',e&&e.message);});}}catch(e){}}
 
+// Ph3: persist a preceptor_access row (guarded by IS_LIVE + SB, master-admin-gated at
+// the RLS layer). Mirrors _prcSaveAssignment; on_conflict=staff_id merge-duplicates.
+function _prcSaveAccess(row){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.upsertPreceptorAccess){SB.upsertPreceptorAccess(row).catch(e=>{if(typeof handleSyncError==='function')handleSyncError(e,'Preceptor access');else console.warn('[prc] access sync',e&&e.message);});}}catch(e){console.warn('[prc] access sync',e);}}
+// Master-admin toggle handler. state = 'granted' | 'revoked' | 'default'. Prompts for a
+// reason on grant/revoke, updates DB.preceptorAccess in memory, and persists. NOTHING is
+// deleted — revoke only sets state, so a later re-grant restores progress untouched.
+function prcSetAccess(staffId,state){
+ if(!(typeof ST!=='undefined'&&ST.user&&ST.user.role==='master_admin')){if(typeof toast==='function')toast('Only the Master Admin can change preceptor access','err');return;}
+ if(['granted','revoked','default'].indexOf(state)<0) return;
+ let reason='';
+ if(state==='granted'||state==='revoked'){
+   const r=prompt(state==='granted'?'Reason for granting preceptor access (belt override):':'Reason for revoking preceptor access:','');
+   if(r===null) return; // cancelled
+   reason=String(r).trim();
+ }
+ if(!DB.preceptorAccess) DB.preceptorAccess=[];
+ const now=new Date().toISOString();
+ const by=(ST.user&&ST.user.name)||null;
+ let row=DB.preceptorAccess.find(x=>x.staffId===staffId);
+ if(!row){row={staffId:staffId};DB.preceptorAccess.push(row);}
+ row.state=state; row.grantedBy=by; row.reason=reason||null; row.grantedAt=now; row.updatedAt=now;
+ _prcSaveAccess({staff_id:staffId,state:state,granted_by:by,reason:reason||null,granted_at:now,updated_at:now});
+ if(typeof toast==='function') toast('Preceptor access '+(state==='granted'?'granted':state==='revoked'?'revoked — progress preserved':'reset to default (belt-based)'), state==='revoked'?'err':'ok');
+ if(typeof renderHProfile==='function') renderHProfile(staffId,'admin');
+}
+// Renders the master-admin access control (state + Grant/Revoke/Reset). Called from
+// ui-views.js openAdminProfile surface (master-admin gated there); domain logic lives here (B7).
+function prcAccessControlHTML(staffId,context){
+ const st=prcAccessState(staffId);
+ const lbl=st==='granted'?'Granted':st==='revoked'?'Revoked':'Default (belt-based)';
+ const col=st==='granted'?'#4ade80':st==='revoked'?'#f87171':'var(--txt2)';
+ const btn=(s,txt,extra)=>'<button class="btn btn-ghost btn-xs"'+(st===s?' disabled style="opacity:.45"':(extra?' style="'+extra+'"':''))+' onclick="prcSetAccess(\''+staffId+'\',\''+s+'\')">'+txt+'</button>';
+ return '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;border:1px solid var(--bdr);border-radius:8px;padding:5px 9px" title="Master-admin preceptor curriculum access (overrides belt)">'
+   +'<svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--gold)"><path d="M10 2l6 3v5c0 4-3 6-6 8-3-2-6-4-6-8V5l6-3z"/></svg>'
+   +'<span style="font-size:11px;color:var(--txt3)">Preceptor: <b style="color:'+col+'">'+lbl+'</b></span>'
+   +btn('granted','Grant','border-color:var(--gold-bd);color:var(--gold)')
+   +btn('revoked','Revoke','border-color:rgba(239,68,68,.4);color:#f87171')
+   +btn('default','Reset')
+   +'</div>';
+}
+
 // Returns true if a new assignment was created, false if skipped as a duplicate
-// (UNIQUE(staff_id,module_id)). Mirrors foundations.js assignModule.
+// (UNIQUE(staff_id,module_id)) or blocked by access/level prereq (Ph3). Mirrors foundations.js assignModule.
 function assignPrcModule(sid,mid,by,type,trigger){
  if(!DB.preceptorAssignments) DB.preceptorAssignments=[];
  if(DB.preceptorAssignments.find(a=>a.staffId===sid&&a.moduleId===mid)) return false;
+ if(prcAssignBlockReason(sid,mid)) return false; // Ph3: access + L2/L3 prerequisite guard
  const _s=(typeof getStaff==='function')?getStaff(sid):(DB.staff||[]).find(x=>x.id===sid);
  const _a={id:'pa-'+Date.now()+'-'+Math.random().toString(36).slice(2,6),staffId:sid,moduleId:mid,assignedBy:by,type:type||'certification',trigger:trigger||null,facilityId:_s?_s.fid:null,assignedDate:new Date().toISOString().slice(0,10),status:'assigned'};
  DB.preceptorAssignments.push(_a);
@@ -2067,6 +2239,13 @@ function savePrcGateScore(sid,mid,gate,score){
 function markPrcG3Item(sid,mid,itemId,confirmed,by){
  let p=(DB.preceptorProgress||[]).find(x=>x.staffId===sid&&x.moduleId===mid);if(!p) return;
  const m=PRECEPTOR_MODULES.find(x=>x.id===mid);if(!m) return;
+ // Ph3: a preceptor candidate's Gate-3 must be confirmed by someone qualified (a certified
+ // preceptor or above). Revoking (confirmed=false) stays open to any leader. Belt-confirmation
+ // authority elsewhere is unaffected — this guard is preceptor-curriculum-specific.
+ if(confirmed && !prcConfirmerQualified(typeof ST!=='undefined'?ST.user:null)){
+   if(typeof toast==='function') toast('Only a certified preceptor (or Master Admin / Assessor) can confirm this observation capstone.','err');
+   return;
+ }
  const thr=prcKThresh(m);
  // Capstone cannot be CONFIRMED until 3 Knowledge passes are in (revoking stays
  // allowed; complete modules exempt). Mirrors Foundations' observation lock.
@@ -2099,9 +2278,11 @@ function renderSPreceptor(){
  const s=getStaff(ST.staffId);if(!s){el.innerHTML='<div class="empty-state"><div class="empty-ttl">No Staff Record</div></div>';return;}
  const assignments=getPreceptorAssignments(s.id);
  const totalA=assignments.length,totalC=assignments.filter(a=>a.status==='completed').length;
+ const prcRevoked=prcAccessState(s.id)==='revoked'; // Ph3: revoke preserves progress but locks the reader
  let html='<div class="card mb16"><div class="card-hd"><div class="card-ttl">Preceptor Certification</div>';
  if(totalA>0) html+='<span class="pill p-gold">'+totalC+'/'+totalA+' completed</span>';
  html+='</div><div class="card-body"><p style="font-size:13px;color:#94a3b8;line-height:1.6;margin:0 0 12px">The facilitator certification pathway: 15 modules across three levels (Facilitator, Advanced, Master). Each module has a scored Knowledge gate; Simulation is assessor-administered and Observation is leader-confirmed. Modules are activated by your educator or manager.</p>';
+ if(prcRevoked) html+='<div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:var(--r);padding:12px 16px;display:flex;align-items:center;gap:10px"><svg viewBox="0 0 20 20" width="18" height="18" fill="none" style="flex-shrink:0"><rect x="4" y="8" width="12" height="8" rx="2" stroke="#f87171" stroke-width="1.4"/><path d="M7 8V6a3 3 0 016 0v2" stroke="#f87171" stroke-width="1.4" stroke-linecap="round"/></svg><span style="font-size:13px;color:#f87171;font-weight:600">Preceptor access revoked — your progress is preserved. Modules are locked until a Master Admin restores access.</span></div>';
  if(totalA>0&&totalC===totalA){html+='<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--r);padding:12px 16px;display:flex;align-items:center;gap:10px"><svg viewBox="0 0 20 20" width="20" height="20" fill="none"><circle cx="10" cy="10" r="9" stroke="#4ade80" stroke-width="1.5"/><path d="M6 10.5l2.5 2.5L14 7.5" stroke="#4ade80" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span style="font-size:13px;color:#4ade80;font-weight:600">All assigned modules completed</span></div>';}
  html+='</div></div>';
  let curLevel=null;
@@ -2112,7 +2293,7 @@ function renderSPreceptor(){
    if(assigned){html+='<div style="display:flex;gap:4px;align-items:center" title="G1: Knowledge | G2: Simulation (assessor) | G3: Observation">'+fndGateBadge(gates.g1.status)+fndGateBadge(gates.g2.status)+fndGateBadge(gates.g3.status)+'<span style="margin-left:6px">'+prcPassChip(m,gates)+'</span></div>';}
    else{html+='<span class="pill p-muted" style="opacity:.5"><svg viewBox="0 0 14 14" width="11" height="11" fill="none" style="margin-right:3px;vertical-align:-1px"><rect x="1" y="5" width="12" height="8" rx="2" stroke="#64748b" stroke-width="1.3"/><path d="M4 5V4a3 3 0 016 0v1" stroke="#64748b" stroke-width="1.3" stroke-linecap="round"/></svg>Locked</span>';}
    html+='</div><div class="card-body" style="padding-top:0"><p style="font-size:12.5px;color:#94a3b8;line-height:1.5;margin:0 0 8px">'+(m.contentPending?'Reader content is pending; the Gate 1 knowledge check is available.':'Self-paced facilitator reader with a scored Knowledge gate (pass at '+prcKThresh(m)+'%).')+'</p>';
-   if(assigned){html+='<div style="display:flex;gap:12px;flex-wrap:wrap;margin:10px 0"><div class="fnd-gate-lbl">'+fndGateBadge(gates.g1.status)+'<span>Knowledge '+Math.min(prcGatePasses(gates.g1,prcKThresh(m)),FND_PASSES_REQUIRED)+'/'+FND_PASSES_REQUIRED+(gates.g1.score>0?' ('+gates.g1.score+'%)':'')+'</span></div><div class="fnd-gate-lbl">'+fndGateBadge(gates.g2.status)+'<span>Simulation (assessor)</span></div><div class="fnd-gate-lbl">'+fndGateBadge(gates.g3.status)+'<span>Observation'+(gates.g3.status==='pass'?' (Confirmed)':'')+'</span></div></div><button class="btn btn-gold btn-sm" style="margin-top:8px" onclick="openPrcModule(\''+m.id+'\')">'+(complete?'Review':'Open Module')+'</button>';}
+   if(assigned){html+='<div style="display:flex;gap:12px;flex-wrap:wrap;margin:10px 0"><div class="fnd-gate-lbl">'+fndGateBadge(gates.g1.status)+'<span>Knowledge '+Math.min(prcGatePasses(gates.g1,prcKThresh(m)),FND_PASSES_REQUIRED)+'/'+FND_PASSES_REQUIRED+(gates.g1.score>0?' ('+gates.g1.score+'%)':'')+'</span></div><div class="fnd-gate-lbl">'+fndGateBadge(gates.g2.status)+'<span>Simulation (assessor)</span></div><div class="fnd-gate-lbl">'+fndGateBadge(gates.g3.status)+'<span>Observation'+(gates.g3.status==='pass'?' (Confirmed)':'')+'</span></div></div>'+(prcRevoked?'<div style="font-size:12px;color:#f87171;margin-top:8px;display:flex;align-items:center;gap:6px"><svg viewBox="0 0 14 14" width="11" height="11" fill="none"><rect x="1" y="5" width="12" height="8" rx="2" stroke="#f87171" stroke-width="1.3"/><path d="M4 5V4a3 3 0 016 0v1" stroke="#f87171" stroke-width="1.3" stroke-linecap="round"/></svg>Locked — preceptor access revoked</div>':'<button class="btn btn-gold btn-sm" style="margin-top:8px" onclick="openPrcModule(\''+m.id+'\')">'+(complete?'Review':'Open Module')+'</button>');}
    html+='</div></div>';
  });
  el.innerHTML=html;
@@ -2122,6 +2303,7 @@ function renderSPreceptor(){
 function openPrcModule(mid){
  const m=PRECEPTOR_MODULES.find(x=>x.id===mid);if(!m)return;
  const s=getStaff(ST.staffId);if(!s)return;
+ if(prcAccessState(s.id)==='revoked'){ if(typeof toast==='function')toast('Preceptor access revoked — modules are locked. Your progress is preserved.','err'); return renderSPreceptor(); } // Ph3
  const gates=getPrcModuleGates(s.id,m.id);
  ST._prcTab=ST._prcTab||'content';
  renderPrcModuleTab(m,s,gates,ST._prcTab);
@@ -2212,6 +2394,7 @@ function renderPrcG3View(m,s,gates){
  if(!gates.complete&&!prcObsReady(m,gates)){h+='<div style="background:rgba(148,163,184,.08);border:1px solid rgba(148,163,184,.25);border-radius:var(--r);padding:12px 14px;margin-bottom:16px;font-size:12px;color:#94a3b8">The capstone unlocks after <b style="color:#e2e8f0">3 Knowledge</b> passes (fresh questions each attempt). Current: '+prcPassChip(m,gates)+'</div>';}
  if(gates.g3.status==='pass') h+='<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--r);padding:14px;text-align:center;margin-bottom:16px"><div style="font-size:16px;font-weight:700;color:#4ade80">Capstone Confirmed</div></div>';
  prcObsItems(m).forEach(obs=>{const conf=gates.g3.items.find(i=>i.id===obs.id&&i.confirmed);h+='<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.06)">';if(conf){h+='<svg viewBox="0 0 18 18" width="16" height="16" fill="none" style="flex-shrink:0;margin-top:2px"><circle cx="9" cy="9" r="8" fill="rgba(74,222,128,.15)" stroke="#4ade80" stroke-width="1.3"/><path d="M5.5 9.5l2.5 2.5L13 7" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><div><div style="font-size:13px;color:#4ade80">'+obs.text+'</div><div style="font-size:11px;color:#64748b;margin-top:2px">Confirmed by '+Security.sanitize(conf.confirmedBy||'—')+' on '+Security.sanitize(conf.date||'')+'</div></div>';}else{h+='<svg viewBox="0 0 18 18" width="16" height="16" fill="none" style="flex-shrink:0;margin-top:2px"><circle cx="9" cy="9" r="8" stroke="#475569" stroke-width="1.3"/></svg><div style="font-size:13px;color:#94a3b8">'+obs.text+'</div>';}h+='</div>';});
+ if(lg&&lg.gate3&&lg.gate3.rubric&&lg.gate3.rubric.length){h+='<div style="margin-top:14px;font-size:11px;color:#c49a20;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Observation rubric (assessor reference)</div><ul style="margin:6px 0 0;padding-left:18px;font-size:12px;color:#94a3b8;line-height:1.6">';lg.gate3.rubric.forEach(r=>{h+='<li>'+Security.sanitize(String(r.category||''))+(r.weight!=null?' <span style="color:#64748b">('+Security.sanitize(String(r.weight))+'%)</span>':'')+'</li>';});h+='</ul>';}
  if(lg&&lg.gate3&&lg.gate3.autoFail&&lg.gate3.autoFail.length){h+='<div style="margin-top:14px;font-size:11px;color:#f87171;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Automatic-fail conditions (assessor reference)</div><ul style="margin:6px 0 0;padding-left:18px;font-size:12px;color:#94a3b8;line-height:1.6">';lg.gate3.autoFail.forEach(a=>{h+='<li>'+Security.sanitize(String(a))+'</li>';});h+='</ul>';}
  h+='</div>';return h;
 }
@@ -2254,8 +2437,10 @@ function renderHPreceptor(){
 }
 function hPrcStaffDetail(sid){
  const s=getStaff(sid);if(!s)return;const el=document.getElementById(ST.portal==='admin'?'a-preceptor':'h-preceptor');if(!el)return;
+ const prcRevoked=prcAccessState(s.id)==='revoked'; // Ph3: locked read-only, progress preserved
  let html='<button class="btn btn-ghost btn-sm" onclick="renderHPreceptor()" style="margin-bottom:12px">&larr; Back</button>';
  html+='<div class="card mb16"><div class="card-hd"><div class="card-ttl">'+fullName(s)+'</div><span class="bb bb-'+s.belt+'">'+s.belt+'</span></div><div class="card-body"><div style="font-size:13px;color:#94a3b8">'+s.role+'</div></div></div>';
+ if(prcRevoked) html+='<div class="card mb16" style="border-color:rgba(248,113,113,.3)"><div class="card-body" style="display:flex;align-items:center;gap:10px"><svg viewBox="0 0 20 20" width="18" height="18" fill="none" style="flex-shrink:0"><rect x="4" y="8" width="12" height="8" rx="2" stroke="#f87171" stroke-width="1.4"/><path d="M7 8V6a3 3 0 016 0v2" stroke="#f87171" stroke-width="1.4" stroke-linecap="round"/></svg><span style="font-size:13px;color:#f87171;font-weight:600">Preceptor access revoked — progress preserved and locked. A Master Admin can restore access to unlock; nothing has been deleted.</span></div></div>';
  PRECEPTOR_MODULES.forEach(m=>{
    if(!isPrcModuleAssigned(s.id,m.id)) return;const gates=getPrcModuleGates(s.id,m.id);
    const a=getPreceptorAssignments(s.id).find(x=>x.moduleId===m.id);
@@ -2263,7 +2448,7 @@ function hPrcStaffDetail(sid){
    html+='<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;font-size:12px;color:#94a3b8"><span>G1: '+(gates.g1.status==='pass'?'<span class="tc-ok">'+gates.g1.score+'%</span>':'<span class="tc-muted">'+gates.g1.status+'</span>')+'</span><span>G2: <span class="tc-muted">assessor</span></span><span>G3: '+(gates.g3.status==='pass'?'<span class="tc-ok">Confirmed</span>':'<span class="tc-warn">Pending</span>')+'</span></div>';
    if(a){ const _typeLbl=a.type==='onboarding'?'Onboarding':(a.type==='remediation'?'Remediation':'Certification'); html+='<div style="font-size:11px;color:#64748b;margin-bottom:12px">Assigned by '+Security.sanitize(a.assignedBy||'—')+(a.assignedDate?' · '+Security.sanitize(a.assignedDate):'')+' · '+_typeLbl+(a.trigger?' · Trigger: '+Security.sanitize(a.trigger):'')+'</div>'; }
    html+='<div style="font-size:12px;font-weight:600;color:#c49a20;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Gate 3: Confirm Observation Capstone</div>';
-   prcObsItems(m).forEach(obs=>{const conf=gates.g3.items.find(i=>i.id===obs.id&&i.confirmed);html+='<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06)"><input type="checkbox" style="accent-color:#4ade80;flex-shrink:0" '+(conf?'checked':'')+' onchange="markPrcG3(\''+s.id+'\',\''+m.id+'\',\''+obs.id+'\',this.checked)"><span style="font-size:12.5px;color:'+(conf?'#4ade80':'#94a3b8')+'">'+obs.text+'</span></div>';});
+   prcObsItems(m).forEach(obs=>{const conf=gates.g3.items.find(i=>i.id===obs.id&&i.confirmed);html+='<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06)"><input type="checkbox" style="accent-color:#4ade80;flex-shrink:0" '+(conf?'checked':'')+(prcRevoked?' disabled title="Preceptor access revoked — locked"':'')+' onchange="markPrcG3(\''+s.id+'\',\''+m.id+'\',\''+obs.id+'\',this.checked)"><span style="font-size:12.5px;color:'+(conf?'#4ade80':'#94a3b8')+'">'+obs.text+'</span></div>';});
    html+='</div></div>';
  });el.innerHTML=html;
 }
@@ -2278,7 +2463,10 @@ function hUnassignPrc(sid,mid){
 }
 function hAssignPrcModal(sid){
  if(ST.user&&(ST.user.role==='staff_admin'||ST.user.role==='assessor')){toast('Assessors cannot assign modules','err');return;}
- const s=getStaff(sid);if(!s)return;const existing=getPreceptorAssignments(s.id);const unassigned=PRECEPTOR_MODULES.filter(m=>!existing.some(a=>a.moduleId===m.id));
+ const s=getStaff(sid);if(!s)return;
+ // Ph3: no preceptor access -> nothing can be assigned. Explain and stop.
+ if(!prcHasAccess(s.id)){toast(prcAccessState(s.id)==='revoked'?'Preceptor access is revoked for this staff member — a Master Admin can re-grant it':'Not eligible for preceptor modules: reach Green Belt or have a Master Admin grant access','err');return;}
+ const existing=getPreceptorAssignments(s.id);const unassigned=PRECEPTOR_MODULES.filter(m=>!existing.some(a=>a.moduleId===m.id));
  if(!unassigned.length){toast('All modules assigned','info');return;}
  let html='<div style="margin-bottom:12px;font-size:13px;color:#94a3b8">Assign to <strong style="color:#e2e8f0">'+fullName(s)+'</strong>:</div>';
  html+='<div style="margin-bottom:12px"><label style="display:block;font-size:12px;color:#94a3b8;margin-bottom:4px">Reason</label>';
@@ -2289,7 +2477,11 @@ function hAssignPrcModal(sid){
  html+='<div id="prc-trigger-wrap" style="display:none;margin-bottom:12px"><label style="display:block;font-size:12px;color:#94a3b8;margin-bottom:4px">Trigger event <span style="color:#64748b">(gate failure or incident reference, optional)</span></label>';
  html+='<input id="prc-assign-trigger" type="text" class="form-input" placeholder="e.g. G1 fail 2026-07-01 or incident #123"></div>';
  html+='<div style="max-height:300px;overflow-y:auto">';
- unassigned.forEach(m=>{html+='<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer;font-size:13px;color:#cbd5e1"><input type="checkbox" class="prc-assign-cb" value="'+m.id+'" style="accent-color:#c49a20"><span><strong>'+m.seq+'.</strong> '+m.title+' <span style="color:#64748b">('+m.levelLabel+')</span></span></label>';});
+ unassigned.forEach(m=>{
+   const locked=!prcLevelUnlocked(s.id,m.level); // Ph3: L2/L3 gated behind prior-level completion
+   const lockNote=locked?' <span style="color:#f87171;font-size:11px">— Level '+(m.level-1)+' must be complete first</span>':'';
+   html+='<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.06);'+(locked?'opacity:.5;cursor:not-allowed':'cursor:pointer')+';font-size:13px;color:#cbd5e1"><input type="checkbox" class="prc-assign-cb" value="'+m.id+'"'+(locked?' disabled':'')+' style="accent-color:#c49a20"><span><strong>'+m.seq+'.</strong> '+m.title+' <span style="color:#64748b">('+m.levelLabel+')</span>'+lockNote+'</span></label>';
+ });
  html+='</div><div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-ghost btn-sm" onclick="closeModal()">Cancel</button><button class="btn btn-gold btn-sm" onclick="hDoAssignPrc(\''+s.id+'\')">Assign</button></div>';
  openModal('Assign Preceptor Modules',html,'modal-sm');
 }
@@ -2297,23 +2489,32 @@ function hDoAssignPrc(sid){
  if(ST.user&&(ST.user.role==='staff_admin'||ST.user.role==='assessor')){toast('Assessors cannot assign modules','err');return;}
  const cbs=document.querySelectorAll('.prc-assign-cb:checked');
  if(!cbs.length){toast('Select at least one','err');return;}
+ // Ph3: block entirely if the candidate has no preceptor access (revoked or belt-ineligible).
+ if(!prcHasAccess(sid)){ toast(prcAccessState(sid)==='revoked'?'Preceptor access is revoked for this staff member — cannot assign':'Not eligible: reach Green Belt or have a Master Admin grant preceptor access','err'); return; }
  const nm=ST.user?ST.user.name:'Manager';
  const typeEl=document.getElementById('prc-assign-type');
  const type=(typeEl&&typeEl.value==='remediation')?'remediation':'certification';
  const trigEl=document.getElementById('prc-assign-trigger');
  const trigger=(type==='remediation'&&trigEl&&trigEl.value.trim())?trigEl.value.trim():null;
- let assigned=0,skipped=0;
- cbs.forEach(cb=>{ if(assignPrcModule(sid,cb.value,nm,type,trigger)) assigned++; else skipped++; });
+ let assigned=0,skipped=0,locked=0,lockMsg='';
+ cbs.forEach(cb=>{
+   const reason=prcAssignBlockReason(sid,cb.value); // Ph3: per-module access + L2/L3 prereq
+   if(reason){ locked++; lockMsg=reason; return; }
+   if(assignPrcModule(sid,cb.value,nm,type,trigger)) assigned++; else skipped++;
+ });
  closeModal();
  if(assigned) toast(assigned+' module'+(assigned>1?'s':'')+' assigned','ok');
  if(skipped) toast(skipped+' already assigned — skipped','info');
+ if(locked) toast(locked+' module'+(locked>1?'s':'')+' locked — '+lockMsg,'err');
  renderHPreceptor();
 }
 function hAssignAllPrc(sid){
  if(ST.user&&(ST.user.role==='staff_admin'||ST.user.role==='assessor')){toast('Assessors cannot assign modules','err');return;}
+ // Ph3: no access -> nothing assignable. (assignAllPrcModules also silently guards each module.)
+ if(!prcHasAccess(sid)){toast(prcAccessState(sid)==='revoked'?'Preceptor access is revoked for this staff member — cannot assign':'Not eligible: reach Green Belt or have a Master Admin grant preceptor access','err');return;}
  const assigned=assignAllPrcModules(sid,ST.user?ST.user.name:'Manager');
  const skipped=PRECEPTOR_MODULES.length-assigned;
  if(!assigned) toast('All '+PRECEPTOR_MODULES.length+' preceptor modules already assigned','info');
- else{ toast(assigned+' module'+(assigned>1?'s':'')+' assigned','ok'); if(skipped) toast(skipped+' already assigned — skipped','info'); }
+ else{ toast(assigned+' module'+(assigned>1?'s':'')+' assigned','ok'); if(skipped) toast(skipped+' already assigned or level-locked — skipped','info'); }
  renderHPreceptor();
 }

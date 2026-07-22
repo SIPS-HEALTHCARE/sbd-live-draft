@@ -9736,6 +9736,7 @@ function renderHProfile(sid,context){
         ${(ST.user&&ST.user.role==='master_admin'&&s.observer)?(s.observationPin?`<span class="pill" style="background:#0ea5e91a;color:#0ea5e9;border:1px solid #0ea5e955;font-size:11px;padding:5px 9px;border-radius:8px;font-weight:700;align-self:center">Observer PIN: ${s.observationPin}</span>`:`<button class="btn btn-ghost btn-sm" onclick="generateObserverPin('${s.id}','${context}')" style="border-color:#0ea5e9;color:#0ea5e9">&#128273; Generate PIN</button>`):''}
         ${context==='admin'&&(ST.user&&ST.user.role==='master_admin')?`<button class="btn btn-err btn-sm" onclick="releaseToFreeAgent('${s.id}')" title="Release staff member to Free Agent Registry" style="margin-left:auto"><svg width="13" height="13" viewBox="0 0 18 18" fill="none"><path d="M12 14H15a1 1 0 001-1V5a1 1 0 00-1-1H12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M9 12l3-3-3-3M12 9H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Release</button>`:''}
       </div>
+      ${(ST.user&&ST.user.role==='master_admin'&&typeof prcAccessControlHTML==='function')?`<div style="margin-top:8px">${prcAccessControlHTML(s.id,context)}</div>`:''}
     </div>
     <div class="g2 mb16">
       <div class="card"><div class="card-hd"><div class="card-ttl">Current Belt Assessments</div><span style="font-size:11.5px;color:${isWhiteBaseline(s)?'var(--txt3)':curSt.p===3?'var(--ok)':'var(--warn)'}">${currentGateCountLabel(s)}</span></div>
