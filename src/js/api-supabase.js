@@ -256,6 +256,14 @@ const SB = {
   upsertInstrumentProgress(row){ return sbFetch('/rest/v1/instrument_progress?on_conflict=staff_id,module_id', { method:'POST', prefer:'resolution=merge-duplicates,return=minimal', body:row }); },
   updateInstrumentAssignmentStatus(staffId, moduleId, status){ return sbFetch(`/rest/v1/instrument_assignments?staff_id=eq.${staffId}&module_id=eq.${encodeURIComponent(moduleId)}`, { method:'PATCH', prefer:'return=minimal', body:{ status } }); },
   deleteInstrumentAssignment(staffId, moduleId){ return sbFetch(`/rest/v1/instrument_assignments?staff_id=eq.${staffId}&module_id=eq.${encodeURIComponent(moduleId)}`, { method:'DELETE', prefer:'return=minimal' }); },
+  // ── SBD Preceptor Certification (#78 Ph1) — mirrors the Foundations/Instruments matrix, table prefix swapped ──
+  getPreceptorModules(){ return sbFetch('/rest/v1/preceptor_modules?select=*&order=seq.asc'); },
+  getPreceptorAssignments(){ return sbFetch('/rest/v1/preceptor_assignments?select=*'); },
+  getPreceptorProgress(){ return sbFetch('/rest/v1/preceptor_progress?select=*'); },
+  createPreceptorAssignment(data){ return sbFetch('/rest/v1/preceptor_assignments?on_conflict=staff_id,module_id', { method:'POST', prefer:'resolution=ignore-duplicates,return=minimal', body:data }); },
+  upsertPreceptorProgress(row){ return sbFetch('/rest/v1/preceptor_progress?on_conflict=staff_id,module_id', { method:'POST', prefer:'resolution=merge-duplicates,return=minimal', body:row }); },
+  updatePreceptorAssignmentStatus(staffId, moduleId, status){ return sbFetch(`/rest/v1/preceptor_assignments?staff_id=eq.${staffId}&module_id=eq.${encodeURIComponent(moduleId)}`, { method:'PATCH', prefer:'return=minimal', body:{ status } }); },
+  deletePreceptorAssignment(staffId, moduleId){ return sbFetch(`/rest/v1/preceptor_assignments?staff_id=eq.${staffId}&module_id=eq.${encodeURIComponent(moduleId)}`, { method:'DELETE', prefer:'return=minimal' }); },
   // ── User Profiles ──
   getUserProfile(userId){ return sbFetch(`/rest/v1/sbd_portal_users?auth_uid=eq.${userId}&select=*`); },
   getAllAdminProfiles(){ return sbFetch('/rest/v1/sbd_portal_users?select=*&order=name.asc'); },
@@ -388,6 +396,9 @@ function resetDB(){
   DB.foundationsProgress = [];
   DB.instrumentAssignments = [];
   DB.instrumentProgress = [];
+  DB.preceptorAssignments = [];
+  DB.preceptorProgress = [];
+  DB.preceptorModules = [];
   console.log('SBD Platform: Global state reset.');
 }
 
