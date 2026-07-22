@@ -1,5 +1,6 @@
 // Resilient OpenRouter caller shared by the edge functions that hit the provider
-// directly (sbd-score-assessment, and — later — david-chat).
+// directly (sbd-score-assessment, david-grade-assessment [orphaned — see its header], and
+// — later — david-chat).
 //
 // Tries the primary model; on a RETRYABLE failure — HTTP 429/5xx, a network/timeout
 // error — it retries the same model with backoff, then falls back to the next model
