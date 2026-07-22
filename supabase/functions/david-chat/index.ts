@@ -234,7 +234,24 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
             tierDirectives += "You have forecasting, charting, and knowledge base retrieval. You do NOT have direct database access — never claim to run SQL or query the database directly.\n";
         }
         if (systemPrompt) {
-            messages.push({ role: 'system', content: systemPrompt + '\n' + memoryInjection + '\n' + shadowDirectives + '\n' + tierDirectives + customFacilityDirective });
+            // #16 prompt caching. Split the system message into two content blocks:
+            //   block 1 = the large, STABLE instrument/KB context (systemPrompt) with an ephemeral
+            //             cache breakpoint — everything up to and including this block is cached.
+            //   block 2 = the per-request DYNAMIC directives (memory, shadow, tier, facility), left
+            //             UNcached so they never bust the cached prefix.
+            // The win: within one request the autonomous loop makes several model calls that reuse
+            // this exact system prefix (cache hit on calls 2..N), and across turns in a session the
+            // prefix is unchanged. OpenRouter passes cache_control through to Anthropic; below the
+            // model's minimum cacheable length it is simply ignored (no error), so this is safe even
+            // for short prompts. Cost is still the provider's ground-truth `cost` (already discounted).
+            const dynamicDirectives = '\n' + memoryInjection + '\n' + shadowDirectives + '\n' + tierDirectives + customFacilityDirective;
+            messages.push({
+                role: 'system',
+                content: [
+                    { type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } },
+                    { type: 'text', text: dynamicDirectives },
+                ],
+            });
         }
         for (const msg of history) {
             if (msg && msg.content) messages.push({ role: msg.role, content: msg.content });
@@ -309,6 +326,10 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
         let usagePromptTokens = 0;
         let usageCompletionTokens = 0;
         let usageCost = 0;
+        // #16: cache token split (subset of prompt tokens). Provider field names vary — read the
+        // OpenRouter-normalized prompt_tokens_details first, fall back to Anthropic-native names.
+        let usageCachedTokens = 0;
+        let usageCacheCreationTokens = 0;
 
         async function runAutonomousLoop(messageChain: any[], depth: number = 0) {
             if (depth > 8) return;
@@ -379,6 +400,8 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
                                 usagePromptTokens += json.usage.prompt_tokens || 0;
                                 usageCompletionTokens += json.usage.completion_tokens || 0;
                                 if (typeof json.usage.cost === 'number') usageCost += json.usage.cost;
+                                usageCachedTokens += json.usage.prompt_tokens_details?.cached_tokens ?? json.usage.cache_read_input_tokens ?? 0;
+                                usageCacheCreationTokens += json.usage.prompt_tokens_details?.cache_write_tokens ?? json.usage.cache_creation_input_tokens ?? 0;
                             }
                         } catch (e) { /* partial */ }
                     }
@@ -490,6 +513,8 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
                                         usagePromptTokens += fJson.usage.prompt_tokens || 0;
                                         usageCompletionTokens += fJson.usage.completion_tokens || 0;
                                         if (typeof fJson.usage.cost === 'number') usageCost += fJson.usage.cost;
+                                        usageCachedTokens += fJson.usage.prompt_tokens_details?.cached_tokens ?? fJson.usage.cache_read_input_tokens ?? 0;
+                                        usageCacheCreationTokens += fJson.usage.prompt_tokens_details?.cache_write_tokens ?? fJson.usage.cache_creation_input_tokens ?? 0;
                                     }
                                 } catch (_e) { /* ignore */ }
                             }
@@ -521,7 +546,11 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
                     user_id: userId,
                     prompt_tokens: usagePromptTokens,
                     completion_tokens: usageCompletionTokens,
-                    cost: usageCost
+                    cost: usageCost,
+                    // #16: cache split behind the same cost. 0 when the provider reports no cache
+                    // activity (prefix below the model's minimum, or a cold cache).
+                    cached_tokens: usageCachedTokens,
+                    cache_creation_tokens: usageCacheCreationTokens
                 }).then(({ error }: { error: any }) => {
                     if (error) console.warn('[DAVID] Usage log skipped:', error.message);
                 });

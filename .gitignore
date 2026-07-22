@@ -32,3 +32,5 @@ WHEALTHY/
 plans/
 # Generated preview from curriculum ingestion dry-run (regenerable)
 scripts/curriculum-ingest-preview.json
+# Kept local-only per user request
+docs/decisions/2026-07-22-app-packaging-options.md

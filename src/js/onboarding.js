@@ -8,9 +8,14 @@ const OB = {
   cameFromGuide: false,
 };
 
-// ── Tour Steps Per Role ──
-// Each step: { target: CSS selector (within the portal), title, desc, group }
-const TOUR_STEPS = {
+// ── Nav registry (single source of truth for per-view tour metadata) — #8b ──
+// Each portal role maps to an ordered list of nav views, each carrying its tour
+// metadata: { target: CSS selector, title, desc, group }. TOUR_STEPS is DERIVED from
+// this registry below (each step also gains an explicit `view` id), so the tour is
+// "nav-registry-driven": adding a view here is all that's needed to cover it in the
+// tour. The staleness guard `auditTourCoverage()` cross-checks this registry against
+// the live sidebar DOM and warns (dev-only) when a nav item has no entry here.
+const NAV_REGISTRY = {
   admin: [
     { target:'[data-view="a-overview"]', title:'Network Overview', desc:'This is your command center. Right now you are looking at belt distribution across all facilities, compliance rates, and network-wide KPIs. Everything rolls up here so you can spot trends at a glance.', group:'Network' },
     { target:'[data-view="a-leaderboard"]', title:'Facility Leaderboard', desc:'Here you can compare every facility side by side. The rankings show compliance scores, belt progression velocity, and staffing health. Use this to identify which locations need attention.', group:'Network' },
@@ -96,6 +101,62 @@ const TOUR_STEPS = {
     { target:'[data-view="x-guide"]', title:'Platform Guide', desc:'Your always-available guide to the System Admin portal. Relaunch the tour or browse features anytime.', group:'Support' },
   ],
 };
+
+// Parse the view id out of a step's target selector (e.g. '[data-view="a-overview"]' → 'a-overview').
+function navView(target){ const m = /data-view="([^"]+)"/.exec(target || ''); return m ? m[1] : null; }
+
+// ── Tour steps, DERIVED from NAV_REGISTRY (#8b) ──
+// Same shape the engine already consumes (target/title/desc/group), plus an explicit
+// `view` id so consumers no longer need to regex the selector. Keyed by tour-role.
+const TOUR_STEPS = Object.fromEntries(
+  Object.entries(NAV_REGISTRY).map(function(entry){
+    var role = entry[0], steps = entry[1];
+    return [role, steps.map(function(s){ return Object.assign({}, s, { view: s.view || navView(s.target) }); })];
+  })
+);
+
+// ── Tour coverage staleness guard (#8b) ──
+// Dev-only. Cross-checks each portal's sidebar nav items (the nav-truth) against
+// NAV_REGISTRY and warns when a nav view has no tour metadata, or a registry entry
+// targets a view that has no nav item. Never runs / logs in production.
+// Views intentionally excluded: drill-down-only views reached by click, not the sidebar.
+const TOUR_COVERAGE_IGNORE = new Set(['a-facility','x-facility']);
+function tourCoverageIsDev(){
+  try {
+    if (window.SBD_DEBUG === true) return true;
+    var h = location.hostname;
+    return h === 'localhost' || h === '127.0.0.1' || h === '' || h.endsWith('.local');
+  } catch(e){ return false; }
+}
+function auditTourCoverage(){
+  if (!tourCoverageIsDev()) return;
+  try {
+    // Which registry roles feed each sidebar prefix (hospital + facility_admin share 'h-').
+    var prefixRoles = { a:['admin'], h:['facility_admin','hospital'], s:['staff_member'], x:['system_admin'] };
+    Object.keys(prefixRoles).forEach(function(prefix){
+      var navEls = document.querySelectorAll('.nav-item[data-view^="' + prefix + '-"]');
+      if (!navEls.length) return; // that portal isn't in the DOM right now — skip
+      var navViews = new Set();
+      navEls.forEach(function(el){ navViews.add(el.getAttribute('data-view')); });
+      // Union of covered views across the roles that map to this prefix.
+      var covered = new Set();
+      prefixRoles[prefix].forEach(function(role){
+        (NAV_REGISTRY[role] || []).forEach(function(s){ var v = navView(s.target); if (v) covered.add(v); });
+      });
+      navViews.forEach(function(v){
+        if (!covered.has(v) && !TOUR_COVERAGE_IGNORE.has(v)) {
+          console.warn('[tour][staleness] nav view "' + v + '" has NO tour metadata in NAV_REGISTRY (prefix ' + prefix + '-). Add a step so the tour stays current.');
+        }
+      });
+      covered.forEach(function(v){
+        if (!navViews.has(v) && !TOUR_COVERAGE_IGNORE.has(v)) {
+          console.warn('[tour][staleness] NAV_REGISTRY step targets "' + v + '" but no sidebar nav item exists (prefix ' + prefix + '-). Dead tour step?');
+        }
+      });
+    });
+  } catch(e){ /* guard must never break the app */ }
+}
+if (typeof window !== 'undefined') window.auditTourCoverage = auditTourCoverage;
 
 // ── Role-to-portal prefix mapping ──
 function getPortalPrefix(){

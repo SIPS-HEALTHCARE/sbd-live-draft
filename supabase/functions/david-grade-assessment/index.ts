@@ -1,3 +1,13 @@
+// ⚠️ ORPHANED / NOT REFERENCED (audited 2026-07-23, task #61)
+// This function has ZERO callers in the repo — no invocation in src/, index.html, or any
+// other edge function; the only mention is documentation. The live grading path is
+// `sbd-score-assessment` (called by scoreSimulationWithAI() in ui-views.js / belt-test-flow.js),
+// which this function duplicates. It is kept (not deleted) pending the retire/keep verdict
+// (Decision D1) and the AIP roadmap. If AIP open-ended grading is revived, wire it here; if
+// not, retire it AND delete the deployed function from the Supabase dashboard (removing this
+// dir alone does not undeploy it). Do not wire it without confirming it does not duplicate
+// sbd-score-assessment.
+//
 // David OG — open-ended assessment grading (M3)
 //
 // The AIP engine (aip_submit_quiz) saves candidate answers but marks every

@@ -1,3 +1,11 @@
+// ⚠️ ORPHANED / NOT REFERENCED + POLICY HAZARD (audited 2026-07-23, task #61)
+// This function has ZERO callers in the repo — no invocation in src/, index.html, or any
+// other edge function; the only mention is documentation. It SEEDS FAKE auth users,
+// facilities, and test data (DEFAULT_PASSWORD below) — running it against the live/prod
+// Supabase instance violates the repo's hard "no fake accounts / no demo data in prod" rule
+// (see CLAUDE.md). Recommendation stands: retire it AND delete the deployed function from the
+// Supabase dashboard (removing this dir alone does not undeploy it). Do NOT invoke against prod.
+//
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.6";
 
