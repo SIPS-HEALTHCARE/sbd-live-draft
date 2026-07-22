@@ -1671,17 +1671,11 @@ const PRC_LEVEL_GATES = [
      "title": "Placement review and module assignment",
      "scenario": "A new learner has just been placed at White Belt. Their weak domains are packaging (34%) and sterilization (48%). Their profile is Sentinel. They are aiming for Yellow. Build their initial module plan and explain your reasoning.",
      "scoringGuide": [
-      "| Pts",
-      "Reads the profile (Sentinel) and plans a clear, standard-cited, step-based approach",
-      "| 20",
-      "Sequences the worst gap first: fm-05 Packaging, then fm-06 Sterilization",
-      "| 25",
-      "Adds the Yellow-required modules (e.g. fm-09 Quality) and the Yellow instrument module",
-      "| 20",
-      "Aims the sequence at the Yellow gate, with practice to 90% before assessment",
-      "| 20",
-      "Frames placement as a starting point, not a judgment",
-      "| 15"
+      "Reads the profile (Sentinel) and plans a clear, standard-cited, step-based approach — 20",
+      "Sequences the worst gap first: fm-05 Packaging, then fm-06 Sterilization — 25",
+      "Adds the Yellow-required modules (e.g. fm-09 Quality) and the Yellow instrument module — 20",
+      "Aims the sequence at the Yellow gate, with practice to 90% before assessment — 20",
+      "Frames placement as a starting point, not a judgment — 15"
      ]
     },
     {
@@ -1689,17 +1683,11 @@ const PRC_LEVEL_GATES = [
      "title": "Stuck-learner intervention",
      "scenario": "David flags a learner stuck five days in a module, two failed knowledge attempts, and now inactive for two days. Profile: Steward. Conduct the intervention (role-played by the assessor).",
      "scoringGuide": [
-      "| Pts",
-      "Opens with empathy and the person (Steward), not pressure",
-      "| 20",
-      "Diagnoses the real barrier together, using the domain data",
-      "| 20",
-      "Correctly identifies this as confidence/discouragement, not a knowledge gap",
-      "| 20",
-      "Shrinks the problem to one small, winnable next step",
-      "| 20",
-      "Closes on a concrete commitment and a scheduled follow-up",
-      "| 20"
+      "Opens with empathy and the person (Steward), not pressure — 20",
+      "Diagnoses the real barrier together, using the domain data — 20",
+      "Correctly identifies this as confidence/discouragement, not a knowledge gap — 20",
+      "Shrinks the problem to one small, winnable next step — 20",
+      "Closes on a concrete commitment and a scheduled follow-up — 20"
      ]
     },
     {
@@ -1707,15 +1695,10 @@ const PRC_LEVEL_GATES = [
      "title": "Assessment-readiness determination",
      "scenario": "A learner insists they are “not ready” for their Yellow assessment. Their practice scores have been at 92% knowledge and 91% simulation for two weeks. Determine and communicate readiness.",
      "scoringGuide": [
-      "| Pts",
-      "Uses the 90% practice threshold as the objective readiness signal, not gut feel",
-      "| 30",
-      "Correctly concludes the learner IS ready",
-      "| 20",
-      "Recognizes the block is confidence, and applies the confidence-boost approach",
-      "| 25",
-      "Makes scheduling easy and reframes the risk of the gate",
-      "| 25"
+      "Uses the 90% practice threshold as the objective readiness signal, not gut feel — 30",
+      "Correctly concludes the learner IS ready — 20",
+      "Recognizes the block is confidence, and applies the confidence-boost approach — 25",
+      "Makes scheduling easy and reframes the risk of the gate — 25"
      ]
     },
     {
@@ -1723,17 +1706,11 @@ const PRC_LEVEL_GATES = [
      "title": "Gate 3 observation planning",
      "scenario": "You are about to run a Gate 3 module observation for a learner you have coached closely and like. Walk through your plan for all three phases, before, during, after.",
      "scoringGuide": [
-      "| Pts",
-      "Before: reviews brief, sets scenario, opens rubric, sets expectations",
-      "| 20",
-      "During: assesses summatively, silent, no coaching or rescue",
-      "| 25",
-      "Names and guards against the halo effect explicitly",
-      "| 20",
-      "Applies safety-critical overrides correctly",
-      "| 15",
-      "After: SBI feedback opening with a strength, immediate documentation",
-      "| 20"
+      "Before: reviews brief, sets scenario, opens rubric, sets expectations — 20",
+      "During: assesses summatively, silent, no coaching or rescue — 25",
+      "Names and guards against the halo effect explicitly — 20",
+      "Applies safety-critical overrides correctly — 15",
+      "After: SBI feedback opening with a strength, immediate documentation — 20"
      ]
     },
     {
@@ -1741,22 +1718,38 @@ const PRC_LEVEL_GATES = [
      "title": "Leadership reporting",
      "scenario": "Your Director asks, with no warning, “How is the department doing?” You have this month's David data. Deliver a two-minute answer.",
      "scoringGuide": [
-      "| Pts",
-      "Frames outcomes (competency, advancement), not activity",
-      "| 30",
-      "Shows efficiency: learners carried per facilitator hour",
-      "| 20",
-      "Names the risks honestly, with a plan for each",
-      "| 30",
-      "Concise and something leadership can act on",
-      "| 20"
+      "Frames outcomes (competency, advancement), not activity — 30",
+      "Shows efficiency: learners carried per facilitator hour — 20",
+      "Names the risks honestly, with a plan for each — 30",
+      "Concise and something leadership can act on — 20"
      ]
     }
    ]
   },
   "gate3": {
    "passPct": 85,
-   "rubric": [],
+   "rubric": [
+    {
+     "category": "David OG proficiency",
+     "weight": 20
+    },
+    {
+     "category": "Coaching effectiveness",
+     "weight": 20
+    },
+    {
+     "category": "Observation technique",
+     "weight": 25
+    },
+    {
+     "category": "Assessment accuracy",
+     "weight": 20
+    },
+    {
+     "category": "Operational excellence",
+     "weight": 15
+    }
+   ],
    "autoFail": [
     "coach during a summative gate, commit a halo-effect pass of work below standard, miss a safety-critical override, or falsify or omit required documentation"
    ]
@@ -1769,11 +1762,69 @@ const PRC_LEVEL_GATES = [
   },
   "gate2": {
    "passPct": 85,
-   "simulations": []
+   "simulations": [
+    {
+     "n": 1,
+     "title": "The network read",
+     "scenario": "Monday's network view: Facility A is thriving, Facility B's advancement has stalled, Facility C's new champion just passed a learner on a Gate 3 you suspect was soft. Prioritize your week across the three.",
+     "scoringGuide": [
+      "Prioritizes the suspected soft pass at C first, it is a standard-integrity risk — 30",
+      "Reads B's stall as facility-specific and plans a root-cause visit or review — 20",
+      "Leaves thriving Facility A to run, allocating attention by need — 20",
+      "Frames the week around holding the standard while developing the network — 30"
+     ]
+    },
+    {
+     "n": 2,
+     "title": "The champion audit",
+     "scenario": "You pull Facility C's champion's recent observations. One clearly passed a learner who skipped a safety-critical step. Handle it.",
+     "scoringGuide": [
+      "Recognizes this as a safety-critical miss that should have been an automatic fail — 30",
+      "Coaches the champion with SBI, honestly, without destroying the relationship — 25",
+      "Re-audits to confirm recalibration rather than assuming it — 25",
+      "Does not simply revoke or ignore; develops the champion while protecting the standard — 20"
+     ]
+    },
+    {
+     "n": 3,
+     "title": "The leadership ask",
+     "scenario": "Midweek, the VP of Perioperative Services asks for a state-of-the-network briefing by end of day.",
+     "scoringGuide": [
+      "Uses David to assemble outcomes across all three facilities quickly — 20",
+      "Frames outcomes and efficiency, not activity — 30",
+      "Names the C standard-integrity risk honestly, with the plan to fix it — 30",
+      "Gives leadership something to act on, concisely — 20"
+     ]
+    },
+    {
+     "n": 4,
+     "title": "The resistance flare",
+     "scenario": "A senior tech at Facility B publicly declares the program pointless in front of the team. Respond in the moment and afterward.",
+     "scoringGuide": [
+      "Does not argue the program publicly or escalate the confrontation — 25",
+      "Reads the fear under the resistance and addresses status and legacy — 30",
+      "Follows up privately to attempt to convert the veteran into a champion — 25",
+      "Protects team morale and the standard simultaneously — 20"
+     ]
+    }
+   ]
   },
   "gate3": {
    "passPct": 90,
-   "rubric": [],
+   "rubric": [
+    {
+     "category": "Blue Belt observation",
+     "weight": 35
+    },
+    {
+     "category": "Coaching a facilitator",
+     "weight": 30
+    },
+    {
+     "category": "Program design defense",
+     "weight": 35
+    }
+   ],
    "autoFail": [
     "pass a Blue Belt observation with a safety-critical miss (halo effect at the leadership level)",
     "coach a facilitator toward lowering the standard",
@@ -1788,12 +1839,49 @@ const PRC_LEVEL_GATES = [
   },
   "gate2": {
    "passPct": 90,
-   "simulations": []
+   "simulations": [
+    {
+     "n": 1,
+     "title": "Event 1",
+     "scenario": "Design and deliver a training session that develops a specific facilitator competency in a real or role-played new facilitator, then assess whether they reached it. You will be observed on both the teaching and the assessment, and asked to justify your judgments afterward.",
+     "scoringGuide": [
+      "Designs backward from a clear target competency — 15",
+      "Uses teach, model, practice, reflect, not lecture — 20",
+      "Beats the expert's curse: surfaces the invisible steps for the learner — 15",
+      "Assesses the facilitator against the standard, not personal style — 20",
+      "Correctly identifies whether the competency was reached, with evidence — 20",
+      "Gives developmental feedback (SBI), honest and motivating — 10"
+     ]
+    }
+   ]
   },
   "gate3": {
    "passPct": 95,
-   "rubric": [],
-   "autoFail": []
+   "rubric": [
+    {
+     "category": "Developing facilitators",
+     "weight": 25
+    },
+    {
+     "category": "Leading at scale",
+     "weight": 25
+    },
+    {
+     "category": "Standard & data stewardship",
+     "weight": 20
+    },
+    {
+     "category": "Improvement study",
+     "weight": 15
+    },
+    {
+     "category": "Capstone defense",
+     "weight": 15
+    }
+   ],
+   "autoFail": [
+    "certify a facilitator who should have failed, bend or configure away any part of the standard, falsify or inflate study or program data, or defend a decision that traded rigor for reach"
+   ]
   }
  }
 ];
@@ -2212,6 +2300,7 @@ function renderPrcG3View(m,s,gates){
  if(!gates.complete&&!prcObsReady(m,gates)){h+='<div style="background:rgba(148,163,184,.08);border:1px solid rgba(148,163,184,.25);border-radius:var(--r);padding:12px 14px;margin-bottom:16px;font-size:12px;color:#94a3b8">The capstone unlocks after <b style="color:#e2e8f0">3 Knowledge</b> passes (fresh questions each attempt). Current: '+prcPassChip(m,gates)+'</div>';}
  if(gates.g3.status==='pass') h+='<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--r);padding:14px;text-align:center;margin-bottom:16px"><div style="font-size:16px;font-weight:700;color:#4ade80">Capstone Confirmed</div></div>';
  prcObsItems(m).forEach(obs=>{const conf=gates.g3.items.find(i=>i.id===obs.id&&i.confirmed);h+='<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.06)">';if(conf){h+='<svg viewBox="0 0 18 18" width="16" height="16" fill="none" style="flex-shrink:0;margin-top:2px"><circle cx="9" cy="9" r="8" fill="rgba(74,222,128,.15)" stroke="#4ade80" stroke-width="1.3"/><path d="M5.5 9.5l2.5 2.5L13 7" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><div><div style="font-size:13px;color:#4ade80">'+obs.text+'</div><div style="font-size:11px;color:#64748b;margin-top:2px">Confirmed by '+Security.sanitize(conf.confirmedBy||'—')+' on '+Security.sanitize(conf.date||'')+'</div></div>';}else{h+='<svg viewBox="0 0 18 18" width="16" height="16" fill="none" style="flex-shrink:0;margin-top:2px"><circle cx="9" cy="9" r="8" stroke="#475569" stroke-width="1.3"/></svg><div style="font-size:13px;color:#94a3b8">'+obs.text+'</div>';}h+='</div>';});
+ if(lg&&lg.gate3&&lg.gate3.rubric&&lg.gate3.rubric.length){h+='<div style="margin-top:14px;font-size:11px;color:#c49a20;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Observation rubric (assessor reference)</div><ul style="margin:6px 0 0;padding-left:18px;font-size:12px;color:#94a3b8;line-height:1.6">';lg.gate3.rubric.forEach(r=>{h+='<li>'+Security.sanitize(String(r.category||''))+(r.weight!=null?' <span style="color:#64748b">('+Security.sanitize(String(r.weight))+'%)</span>':'')+'</li>';});h+='</ul>';}
  if(lg&&lg.gate3&&lg.gate3.autoFail&&lg.gate3.autoFail.length){h+='<div style="margin-top:14px;font-size:11px;color:#f87171;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Automatic-fail conditions (assessor reference)</div><ul style="margin:6px 0 0;padding-left:18px;font-size:12px;color:#94a3b8;line-height:1.6">';lg.gate3.autoFail.forEach(a=>{h+='<li>'+Security.sanitize(String(a))+'</li>';});h+='</ul>';}
  h+='</div>';return h;
 }
