@@ -7205,7 +7205,10 @@ function renderSDashboard(){
             <div style="font-size:12px;color:var(--txt3);margin-top:4px">${win.cfg?win.cfg.label:''}</div>
           </div>
           <div class="prog mt8 mb12" style="height:10px"><div class="prog-fill" style="width:${win.pct||0}%;background:${win.status==='open'?'var(--ok)':'var(--warn)'}"></div></div>
-          ${win.status==='open'&&nb?`<button class="btn btn-gold" style="width:100%;justify-content:center;margin-top:8px" onclick="openApplyModal('${s.id}')">${ICO.record} Apply for ${nb} Belt Assessment</button>`:''}
+          ${win.status==='open'&&nb?(canRequestAssessment(s.id,s.belt)
+            ? `<button class="btn btn-gold" style="width:100%;justify-content:center;margin-top:8px" onclick="openApplyModal('${s.id}')">${ICO.record} Apply for ${nb} Belt Assessment</button>`
+            : `<div style="padding:11px 14px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:var(--rs);font-size:12px;color:var(--txt2);text-align:center;margin-top:8px;line-height:1.5">Complete your ${s.belt} Belt Knowledge and Simulation practice tests at 80% or higher to unlock your assessment request.<div style="margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="sNav(document.querySelector('#s-portal .nav-item[data-view=s-study]'),'s-study','Study &amp; Practice')">Go to Study &amp; Practice</button></div></div>`
+          ):''}
           ${win.status==='closed'?`<div style="padding:10px;background:var(--err-bg);border:1px solid var(--err-bd);border-radius:var(--rs);font-size:12px;color:var(--err);text-align:center;margin-top:8px">Window closed. Keep training – it reopens automatically.</div>`:''}
           `}
         </div>
@@ -7247,6 +7250,22 @@ function openApplyModal(sid){
   if(!nb){toast('Already at maximum belt level.','info');return;}
   const win=getWindowStatus(s);
   if(win.status!=='open'){toast('Assessment window is not currently open.','err');return;}
+  // #120 (Ignacio, 2026-07-22): the Study & Practice request path already gates on the current-belt
+  // practice tests (canRequestAssessment); this Apply path did not, so a request could be filed with
+  // no practice done. Close that same gate here. (Master-admin override is a separate additive flag.)
+  if(!canRequestAssessment(s.id, s.belt)){
+    const psc=getPracticeScores(s.id, s.belt)||{};
+    openModal(`Apply for ${nb} Belt Assessment`,`
+      <div class="modal-body">
+        <div style="padding:14px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:var(--rs);font-size:12.5px;color:var(--txt2);line-height:1.6">
+          <div style="font-weight:700;color:var(--warn);margin-bottom:6px">Practice tests required</div>
+          Complete your <strong>${s.belt} Belt</strong> Knowledge and Simulation practice tests at 80% or higher before requesting an assessment.
+          <div style="margin-top:8px;font-size:12px">Knowledge: <strong>${psc.knowledge||0}%</strong> &bull; Simulation: <strong>${psc.simulation||0}%</strong></div>
+        </div>
+      </div>
+      <div class="modal-ft"><button class="btn btn-ghost" onclick="closeModal()">Close</button><button class="btn btn-gold" onclick="closeModal();sNav(document.querySelector('#s-portal .nav-item[data-view=s-study]'),'s-study','Study &amp; Practice')">Go to Study &amp; Practice</button></div>`,'modal-md');
+    return;
+  }
   const gatesNeeded=[{key:'c',label:'Competency'},{key:'s',label:'Simulation'},{key:'o',label:'Observation'}].filter(g=>s.nxt[g.key]!=='pass');
   openModal(`Apply for ${nb} Belt Assessment`,`
     <div class="modal-body">
@@ -7267,6 +7286,8 @@ function openApplyModal(sid){
 function submitApply(sid,gate,targetBelt){
   const s=getStaff(sid);
   if(!s)return;
+  // #120: defense in depth — never queue a request when the current-belt practice gate isn't met.
+  if(!canRequestAssessment(s.id, s.belt)){ toast('Complete both practice tests at 80% or above before requesting.','err'); return; }
   const gateLabel={c:'Competency',s:'Simulation',o:'Observation'}[gate];
   const qid='q'+Date.now();
   const newQItem={id:qid,sid,fid:s.fid,type:gateLabel,targetBelt,date:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})};
