@@ -8473,7 +8473,10 @@ function savePracticeScore(belt, mode, score, total) {
 
 function canRequestAssessment(staffId, belt) {
   const s = getStaff(staffId || ST.staffId);
-  if (!s || !s.practiceScores || !s.practiceScores[belt]) return false;
+  if (!s) return false;
+  // #120 master-admin override: an explicit waiver lets this candidate request regardless of practice.
+  if (s.assessmentGateOverride && s.assessmentGateOverride.waived) return true;
+  if (!s.practiceScores || !s.practiceScores[belt]) return false;
   const scores = s.practiceScores[belt];
   return (scores.knowledge || 0) >= 80 && (scores.simulation || 0) >= 80;
 }
@@ -9758,6 +9761,11 @@ function renderHProfile(sid,context){
         ${context==='admin'||context==='h'?`<button class="btn btn-blue btn-sm" onclick="openPromoteModal('${s.id}','${context}')">&#x2B06; Promote</button>`:''}
         <button class="btn btn-ghost btn-sm" onclick="downloadStaffReport('${s.id}')">${ICO.dl} Report</button>
         ${(ST.user&&ST.user.role==='master_admin')?`<button class="btn btn-ghost btn-sm" onclick="openBeltOverrideModal('${s.id}','${context}')" style="border-color:var(--gold-bd);color:var(--gold)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Override Belt</button>`:''}
+        ${(ST.user&&ST.user.role==='master_admin')?(
+          (s.assessmentGateOverride && s.assessmentGateOverride.waived)
+            ? `<span class="pill p-ok" style="align-self:center;font-size:11px" title="${s.assessmentGateOverride.reason?('Reason: '+s.assessmentGateOverride.reason):'Practice-test gate waived'}">Practice gate waived</span><button class="btn btn-ghost btn-sm" onclick="clearAssessmentOverride('${s.id}','${context}')" title="Remove the practice-gate waiver">Clear Waiver</button>`
+            : `<button class="btn btn-ghost btn-sm" onclick="grantAssessmentOverride('${s.id}','${context}')" style="border-color:var(--gold-bd);color:var(--gold)" title="Let this candidate request an assessment without completing the practice tests"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg> Waive Practice Gate</button>`
+        ):''}
         ${(ST.user&&ST.user.role==='master_admin')?`<button class="btn btn-ghost btn-sm" onclick="toggleObserver('${s.id}','${context}')" style="border-color:${s.observer?'#0ea5e9':'var(--bdr)'};color:${s.observer?'#0ea5e9':'var(--txt2)'}" title="${s.observer?'Revoke observer access':'Grant observer access'}"><svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 10s3-5.5 8-5.5S18 10 18 10s-3 5.5-8 5.5S2 10 2 10z"/><circle cx="10" cy="10" r="2.3"/></svg> ${s.observer?'Observer: On':'Make Observer'}</button>`:''}
         ${(ST.user&&ST.user.role==='master_admin'&&s.observer)?(s.observationPin?`<span class="pill" style="background:#0ea5e91a;color:#0ea5e9;border:1px solid #0ea5e955;font-size:11px;padding:5px 9px;border-radius:8px;font-weight:700;align-self:center">Observer PIN: ${s.observationPin}</span>`:`<button class="btn btn-ghost btn-sm" onclick="generateObserverPin('${s.id}','${context}')" style="border-color:#0ea5e9;color:#0ea5e9">&#128273; Generate PIN</button>`):''}
         ${context==='admin'&&(ST.user&&ST.user.role==='master_admin')?`<button class="btn btn-err btn-sm" onclick="releaseToFreeAgent('${s.id}')" title="Release staff member to Free Agent Registry" style="margin-left:auto"><svg width="13" height="13" viewBox="0 0 18 18" fill="none"><path d="M12 14H15a1 1 0 001-1V5a1 1 0 00-1-1H12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M9 12l3-3-3-3M12 9H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Release</button>`:''}
@@ -13099,6 +13107,55 @@ async function confirmOpenWindow(staffId, context){
   if(typeof logActivity==='function') logActivity('window_override_open', {staffId:s.id, until, weeks:cfg.open, reason});
   closeModal();
   toast(`${fullName(s)}: assessment window opened for ${cfg.open} week${cfg.open===1?'':'s'}.`,'ok');
+  if(typeof renderHProfile==='function') renderHProfile(s.id, context||'admin');
+}
+
+// #120 master-admin override: waive / restore the practice-test gate for belt assessment requests.
+// Mirrors the window-override handlers: targeted single-column PATCH, master-admin only, audit-logged.
+async function grantAssessmentOverride(staffId, context){
+  if(!(ST.user && ST.user.role==='master_admin')){ toast('Not permitted.','err'); return; }
+  const s=getStaff(staffId);
+  if(!s) return;
+  const reason=prompt('Reason for waiving the practice-test gate for '+fullName(s)+'? (optional)');
+  if(reason===null) return; // cancelled
+  const prev=s.assessmentGateOverride || null;
+  s.assessmentGateOverride={
+    waived:true,
+    by: (ST.user && ST.user.id) || null,
+    byName: (ST.user && (ST.user.name || ST.user.email)) || ST.name || 'Admin',
+    at: new Date().toISOString(),
+    reason: reason.trim()
+  };
+  if(IS_LIVE && typeof SB!=='undefined' && SB.updateStaff){
+    try { await SB.updateStaff(s.id, { assessment_gate_override: s.assessmentGateOverride }); } // targeted single-column write
+    catch(e){
+      s.assessmentGateOverride=prev;
+      if(typeof handleSyncError==='function') handleSyncError(e,'Waive practice gate'); else toast('Could not save — please retry.','err');
+      return;
+    }
+  }
+  if(typeof logActivity==='function') logActivity('assessment_gate_override_grant', {staffId:s.id, reason:reason.trim()});
+  toast(`${fullName(s)}: practice gate waived. They can request an assessment now.`,'ok');
+  if(typeof renderHProfile==='function') renderHProfile(s.id, context||'admin');
+}
+
+async function clearAssessmentOverride(staffId, context){
+  if(!(ST.user && ST.user.role==='master_admin')){ toast('Not permitted.','err'); return; }
+  const s=getStaff(staffId);
+  if(!s || !s.assessmentGateOverride) return;
+  if(!confirm(`Remove the practice-gate waiver for ${fullName(s)}? They will need to complete the practice tests to request.`)) return;
+  const prev=s.assessmentGateOverride;
+  s.assessmentGateOverride=null;
+  if(IS_LIVE && typeof SB!=='undefined' && SB.updateStaff){
+    try { await SB.updateStaff(s.id, { assessment_gate_override: null }); }
+    catch(e){
+      s.assessmentGateOverride=prev;
+      if(typeof handleSyncError==='function') handleSyncError(e,'Clear practice-gate waiver'); else toast('Could not save — please retry.','err');
+      return;
+    }
+  }
+  if(typeof logActivity==='function') logActivity('assessment_gate_override_clear', {staffId:s.id});
+  toast(`${fullName(s)}: practice-gate waiver removed.`,'ok');
   if(typeof renderHProfile==='function') renderHProfile(s.id, context||'admin');
 }
 

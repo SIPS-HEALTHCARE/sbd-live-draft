@@ -577,6 +577,7 @@ function mapStaffFromBackend(row){
     placementNeeded: row.placement_needed,
     placementAcknowledged: row.placement_acknowledged || false,
     windowOverride: row.window_override || null,
+    assessmentGateOverride: row.assessment_gate_override || null,
   };
 }
 
@@ -600,7 +601,8 @@ function mapStaffToBackend(staff){
     oip: staff.oip || null,
     history: staff.history || null,
     practice_scores: staff.practiceScores || null,
-    window_override: staff.windowOverride || null
+    window_override: staff.windowOverride || null,
+    assessment_gate_override: staff.assessmentGateOverride || null
   };
   if(staff.cur){
     obj.cur_comp = staff.cur.c || null;
