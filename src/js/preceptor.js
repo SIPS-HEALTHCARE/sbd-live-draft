@@ -1847,6 +1847,186 @@ function getPrcModuleGates(sid,mid){
 }
 function isPrcModuleComplete(sid,mid){const p=getPrcModuleGates(sid,mid);return p.complete===true;}
 
+// ── Preceptor Certification Reporting Helpers (Ph.2) ─────────────────────────
+// Pure, READ-ONLY aggregation over the in-memory preceptor arrays, mirroring the
+// Foundations reporting helpers (fndSummaryForStaff / fiFacilityRollup in
+// foundations.js). No writes, no DB calls, no DOM — safe to call from any
+// report/dashboard path. ui-views.js only CALLS these (B7). See
+// docs/decisions/2026-07-22-preceptor-certification-ph2.md.
+// ⚠️ SCOPE: reads DB.preceptor* (RLS-filtered at hydration). Correct for
+//   self / own-facility surfaces; a cross-facility caller must supply
+//   scope-correct data. ⚠️ completedDateApprox is DERIVED from the G3 confirm
+//   date (no completed_at column) — treat it as approximate.
+
+// Summarize ONE preceptor module for a candidate into a report-ready row.
+// A preceptor module has a single scored Knowledge gate (threshold varies by
+// level), an assessor-administered Simulation, and a leader-confirmed Observation.
+function prcModuleSummary(m, assignment, gates){
+ const g1=(gates&&gates.g1)||{status:'locked',score:0,attempts:[]};
+ const g2=(gates&&gates.g2)||{status:'locked',score:0,attempts:[]};
+ const g3=(gates&&gates.g3)||{status:'locked',items:[]};
+ const thr=prcKThresh(m);
+ const kPasses=prcGatePasses(g1,thr);
+ const complete=!!(gates&&gates.complete);
+ // 'In Progress' is DERIVED (assigned & !complete); never stored.
+ let status; if(complete) status='complete'; else if(assignment) status='in_progress'; else status='not_assigned';
+ // "Stalled" (needs attention): assigned + not complete, with a Knowledge attempt
+ // below threshold, OR assigned with zero Knowledge passes recorded.
+ const failedAttempts=(g1.attempts||[]).filter(a=>(a.score||0)<thr).length;
+ const stalled=!!assignment&&!complete&&(failedAttempts>0||kPasses===0);
+ const dates=[];
+ (g1.attempts||[]).forEach(a=>{if(a&&a.date)dates.push(a.date);});
+ (g3.items||[]).forEach(i=>{if(i&&i.date)dates.push(i.date);});
+ dates.sort();
+ const lastActivityDate=dates.length?dates[dates.length-1]:null;
+ const confirmDates=complete?(g3.items||[]).filter(i=>i&&i.confirmed&&i.date).map(i=>i.date).sort():[];
+ const completedDateApprox=complete?(confirmDates.length?confirmDates[confirmDates.length-1]:lastActivityDate):null;
+ return {
+  moduleId:m.id, seq:m.seq, level:m.level, levelLabel:m.levelLabel, title:m.title,
+  assigned:!!assignment, complete, status, stalled,
+  kThresh:thr, kScore:g1.score||0,
+  kPasses:Math.min(kPasses,FND_PASSES_REQUIRED), passesRequired:FND_PASSES_REQUIRED,
+  gates:{
+   knowledge:  {status:g1.status, score:g1.score||0, passes:kPasses},
+   simulation: {status:g2.status, score:g2.score||0},
+   observation:{status:g3.status, score:g3.score||0}
+  },
+  assignedDate: assignment?(assignment.assignedDate||null):null,
+  lastActivityDate, completedDateApprox
+ };
+}
+
+// Preceptor summary for ONE candidate. Percentages are over ASSIGNED modules
+// (matches the "N/M completed" convention). Mirrors fndSummaryForStaff.
+function prcSummaryForStaff(staffId){
+ const asg={}; getPreceptorAssignments(staffId).forEach(a=>{asg[a.moduleId]=a;});
+ const rows=PRECEPTOR_MODULES.map(m=>prcModuleSummary(m, asg[m.id]||null, getPrcModuleGates(staffId,m.id)));
+ const assignedRows=rows.filter(r=>r.assigned);
+ const complete=assignedRows.filter(r=>r.complete).length;
+ const byLevel={1:{a:0,c:0},2:{a:0,c:0},3:{a:0,c:0}};
+ assignedRows.forEach(r=>{const L=byLevel[r.level]||(byLevel[r.level]={a:0,c:0});L.a++;if(r.complete)L.c++;});
+ return {
+  modules: rows,
+  assigned: assignedRows.length,
+  complete,
+  inProgress: assignedRows.length-complete,
+  pct: assignedRows.length?Math.round(complete/assignedRows.length*100):0,
+  needsAttention: assignedRows.some(r=>r.stalled),   // any stalled/failed module
+  byLevel
+ };
+}
+
+// Roll up preceptor completion across every candidate in a facility (or the whole
+// visible roster when facilityId is falsy). READ-ONLY; same SCOPE caveat as above.
+// Mirrors fiFacilityRollup. needsAttention = count of candidates with >= 1 stalled
+// module (a Knowledge attempt below threshold, or assigned-but-no-passes).
+function prcFacilityRollup(facilityId){
+ const roster=(typeof staffOf==='function')?staffOf(facilityId)
+             :(DB.staff||[]).filter(s=>!facilityId||s.fid===facilityId);
+ let assignedCount=0, completeCount=0, inProgressCount=0, staffWith=0, needsAttention=0;
+ const perStaff=roster.map(s=>{
+  const summary=prcSummaryForStaff(s.id);
+  assignedCount+=summary.assigned;
+  completeCount+=summary.complete;
+  inProgressCount+=summary.inProgress;
+  if(summary.assigned>0) staffWith++;
+  if(summary.assigned>0&&summary.needsAttention) needsAttention++;
+  return {staffId:s.id, name:(typeof fullName==='function'?fullName(s):s.name)||s.name, summary};
+ });
+ return {
+  facilityId: facilityId||null,
+  staffCount: roster.length,
+  staffWith,
+  assignedCount, completeCount, inProgressCount,
+  needsAttention,
+  completionPct: assignedCount?Math.round(completeCount/assignedCount*100):0,
+  perStaff
+ };
+}
+
+// Compact gate-progress cell text, e.g. "K 2/3 (90%) · Sim ✓ · Obs ✓".
+function _prcGateText(m){
+ const ks=m.kScore?' ('+m.kScore+'%)':'';
+ return 'K '+m.kPasses+'/'+m.passesRequired+ks+' · Sim '+(m.gates.simulation.status==='pass'?'✓':'assessor')+' · Obs '+(m.gates.observation.status==='pass'?'✓':'–');
+}
+
+// Personal report — on-screen (renderSReport). Mirrors fiStaffSectionHTML.
+function prcStaffSectionHTML(staffId){
+ const sum=prcSummaryForStaff(staffId);
+ const rows=sum.modules.filter(m=>m.assigned);
+ if(!rows.length) return '';
+ return rptSection('Preceptor Certification', sum.complete+'/'+sum.assigned+' complete ('+sum.pct+'%)')+
+   '<div class="card mb16">'+
+     '<div style="overflow-x:auto"><table class="tbl" style="min-width:520px">'+
+       '<thead><tr><th>Module</th><th>Level</th><th>Status</th><th>Gate Progress (K/Sim/Obs)</th><th>Started</th><th>Completed*</th></tr></thead>'+
+       '<tbody>'+rows.map(m=>'<tr>'+
+         '<td style="font-size:12px;font-weight:600">'+Security.sanitize(m.title)+'</td>'+
+         '<td><span style="font-size:9.5px;font-weight:700;color:var(--gold)">L'+m.level+'</span></td>'+
+         '<td>'+(m.complete?'<span class="pill p-ok">Complete</span>':(m.stalled?'<span class="pill p-err">Needs Attention</span>':'<span class="pill p-warn">In Progress</span>'))+'</td>'+
+         '<td style="font-size:11.5px;color:var(--txt2)">'+_prcGateText(m)+'</td>'+
+         '<td style="font-size:11px;color:var(--txt3)">'+(m.assignedDate||'--')+'</td>'+
+         '<td style="font-size:11px;color:'+(m.complete?'var(--ok)':'var(--txt3)')+';font-weight:'+(m.complete?'600':'400')+'">'+(m.completedDateApprox||'--')+'</td>'+
+       '</tr>').join('')+'</tbody>'+
+     '</table></div>'+
+     '<div style="font-size:10px;color:var(--txt3);margin-top:6px;padding:0 2px">* Completion date is derived from the observation sign-off and is approximate.</div>'+
+   '</div>';
+}
+
+// Personal report — PDF (downloadStaffReport). Mirrors fiStaffSectionPDF.
+function prcStaffSectionPDF(staffId){
+ const sum=prcSummaryForStaff(staffId);
+ const rows=sum.modules.filter(m=>m.assigned);
+ if(!rows.length) return '';
+ return pSection('Preceptor Certification', sum.complete+'/'+sum.assigned+' complete ('+sum.pct+'%)')+
+   '<table class="no-break"><thead><tr><th>Module</th><th>Level</th><th>Status</th><th>Gate Progress (K/Sim/Obs)</th><th>Started</th><th>Completed*</th></tr></thead>'+
+   '<tbody>'+rows.map(m=>'<tr>'+
+     '<td style="font-weight:600">'+Security.sanitize(m.title)+'</td>'+
+     '<td style="font-size:7.5pt;font-weight:700;color:#d97706">L'+m.level+'</td>'+
+     '<td><span class="badge '+(m.complete?'badge-green':(m.stalled?'badge-err':'badge-warn'))+'">'+(m.complete?'Complete':(m.stalled?'Needs Attention':'In Progress'))+'</span></td>'+
+     '<td style="font-size:8pt">'+_prcGateText(m)+'</td>'+
+     '<td style="color:#64748b">'+(m.assignedDate||'–')+'</td>'+
+     '<td style="color:'+(m.complete?'#16a34a':'#64748b')+';font-weight:'+(m.complete?'700':'400')+'">'+(m.completedDateApprox||'–')+'</td>'+
+   '</tr>').join('')+'</tbody></table>'+
+   '<div style="font-size:7.5pt;color:#64748b;margin-top:4px">* Completion date is derived from the observation sign-off and is approximate.</div>';
+}
+
+// Facility report — on-screen (renderHReports / renderAFacility). rollup = prcFacilityRollup(fid).
+// Mirrors fiFacilitySectionHTML (optional profileFn: manager uses openHProfile, admin openAdminProfile).
+function prcFacilitySectionHTML(rollup, profileFn){
+ if(!rollup || rollup.assignedCount===0) return '';
+ const opener=profileFn||'openHProfile';
+ const rows=rollup.perStaff.filter(p=>p.summary.assigned>0).sort((a,b)=>b.summary.pct-a.summary.pct);
+ return rptSection('Preceptor Certification', rollup.completeCount+'/'+rollup.assignedCount+' modules complete ('+rollup.completionPct+'%)')+
+   '<div class="card mb16">'+
+     '<div style="overflow-x:auto"><table class="tbl" style="min-width:460px">'+
+       '<thead><tr><th>Staff</th><th>Assigned</th><th>Complete</th><th>In Progress</th><th>Completion</th></tr></thead>'+
+       '<tbody>'+rows.map(p=>'<tr onclick="'+opener+'(\''+p.staffId+'\')" style="cursor:pointer">'+
+         '<td class="fw7">'+Security.sanitize(p.name||'--')+(p.summary.needsAttention?' <span class="pill p-err" style="font-size:9px">needs attention</span>':'')+'</td>'+
+         '<td>'+p.summary.assigned+'</td>'+
+         '<td style="color:var(--ok);font-weight:600">'+p.summary.complete+'</td>'+
+         '<td style="color:var(--warn)">'+p.summary.inProgress+'</td>'+
+         '<td><span style="font-weight:700;color:'+(p.summary.pct>=80?'var(--ok)':p.summary.pct>=50?'var(--warn)':'var(--err)')+'">'+p.summary.pct+'%</span></td>'+
+       '</tr>').join('')+'</tbody>'+
+     '</table></div>'+
+   '</div>';
+}
+
+// Facility report — PDF (downloadFacilityReportV2). rollup = prcFacilityRollup(facId).
+// Mirrors fiFacilitySectionPDF.
+function prcFacilitySectionPDF(rollup){
+ if(!rollup || rollup.assignedCount===0) return '';
+ const rows=rollup.perStaff.filter(p=>p.summary.assigned>0).sort((a,b)=>b.summary.pct-a.summary.pct);
+ return pSection('Preceptor Certification', rollup.completeCount+'/'+rollup.assignedCount+' modules complete ('+rollup.completionPct+'%)')+
+   '<table class="no-break"><thead><tr><th>Staff</th><th>Assigned</th><th>Complete</th><th>In Progress</th><th>Completion</th></tr></thead>'+
+   '<tbody>'+rows.map(p=>'<tr>'+
+     '<td style="font-weight:700">'+Security.sanitize(p.name||'–')+'</td>'+
+     '<td>'+p.summary.assigned+'</td>'+
+     '<td style="color:#16a34a;font-weight:700">'+p.summary.complete+'</td>'+
+     '<td style="color:#d97706">'+p.summary.inProgress+'</td>'+
+     '<td><span class="badge '+(p.summary.pct>=80?'badge-green':p.summary.pct>=60?'badge-warn':'badge-err')+'">'+p.summary.pct+'%</span></td>'+
+   '</tr>').join('')+'</tbody></table>';
+}
+
 // ── Live persistence (mirror each in-memory write to Supabase, guarded by IS_LIVE + SB) ──
 function _prcProgToBackend(p){return {staff_id:p.staffId,module_id:p.moduleId,g1:p.g1,g2:p.g2,g3:p.g3,complete:p.complete,updated_at:new Date().toISOString()};}
 function _prcSaveProgress(p){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.upsertPreceptorProgress){SB.upsertPreceptorProgress(_prcProgToBackend(p)).catch(e=>{if(typeof handleSyncError==='function')handleSyncError(e,'Preceptor progress');else console.warn('[prc] progress sync',e&&e.message);});}}catch(e){console.warn('[prc] progress sync',e);}}
@@ -2008,7 +2188,7 @@ function submitPrcGate(mid,gk){
  order.forEach((origIdx,qi)=>{const item=items[origIdx];const ci=ansIdx(item);const opts=document.querySelectorAll('input[name="prc-'+gk+'-'+m.id+'-'+qi+'"]');opts.forEach((opt,oi)=>{const lbl=opt.closest('.fnd-q-opt');if(!lbl)return;opt.disabled=true;if(oi===ci)lbl.classList.add('fnd-q-correct');else if(opt.checked&&oi!==ci)lbl.classList.add('fnd-q-wrong');});});
  const rEl=document.getElementById('prc-gate-result');
  if(rEl){if(score>=thr){const _g2=getPrcModuleGates(s.id,m.id);const _n=Math.min(prcGatePasses(_g2[gk],thr),FND_PASSES_REQUIRED);const _done=_n>=FND_PASSES_REQUIRED;const _obsNow=_done&&_g2.g3.status!=='pass';rEl.innerHTML='<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--r);padding:14px 16px;text-align:center;margin-top:12px"><div style="font-size:24px;font-weight:700;color:#4ade80">'+score+'%</div><div style="font-size:13px;color:#4ade80;font-weight:600;margin:4px 0">'+(_done?'Knowledge Gate Complete &mdash; '+_n+' of '+FND_PASSES_REQUIRED+' passes':'Knowledge pass '+_n+' of '+FND_PASSES_REQUIRED)+'</div><div style="font-size:12px;color:#94a3b8">'+correct+' of '+order.length+' correct.'+(_done?(_obsNow?' The observation capstone is now ready for your assessor.':''):' Take it again with a fresh set of questions; '+thr+'%+ counts as a pass.')+'</div>'+(_done?'':'<button class="btn btn-gold btn-sm" style="margin-top:8px" onclick="openPrcModule(\''+mid+'\')">Take Again (fresh questions)</button>')+'</div>';toast(_done?'Knowledge gate complete ('+_n+'/'+FND_PASSES_REQUIRED+')':'Knowledge pass '+_n+' of '+FND_PASSES_REQUIRED,'ok');}
- else{rEl.innerHTML='<div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:var(--r);padding:14px 16px;text-align:center;margin-top:12px"><div style="font-size:24px;font-weight:700;color:#f87171">'+score+'%</div><div style="font-size:13px;color:#f87171;font-weight:600;margin:4px 0">Not Yet Passing</div><div style="font-size:12px;color:#94a3b8">'+correct+' of '+order.length+' correct. '+thr+'% required.</div><button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="openPrcModule(\''+mid+'\')">Try Again</button></div>';toast('Score: '+score+'%. '+thr+'% required.','err');}}
+ else{rEl.innerHTML='<div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:var(--r);padding:14px 16px;text-align:center;margin-top:12px"><div style="font-size:24px;font-weight:700;color:#f87171">'+score+'%</div><div style="font-size:13px;color:#f87171;font-weight:600;margin:4px 0">Not Yet Passing</div><div style="font-size:12px;color:#94a3b8">'+correct+' of '+order.length+' correct. '+thr+'% required. This module needs another attempt &mdash; retake with fresh questions.</div><button class="btn btn-gold btn-sm" style="margin-top:8px" onclick="openPrcModule(\''+mid+'\')">Retake with fresh questions</button></div>';toast('Score: '+score+'%. '+thr+'% required.','err');}}
 }
 
 // Gate 2 Simulation — read-only assessor-administered reference (level capstone panel).
