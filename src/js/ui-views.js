@@ -7151,7 +7151,12 @@ function renderSDashboard(){
       </div>
       <div style="color:var(--txt3)"><svg viewBox="0 0 18 18" fill="none" width="14" height="14"><path d="M6 3l6 6-6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
     </div>` : '';
-  document.getElementById('s-dashboard').innerHTML= placementCallout + placementBanner + oipCallout + psCalloutHtml + studyCallout + `
+  // #121 (Ignacio, Loom 2026-07-22): a candidate with an assessor-approved gate must see the
+  // Begin card as the FIRST thing on login, not only inside Study & Practice. Reuses the same
+  // beltTestEntryCard; it renders only while a component gate is eligible and auto-clears once
+  // the test is taken (btComponentEligible -> false on PENDING_REVIEW), so it "hangs until complete".
+  const beltEntry = (typeof beltTestEntryCard==='function') ? beltTestEntryCard(s, nb) : '';
+  document.getElementById('s-dashboard').innerHTML= beltEntry + placementCallout + placementBanner + oipCallout + psCalloutHtml + studyCallout + `
     <div class="stat-grid">
       <div class="stat-card"><div class="stat-accent" style="background:${BELT_CLR[s.belt]}"></div>
         <div class="stat-lbl">Current Belt</div>
