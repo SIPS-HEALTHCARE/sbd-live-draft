@@ -222,8 +222,8 @@ Located in `supabase/functions/`. Each is a Deno serverless function.
 | `bulk-upload-staff` | CSV bulk staff import | `processBulkUpload()` |
 | `sbd-emails` / `sbd-send-emails` | Email notifications | Various triggers |
 | `sbd-assessment-notifications` | Notify on assessment events | Assessment flows |
-| `david-grade-assessment` | ⚠️ **ORPHANED** — AIP open-ended grader (M3). Duplicates `sbd-score-assessment`. | **Zero callers** (retire/keep = Decision D1) |
-| `sbd-matrix-seeder` | ⚠️ **ORPHANED + POLICY HAZARD** — seeds fake auth users/facilities. Must never run against prod. | **Zero callers** (recommended retire) |
+| `david-grade-assessment` | 🗑️ **RETIRED (#61)** — was an orphaned AIP open-ended grader duplicating `sbd-score-assessment`. Removed from repo; delete the deployed function from the Supabase dashboard to fully undeploy. | Zero callers — retired |
+| `sbd-matrix-seeder` | 🗑️ **RETIRED (#61)** — was a policy hazard that seeded fake auth users/facilities (`test-sbd.com`, hardcoded password) and remained deployed with `verify_jwt=false`. Removed from repo + local `scripts/seed-30-agents.js`. **Deployed function must still be deleted from the Supabase dashboard to fully undeploy.** | Zero callers — retired |
 
 ---
 
