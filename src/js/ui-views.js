@@ -7161,7 +7161,17 @@ function renderSDashboard(){
   // Begin card as the FIRST thing on login, not only inside Study & Practice. Reuses the same
   // beltTestEntryCard; it renders only while a component gate is eligible and auto-clears once
   // the test is taken (btComponentEligible -> false on PENDING_REVIEW), so it "hangs until complete".
-  const beltEntry = (typeof beltTestEntryCard==='function') ? beltTestEntryCard(s, nb) : '';
+  // #121 (Ignacio, Loom Jul 22): the dashboard shows a persistent "assessment ready" NOTIFICATION that
+  // routes into Study & Practice to begin — not the direct-launch card (that stays inside Study & Practice).
+  const beltEntry = (nb && typeof btEligible==='function' && btEligible(s.id, nb))
+    ? `<div style="background:rgba(139,92,246,.08);border:1.5px solid rgba(139,92,246,.4);border-radius:var(--r);padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+         <div style="flex:1;min-width:0">
+           <div style="font-size:12.5px;font-weight:800;color:#a78bfa;margin-bottom:3px">&#127894; Assessment ready to take</div>
+           <div style="font-size:12px;color:var(--txt2);line-height:1.5">Your assessor approved a gate for your ${nb} Belt. Go to Study &amp; Practice to begin your proctored test.</div>
+         </div>
+         <button class="btn btn-sm" style="background:#8b5cf6;color:#fff;border:none;white-space:nowrap" onclick="sNav(document.querySelector('#s-portal .nav-item[data-view=s-study]'),'s-study','Study &amp; Practice')">Go to Study &amp; Practice</button>
+       </div>`
+    : '';
   document.getElementById('s-dashboard').innerHTML= beltEntry + placementCallout + placementBanner + oipCallout + psCalloutHtml + studyCallout + `
     <div class="stat-grid">
       <div class="stat-card"><div class="stat-accent" style="background:${BELT_CLR[s.belt]}"></div>
