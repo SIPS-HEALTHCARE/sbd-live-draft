@@ -959,7 +959,7 @@ function renderGuideView(prefix){
   // List every section walkthrough available for this role
   const seenList = (ob && ob.seenSections) ? ob.seenSections : [];
   steps.forEach(step=>{
-    const viewId = step.target.match(/data-view="([^"]+)"/)?.[1] || '';
+    const viewId = step.view || step.target.match(/data-view="([^"]+)"/)?.[1] || '';
     if(!viewId || viewId === prefix+'-guide') return;
     const wt = SECTION_WALKTHROUGHS[viewId];
     if(!wt) return;
@@ -1046,7 +1046,7 @@ function renderGuideView(prefix){
     html += '<div class="guide-section-label">'+group+'</div>';
     html += '<div class="guide-card-grid">';
     groups[group].forEach(step=>{
-      const viewId = step.target.match(/data-view="([^"]+)"/)?.[1] || '';
+      const viewId = step.view || step.target.match(/data-view="([^"]+)"/)?.[1] || '';
       const icoClr = icoColors[group] || '#c49a20';
       html += '<div class="guide-card" data-guide-title="'+step.title.toLowerCase()+'" data-guide-desc="'+step.desc.toLowerCase()+'">';
       html += '<div class="guide-card-icon" style="background:'+icoClr+'15;border:1px solid '+icoClr+'30"><svg viewBox="0 0 18 18" fill="none" width="18" height="18"><circle cx="9" cy="9" r="6" stroke="'+icoClr+'" stroke-width="1.3" opacity=".8"/><circle cx="9" cy="9" r="2" fill="'+icoClr+'" opacity=".5"/></svg></div>';
@@ -1842,8 +1842,8 @@ function replaySingleSWT(viewId, prefix){
   const titleMap = {};
   const steps = TOUR_STEPS[getTourRole()] || [];
   steps.forEach(s=>{
-    const m = s.target.match(/data-view="([^"]+)"/);
-    if(m) titleMap[m[1]] = s.title;
+    const v = s.view || (s.target.match(/data-view="([^"]+)"/) || [])[1];
+    if(v) titleMap[v] = s.title;
   });
   const navEl = portalEl.querySelector('.nav-item[data-view="'+viewId+'"]');
   if(navEl) navFn(navEl, viewId, titleMap[viewId] || viewId);
@@ -1867,6 +1867,9 @@ enterPortal = function(type){
 
     // Attention check (runs every portal entry)
     checkAttentionItems(prefix);
+
+    // #8b staleness guard — dev-only; warns if a sidebar view lacks tour metadata.
+    if (typeof auditTourCoverage === 'function') auditTourCoverage();
   }, 200);
 };
 

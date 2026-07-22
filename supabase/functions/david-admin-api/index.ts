@@ -355,12 +355,17 @@ serve(async (req) => {
     }
 
     if (action === 'GET_AUDIT_LOGS') {
-      const { data, error } = await adminSupabase
+      // #15 audit drill-down: an optional facilityId in the payload scopes the log to one
+      // facility (per-card "View Audit"). Omitted → the network-wide latest-100 as before.
+      const facilityId = payload?.facilityId;
+      let query = adminSupabase
         .from('david_audit_logs')
         .select('id, created_at, action, facility_id, target_id, details, actor_id')
         .order('created_at', { ascending: false })
         .limit(100);
-      
+      if (facilityId) query = query.eq('facility_id', facilityId);
+      const { data, error } = await query;
+
       if (error) {
         console.error('[DAVID_ADMIN_API] GET_AUDIT_LOGS error:', JSON.stringify(error));
         throw error;

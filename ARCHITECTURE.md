@@ -21,7 +21,7 @@ It is NOT a framework project. It is a **vanilla HTML/CSS/JS single-page applica
 | Frontend | Vanilla HTML/CSS/JS | Single `index.html` entry point |
 | Backend | Supabase (PostgreSQL) | Project ID: `mhijaqahbceuahfzezbh` |
 | Auth | Supabase Auth (JWT) | Custom claims via `sbd-sync-user-claims` edge function |
-| Edge Functions | Deno (Supabase Functions) | 12 functions in `supabase/functions/` |
+| Edge Functions | Deno (Supabase Functions) | 20 functions in `supabase/functions/` |
 | AI Chat | DAVID AI | SSE streaming via `david-chat` edge function |
 | Deployment | Vercel | Static deploy, `vercel.json` copies files to `public/` |
 | CSS | Single `src/css/index.css` | 77KB, dark theme with gold accent (`#c49a20`) |
@@ -222,7 +222,6 @@ Located in `supabase/functions/`. Each is a Deno serverless function.
 | `bulk-upload-staff` | CSV bulk staff import | `processBulkUpload()` |
 | `sbd-emails` / `sbd-send-emails` | Email notifications | Various triggers |
 | `sbd-assessment-notifications` | Notify on assessment events | Assessment flows |
-| `sbd-matrix-seeder` | Seed assessment matrix data | Admin tools |
 
 ---
 

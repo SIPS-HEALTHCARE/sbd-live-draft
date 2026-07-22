@@ -387,8 +387,10 @@ function enterPortal(type){
   if(_navPlacement) _navPlacement.style.display='flex';
   if(typeof updatePlacementBadge === 'function') updatePlacementBadge();
   if(typeof updateObservationBadge === 'function') updateObservationBadge();
-  // Observer module (shell) — visible to SIPS admins. Per-observer role gating
-  // and the candidate request/PIN flow land in later Observer milestones.
+  // Observer console — visible to SIPS admins. The candidate request/PIN flow and the
+  // two-PIN capture handshake are live (#58). The queue is facility-scoped, which is the
+  // per-observer scope under the D2a decision, and in-progress rows show which observer
+  // holds them; DB-level per-observer isolation would be a separate D3-DB migration.
   const _navObs=document.getElementById('nav-observations');
   if(_navObs) _navObs.style.display='flex';
   const _navObsRev=document.getElementById('nav-observationreviews');
@@ -693,7 +695,7 @@ function renderADavidDashboardView() {
   const container = document.getElementById('a-daviddashboard');
   if (!container) return;
   // Load the premium Command Center UI directly
-  container.innerHTML = `<iframe src="/david-command-center.html?v=9" style="width:100%;height:calc(100vh - 64px);border:none;border-radius:12px;background:var(--bg);" allowfullscreen></iframe>`;
+  container.innerHTML = `<iframe src="/david-command-center.html?v=10" style="width:100%;height:calc(100vh - 64px);border:none;border-radius:12px;background:var(--bg);" allowfullscreen></iframe>`;
 }
 
 window.refreshDashboard = function() {
@@ -1985,6 +1987,7 @@ function renderPAScreen(){
       <div style="margin-bottom:20px">
         <div style="font-size:11px;color:#64748b;margin-bottom:8px;font-style:italic">Describe your approach in your own words. Be specific.</div>
         <textarea id="pa-sim-input" style="width:100%;min-height:140px;background:#0e1328;border:1.5px solid rgba(139,92,246,.3);border-radius:8px;padding:12px 14px;color:#e2e8f0;font-size:13.5px;line-height:1.6;resize:vertical;font-family:'Poppins',sans-serif;box-sizing:border-box" placeholder="Type your response here..." oninput="paSimInput('${q.id}',this.value)">${savedAns||''}</textarea>
+        <div style="text-align:right;margin-top:6px">${(window.micButtonHTML?micButtonHTML('pa-sim-input'):'')}</div>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">
           <div id="pa-sim-hint" style="font-size:11px;color:${charCount<minChars?'#f59e0b':'#22c55e'}">${charCount<minChars?`Minimum ${minChars} characters (${charCount}/${minChars})`:'Response recorded'}</div>
         </div>
@@ -2985,7 +2988,7 @@ function renderAObservations(){
     const statusPill = o.status === 'returned'
       ? '<span class="pill" style="color:#f59e0b;background:#f59e0b1a;border:1px solid #f59e0b55">Returned</span>'
       : o.status === 'in_progress'
-      ? '<span class="pill" style="color:#0ea5e9;background:#0ea5e91a;border:1px solid #0ea5e955">In progress</span>'
+      ? `<span class="pill" style="color:#0ea5e9;background:#0ea5e91a;border:1px solid #0ea5e955">In progress${o.observerName?' &middot; '+(typeof esc==='function'?esc(o.observerName):o.observerName):''}</span>`
       : '<span class="pill" style="color:#94a3b8;background:#94a3b81a;border:1px solid #94a3b855">Awaiting observer</span>';
     return `<tr style="border-top:1px solid var(--bdr)">
       <td style="padding:10px 8px"><div style="font-weight:700">${s?fullName(s):'Unknown'}</div><div style="font-size:11px;color:var(--txt3)">${fac?fac.name:'—'}</div></td>
@@ -13600,7 +13603,7 @@ function renderBeltTestReviewSection(assignedFids){
                   <td style="text-align:center">${resultBadge(r)}</td>
                   <td style="text-align:center">${floorFailCount(r) ? `<span class="pill p-warn">${floorFailCount(r)}</span>` : '<span style="color:var(--txt3)">0</span>'}</td>
                   <td style="text-align:center">${comboBadge(r)}</td>
-                  <td><textarea id="bt-notes-${r.id}" rows="2" placeholder="Optional notes for this gate…" style="width:170px;min-width:150px;background:var(--bg2,#0e1328);border:1px solid var(--bdr2);border-radius:6px;padding:6px 8px;color:var(--txt1);font-size:11.5px;font-family:inherit;resize:vertical;box-sizing:border-box">${esc(r.notes)}</textarea></td>
+                  <td><textarea id="bt-notes-${r.id}" rows="2" placeholder="Optional notes for this gate…" style="width:170px;min-width:150px;background:var(--bg2,#0e1328);border:1px solid var(--bdr2);border-radius:6px;padding:6px 8px;color:var(--txt1);font-size:11.5px;font-family:inherit;resize:vertical;box-sizing:border-box">${esc(r.notes)}</textarea><div style="text-align:right;margin-top:4px">${(window.micButtonHTML?micButtonHTML('bt-notes-'+r.id):'')}</div></td>
                   <td><div style="display:flex;gap:5px;flex-wrap:wrap">
                     <button class="btn btn-ghost btn-xs" onclick="downloadBeltTestReport('${r.id}')">Report</button>
                     <button class="btn btn-ok btn-xs" onclick="acceptBeltTestResult('${r.id}')">Accept</button>
@@ -14656,7 +14659,7 @@ function openRecordModal(sid){
         <button type="button" class="btn" id="ra-pass" style="justify-content:center;padding:12px;background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-bd)" onclick="selectResult('pass')">${ICO.check} Pass</button>
         <button type="button" class="btn" id="ra-fail" style="justify-content:center;padding:12px;background:var(--s2);color:var(--txt3);border:1px solid var(--bdr2)" onclick="selectResult('fail')">${ICO.x} Fail</button>
       </div></div>
-      <div class="form-group"><label class="form-label">Notes (optional)</label><textarea class="form-textarea" id="ra-notes" placeholder="Assessment notes..."></textarea></div>
+      <div class="form-group"><label class="form-label">Notes (optional)</label><textarea class="form-textarea" id="ra-notes" placeholder="Assessment notes..."></textarea><div style="text-align:right;margin-top:6px">${(window.micButtonHTML?micButtonHTML('ra-notes'):'')}</div></div>
     </div>
     <div class="modal-ft"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-gold" onclick="submitAssessment('${sid||''}')">${ICO.record} Submit Assessment</button></div>`,'modal-md');
 }

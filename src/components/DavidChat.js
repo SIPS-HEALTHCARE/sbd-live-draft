@@ -628,6 +628,24 @@ class DavidChat {
             .david-send-btn:hover { filter: brightness(1.08); }
             .david-send-btn:active { transform: scale(.94); }
             .david-send-btn:disabled { background: var(--s3); color: var(--txt3); cursor: not-allowed; filter: none; }
+            .david-mic-btn {
+                background: var(--s3);
+                border: 1px solid var(--glass-border, rgba(255,255,255,0.1));
+                border-radius: 10px;
+                width: 40px;
+                height: 40px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                flex-shrink: 0;
+                font-size: 16px;
+                line-height: 1;
+                transition: filter .15s, transform .15s, background .15s;
+            }
+            .david-mic-btn:hover { filter: brightness(1.12); }
+            .david-mic-btn:active { transform: scale(.94); }
+            .david-mic-btn[aria-pressed="true"] { background: #4a1414; }
 
             /* ── Citations, evidence, charts ── */
             .david-citation-badge {
@@ -927,6 +945,7 @@ class DavidChat {
                             <div class="david-chips-row" id="david-qa">${qaButtons}</div>
                             <div class="david-input-wrapper">
                                 <textarea placeholder="${placeholder}" id="david-query" rows="1"></textarea>
+                                ${(window.dictationSupported && window.dictationSupported()) ? `<button class="david-mic-btn" id="david-mic" aria-label="Dictate by voice" title="Dictate by voice" type="button" onclick="startDictation('david-query', this)"><span class="dictate-ico" aria-hidden="true">🎤</span></button>` : ''}
                                 <button class="david-send-btn" id="david-btn" aria-label="Send message" type="button">
                                     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
                                 </button>

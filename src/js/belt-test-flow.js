@@ -198,6 +198,7 @@ function renderBTScreen(){
     qHtml = `<div style="margin-bottom:20px">
       <div style="font-size:11px;color:#64748b;margin-bottom:8px;font-style:italic">Describe your approach in your own words. Be specific.</div>
       <textarea id="bt-sim-input" style="width:100%;min-height:140px;background:#0e1328;border:1.5px solid rgba(139,92,246,.3);border-radius:8px;padding:12px 14px;color:#e2e8f0;font-size:13.5px;line-height:1.6;resize:vertical;font-family:'Poppins',sans-serif;box-sizing:border-box" placeholder="Type your response here..." oninput="btSimInput('${q.id}',this.value)">${savedAns||''}</textarea>
+      <div style="text-align:right;margin-top:6px">${(window.micButtonHTML?micButtonHTML('bt-sim-input'):'')}</div>
       <div style="margin-top:6px"><div id="bt-sim-hint" style="font-size:11px;color:${charCount<minChars?'#f59e0b':'#22c55e'}">${charCount<minChars?`Minimum ${minChars} characters (${charCount}/${minChars})`:'Response recorded'}</div></div>
     </div>`;
   }
