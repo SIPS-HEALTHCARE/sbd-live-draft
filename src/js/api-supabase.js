@@ -271,6 +271,8 @@ const SB = {
   getUserProfile(userId){ return sbFetch(`/rest/v1/sbd_portal_users?auth_uid=eq.${userId}&select=*`); },
   getAllAdminProfiles(){ return sbFetch('/rest/v1/sbd_portal_users?select=*&order=name.asc'); },
   updateUserProfile(userId, data){ return sbFetch(`/rest/v1/sbd_portal_users?auth_uid=eq.${userId}`, { method:'PATCH', body:data }); },
+  // #73 v1.1: master-admin-only capability write via the SECURITY DEFINER RPC (role-checked server-side).
+  setUserCapabilities(authUid, caps){ return sbFetch('/rest/v1/rpc/sbd_set_user_capabilities', { method:'POST', body:{ p_staff_id: authUid, p_caps: caps || {} } }); },
   syncUserClaims(data){ return sbFetch('/functions/v1/sbd-sync-user-claims', { method:'POST', body:data }); },
   // ── David OG access ──
   // Mirrors supabase/functions/david-chat/auth.ts so the nav matches what the
@@ -917,7 +919,8 @@ function mapUserFromBackend(row){
     sid:          row.staff_id || row.auth_uid || row.id || null,
     assignedFids: row.assigned_facility_ids || [],
     active:       row.active,
-    protected:    row.protected
+    protected:    row.protected,
+    capabilities: row.capabilities || {}
   };
 }
 function mapUserToBackend(u){

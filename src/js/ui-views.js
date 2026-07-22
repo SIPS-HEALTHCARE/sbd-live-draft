@@ -9557,6 +9557,24 @@ function renderHStaff(){
 // ── Role helpers ──────────────────────────────────────────────────────────────
 function isFacilityAdmin(){ return ST.user && ST.user.role === 'facility_admin'; }
 function isAdminOrFacAdmin(){ return ST.user && (ST.user.role==='master_admin'||ST.user.role==='staff_admin'||ST.user.role==='facility_admin'); }
+// #73 v1.1: EFFECTIVE role = base role OR a granted capability. A granted user's own UI treats them
+// exactly like the role they were granted (assessor = system-wide; educator = the granted facilities).
+// Mirrors the server-side RLS (sbd_is_assessor / sbd_leads_facility_of), so UI and enforcement agree.
+function _capsOf(u){ return (u && u.capabilities) || {}; }
+function effIsAssessor(u){ u=u||ST.user; if(!u) return false; return u.role==='staff_admin'||u.role==='assessor'||!!_capsOf(u).assessor; }
+function effLeadsFacility(fid, u){ u=u||ST.user; if(!u||fid==null) return false;
+  if(u.role==='educator'||u.role==='hospital'||u.role==='facility_admin'){
+    if(u.fid!=null && String(u.fid)===String(fid)) return true;
+    if(Array.isArray(u.assignedFids) && u.assignedFids.map(String).indexOf(String(fid))>=0) return true;
+  }
+  var ef=_capsOf(u).educator_facilities;
+  return Array.isArray(ef) && ef.map(String).indexOf(String(fid))>=0;
+}
+// True if the current user leads ANY facility (base leader role or an educator capability grant).
+function effIsFacilityLeader(u){ u=u||ST.user; if(!u) return false;
+  if(u.role==='educator'||u.role==='hospital'||u.role==='facility_admin') return true;
+  var ef=_capsOf(u).educator_facilities; return Array.isArray(ef) && ef.length>0;
+}
 // Resolve context string for profile rendering  --  facility admins get admin-level capabilities
 function hProfileContext(){ return isFacilityAdmin() ? 'admin' : 'h'; }
 
@@ -16231,13 +16249,53 @@ function _rmPeople(){
 function _rmCapBadges(s){
   const prc=(typeof prcAccessState==='function')?prcAccessState(s.id):'default';
   const wv=s.assessmentGateOverride&&s.assessmentGateOverride.waived;
+  const cap=((DB.users||[]).find(x=>x.sid===s.id)||{}).capabilities||{};
+  const eduN=Array.isArray(cap.educator_facilities)?cap.educator_facilities.length:0;
   const chip=(on,txt,col)=>`<span class="pill" style="font-size:10px;padding:2px 7px;border:1px solid ${on?col+'55':'var(--bdr)'};background:${on?col+'1a':'transparent'};color:${on?col:'var(--txt3)'}">${txt}</span>`;
-  return [ chip(!!s.observer,'Observer','#0ea5e9'),
+  const out=[ chip(!!s.observer,'Observer','#0ea5e9'),
            chip(prc==='granted',prc==='revoked'?'Preceptor (revoked)':'Preceptor', prc==='revoked'?'#f87171':'#22c55e'),
-           chip(!!wv,'Gate waiver','#c49a20') ].join(' ');
+           chip(!!wv,'Gate waiver','#c49a20') ];
+  if(cap.assessor) out.push(chip(true,'Assessor','#a78bfa'));
+  if(eduN) out.push(chip(true,'Educator ×'+eduN,'#a78bfa'));
+  return out.join(' ');
 }
 
 function selectRoleMgmt(sid){ ROLEMGMT_SEL=sid; renderARoleMgmt(); }
+
+function _rmUserFor(staffId){ return (DB.users||[]).find(u=>u.sid===staffId) || null; }
+// #73 v1.1: master-admin capability write. Reads the person's current capabilities, applies a
+// mutation, and persists via the role-checked RPC (SB.setUserCapabilities). Optimistic with rollback.
+async function rmSetCapability(staffId, mutate){
+  if(!(ST.user&&ST.user.role==='master_admin')){ toast('Only master admins can change capabilities.','err'); return; }
+  const u=_rmUserFor(staffId);
+  if(!u || !u.authUid){ toast('This person has no login account to grant capabilities to.','err'); return; }
+  const caps = JSON.parse(JSON.stringify(u.capabilities||{}));
+  mutate(caps);
+  if(caps.assessor!==true) delete caps.assessor;
+  if(Array.isArray(caps.educator_facilities) && caps.educator_facilities.length===0) delete caps.educator_facilities;
+  const prev=u.capabilities;
+  u.capabilities=caps;
+  try{
+    if(IS_LIVE && typeof SB!=='undefined' && SB.setUserCapabilities) await SB.setUserCapabilities(u.authUid, caps);
+    if(typeof logActivity==='function') logActivity('capability_change', {staffId, capabilities:caps});
+    toast('Capabilities updated for '+fullName(getStaff(staffId)||{first:'',last:''})+'.','ok');
+  }catch(e){
+    u.capabilities=prev;
+    if(typeof handleSyncError==='function') handleSyncError(e,'Capability update'); else toast('Could not save — please retry.','err');
+  }
+  renderARoleMgmt();
+}
+function rmToggleAssessor(staffId){
+  const u=_rmUserFor(staffId); const cur=!!(u&&u.capabilities&&u.capabilities.assessor);
+  rmSetCapability(staffId, c=>{ if(cur) delete c.assessor; else c.assessor=true; });
+}
+function rmAddEducatorFac(staffId){
+  const sel=document.getElementById('rm-edu-fac-'+staffId); if(!sel||!sel.value) return; const fid=sel.value;
+  rmSetCapability(staffId, c=>{ c.educator_facilities=Array.isArray(c.educator_facilities)?c.educator_facilities:[]; if(c.educator_facilities.map(String).indexOf(String(fid))<0) c.educator_facilities.push(fid); });
+}
+function rmRemoveEducatorFac(staffId, fid){
+  rmSetCapability(staffId, c=>{ if(Array.isArray(c.educator_facilities)) c.educator_facilities=c.educator_facilities.filter(x=>String(x)!==String(fid)); });
+}
 
 function _rmPanel(s){
   const u=(DB.users||[]).find(x=>x.sid===s.id);
@@ -16245,6 +16303,8 @@ function _rmPanel(s){
   const sys=fac&&fac.systemId&&typeof getSystem==='function'?getSystem(fac.systemId):null;
   const role=(u&&u.role)||s.role||'staff_member';
   const wv=s.assessmentGateOverride&&s.assessmentGateOverride.waived;
+  const cap=(u&&u.capabilities)||{};
+  const eduFacs=Array.isArray(cap.educator_facilities)?cap.educator_facilities:[];
   return `<div class="card">
     <div class="card-hd"><div class="card-ttl">${fullName(s)}</div>
       <button class="btn btn-ghost btn-xs" onclick="ROLEMGMT_SEL=null;renderARoleMgmt()">Close</button></div>
@@ -16272,6 +16332,16 @@ function _rmPanel(s){
             <div><div style="font-size:12.5px;font-weight:600">Assessment practice-gate waiver</div><div style="font-size:11px;color:var(--txt3)">Request an assessment without the practice tests</div></div>
             ${wv?`<button class="btn btn-ghost btn-sm" onclick="clearAssessmentOverride('${s.id}','rolemgmt')">Clear</button>`:`<button class="btn btn-ghost btn-sm" onclick="grantAssessmentOverride('${s.id}','rolemgmt')" style="border-color:var(--gold-bd);color:var(--gold)">Waive</button>`}
           </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--bdr);border-radius:8px;padding:8px 11px">
+            <div><div style="font-size:12.5px;font-weight:600">Assessor rights</div><div style="font-size:11px;color:var(--txt3)">System-wide assessor access (observe + confirm), on top of their role</div></div>
+            <button class="btn btn-ghost btn-sm" onclick="rmToggleAssessor('${s.id}')" style="border-color:${cap.assessor?'#22c55e':'var(--bdr)'};color:${cap.assessor?'#22c55e':'var(--txt2)'}"${u?'':' disabled title="No login account"'}>${cap.assessor?'On':'Grant'}</button>
+          </div>
+          <div style="border:1px solid var(--bdr);border-radius:8px;padding:8px 11px">
+            <div style="font-size:12.5px;font-weight:600">Facility educator</div>
+            <div style="font-size:11px;color:var(--txt3);margin:2px 0 7px">Educator/leader access at specific facilities, on top of their role</div>
+            <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:7px">${eduFacs.length?eduFacs.map(fid=>{const f=getFac(fid);return `<span class="pill" style="font-size:10px;padding:2px 6px;border:1px solid #22c55e55;background:#22c55e1a;color:#22c55e">${f?f.name:fid} <span style="cursor:pointer;font-weight:800" onclick="rmRemoveEducatorFac('${s.id}','${fid}')">&times;</span></span>`;}).join(''):'<span style="font-size:11px;color:var(--txt3)">None</span>'}</div>
+            ${u?`<div style="display:flex;gap:6px"><select id="rm-edu-fac-${s.id}" class="form-select" style="flex:1;font-size:12px;padding:5px 8px">${(DB.facilities||[]).map(f=>`<option value="${f.id}">${f.name}</option>`).join('')}</select><button class="btn btn-ghost btn-sm" onclick="rmAddEducatorFac('${s.id}')">Add</button></div>`:'<span style="font-size:11px;color:var(--txt3)">No login account to grant to.</span>'}
+          </div>
         </div>
       </div>
       <div>
@@ -16288,7 +16358,7 @@ async function _rmLoadAudit(sid){
     const rows=(IS_LIVE && typeof SB!=='undefined' && SB.getStaffActivity)?await SB.getStaffActivity(sid,40):[];
     if(ROLEMGMT_SEL!==sid) return;
     const box2=document.getElementById('rm-audit'); if(!box2) return;
-    const accessTypes=['role_change','capability_grant','capability_revoke','window_override_open','window_override_close','assessment_gate_override_grant','assessment_gate_override_clear'];
+    const accessTypes=['role_change','capability_change','capability_grant','capability_revoke','window_override_open','window_override_close','assessment_gate_override_grant','assessment_gate_override_clear'];
     const filtered=(rows||[]).filter(r=>accessTypes.indexOf(r.event_type)>=0);
     const show=(filtered.length?filtered:(rows||[])).slice(0,15);
     box2.innerHTML=show.length?show.map(r=>{
