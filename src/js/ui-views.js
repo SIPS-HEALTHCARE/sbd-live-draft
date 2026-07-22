@@ -375,6 +375,8 @@ function enterPortal(type){
   document.getElementById('a-topbar-pill').textContent=isMaster?'Master Admin':'Staff Admin';
   document.getElementById('admin-mgmt-lbl').style.display=isMaster?'block':'none';
   document.getElementById('nav-adminusers').style.display=isMaster?'flex':'none';
+  const _navRoleMgmt = document.getElementById('nav-rolemgmt');
+  if (_navRoleMgmt) _navRoleMgmt.style.display = isMaster ? 'flex' : 'none';
   const _navDavidDash = document.getElementById('nav-daviddashboard');
   if (_navDavidDash) _navDavidDash.style.display = isMaster ? 'flex' : 'none';
   document.getElementById('nav-freeagents').style.display=isMaster?'flex':'none';
@@ -620,7 +622,7 @@ function renderAView(view){
     toast('RBAC Guard: Unauthorized access to Network Portal', 'err');
     return;
   }
-  ['a-overview','a-leaderboard','a-allstaff','a-scoreboard','a-facilities','a-facility','a-registrations','a-assessments','a-progression','a-foundations','a-instruments','a-preceptor','a-upload','a-reports','a-david','a-daviddashboard','a-adminusers','a-promoqueue','a-freeagents','a-placementreviews','a-observations','a-observationreviews','a-guide','a-settings','a-systems','a-systems-dashboard'].forEach(v=>{
+  ['a-overview','a-leaderboard','a-allstaff','a-scoreboard','a-facilities','a-facility','a-registrations','a-assessments','a-progression','a-foundations','a-instruments','a-preceptor','a-upload','a-reports','a-david','a-daviddashboard','a-adminusers','a-rolemgmt','a-promoqueue','a-freeagents','a-placementreviews','a-observations','a-observationreviews','a-guide','a-settings','a-systems','a-systems-dashboard'].forEach(v=>{
     const el=document.getElementById(v);
     if(el){ el.classList.add('hidden'); el.classList.remove('fade-in'); }
   });
@@ -640,6 +642,7 @@ function renderAView(view){
     'a-david':renderADavidView,
     'a-daviddashboard':renderADavidDashboardView,
     'a-adminusers':renderAAdminUsers,
+    'a-rolemgmt':renderARoleMgmt,
     'a-promoqueue':renderAPromoQueue,
     'a-freeagents':renderAFreeAgents,
     'a-placementreviews':renderAPlacementReviews,
@@ -2716,7 +2719,7 @@ function reviewFilterBar(onChangeFn){
     </div>`;
 }
 // Lightweight page search: shared state + caret-preserving input + box markup
-const PAGE_Q = { reg:'', fa:'', users:'' };
+const PAGE_Q = { reg:'', fa:'', users:'', rolemgmt:'' };
 function pageSearchInput(el, key, renderFn){
   PAGE_Q[key]=el.value; const c=el.selectionStart;
   if(typeof window[renderFn]==='function') window[renderFn]();
@@ -13017,16 +13020,22 @@ function openAdminProfile(sid){
 
 // Grant / revoke Observer access (master-admin only). Flips the staff.observer
 // flag via a targeted single-column write -- never touches other staff fields.
+// #73: after a role/capability action, re-render the surface it was invoked from
+// ('rolemgmt' = the Role Management console; anything else = the staff profile).
+function _accessActionRerender(sid, context){
+  if(context==='rolemgmt' && typeof renderARoleMgmt==='function'){ renderARoleMgmt(); return; }
+  if(typeof renderHProfile==='function') renderHProfile(sid, context);
+}
 function toggleObserver(sid, context){
   const s=getStaff(sid); if(!s) return;
   if(!(ST.user&&ST.user.role==='master_admin')){toast('Only master admins can grant observer access.','err');return;}
   const next=!s.observer;
   s.observer=next;
   if(IS_LIVE && typeof SB!=='undefined' && SB.updateStaff){
-    SB.updateStaff(sid,{observer:next}).catch(e=>{ s.observer=!next; handleSyncError(e,'Observer toggle'); if(typeof renderHProfile==='function') renderHProfile(sid,context); });
+    SB.updateStaff(sid,{observer:next}).catch(e=>{ s.observer=!next; handleSyncError(e,'Observer toggle'); _accessActionRerender(sid,context); });
   }
   toast(`${fullName(s)} ${next?'is now an authorized observer.':'is no longer an observer.'}`, next?'ok':'err');
-  if(typeof renderHProfile==='function') renderHProfile(sid,context);
+  _accessActionRerender(sid,context);
 }
 
 // Generate a reusable observation PIN for an authorized observer (master-admin only).
@@ -13136,7 +13145,7 @@ async function grantAssessmentOverride(staffId, context){
   }
   if(typeof logActivity==='function') logActivity('assessment_gate_override_grant', {staffId:s.id, reason:reason.trim()});
   toast(`${fullName(s)}: practice gate waived. They can request an assessment now.`,'ok');
-  if(typeof renderHProfile==='function') renderHProfile(s.id, context||'admin');
+  _accessActionRerender(s.id, context||'admin');
 }
 
 async function clearAssessmentOverride(staffId, context){
@@ -13156,7 +13165,7 @@ async function clearAssessmentOverride(staffId, context){
   }
   if(typeof logActivity==='function') logActivity('assessment_gate_override_clear', {staffId:s.id});
   toast(`${fullName(s)}: practice-gate waiver removed.`,'ok');
-  if(typeof renderHProfile==='function') renderHProfile(s.id, context||'admin');
+  _accessActionRerender(s.id, context||'admin');
 }
 
 async function adminCloseWindow(staffId, context){
@@ -16195,6 +16204,125 @@ async function executeReleaseToFA(staffId){
   if(ST.hView==='h-staff') renderHStaff();
 }
 
+
+// ============================================================ ROLE MANAGEMENT (#73 v1)
+// Master-admin console to search any person across every system/facility and review or change
+// their role and role-independent capabilities in one place, with an audit trail. Reuses the
+// existing write paths (syncUserClaims for role, toggleObserver/prcSetAccess/assessment waiver
+// for capabilities); those handlers re-render this console when invoked with context 'rolemgmt'.
+let ROLEMGMT_SEL = null;
+const ROLE_LABELS = {master_admin:'Master Admin',staff_admin:'Assessor',system_admin:'System Admin',hospital:'Hospital Manager',facility_admin:'Facility Admin',staff_member:'Staff Member'};
+
+function _rmPeople(){
+  const q=(PAGE_Q.rolemgmt||'').trim().toLowerCase();
+  let list=(DB.staff||[]).map(s=>{
+    const fac=(typeof getFac==='function')?getFac(s.fid):null;
+    const sys=fac&&fac.systemId&&typeof getSystem==='function'?getSystem(fac.systemId):null;
+    const u=(DB.users||[]).find(x=>x.sid===s.id);
+    return { s, fac, sys, u, role:(u&&u.role)||s.role||'staff_member', email:(u&&u.email)||'' };
+  });
+  if(q) list=list.filter(p=>[fullName(p.s),p.email,p.fac?p.fac.name:'',p.sys?p.sys.name:'',ROLE_LABELS[p.role]||p.role].join(' ').toLowerCase().includes(q));
+  return list.sort((a,b)=>fullName(a.s).localeCompare(fullName(b.s)));
+}
+
+function _rmCapBadges(s){
+  const prc=(typeof prcAccessState==='function')?prcAccessState(s.id):'default';
+  const wv=s.assessmentGateOverride&&s.assessmentGateOverride.waived;
+  const chip=(on,txt,col)=>`<span class="pill" style="font-size:10px;padding:2px 7px;border:1px solid ${on?col+'55':'var(--bdr)'};background:${on?col+'1a':'transparent'};color:${on?col:'var(--txt3)'}">${txt}</span>`;
+  return [ chip(!!s.observer,'Observer','#0ea5e9'),
+           chip(prc==='granted',prc==='revoked'?'Preceptor (revoked)':'Preceptor', prc==='revoked'?'#f87171':'#22c55e'),
+           chip(!!wv,'Gate waiver','#c49a20') ].join(' ');
+}
+
+function selectRoleMgmt(sid){ ROLEMGMT_SEL=sid; renderARoleMgmt(); }
+
+function _rmPanel(s){
+  const u=(DB.users||[]).find(x=>x.sid===s.id);
+  const fac=(typeof getFac==='function')?getFac(s.fid):null;
+  const sys=fac&&fac.systemId&&typeof getSystem==='function'?getSystem(fac.systemId):null;
+  const role=(u&&u.role)||s.role||'staff_member';
+  const wv=s.assessmentGateOverride&&s.assessmentGateOverride.waived;
+  return `<div class="card">
+    <div class="card-hd"><div class="card-ttl">${fullName(s)}</div>
+      <button class="btn btn-ghost btn-xs" onclick="ROLEMGMT_SEL=null;renderARoleMgmt()">Close</button></div>
+    <div class="card-body" style="display:flex;flex-direction:column;gap:14px">
+      <div style="font-size:11.5px;color:var(--txt3)">${fac?fac.name:'No facility'}${sys?' &middot; '+sys.name:''} &middot; ${s.belt} Belt</div>
+      <div>
+        <div style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Account Role</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span class="pill" style="background:rgba(139,92,246,.12);color:#a78bfa;border:1px solid rgba(139,92,246,.3)">${ROLE_LABELS[role]||role}</span>
+          ${u?`<button class="btn btn-ghost btn-sm" onclick="openEditUserModal('${u.id}')">Change role</button>`:'<span style="font-size:11px;color:var(--txt3)">No login account</span>'}
+        </div>
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Access &amp; capabilities (independent of role)</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--bdr);border-radius:8px;padding:8px 11px">
+            <div><div style="font-size:12.5px;font-weight:600">Observer</div><div style="font-size:11px;color:var(--txt3)">Can conduct observations</div></div>
+            <button class="btn btn-ghost btn-sm" onclick="toggleObserver('${s.id}','rolemgmt')" style="border-color:${s.observer?'#0ea5e9':'var(--bdr)'};color:${s.observer?'#0ea5e9':'var(--txt2)'}">${s.observer?'On':'Grant'}</button>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--bdr);border-radius:8px;padding:8px 11px;flex-wrap:wrap">
+            <div><div style="font-size:12.5px;font-weight:600">Preceptor access</div><div style="font-size:11px;color:var(--txt3)">Curriculum access, overrides belt</div></div>
+            ${typeof prcAccessControlHTML==='function'?prcAccessControlHTML(s.id,'rolemgmt'):''}
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--bdr);border-radius:8px;padding:8px 11px">
+            <div><div style="font-size:12.5px;font-weight:600">Assessment practice-gate waiver</div><div style="font-size:11px;color:var(--txt3)">Request an assessment without the practice tests</div></div>
+            ${wv?`<button class="btn btn-ghost btn-sm" onclick="clearAssessmentOverride('${s.id}','rolemgmt')">Clear</button>`:`<button class="btn btn-ghost btn-sm" onclick="grantAssessmentOverride('${s.id}','rolemgmt')" style="border-color:var(--gold-bd);color:var(--gold)">Waive</button>`}
+          </div>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Audit trail</div>
+        <div id="rm-audit" style="font-size:11.5px;color:var(--txt3)">Loading recent activity...</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function _rmLoadAudit(sid){
+  const box=document.getElementById('rm-audit'); if(!box) return;
+  try{
+    const rows=(IS_LIVE && typeof SB!=='undefined' && SB.getStaffActivity)?await SB.getStaffActivity(sid,40):[];
+    if(ROLEMGMT_SEL!==sid) return;
+    const box2=document.getElementById('rm-audit'); if(!box2) return;
+    const accessTypes=['role_change','capability_grant','capability_revoke','window_override_open','window_override_close','assessment_gate_override_grant','assessment_gate_override_clear'];
+    const filtered=(rows||[]).filter(r=>accessTypes.indexOf(r.event_type)>=0);
+    const show=(filtered.length?filtered:(rows||[])).slice(0,15);
+    box2.innerHTML=show.length?show.map(r=>{
+      const d=r.created_at?new Date(r.created_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'';
+      let meta=''; if(r.event_meta){ meta=(typeof r.event_meta==='string')?r.event_meta:(r.event_meta.reason||''); }
+      return `<div style="padding:6px 0;border-bottom:1px solid var(--bdr)"><span style="color:var(--txt2);font-weight:600">${String(r.event_type||'').replace(/_/g,' ')}</span> <span style="color:var(--txt3)">${d}</span>${meta?`<div style="color:var(--txt3);font-size:11px">${String(meta).slice(0,120)}</div>`:''}</div>`;
+    }).join(''):'<div style="color:var(--txt3)">No recorded activity yet.</div>';
+  }catch(e){ const b=document.getElementById('rm-audit'); if(b) b.innerHTML='<div style="color:var(--txt3)">Audit log unavailable right now.</div>'; }
+}
+
+function renderARoleMgmt(){
+  const el=document.getElementById('a-rolemgmt'); if(!el) return;
+  if(!(ST.user&&ST.user.role==='master_admin')){ el.innerHTML='<div class="empty-state"><div class="empty-ttl">Master Admin only</div></div>'; return; }
+  const people=_rmPeople();
+  const sel=ROLEMGMT_SEL?getStaff(ROLEMGMT_SEL):null;
+  el.innerHTML=`
+    <div class="card mb12">
+      <div class="card-hd" style="gap:10px;flex-wrap:wrap"><div class="card-ttl">Role &amp; Access Management</div>
+        ${pageSearchBox('rolemgmt','renderARoleMgmt','Search person, facility, or system...')}
+      </div>
+      <div class="card-body" style="font-size:11.5px;color:var(--txt3)">Search anyone across every system and facility, review their role and access, and grant or remove capabilities independent of their staff role. Master-admin only; every change is recorded in the audit trail.</div>
+    </div>
+    <div style="display:grid;grid-template-columns:${sel?'minmax(0,1fr) minmax(0,1.3fr)':'1fr'};gap:12px;align-items:start">
+      <div class="card"><div class="card-hd"><div class="card-ttl">People</div><span class="pill p-muted">${people.length}</span></div>
+        <div style="max-height:540px;overflow-y:auto">
+          ${people.length?people.map(p=>`
+            <div onclick="selectRoleMgmt('${p.s.id}')" style="padding:11px 14px;border-bottom:1px solid var(--bdr);cursor:pointer;background:${ROLEMGMT_SEL===p.s.id?'rgba(139,92,246,.08)':'transparent'}">
+              <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${fullName(p.s)}</div>
+              <div style="font-size:11px;color:var(--txt3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${ROLE_LABELS[p.role]||p.role} &middot; ${p.fac?p.fac.name:'No facility'}${p.sys?' &middot; '+p.sys.name:''}</div>
+              <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">${_rmCapBadges(p.s)}</div>
+            </div>`).join(''):'<div style="padding:24px;text-align:center;color:var(--txt3);font-size:12px">No people match that search.</div>'}
+        </div>
+      </div>
+      ${sel?_rmPanel(sel):'<div class="card"><div class="card-body" style="text-align:center;color:var(--txt3);font-size:12px;padding:40px 20px">Select a person to review and manage their role and access.</div></div>'}
+    </div>`;
+  if(sel) _rmLoadAudit(sel.id);
+}
 
 function renderAAdminUsers(){
   const isMaster = ST.user && ST.user.role === 'master_admin';

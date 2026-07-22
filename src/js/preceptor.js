@@ -2169,7 +2169,7 @@ function _prcSaveAccess(row){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeo
 // Master-admin toggle handler. state = 'granted' | 'revoked' | 'default'. Prompts for a
 // reason on grant/revoke, updates DB.preceptorAccess in memory, and persists. NOTHING is
 // deleted — revoke only sets state, so a later re-grant restores progress untouched.
-function prcSetAccess(staffId,state){
+function prcSetAccess(staffId,state,context){
  if(!(typeof ST!=='undefined'&&ST.user&&ST.user.role==='master_admin')){if(typeof toast==='function')toast('Only the Master Admin can change preceptor access','err');return;}
  if(['granted','revoked','default'].indexOf(state)<0) return;
  let reason='';
@@ -2186,7 +2186,8 @@ function prcSetAccess(staffId,state){
  row.state=state; row.grantedBy=by; row.reason=reason||null; row.grantedAt=now; row.updatedAt=now;
  _prcSaveAccess({staff_id:staffId,state:state,granted_by:by,reason:reason||null,granted_at:now,updated_at:now});
  if(typeof toast==='function') toast('Preceptor access '+(state==='granted'?'granted':state==='revoked'?'revoked — progress preserved':'reset to default (belt-based)'), state==='revoked'?'err':'ok');
- if(typeof renderHProfile==='function') renderHProfile(staffId,'admin');
+ if(context==='rolemgmt' && typeof renderARoleMgmt==='function'){ renderARoleMgmt(); }
+ else if(typeof renderHProfile==='function'){ renderHProfile(staffId,'admin'); }
 }
 // Renders the master-admin access control (state + Grant/Revoke/Reset). Called from
 // ui-views.js openAdminProfile surface (master-admin gated there); domain logic lives here (B7).
@@ -2194,7 +2195,7 @@ function prcAccessControlHTML(staffId,context){
  const st=prcAccessState(staffId);
  const lbl=st==='granted'?'Granted':st==='revoked'?'Revoked':'Default (belt-based)';
  const col=st==='granted'?'#4ade80':st==='revoked'?'#f87171':'var(--txt2)';
- const btn=(s,txt,extra)=>'<button class="btn btn-ghost btn-xs"'+(st===s?' disabled style="opacity:.45"':(extra?' style="'+extra+'"':''))+' onclick="prcSetAccess(\''+staffId+'\',\''+s+'\')">'+txt+'</button>';
+ const btn=(s,txt,extra)=>'<button class="btn btn-ghost btn-xs"'+(st===s?' disabled style="opacity:.45"':(extra?' style="'+extra+'"':''))+' onclick="prcSetAccess(\''+staffId+'\',\''+s+'\',\''+(context||'admin')+'\')">'+txt+'</button>';
  return '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;border:1px solid var(--bdr);border-radius:8px;padding:5px 9px" title="Master-admin preceptor curriculum access (overrides belt)">'
    +'<svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--gold)"><path d="M10 2l6 3v5c0 4-3 6-6 8-3-2-6-4-6-8V5l6-3z"/></svg>'
    +'<span style="font-size:11px;color:var(--txt3)">Preceptor: <b style="color:'+col+'">'+lbl+'</b></span>'
