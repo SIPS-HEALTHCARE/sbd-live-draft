@@ -5573,6 +5573,8 @@ function downloadStaffReport(staffId){
 
     ${fiStaffSectionPDF(s.id)}
 
+    ${prcStaffSectionPDF(s.id)}
+
     ${oipSection}
 
     ${pSection('Full Assessment Log', (s.history||[]).length+' entries')}
@@ -5702,6 +5704,8 @@ function downloadFacilityReportV2(fid){
     }).join('')}</tbody></table>
 
     ${fiFacilitySectionPDF(fiFacilityRollup(facId))}
+
+    ${prcFacilitySectionPDF(prcFacilityRollup(facId))}
 
     ${pSection('OIP Team Composition')}
     <div class="grid-4 no-break" style="gap:10px;margin-bottom:14px">
@@ -6113,6 +6117,9 @@ async function renderSReport(){
 
     <!-- Foundations & Instruments -->
     ${fiStaffSectionHTML(s.id)}
+
+    <!-- Preceptor Certification -->
+    ${prcStaffSectionHTML(s.id)}
 
     <!-- Belt Progression Timeline -->
     ${rptSection('Belt Progression Timeline')}
@@ -9399,12 +9406,14 @@ function renderHDashboard(){
   const beltCounts=BELT_ORDER.map(b=>st.filter(s=>s.belt===b).length);
   const hs=buildHealthScore(fid);
   const fiRoll=(typeof fiFacilityRollup==='function')?fiFacilityRollup(fid):null;
+  const prcRoll=(typeof prcFacilityRollup==='function')?prcFacilityRollup(fid):null;
 
   document.getElementById('h-dashboard').innerHTML=`
     <div class="stat-grid">
       <div class="stat-card"><div class="stat-accent" style="background:var(--blue)"></div><div class="stat-lbl">Total Staff</div><div class="stat-val" style="color:var(--blue)">${n}</div><div class="stat-sub">Department members</div></div>
       <div class="stat-card"><div class="stat-accent" style="background:var(--ok)"></div><div class="stat-lbl">Green Belt Compliance</div><div class="stat-val" style="color:var(--ok)">${pct}%</div><div class="stat-sub">${aboveGreen} of ${n} at Green+</div></div>
       <div class="stat-card"><div class="stat-accent" style="background:var(--gold)"></div><div class="stat-lbl">F&amp;I Completion</div><div class="stat-val" style="color:var(--gold)">${fiRoll&&fiRoll.assignedCount?fiRoll.completionPct+'%':'--'}</div><div class="stat-sub">${fiRoll&&fiRoll.assignedCount?fiRoll.completeCount+' of '+fiRoll.assignedCount+' modules':'No modules assigned'}</div></div>
+      <div class="stat-card"><div class="stat-accent" style="background:var(--gold)"></div><div class="stat-lbl">Preceptor Certification</div><div class="stat-val" style="color:var(--gold)">${prcRoll&&prcRoll.assignedCount?prcRoll.completionPct+'%':'--'}</div><div class="stat-sub">${prcRoll&&prcRoll.assignedCount?prcRoll.completeCount+' of '+prcRoll.assignedCount+' modules':'No modules assigned'}</div></div>
       <div class="stat-card"><div class="stat-accent" style="background:${hs.gradeColor}"></div>
         <div class="stat-lbl">Health Grade</div>
         <div class="stat-val" style="color:${hs.gradeColor};font-size:26px">${hs.grade} <span style="font-size:14px;font-weight:700">${hs.totalScore}/100</span></div>
@@ -11427,6 +11436,8 @@ function renderHReports(){
 
     ${fiFacilitySectionHTML(fiFacilityRollup(fid))}
 
+    ${prcFacilitySectionHTML(prcFacilityRollup(fid))}
+
     ${rptSection('OIP Team Composition')}
     <div class="card mb16">
       <div class="card-body">
@@ -11663,6 +11674,11 @@ function renderAOverview(){
   const allSt=DB.staff.filter(s=>scopedFacs.find(f=>f.id===s.fid));
   const n=allSt.length;
   const aboveG=allSt.filter(s=>beltIdx(s.belt)>=2).length;
+  // Network-scoped preceptor rollup: sum the per-facility rollup over scoped
+  // facilities (respects the master/assignedFids scope; prcFacilityRollup(null)
+  // would ignore it). Minimal glue over the preceptor.js data fn (B7).
+  const prcNet=(typeof prcFacilityRollup==='function')?scopedFacs.reduce((acc,f)=>{const r=prcFacilityRollup(f.id);acc.assignedCount+=r.assignedCount;acc.completeCount+=r.completeCount;return acc;},{assignedCount:0,completeCount:0}):null;
+  const prcNetPct=prcNet&&prcNet.assignedCount?Math.round(prcNet.completeCount/prcNet.assignedCount*100):0;
   document.getElementById('a-overview').innerHTML=`
     <div class="stat-grid">
       <div class="stat-card"><div class="stat-accent" style="background:var(--gold)"></div><div class="stat-lbl">Active Facilities</div><div class="stat-val" style="color:var(--gold)">${scopedFacs.length}</div><div class="stat-sub">Active hospitals</div></div>
@@ -11671,6 +11687,7 @@ function renderAOverview(){
       <div class="stat-card"><div class="stat-accent" style="background:var(--warn)"></div><div class="stat-lbl">Pending Assessments</div><div class="stat-val" style="color:var(--warn)">${DB.queue.filter(q=>!assignedFids||assignedFids.includes(q.fid)).length}</div><div class="stat-sub">Awaiting SBD decision</div></div>
       <div class="stat-card"><div class="stat-accent" style="background:#0ea5e9"></div><div class="stat-lbl">Authorized Observers</div><div class="stat-val" style="color:#0ea5e9">${allSt.filter(s=>s.observer).length}</div><div class="stat-sub">Can conduct observations</div></div>
       <div class="stat-card"><div class="stat-accent" style="background:#8b5cf6"></div><div class="stat-lbl">Observation Gate Passed</div><div class="stat-val" style="color:#8b5cf6">${allSt.filter(s=>s.cur&&s.cur.o==='pass').length}</div><div class="stat-sub">${n?Math.round(allSt.filter(s=>s.cur&&s.cur.o==='pass').length/n*100):0}% of ${n} staff</div></div>
+      <div class="stat-card"><div class="stat-accent" style="background:var(--gold)"></div><div class="stat-lbl">Preceptor Certification</div><div class="stat-val" style="color:var(--gold)">${prcNet&&prcNet.assignedCount?prcNetPct+'%':'--'}</div><div class="stat-sub">${prcNet&&prcNet.assignedCount?prcNet.completeCount+' of '+prcNet.assignedCount+' modules':'No modules assigned'}</div></div>
     </div>
     ${(()=>{
       const eligible=DB.staff.filter(s=>beltIdx(s.belt)>=2);
@@ -12902,6 +12919,7 @@ function renderFacReports(el){
       </div>
     </div>
     ${fiFacilitySectionHTML(fiFacilityRollup(fid), 'openAdminProfile')}
+    ${prcFacilitySectionHTML(prcFacilityRollup(fid), 'openAdminProfile')}
     ${stagnation.length?`${rptSection('Stagnation Alerts',stagnation.length+' flagged')}
     <div class="card mb16"><div style="overflow-x:auto"><table class="tbl" style="min-width:360px"><thead><tr><th>Name</th><th>Belt</th><th>Days at Belt</th><th>Expected</th><th>Overage</th></tr></thead>
     <tbody>${stagnation.slice(0,8).map(({s,actual,expected,over})=>`<tr onclick="openAdminProfile('${s.id}')" style="cursor:pointer"><td class="fw7">${fullName(s)}</td><td>${beltBadge(s.belt)}</td><td style="color:var(--err);font-weight:600">${actual}d</td><td style="color:var(--txt3)">${expected}d</td><td><span class="pill p-err" style="font-size:9px">+${over}d</span></td></tr>`).join('')}</tbody></table></div></div>`:''}
