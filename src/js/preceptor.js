@@ -7997,10 +7997,32 @@ function submitPrcGate(mid,gk){
 }
 
 // Gate 2 Simulation — read-only assessor-administered reference (level capstone panel).
+// ── Phase 2: proctoring PIN handshake for the assessor-administered gates ──
+// Ignacio 2026-07-23: Simulation + Observation run through the belt-style PIN
+// handshake. The assessor generates a one-time PIN (assessment_type 'preceptor');
+// the candidate enters it on their device to confirm co-presence before the
+// assessor conducts and records the gate. No enum constraint on assessment_type,
+// so this reuses the existing sbd-assessor-pin flow as-is.
+function prcPinHandshakeCard(gateLabel){
+ return '<div style="background:rgba(139,92,246,.06);border:1px solid rgba(139,92,246,.28);border-radius:var(--r);padding:12px 14px;margin:0 0 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
+   +'<svg viewBox="0 0 20 20" width="16" height="16" fill="none" style="flex-shrink:0"><rect x="4" y="9" width="12" height="8" rx="2" stroke="#8b5cf6" stroke-width="1.4"/><path d="M7 9V7a3 3 0 016 0v2" stroke="#8b5cf6" stroke-width="1.4" stroke-linecap="round"/></svg>'
+   +'<div style="flex:1;min-width:180px"><div style="font-size:12.5px;color:#e2e8f0;font-weight:600">Assessor-proctored '+gateLabel+'</div><div style="font-size:11.5px;color:#94a3b8">When your assessor is ready, enter the PIN they generate to begin.</div></div>'
+   +'<button class="btn btn-gold btn-sm" onclick="prcEnterAssessorPin()">Enter Assessor PIN</button>'
+   +'</div>';
+}
+function prcEnterAssessorPin(){
+ const s=(typeof getStaff==='function')?getStaff(ST.staffId):null; if(!s){if(typeof toast==='function')toast('No staff record.','err');return;}
+ if(typeof showAssessorPinGate!=='function'){if(typeof toast==='function')toast('PIN gate unavailable.','err');return;}
+ showAssessorPinGate(s.id,'preceptor',function(){ if(typeof toast==='function')toast('Authorized. Your assessor will now conduct and record the assessment.','ok'); });
+}
+// Assessor-side: generate the proctoring PIN for a candidate's preceptor assessment.
+function prcAssessorPinBtn(sid){
+ return '<button class="btn btn-ghost btn-xs" style="border-color:rgba(139,92,246,.4);color:#a78bfa" onclick="showGeneratePinModal(\''+sid+'\',\'preceptor\')" title="Generate a one-time PIN for the candidate to begin the proctored assessment"><svg viewBox="0 0 20 20" width="12" height="12" fill="none" style="vertical-align:-2px;margin-right:4px"><rect x="4" y="9" width="12" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M7 9V7a3 3 0 016 0v2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>Generate Assessment PIN</button>';
+}
 function renderPrcGate2Reference(m){
  const lg=prcLevelGate(m.level);
  const sims=(lg&&lg.gate2&&lg.gate2.simulations)||[];
- let h='<div class="fnd-kc"><div style="font-size:16px;font-weight:700;color:#e2e8f0;margin-bottom:4px">Simulation (Assessor-Administered)</div><div style="font-size:12px;color:#94a3b8;margin-bottom:16px">These '+m.levelLabel+' simulations are scored by an assessor, not auto-graded here. Pass standard: '+prcSThresh(m)+'%. Use them to prepare.</div>';
+ let h='<div class="fnd-kc"><div style="font-size:16px;font-weight:700;color:#e2e8f0;margin-bottom:4px">Simulation (Assessor-Administered)</div><div style="font-size:12px;color:#94a3b8;margin-bottom:16px">These '+m.levelLabel+' simulations are scored by an assessor, not auto-graded here. Pass standard: '+prcSThresh(m)+'%. Use them to prepare.</div>'+prcPinHandshakeCard('Simulation');
  if(!sims.length){h+='<div style="background:rgba(148,163,184,.08);border:1px solid rgba(148,163,184,.25);border-radius:var(--r);padding:14px 16px;font-size:13px;color:#94a3b8">The '+m.levelLabel+' simulation set is administered directly by your assessor at the level capstone.</div>';}
  sims.forEach(sim=>{
    h+='<div class="fnd-section"><div class="fnd-section-title">Simulation '+sim.n+': '+Security.sanitize(sim.title||'')+'</div><div class="fnd-section-body" style="white-space:pre-wrap">'+Security.sanitize(sim.scenario||'')+'</div>';
@@ -8013,7 +8035,7 @@ function renderPrcGate2Reference(m){
 // Gate 3 Observation — candidate-facing status (leader confirms in the Hospital portal).
 function renderPrcG3View(m,s,gates){
  const lg=prcLevelGate(m.level);
- let h='<div class="fnd-kc"><div style="font-size:16px;font-weight:700;color:#e2e8f0;margin-bottom:4px">Observation / Practicum Capstone</div><div style="font-size:12px;color:#94a3b8;margin-bottom:16px">Your assessor confirms the '+m.levelLabel+' practicum after observing you at the '+prcOThresh(m)+'% standard. You cannot self-confirm this item.</div>';
+ let h='<div class="fnd-kc"><div style="font-size:16px;font-weight:700;color:#e2e8f0;margin-bottom:4px">Observation / Practicum Capstone</div><div style="font-size:12px;color:#94a3b8;margin-bottom:16px">Your assessor confirms the '+m.levelLabel+' practicum after observing you at the '+prcOThresh(m)+'% standard. You cannot self-confirm this item.</div>'+(gates.g3.status==='pass'?'':prcPinHandshakeCard('Observation'));
  if(!gates.complete&&!prcObsReady(m,gates)){h+='<div style="background:rgba(148,163,184,.08);border:1px solid rgba(148,163,184,.25);border-radius:var(--r);padding:12px 14px;margin-bottom:16px;font-size:12px;color:#94a3b8">The capstone unlocks after <b style="color:#e2e8f0">3 Knowledge</b> passes (fresh questions each attempt). Current: '+prcPassChip(m,gates)+'</div>';}
  if(gates.g3.status==='pass') h+='<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--r);padding:14px;text-align:center;margin-bottom:16px"><div style="font-size:16px;font-weight:700;color:#4ade80">Capstone Confirmed</div></div>';
  prcObsItems(m).forEach(obs=>{const conf=gates.g3.items.find(i=>i.id===obs.id&&i.confirmed);h+='<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.06)">';if(conf){h+='<svg viewBox="0 0 18 18" width="16" height="16" fill="none" style="flex-shrink:0;margin-top:2px"><circle cx="9" cy="9" r="8" fill="rgba(74,222,128,.15)" stroke="#4ade80" stroke-width="1.3"/><path d="M5.5 9.5l2.5 2.5L13 7" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><div><div style="font-size:13px;color:#4ade80">'+obs.text+'</div><div style="font-size:11px;color:#64748b;margin-top:2px">Confirmed by '+Security.sanitize(conf.confirmedBy||'—')+' on '+Security.sanitize(conf.date||'')+'</div></div>';}else{h+='<svg viewBox="0 0 18 18" width="16" height="16" fill="none" style="flex-shrink:0;margin-top:2px"><circle cx="9" cy="9" r="8" stroke="#475569" stroke-width="1.3"/></svg><div style="font-size:13px;color:#94a3b8">'+obs.text+'</div>';}h+='</div>';});
@@ -8072,6 +8094,7 @@ function hPrcStaffDetail(sid){
    html+='<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;font-size:12px;color:#94a3b8"><span>G1: '+(gates.g1.status==='pass'?'<span class="tc-ok">'+gates.g1.score+'%</span>':'<span class="tc-muted">'+gates.g1.status+'</span>')+'</span><span>G2: <span class="tc-muted">assessor</span></span><span>G3: '+(gates.g3.status==='pass'?'<span class="tc-ok">Confirmed</span>':'<span class="tc-warn">Pending</span>')+'</span></div>';
    if(a){ const _typeLbl=a.type==='onboarding'?'Onboarding':(a.type==='remediation'?'Remediation':'Certification'); html+='<div style="font-size:11px;color:#64748b;margin-bottom:12px">Assigned by '+Security.sanitize(a.assignedBy||'—')+(a.assignedDate?' · '+Security.sanitize(a.assignedDate):'')+' · '+_typeLbl+(a.trigger?' · Trigger: '+Security.sanitize(a.trigger):'')+'</div>'; }
    html+='<div style="font-size:12px;font-weight:600;color:#c49a20;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Gate 3: Confirm Observation Capstone</div>';
+   if(!prcRevoked) html+='<div style="margin-bottom:10px">'+prcAssessorPinBtn(s.id)+'<span style="font-size:11px;color:#64748b;margin-left:8px">Generate a PIN for the candidate to confirm presence before you record.</span></div>';
    prcObsItems(m).forEach(obs=>{const conf=gates.g3.items.find(i=>i.id===obs.id&&i.confirmed);html+='<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06)"><input type="checkbox" style="accent-color:#4ade80;flex-shrink:0" '+(conf?'checked':'')+(prcRevoked?' disabled title="Preceptor access revoked — locked"':'')+' onchange="markPrcG3(\''+s.id+'\',\''+m.id+'\',\''+obs.id+'\',this.checked)"><span style="font-size:12.5px;color:'+(conf?'#4ade80':'#94a3b8')+'">'+obs.text+'</span></div>';});
    html+='</div></div>';
  });el.innerHTML=html;

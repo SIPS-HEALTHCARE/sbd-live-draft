@@ -1781,7 +1781,7 @@ function showGeneratePinModal(staffId, assessmentType='placement'){
     <div class="modal-body" style="text-align:center">
       <div style="font-size:13px;color:var(--txt2);margin-bottom:16px;line-height:1.6">
         Generate a one-time PIN for <strong style="color:var(--txt1)">${fullName(s)}</strong> to begin their
-        <strong style="color:var(--gold)">${assessmentType === 'placement' ? 'Placement' : 'Belt'} Assessment</strong>.
+        <strong style="color:var(--gold)">${assessmentType === 'placement' ? 'Placement' : assessmentType === 'preceptor' ? 'Preceptor' : 'Belt'} Assessment</strong>.
       </div>
       <div id="gen-pin-area">
         <button class="btn btn-gold" style="padding:12px 32px;font-size:14px" onclick="executeGeneratePin('${staffId}','${assessmentType}')">&#128274; Generate PIN</button>
