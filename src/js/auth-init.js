@@ -2082,7 +2082,7 @@ async function initAppData(){
     window.DB.preceptorModules = prcModules||[];
     // SBD Preceptor Certification (#78 Ph3): master-admin access control. Absence of a
     // row = default (belt-based). RLS filters to own-or-leader scope at read time.
-    window.DB.preceptorAccess = (prcAccess||[]).map(r=>({ staffId:r.staff_id, state:r.state, grantedBy:r.granted_by, grantedAt:r.granted_at, reason:r.reason, updatedAt:r.updated_at }));
+    window.DB.preceptorAccess = (prcAccess||[]).map(r=>({ staffId:r.staff_id, state:r.state, grantedBy:r.granted_by, grantedAt:r.granted_at, requestedAt:r.requested_at, reason:r.reason, updatedAt:r.updated_at }));
     const currentSystems = window.DB.hospitalSystems || [];
     const memoryOptimistic = currentSystems.filter(s => s.id && String(s.id).startsWith('sys-'));
     const storageOptimistic = JSON.parse(localStorage.getItem('sbd_optimistic_systems') || '[]');
