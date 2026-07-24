@@ -5489,6 +5489,33 @@ function oipSelect(idx){ oipSelectOverlay(idx); }
 
 
 // ============================================================ DOWNLOAD: LEVEL 1  --  INDIVIDUAL STAFF
+// Profile "SBD Background" (Ignacio 2026-07-23): capture, from the profile tab, how
+// long the staff member has been in the SBD program and how many years certified in
+// SBD. Editor-gated (master/staff/facility admin); targeted staff PATCH (two columns).
+function openSbdBackgroundModal(staffId, context){
+  const s = getStaff(staffId); if(!s){ toast('Staff record not found.','err'); return; }
+  const inp = 'width:100%;padding:9px 11px;background:var(--s2);border:1px solid var(--bdr);border-radius:8px;color:var(--txt1);font-size:14px;box-sizing:border-box';
+  openModal('SBD Background &mdash; '+fullName(s), `
+    <div class="modal-body">
+      <p style="font-size:12.5px;color:var(--txt2);margin:0 0 14px;line-height:1.5">How long has this staff member been in the SBD program, and how many years have they been certified in SBD? Whole years; leave blank if unknown.</p>
+      <label style="font-size:12px;color:var(--txt2);display:block;margin-bottom:4px">Years in the SBD program</label>
+      <input id="sbd-years" type="number" min="0" max="60" style="${inp};margin-bottom:14px" value="${s.sbdYears!=null?s.sbdYears:''}" placeholder="e.g. 3">
+      <label style="font-size:12px;color:var(--txt2);display:block;margin-bottom:4px">Years certified in SBD</label>
+      <input id="sbd-cert" type="number" min="0" max="60" style="${inp}" value="${s.certYears!=null?s.certYears:''}" placeholder="e.g. 2">
+    </div>
+    <div class="modal-ft"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-gold" onclick="saveSbdBackground('${staffId}','${context}')">Save</button></div>`, 'modal-sm');
+}
+function saveSbdBackground(staffId, context){
+  const s = getStaff(staffId); if(!s) return;
+  const parse = id => { const el = document.getElementById(id); if(!el) return null; const v = String(el.value).trim(); if(v==='') return null; const n = parseInt(v,10); return (isNaN(n)||n<0)?null:Math.min(n,60); };
+  s.sbdYears = parse('sbd-years'); s.certYears = parse('sbd-cert');
+  if(IS_LIVE && typeof SB!=='undefined' && SB.updateStaff){
+    SB.updateStaff(s.id, { sbd_program_years: s.sbdYears, sbd_cert_years: s.certYears }).catch(e => handleSyncError(e,'SBD background'));
+  }
+  toast('SBD background saved.','ok');
+  closeModal();
+  if(typeof renderHProfile==='function') renderHProfile(staffId, context);
+}
 function downloadStaffReport(staffId){
   const s = getStaff(staffId||ST.staffId);
   if(!s){ toast('Staff record not found.','err'); return; }
@@ -5529,7 +5556,7 @@ function downloadStaffReport(staffId){
       <div>
         <div class="rpt-brand">SIPS Healthcare Solutions &bull; Sterile By Design</div>
         <div class="rpt-title">${fullName(s)}</div>
-        <div class="rpt-sub">${s.role} &bull; ${getFac(s.fid)?.name||'–'} &bull; Sterile Processing Department<br>Belt: ${s.belt} (${BELT_CERT[s.belt]}) &bull; Since ${s.since || '—'}</div>
+        <div class="rpt-sub">${s.role} &bull; ${getFac(s.fid)?.name||'–'} &bull; Sterile Processing Department<br>Belt: ${s.belt} (${BELT_CERT[s.belt]}) &bull; Since ${s.since || '—'}${(s.sbdYears!=null||s.certYears!=null)?`<br>${s.sbdYears!=null?s.sbdYears+' yr(s) in SBD program':''}${(s.sbdYears!=null&&s.certYears!=null)?' &bull; ':''}${s.certYears!=null?s.certYears+' yr(s) certified in SBD':''}`:''}</div>
       </div>
       <div class="rpt-grade-box">
         <div class="rpt-grade" style="color:${BELT_CLR_PRINT[s.belt]||'#0f172a'}">${psStars>0?Array(psStars).fill('★').join(''):'–'}</div>
@@ -9799,7 +9826,7 @@ function renderHProfile(sid,context){
           })()}
         </div>
         <div style="margin-bottom:8px">${beltBadge(s.belt)} <span style="font-size:12px;color:var(--txt3);margin-left:6px">${BELT_CERT[s.belt]}</span></div>
-        <div class="prof-meta"><span class="pmeta"><svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="2" y="3" width="10" height="10" rx="1" stroke="currentColor" stroke-width="1.3"/><path d="M5 1v3M9 1v3M2 7h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>Since ${s.since || '—'}</span><span class="pmeta">${daysAtPhrase(s.since)} at current belt</span>${s.stars>0?`<span class="pmeta tc-gold">${'* '.repeat(s.stars).trim()}</span>`:''}</div>
+        <div class="prof-meta"><span class="pmeta"><svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="2" y="3" width="10" height="10" rx="1" stroke="currentColor" stroke-width="1.3"/><path d="M5 1v3M9 1v3M2 7h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>Since ${s.since || '—'}</span><span class="pmeta">${daysAtPhrase(s.since)} at current belt</span>${s.stars>0?`<span class="pmeta tc-gold">${'* '.repeat(s.stars).trim()}</span>`:''}${(s.sbdYears!=null||s.certYears!=null)?`<span class="pmeta">${s.sbdYears!=null?s.sbdYears+'y in SBD':''}${(s.sbdYears!=null&&s.certYears!=null)?' &middot; ':''}${s.certYears!=null?s.certYears+'y certified':''}</span>`:''}</div>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         ${context==='admin'?`<button class="btn btn-gold btn-sm" onclick="openRecordModal('${s.id}')">${ICO.record} Record Assessment</button>`:''}
@@ -9810,6 +9837,7 @@ function renderHProfile(sid,context){
         ) : ''}
         ${context==='admin'||context==='h'?`<button class="btn btn-blue btn-sm" onclick="openPromoteModal('${s.id}','${context}')">&#x2B06; Promote</button>`:''}
         <button class="btn btn-ghost btn-sm" onclick="downloadStaffReport('${s.id}')">${ICO.dl} Report</button>
+        ${(ST.user&&['master_admin','staff_admin','facility_admin'].includes(ST.user.role))?`<button class="btn btn-ghost btn-sm" onclick="openSbdBackgroundModal('${s.id}','${context}')" title="Set SBD program tenure and years certified"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg> SBD Background</button>`:''}
         ${(ST.user&&ST.user.role==='master_admin')?`<button class="btn btn-ghost btn-sm" onclick="openBeltOverrideModal('${s.id}','${context}')" style="border-color:var(--gold-bd);color:var(--gold)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Override Belt</button>`:''}
         ${(ST.user&&ST.user.role==='master_admin')?(
           (s.assessmentGateOverride && s.assessmentGateOverride.waived)
