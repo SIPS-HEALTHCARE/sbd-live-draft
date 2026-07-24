@@ -28,3 +28,9 @@
 - Before editing `ui-views.js`: **grep for the function name** to understand callers AND callees. The file has 14K+ lines and 294 functions with no module boundaries.
 - After editing any `src/js/*.js` file: **bump the `?v=` cache-bust number** on the corresponding `<script>` tag in `index.html`.
 - `SBD_GOD_SOG.html` is a legacy monolith. It is NOT the production source. Do not copy from it.
+
+## Safety rules
+- Never run destructive operations (DROP, DELETE without WHERE, truncation, data migrations) without explicit confirmation in the session.
+- Never deploy to production without explicit confirmation.
+- Never print, echo, or commit secrets — environment variables only.
+- Work on `work/*` branches; do not push directly to `main`.
