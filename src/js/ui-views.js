@@ -1768,6 +1768,10 @@ async function submitPinGate(staffId, assessmentType){
     }, 1500);
   } catch(e){
     errEl.textContent = e.message || 'Authorization failed. Please try again.';
+    // Clear the rejected PIN so Enter can't resubmit the same wrong digits
+    // (each resubmit logs another failed attempt toward the #60 lockout).
+    for(let i=0;i<6;i++){ const d=document.getElementById('pin-d'+i); if(d) d.value=''; }
+    document.getElementById('pin-d0')?.focus();
     btn.textContent = 'Authorize \u0026 Begin';
     updatePinSubmitState();
   }
