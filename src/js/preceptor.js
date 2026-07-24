@@ -7468,11 +7468,42 @@ function prcAccessState(staffId){ const r=prcAccessRow(staffId); return (r&&r.st
 // Reads the access record FIRST, belt SECOND. revoked -> false; granted -> true (any
 // belt); default/no-row -> belt eligibility (Green+, the existing 02B gate).
 function prcHasAccess(staffId){
- const st=prcAccessState(staffId);
- if(st==='revoked') return false;
- if(st==='granted') return true;
+ // Apply→approve model (Ignacio 2026-07-23): access requires an explicit master-admin
+ // GRANT. Belt level no longer auto-grants — it only makes a candidate eligible to
+ // APPLY (see prcCanApply). 'requested' = application pending (no access yet).
+ return prcAccessState(staffId)==='granted';
+}
+// Eligible to APPLY: at the old default tier (Green Belt+, beltIdx>=2) and no decision
+// yet (state 'default'). Already-requested/granted/revoked are not re-appliable.
+function prcCanApply(staffId){
+ if(prcAccessState(staffId)!=='default') return false;
  const s=(typeof getStaff==='function')?getStaff(staffId):(DB.staff||[]).find(x=>x.id===staffId);
  return !!(s && typeof beltIdx==='function' && beltIdx(s.belt)>=2);
+}
+// Candidate self-applies for the preceptor school (default -> requested). NOT master-
+// gated (this is the candidate's own action); the master-admin approve step grants it.
+function prcApply(staffId){
+ staffId = staffId || (typeof ST!=='undefined' && ST.staffId);
+ if(!prcCanApply(staffId)){ if(typeof toast==='function') toast('You are not eligible to apply for the preceptor school yet.','err'); return; }
+ if(!DB.preceptorAccess) DB.preceptorAccess=[];
+ const now=new Date().toISOString();
+ let row=DB.preceptorAccess.find(x=>x.staffId===staffId);
+ if(!row){ row={staffId:staffId}; DB.preceptorAccess.push(row); }
+ row.state='requested'; row.requestedAt=now; row.updatedAt=now;
+ _prcSaveAccess({staff_id:staffId,state:'requested',requested_at:now,updated_at:now});
+ if(typeof toast==='function') toast('Application submitted. A master admin will review it.','ok');
+ if(typeof renderSPreceptor==='function') renderSPreceptor();
+}
+// Master-admin approve/deny of a pending application. Approve -> granted; deny -> default
+// (candidate may re-apply). Reuses the master-admin gate + persistence in prcSetAccess.
+function prcApproveApplication(staffId,approve){
+ if(!(typeof ST!=='undefined'&&ST.user&&ST.user.role==='master_admin')){ if(typeof toast==='function') toast('Only the Master Admin can approve applications','err'); return; }
+ prcSetAccess(staffId, approve?'granted':'default', 'apprqueue');
+}
+// Pending applications (state 'requested'), newest first — feeds the approve queue.
+function prcPendingApplications(){
+ return (DB.preceptorAccess||[]).filter(r=>r.state==='requested')
+   .slice().sort((a,b)=>String(b.requestedAt||'').localeCompare(String(a.requestedAt||'')));
 }
 // Ph3 L2/L3 prerequisite: a level unlocks only when the PRIOR level is fully complete
 // (every ASSIGNED module of that level complete, and at least one assigned). Uses the
@@ -7709,8 +7740,29 @@ function prcSetAccess(staffId,state,context){
  row.state=state; row.grantedBy=by; row.reason=reason||null; row.grantedAt=now; row.updatedAt=now;
  _prcSaveAccess({staff_id:staffId,state:state,granted_by:by,reason:reason||null,granted_at:now,updated_at:now});
  if(typeof toast==='function') toast('Preceptor access '+(state==='granted'?'granted':state==='revoked'?'revoked — progress preserved':'reset to default (belt-based)'), state==='revoked'?'err':'ok');
- if(context==='rolemgmt' && typeof renderARoleMgmt==='function'){ renderARoleMgmt(); }
+ if(context==='apprqueue' && typeof renderHPreceptor==='function'){ renderHPreceptor(); }
+ else if(context==='rolemgmt' && typeof renderARoleMgmt==='function'){ renderARoleMgmt(); }
  else if(typeof renderHProfile==='function'){ renderHProfile(staffId,'admin'); }
+}
+// Master-admin approve-queue card (pending preceptor applications). Returns '' for
+// non-masters or when the queue is empty. Embedded at the top of renderHPreceptor.
+function _prcApplyQueueHTML(){
+ if(!(typeof ST!=='undefined'&&ST.user&&ST.user.role==='master_admin')) return '';
+ const pend=prcPendingApplications();
+ if(!pend.length) return '';
+ const rows=pend.map(r=>{
+   const s=(typeof getStaff==='function')?getStaff(r.staffId):null;
+   const nm=s?fullName(s):r.staffId;
+   const fac=(s&&typeof getFac==='function')?getFac(s.fid):null;
+   return '<tr><td style="font-weight:600">'+Security.sanitize(nm)+'</td>'
+     +'<td style="font-size:12px;color:#94a3b8">'+(fac?Security.sanitize(fac.name):'—')+'</td>'
+     +'<td>'+(s?'<span class="bb bb-'+s.belt+'">'+s.belt+'</span>':'—')+'</td>'
+     +'<td style="white-space:nowrap"><button class="btn btn-gold btn-xs" onclick="prcApproveApplication(\''+r.staffId+'\',true)">Approve</button> '
+     +'<button class="btn btn-ghost btn-xs" onclick="prcApproveApplication(\''+r.staffId+'\',false)">Deny</button></td></tr>';
+ }).join('');
+ return '<div class="card mb16"><div class="card-hd"><div class="card-ttl">Preceptor Applications <span class="pill p-gold">'+pend.length+' pending</span></div></div>'
+   +'<div class="card-body" style="padding:0"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Name</th><th>Facility</th><th>Belt</th><th>Decision</th></tr></thead><tbody>'
+   +rows+'</tbody></table></div></div></div>';
 }
 // Renders the master-admin access control (state + Grant/Revoke/Reset). Called from
 // ui-views.js openAdminProfile surface (master-admin gated there); domain logic lives here (B7).
@@ -7809,6 +7861,19 @@ function renderSPreceptor(){
  if(prcRevoked) html+='<div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:var(--r);padding:12px 16px;display:flex;align-items:center;gap:10px"><svg viewBox="0 0 20 20" width="18" height="18" fill="none" style="flex-shrink:0"><rect x="4" y="8" width="12" height="8" rx="2" stroke="#f87171" stroke-width="1.4"/><path d="M7 8V6a3 3 0 016 0v2" stroke="#f87171" stroke-width="1.4" stroke-linecap="round"/></svg><span style="font-size:13px;color:#f87171;font-weight:600">Preceptor access revoked — your progress is preserved. Modules are locked until a Master Admin restores access.</span></div>';
  if(totalA>0&&totalC===totalA){html+='<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--r);padding:12px 16px;display:flex;align-items:center;gap:10px"><svg viewBox="0 0 20 20" width="20" height="20" fill="none"><circle cx="10" cy="10" r="9" stroke="#4ade80" stroke-width="1.5"/><path d="M6 10.5l2.5 2.5L14 7.5" stroke="#4ade80" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span style="font-size:13px;color:#4ade80;font-weight:600">All assigned modules completed</span></div>';}
  html+='</div></div>';
+ // Apply→approve access gate (Ignacio 2026-07-23): only a master-admin GRANT opens the
+ // module list. Belt-eligible candidates see an Apply card; pending shows a status card.
+ const _prcAccSt=prcAccessState(s.id);
+ if(_prcAccSt!=='granted'){
+   if(_prcAccSt==='requested'){
+     html+='<div class="card mb16"><div class="card-body" style="display:flex;align-items:center;gap:10px"><svg viewBox="0 0 20 20" width="18" height="18" fill="none" style="flex-shrink:0"><circle cx="10" cy="10" r="8" stroke="#c49a20" stroke-width="1.4"/><path d="M10 6v4l2.5 1.5" stroke="#c49a20" stroke-width="1.4" stroke-linecap="round"/></svg><div><div style="font-size:13px;color:#e2e8f0;font-weight:600">Application submitted</div><div style="font-size:12px;color:#94a3b8">A master admin will review your preceptor school application.</div></div></div></div>';
+   } else if(!prcRevoked && prcCanApply(s.id)){
+     html+='<div class="card mb16"><div class="card-body"><p style="font-size:13px;color:#94a3b8;line-height:1.6;margin:0 0 12px">You are eligible to join the preceptor school. Submit an application and a master admin will approve your access to the full pathway.</p><button class="btn btn-gold" onclick="prcApply()">Apply for Preceptor School</button></div></div>';
+   } else if(!prcRevoked){
+     html+='<div class="card mb16"><div class="card-body" style="font-size:13px;color:#94a3b8">Reach Green Belt to become eligible to apply for the preceptor school.</div></div>';
+   }
+   el.innerHTML=html; el.scrollTop=0; return;
+ }
  let curLevel=null;
  PRECEPTOR_MODULES.forEach(m=>{
    if(m.level!==curLevel){curLevel=m.level;html+='<div style="font-size:11px;color:#c49a20;font-weight:600;letter-spacing:1px;text-transform:uppercase;margin:18px 0 10px">'+m.levelLabel+'</div>';}
@@ -7982,6 +8047,7 @@ function renderHPreceptor(){
  let html='<div class="card mb16"><div class="card-hd"><div class="card-ttl">Preceptor Certification'+(isSystemWide?' <span style="font-size:11px;color:#64748b;font-weight:500">(all facilities)</span>':'')+'</div></div><div class="card-body"><p style="font-size:13px;color:#94a3b8;line-height:1.6;margin:0 0 16px">Assign the facilitator certification pathway. Each module has a scored Knowledge gate; Simulation is assessor-administered and the Observation capstone is leader-confirmed.</p>';
  if(isSystemWide){html+='<div style="margin-bottom:14px"><select class="form-select" style="max-width:280px" onchange="ST._prcFacFilter=this.value;renderHPreceptor()"><option value="all"'+((ST._prcFacFilter||"all")==="all"?" selected":"")+'>All Facilities</option>'+scopeFacs.slice().sort((a,b)=>(a.name||"").localeCompare(b.name||"")).map(f=>'<option value="'+f.id+'"'+(ST._prcFacFilter===f.id?" selected":"")+'>'+f.name+'</option>').join("")+'</select></div>';}
  html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:8px"><div class="stat-card-mini"><div class="stat-lbl">Enrolled</div><div class="stat-val">'+staffWith+'</div></div><div class="stat-card-mini"><div class="stat-lbl">Assigned</div><div class="stat-val">'+totalA+'</div></div><div class="stat-card-mini"><div class="stat-lbl">Completed</div><div class="stat-val" style="color:#4ade80">'+totalC+'</div></div><div class="stat-card-mini"><div class="stat-lbl">Rate</div><div class="stat-val">'+(totalA>0?Math.round(totalC/totalA*100):0)+'%</div></div></div></div></div>';
+ html+=_prcApplyQueueHTML();
  html+='<div class="card mb16"><div class="card-hd"><div class="card-ttl">Staff Preceptor Progress</div></div><div class="card-body" style="padding:0"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Name</th>'+(isSystemWide?'<th>Facility</th>':'')+'<th>Belt</th><th>Modules</th><th>Actions</th></tr></thead><tbody>';
  rows.sort((a,b)=>fullName(a.s).localeCompare(fullName(b.s)));
  rows.forEach(r=>{html+='<tr><td style="font-weight:600">'+fullName(r.s)+'</td>'+(isSystemWide?'<td style="font-size:12px;color:#94a3b8">'+((DB.facilities.find(f=>f.id===r.s.fid)||{}).name||'—')+'</td>':'')+'<td><span class="bb bb-'+r.s.belt+'">'+r.s.belt+'</span></td><td>'+(r.assigned>0?'<span class="'+(r.pct===100?'tc-ok':r.pct>0?'tc-warn':'tc-muted')+'">'+r.done+'/'+r.assigned+'</span>':'<span class="tc-muted">None</span>')+'</td><td style="white-space:nowrap">';
