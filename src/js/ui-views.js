@@ -2939,6 +2939,7 @@ function renderAObservations(){
   if(ovsCapture){ el.innerHTML = ovsRenderCapture(); return; }
 
   const u = ST.user;
+  const canWrite = _canWriteObs(u);
   let pool = (DB.observations || []).filter(o => ['requested','in_progress','returned'].includes(o.status));
   // Role scope (RLS Addendum v1.1) — mirror the Foundations/Instruments model:
   // system-wide admins (master/admin/staff_admin/assessor/system_admin) see all
@@ -2995,7 +2996,7 @@ function renderAObservations(){
       <td style="padding:10px 8px">${beltBadge(o.targetBelt)}</td>
       <td style="padding:10px 8px;font-size:12px;color:var(--txt2)">${items} items</td>
       <td style="padding:10px 8px">${statusPill}</td>
-      <td style="padding:10px 8px;text-align:right"><button class="btn btn-gold btn-sm" onclick="ovsOpenCapture('${o.id}')">${o.status==='in_progress'?'Resume':'Conduct'}</button></td>
+      <td style="padding:10px 8px;text-align:right">${canWrite ? `<button class="btn btn-gold btn-sm" onclick="ovsOpenCapture('${o.id}')">${o.status==='in_progress'?'Resume':'Conduct'}</button>` : `<span class="pill" style="color:#94a3b8;background:#94a3b81a;border:1px solid #94a3b855">View only</span>`}</td>
     </tr>`;
   }).join('');
 
@@ -3003,6 +3004,7 @@ function renderAObservations(){
     <div>
       <h2 style="margin:0 0 6px">Observations${isSystemWide?' <span style="font-size:11px;color:#64748b;font-weight:500">(all facilities)</span>':''}</h2>
       <p style="color:var(--txt2);font-size:13px;margin:0 0 16px">On-the-floor performance checks &mdash; the third assessment gate, alongside Competency and Simulation.</p>
+      ${canWrite ? '' : `<div style="background:#94a3b81a;border:1px solid #94a3b855;border-radius:8px;padding:10px 12px;font-size:12px;color:var(--txt2);margin:0 0 14px">View-only access. Recording and confirming observations is limited to master admins and granted assessors. A master admin can grant Assessor access in the Role Management tab.</div>`}
       ${isSystemWide && scopeFacs.length>1 ? `<div style="margin-bottom:14px"><select class="form-select" style="max-width:280px" onchange="ST._obsFacFilter=this.value;renderAObservations()"><option value="all"${obsFac==='all'?' selected':''}>All Facilities</option>${scopeFacs.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(f=>`<option value="${f.id}"${obsFac===f.id?' selected':''}>${f.name}</option>`).join('')}</select></div>` : ''}
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px">
         <div class="stat-card"><div class="stat-accent" style="background:#94a3b8"></div><div class="stat-lbl">Awaiting Observer</div><div class="stat-val">${requested}</div><div class="stat-sub">candidate requested</div></div>
@@ -3046,6 +3048,7 @@ function renderAObservations(){
 
 // Enter the capture flow for one observation.
 function ovsOpenCapture(obsId){
+  if(!_canWriteObs()){ toast('Recording observations is limited to master admins and granted assessors. Ask a master admin for Assessor access in the Role Management tab.','err'); return; }
   const o = (DB.observations||[]).find(x => x.id === obsId);
   if(!o){ toast('Observation not found.','err'); return; }
   ovsCapture = { obsId, unlocked:false, observerStaffId:null, observerName:null };
@@ -3217,6 +3220,7 @@ function ovsRenderCapture(){
 
 // Submit: two-tap, then persist the record (status submitted, review pending).
 function ovsSubmit(){
+  if(!_canWriteObs()){ toast('Recording observations is limited to master admins and granted assessors.','err'); return; }
   if(!ovsCapture || !ovsCapture.unlocked) return;
   const o = (DB.observations||[]).find(x => x.id === ovsCapture.obsId); if(!o) return;
   const cl = ovsInstrument(o.checklistBelt || o.targetBelt);
@@ -3312,6 +3316,7 @@ function renderAObservationReviews(){
   const el = document.getElementById('a-observationreviews');
   if(!el) return;
   const u = ST.user;
+  const canWrite = _canWriteObs(u);
   let pool = (DB.observations || []).filter(o => o.status === 'submitted' || o.status === 'reviewed');
   if(u && u.role === 'staff_admin' && u.assignedFids && u.assignedFids.length)
     pool = pool.filter(o => u.assignedFids.includes(o.fid));
@@ -3330,7 +3335,9 @@ function renderAObservationReviews(){
     const s = getStaff(o.staffId); const fac = getFac(o.fid);
     const armedC = ovsArmed && ovsArmed.action==='confirm' && ovsArmed.id===o.id;
     const armedR = ovsArmed && ovsArmed.action==='return'  && ovsArmed.id===o.id;
-    const actions = o.status === 'submitted'
+    const actions = !canWrite
+      ? `<span class="pill" style="font-size:11px;color:#94a3b8;background:#94a3b81a;border:1px solid #94a3b855">View only</span>`
+      : o.status === 'submitted'
       ? `<button class="btn btn-sm ${armedC?'btn-gold':'btn-primary'}" onclick="confirmObservation('${o.id}')">${armedC?'Confirm?':'Confirm & write gate'}</button>
          <button class="btn btn-ghost btn-sm" onclick="returnObservation('${o.id}')" style="margin-left:6px">${armedR?'Return?':'Return'}</button>`
       : `<span class="pill p-ok" style="font-size:11px">Gate written</span>`;
@@ -3379,6 +3386,7 @@ function renderAObservationReviews(){
 
 // Confirm a submission → write the Observation gate (nxt.o) via a targeted PATCH.
 function confirmObservation(obsId){
+  if(!_canWriteObs()){ toast('Confirming a gate is limited to master admins and granted assessors.','err'); return; }
   const o = (DB.observations||[]).find(x => x.id === obsId); if(!o) return;
   // Two-tap arm (sandbox-safe; never a native confirm()).
   if(!(ovsArmed && ovsArmed.action==='confirm' && ovsArmed.id===obsId)){
@@ -3410,6 +3418,7 @@ function confirmObservation(obsId){
 
 // Return a submission to the observer (no gate write).
 function returnObservation(obsId){
+  if(!_canWriteObs()){ toast('Returning an observation is limited to master admins and granted assessors.','err'); return; }
   const o = (DB.observations||[]).find(x => x.id === obsId); if(!o) return;
   if(!(ovsArmed && ovsArmed.action==='return' && ovsArmed.id===obsId)){
     ovsArmed = { action:'return', id:obsId };
@@ -9572,6 +9581,13 @@ function isAdminOrFacAdmin(){ return ST.user && (ST.user.role==='master_admin'||
 // Mirrors the server-side RLS (sbd_is_assessor / sbd_leads_facility_of), so UI and enforcement agree.
 function _capsOf(u){ return (u && u.capabilities) || {}; }
 function effIsAssessor(u){ u=u||ST.user; if(!u) return false; return u.role==='staff_admin'||u.role==='assessor'||!!_capsOf(u).assessor; }
+// Observation WRITE permission — mirrors the backend RLS (sbd_is_master_admin OR
+// sbd_is_assessor): master/admin, the 'assessor' role, or a granted Assessor
+// capability. Deliberately EXCLUDES base staff_admin: per the #50/#54 ruling,
+// staff_admin assessors must be granted the Assessor capability (Role Management)
+// to record, so the UI matches the lock and read-only users never hit an RLS
+// error mid-action. (effIsAssessor stays staff_admin-inclusive for non-write UI.)
+function _canWriteObs(u){ u=u||ST.user; if(!u) return false; return u.role==='master_admin'||u.role==='admin'||u.role==='assessor'||!!_capsOf(u).assessor; }
 function effLeadsFacility(fid, u){ u=u||ST.user; if(!u||fid==null) return false;
   if(u.role==='educator'||u.role==='hospital'||u.role==='facility_admin'){
     if(u.fid!=null && String(u.fid)===String(fid)) return true;
