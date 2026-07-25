@@ -6825,7 +6825,7 @@ function requestPSCompletion(tid) {
   const existing = DB.psCompletionRequests.find(r => r.sid === s.id && r.tid === tid && r.status === 'pending');
   if (existing) { toast('You already have a pending completion request for this track.', 'err'); return; }
   const track = PS_TRACKS[tid];
-  DB.psCompletionRequests.push({
+  const req = {
     id: 'psr-' + Date.now(),
     sid: s.id, fid: s.fid, tid,
     trackName: track ? track.name : tid,
@@ -6833,7 +6833,15 @@ function requestPSCompletion(tid) {
     practiceS: s.psPracticeScores?.[tid]?.simulation || null,
     requestedAt: new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),
     status: 'pending'
-  });
+  };
+  DB.psCompletionRequests.push(req);
+  // The request used to live only in memory, so it disappeared on refresh and no
+  // leader ever saw it, despite the candidate being told it would be reviewed.
+  if(IS_LIVE && typeof SB!=='undefined' && SB.createPSCompletionRequest){
+    SB.createPSCompletionRequest(mapPSCompletionRequestToBackend(req))
+      .then(rows=>{ const row=Array.isArray(rows)?rows[0]:rows; if(row&&row.id) req.id=row.id; })
+      .catch(e=>handleSyncError(e,'Position School sign-off request'));
+  }
   toast((track ? track.name : 'Track') + ' completion request submitted. Your supervisor will review.', 'ok');
   closeModal();
   renderSPosSchool();
@@ -11327,6 +11335,64 @@ function renderHMilestones(){
 }
 
 // ============================================================ H POS SCHOOL
+// Pending Position School sign-off requests for this facility. Candidates were being
+// told a supervisor would review, but nothing surfaced the request to anyone. This is
+// that missing surface: approve runs the same completePSTrack path as Award Star, so
+// there is still exactly one way a track gets completed.
+function psPendingRequestsFor(fid){
+  return (DB.psCompletionRequests||[]).filter(r =>
+    r.status === 'pending' && (fid == null || String(r.fid) === String(fid))
+  );
+}
+function psCompletionQueueHTML(fid){
+  if(!(ST.user && ['master_admin','admin','staff_admin','assessor','educator','hospital','facility_admin'].includes(ST.user.role))) return '';
+  const pend = psPendingRequestsFor(fid);
+  if(!pend.length) return '';
+  const rows = pend.map(r=>{
+    const s = getStaff(r.sid);
+    return `<tr>
+      <td class="fw7">${s?fullName(s):'Unknown'}</td>
+      <td style="font-size:12px;color:var(--txt2)">${esc0(r.trackName||r.tid)}</td>
+      <td style="font-size:11px;color:var(--txt3)">K ${r.practiceK!=null?r.practiceK:'--'} &middot; S ${r.practiceS!=null?r.practiceS:'--'}</td>
+      <td style="font-size:11px;color:var(--txt3)">${esc0(r.requestedAt||'')}</td>
+      <td style="white-space:nowrap;text-align:right">
+        <button class="btn btn-ok btn-xs" onclick="approvePSCompletion('${r.id}')">Approve &amp; award star</button>
+        <button class="btn btn-ghost btn-xs" style="margin-left:6px;border-color:rgba(239,68,68,.4);color:#f87171" onclick="denyPSCompletion('${r.id}')">Deny</button>
+      </td></tr>`;
+  }).join('');
+  return `<div class="card mb16" style="border-color:var(--gold-bd)">
+    <div class="card-hd"><div class="card-ttl">Sign-off requests<span class="pill p-gold" style="margin-left:8px">${pend.length}</span></div></div>
+    <div class="card-body" style="padding:0"><div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th>Staff</th><th>Track</th><th>Practice</th><th>Requested</th><th style="text-align:right">Action</th></tr></thead>
+      <tbody>${rows}</tbody></table></div></div></div>`;
+}
+function esc0(v){ return (typeof Security!=='undefined'&&Security.sanitize)?Security.sanitize(String(v==null?'':v)):String(v==null?'':v); }
+function _psDecide(reqId, status){
+  const r = (DB.psCompletionRequests||[]).find(x=>String(x.id)===String(reqId));
+  if(!r) return null;
+  r.status = status;
+  r.decidedBy = ST.user?.id || null;
+  r.decidedAt = new Date().toISOString();
+  if(IS_LIVE && typeof SB!=='undefined' && SB.decidePSCompletionRequest && !String(r.id).startsWith('psr-')){
+    SB.decidePSCompletionRequest(r.id, { status, decided_by: r.decidedBy, decided_at: r.decidedAt })
+      .catch(e=>handleSyncError(e,'Position School sign-off decision'));
+  }
+  return r;
+}
+function approvePSCompletion(reqId){
+  const r = _psDecide(reqId, 'approved');
+  if(!r) return;
+  // Award through the existing path so the 3-pass gate and star rules still apply.
+  completePSTrack(r.sid, r.tid);
+  toast('Sign-off approved for '+(r.trackName||r.tid)+'.','ok');
+  if(typeof renderHPosSchool==='function') renderHPosSchool();
+}
+function denyPSCompletion(reqId){
+  const r = _psDecide(reqId, 'denied');
+  if(!r) return;
+  toast('Sign-off request denied.','err');
+  if(typeof renderHPosSchool==='function') renderHPosSchool();
+}
 function renderHPosSchool(){
   const fid=ST.hFid||'test-a';
   const st=staffOf(fid);
@@ -11412,6 +11478,7 @@ function renderHPosSchool(){
   }
 
   document.getElementById('h-posschool').innerHTML=`
+    ${psCompletionQueueHTML(fid)}
     <div class="stat-grid mb16">
       <div class="stat-card"><div class="stat-accent" style="background:var(--ok)"></div>
         <div class="stat-lbl">Track Completions</div><div class="stat-val" style="color:var(--ok)">${completeCount}</div>

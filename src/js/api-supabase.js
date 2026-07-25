@@ -356,6 +356,11 @@ const SB = {
   createSchedule(data){ return sbFetch('/rest/v1/sbd_schedule', { method:'POST', body:data }); },
   updateSchedule(id, data){ return sbFetch(`/rest/v1/sbd_schedule?id=eq.${id}`, { method:'PATCH', body:data }); },
   deleteSchedule(id){ return sbFetch(`/rest/v1/sbd_schedule?id=eq.${id}`, { method:'DELETE' }); },
+  // ── Position School completion requests ──
+  // A candidate asks for sign-off on a track; a leader approves or denies it.
+  getPSCompletionRequests(){ return sbFetch('/rest/v1/ps_completion_requests?select=*&order=created_at.desc'); },
+  createPSCompletionRequest(data){ return sbFetch('/rest/v1/ps_completion_requests', { method:'POST', body:data }); },
+  decidePSCompletionRequest(id, data){ return sbFetch(`/rest/v1/ps_completion_requests?id=eq.${id}`, { method:'PATCH', body:data }); },
   // ── Facility shift definitions ──
   // Custom shifts a facility defines on top of SHIFT_DEF_DEFAULT. Upsert is keyed on
   // (fid, shift_id) so re-saving an existing shift edits it rather than duplicating.
@@ -971,6 +976,38 @@ function mapScheduleToBackend(sch){
     shift: sch.shift,
     assigned_staff_ids: sch.assignedStaff || [],
     zone_assignments: sch.zoneAssignments || {}
+  };
+}
+
+// Position School completion requests. Frontend shape predates the table, so the
+// mapper keeps the original field names the views already use.
+function mapPSCompletionRequestFromBackend(row){
+  return {
+    id: row.id,
+    sid: row.staff_id,
+    fid: row.facility_id,
+    tid: row.track_id,
+    trackName: row.track_name,
+    practiceK: row.practice_k,
+    practiceS: row.practice_s,
+    status: row.status,
+    decidedBy: row.decided_by,
+    decidedAt: row.decided_at,
+    requestedAt: row.created_at
+      ? new Date(row.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
+      : ''
+  };
+}
+
+function mapPSCompletionRequestToBackend(r){
+  return {
+    staff_id: r.sid,
+    facility_id: r.fid || null,
+    track_id: r.tid,
+    track_name: r.trackName || null,
+    practice_k: r.practiceK != null ? r.practiceK : null,
+    practice_s: r.practiceS != null ? r.practiceS : null,
+    status: r.status || 'pending'
   };
 }
 
