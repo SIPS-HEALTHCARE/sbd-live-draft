@@ -10005,8 +10005,25 @@ let schBuilderYear  = new Date().getFullYear();
 // is on h-attendance (standalone) or h-schedule (combined tabs)
 function _refreshHAtt(){ if(ST.hView==='h-attendance') renderHAttendance(); else renderHSchedule(); }
 
+// Custom shift definitions live in facility_shifts but DB.facilityShifts started as {}
+// and was never filled from the server, so saved shifts never came back. Load them once
+// per facility, then re-render. Failures are non-blocking: the defaults still render.
+const _shiftDefsLoaded = {};
+function _loadFacilityShiftDefs(fid){
+  if(!fid || _shiftDefsLoaded[fid]) return;
+  if(!(typeof IS_LIVE!=='undefined' && IS_LIVE && typeof SB!=='undefined' && SB.getFacilityShiftDefs)) return;
+  _shiftDefsLoaded[fid] = true;
+  SB.getFacilityShiftDefs(fid).then(rows=>{
+    if(!Array.isArray(rows) || !rows.length) return;
+    if(!DB.facilityShifts) DB.facilityShifts = {};
+    if(!DB.facilityShifts[fid]) DB.facilityShifts[fid] = {...SHIFT_DEF_DEFAULT};
+    rows.forEach(r=>{ const d = mapShiftDefFromBackend(r); DB.facilityShifts[fid][d.id] = d; });
+    if(ST.hView==='h-schedule' && typeof renderHSchedule==='function') renderHSchedule();
+  }).catch(e=>{ _shiftDefsLoaded[fid] = false; console.warn('[shifts] definition load failed', e && e.message); });
+}
 function renderHSchedule(){
   const fid = ST.hFid||'test-a';
+  _loadFacilityShiftDefs(fid);
   const el = document.getElementById('h-schedule');
   const today = todayStr();
   const shifts = getFacilityShifts(fid);
@@ -10287,7 +10304,11 @@ function saveShiftDef(fid, editId){
   const bd=document.getElementById('cs-bd').value||'rgba(249,115,22,.3)';
   if(!id||!name||!start||!end){toast('Please fill all required fields.','err');return;}
   if(!DB.facilityShifts[fid]) DB.facilityShifts[fid]={...SHIFT_DEF_DEFAULT};
-  DB.facilityShifts[fid][id]={id,label:id,name,start,end,icon,color,bg,bd};
+  const def={id,label:id,name,start,end,icon,color,bg,bd};
+  DB.facilityShifts[fid][id]=def;
+  // Without this the shift only existed on screen and was gone on the next load.
+  if(IS_LIVE && typeof SB!=='undefined' && SB.upsertFacilityShiftDef)
+    SB.upsertFacilityShiftDef(mapShiftDefToBackend(fid, def)).catch(e => handleSyncError(e,'Shift definition sync'));
   closeModal();
   toast(`Shift "${name}" ${editId?'updated':'created'}.`,'ok');
   renderHSchedule();
@@ -10295,7 +10316,18 @@ function saveShiftDef(fid, editId){
 function deleteShift(fid, shiftId){
   if(!confirm('Delete this shift? Scheduled assignments for this shift will also be removed.')) return;
   if(DB.facilityShifts[fid]) delete DB.facilityShifts[fid][shiftId];
+  const removed = DB.schedule.filter(s=>s.fid===fid&&s.shift===shiftId);
   DB.schedule = DB.schedule.filter(s=>!(s.fid===fid&&s.shift===shiftId));
+  // Both the definition and the shift's scheduled days were only being dropped in
+  // memory, so the shift and its assignments came back on the next load.
+  if(IS_LIVE && typeof SB!=='undefined'){
+    if(SB.deleteFacilityShiftDef)
+      SB.deleteFacilityShiftDef(fid, shiftId).catch(e => handleSyncError(e,'Shift definition sync'));
+    removed.forEach(s=>{
+      if(SB.deleteSchedule && !String(s.id).startsWith('sch-'))
+        SB.deleteSchedule(s.id).catch(e => handleSyncError(e,'Schedule sync'));
+    });
+  }
   toast('Shift deleted.','ok');
   renderHSchedule();
 }
