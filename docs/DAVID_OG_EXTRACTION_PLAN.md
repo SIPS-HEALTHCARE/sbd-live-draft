@@ -73,3 +73,36 @@ In short: what exists today proves the *capability* works. Extraction is how it 
   matches one of these, apply the Push-Back Protocol in `docs/ENGINEERING_STANDARDS.md`.
 - When the service exists, this repo keeps only a **thin integration layer** (auth,
   tiers, quotas stay here) and the chat UI becomes a pure renderer.
+
+## 4. Carried-over risks, verified and deferred
+
+Findings confirmed against the running project and deliberately **not** patched in place,
+so the extraction inherits an accurate picture rather than a half-fixed one.
+
+### 4.1 `exec_sql` executes any non-SELECT statement (deferred 2026-07-25)
+
+Verified in the live function definition:
+
+- The RPC branches on `sql_query ILIKE 'SELECT%'`. On the `SELECT` branch it wraps the
+  query and returns rows. On the **`ELSE` branch it runs `EXECUTE sql_query` unguarded**,
+  so any `UPDATE`, `DELETE`, or DDL the model writes is executed. There is no read-only
+  enforcement and no confirmation step.
+- It is `SECURITY DEFINER` and reached with the service-role client, so RLS does not
+  apply to anything it touches.
+
+What is already contained, so the risk is scoped correctly:
+
+- `exec_sql` is **service_role only**. `anon` and `authenticated` both lack EXECUTE
+  (checked directly). It was anon-callable until the 2026-07-20 security sweep closed it.
+- The tool is offered only when the caller's portal role is `master_admin`, and the role
+  is rechecked server-side when the tool call comes back, so a fabricated call is
+  rejected rather than run.
+- `david-chat` is the **only** caller anywhere in the repo.
+
+Residual risk: a master admin's chat turn can cause a model-written destructive write or
+DDL against production. Not reachable by an outsider, and not reachable by any other role.
+
+Decision: leave the running system unchanged and design the safe replacement in the new
+service (typed, read-only, whitelisted data access, per Section 1.2). Because `david-chat`
+is the sole caller, a read-only guard remains a contained change if the risk is ever
+judged too costly to carry until extraction.
