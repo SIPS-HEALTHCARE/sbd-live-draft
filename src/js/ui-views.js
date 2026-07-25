@@ -5534,12 +5534,20 @@ function oipSelect(idx){ oipSelectOverlay(idx); }
 // Profile "SBD Background" (Ignacio 2026-07-23): capture, from the profile tab, how
 // long the staff member has been in the SBD program and how many years certified in
 // SBD. Editor-gated (master/staff/facility admin); targeted staff PATCH (two columns).
+// Shawn 2026-07-25: staff can also set their own two values from My Profile whenever they
+// like (context 'self'). No forced setup step; the fields display only and gate nothing.
+function _sbdBgCanEdit(staffId){
+  if(ST.user && ['master_admin','staff_admin','facility_admin'].includes(ST.user.role)) return true;
+  return !!staffId && staffId === ST.staffId;
+}
 function openSbdBackgroundModal(staffId, context){
   const s = getStaff(staffId); if(!s){ toast('Staff record not found.','err'); return; }
+  if(!_sbdBgCanEdit(staffId)){ toast('You can only edit your own SBD background.','err'); return; }
+  const self = context === 'self';
   const inp = 'width:100%;padding:9px 11px;background:var(--s2);border:1px solid var(--bdr);border-radius:8px;color:var(--txt1);font-size:14px;box-sizing:border-box';
   openModal('SBD Background &mdash; '+fullName(s), `
     <div class="modal-body">
-      <p style="font-size:12.5px;color:var(--txt2);margin:0 0 14px;line-height:1.5">How long has this staff member been in the SBD program, and how many years have they been certified in SBD? Whole years; leave blank if unknown.</p>
+      <p style="font-size:12.5px;color:var(--txt2);margin:0 0 14px;line-height:1.5">${self?'How long have you been in the SBD program, and how many years have you been certified in SBD? Whole years; leave blank if you are not sure.':'How long has this staff member been in the SBD program, and how many years have they been certified in SBD? Whole years; leave blank if unknown.'}</p>
       <label style="font-size:12px;color:var(--txt2);display:block;margin-bottom:4px">Years in the SBD program</label>
       <input id="sbd-years" type="number" min="0" max="60" style="${inp};margin-bottom:14px" value="${s.sbdYears!=null?s.sbdYears:''}" placeholder="e.g. 3">
       <label style="font-size:12px;color:var(--txt2);display:block;margin-bottom:4px">Years certified in SBD</label>
@@ -5549,6 +5557,7 @@ function openSbdBackgroundModal(staffId, context){
 }
 function saveSbdBackground(staffId, context){
   const s = getStaff(staffId); if(!s) return;
+  if(!_sbdBgCanEdit(staffId)){ toast('You can only edit your own SBD background.','err'); return; }
   const parse = id => { const el = document.getElementById(id); if(!el) return null; const v = String(el.value).trim(); if(v==='') return null; const n = parseInt(v,10); return (isNaN(n)||n<0)?null:Math.min(n,60); };
   s.sbdYears = parse('sbd-years'); s.certYears = parse('sbd-cert');
   if(IS_LIVE && typeof SB!=='undefined' && SB.updateStaff){
@@ -5556,7 +5565,23 @@ function saveSbdBackground(staffId, context){
   }
   toast('SBD background saved.','ok');
   closeModal();
+  if(context === 'self'){ if(typeof renderSOIP==='function') renderSOIP(); return; }
   if(typeof renderHProfile==='function') renderHProfile(staffId, context);
+}
+// The card the staff member sees on My Profile. Purely optional; shows what is on record
+// and opens the same modal to set or change it.
+function sbdBackgroundSelfCardHTML(s){
+  const has = s.sbdYears!=null || s.certYears!=null;
+  const line = has
+    ? `${s.sbdYears!=null?s.sbdYears+' yr(s) in the SBD program':''}${(s.sbdYears!=null&&s.certYears!=null)?' &bull; ':''}${s.certYears!=null?s.certYears+' yr(s) certified in SBD':''}`
+    : 'Not set. Add it whenever you like, or leave it blank.';
+  return `<div style="background:var(--s2);border:1px solid var(--bdr);border-radius:var(--r);padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
+      <div style="flex:1;min-width:0;text-align:left">
+        <div style="font-size:11px;font-weight:700;color:var(--txt3);letter-spacing:.06em;margin-bottom:5px">SBD BACKGROUND</div>
+        <div style="font-size:12.5px;color:${has?'var(--txt1)':'var(--txt3)'};line-height:1.5">${line}</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="openSbdBackgroundModal('${s.id}','self')">${has?'Edit':'Add'}</button>
+    </div>`;
 }
 function downloadStaffReport(staffId){
   const s = getStaff(staffId||ST.staffId);
@@ -7033,7 +7058,8 @@ function renderSOIP(){
   if(!s.oip.completed){
     el.innerHTML=`
       <div style="max-width:520px;margin:0 auto">
-        <div style="text-align:center;padding:32px 0 24px">
+        <div style="padding-top:24px">${sbdBackgroundSelfCardHTML(s)}</div>
+        <div style="text-align:center;padding:8px 0 24px">
           <div style="width:64px;height:64px;border-radius:50%;background:rgba(196,154,32,.12);border:2px solid var(--gold-bd);display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 16px">&#9670;</div>
           <div style="font-size:20px;font-weight:800;margin-bottom:8px">Operator Intelligence Profile</div>
           <div style="font-size:13px;color:var(--txt2);line-height:1.7;margin-bottom:24px">A 30-question scenario-based assessment that identifies your natural operator style. Every question is rooted in real SPD situations. There are no right or wrong answers.<br><br>Most staff complete it in 15 to 20 minutes.</div>
@@ -7061,6 +7087,7 @@ function renderSOIP(){
 
   el.innerHTML=`
     <div style="max-width:560px;margin:0 auto">
+      ${sbdBackgroundSelfCardHTML(s)}
       <div style="background:${pType.bg};border:1.5px solid ${pType.bd};border-radius:var(--r);padding:20px;margin-bottom:16px;text-align:center">
         <div style="font-size:10.5px;font-weight:700;color:${pType.color};letter-spacing:.1em;margin-bottom:10px">YOUR OPERATOR TYPE</div>
         <div style="font-size:52px;line-height:1;margin-bottom:10px">${pType.icon}</div>
