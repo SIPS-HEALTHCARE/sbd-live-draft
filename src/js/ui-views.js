@@ -10472,7 +10472,15 @@ function saveShift(fid, date, shift){
 function clearShift(fid,date,shift){
   if(!confirm('Remove all staff from this shift?')) return;
   const existing = DB.schedule.find(s=>s.fid===fid&&s.date===date&&s.shift===shift);
-  if(existing) existing.assignedStaff=[];
+  if(existing){
+    existing.assignedStaff=[];
+    // Zone assignments belong to the staff who were just removed, so they go too;
+    // leaving them would strand zones against people no longer on the shift.
+    existing.zoneAssignments={};
+    // Mirror saveShift: without this the clear was in-memory only and the staff
+    // reappeared on the next load.
+    if(IS_LIVE) SB.updateSchedule(existing.id, mapScheduleToBackend(existing)).catch(e => handleSyncError(e,'Schedule sync'));
+  }
   closeModal();
   toast('Shift cleared.','ok');
   _refreshHAtt();
