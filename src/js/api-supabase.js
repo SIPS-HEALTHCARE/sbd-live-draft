@@ -356,6 +356,12 @@ const SB = {
   createSchedule(data){ return sbFetch('/rest/v1/sbd_schedule', { method:'POST', body:data }); },
   updateSchedule(id, data){ return sbFetch(`/rest/v1/sbd_schedule?id=eq.${id}`, { method:'PATCH', body:data }); },
   deleteSchedule(id){ return sbFetch(`/rest/v1/sbd_schedule?id=eq.${id}`, { method:'DELETE' }); },
+  // ── Facility shift definitions ──
+  // Custom shifts a facility defines on top of SHIFT_DEF_DEFAULT. Upsert is keyed on
+  // (fid, shift_id) so re-saving an existing shift edits it rather than duplicating.
+  getFacilityShiftDefs(fid){ return sbFetch(`/rest/v1/facility_shifts?fid=eq.${encodeURIComponent(fid)}&select=*`); },
+  upsertFacilityShiftDef(data){ return sbFetch('/rest/v1/facility_shifts?on_conflict=fid,shift_id', { method:'POST', prefer:'resolution=merge-duplicates', body:data }); },
+  deleteFacilityShiftDef(fid, shiftId){ return sbFetch(`/rest/v1/facility_shifts?fid=eq.${encodeURIComponent(fid)}&shift_id=eq.${encodeURIComponent(shiftId)}`, { method:'DELETE' }); },
   // ── Attendance ──
   getAttendance(fid, date){ return sbFetch(`/rest/v1/sbd_attendance?facility_id=eq.${encodeURIComponent(fid)}&date=eq.${date}&select=*`); },
   getStaffAttendance(staffId){ return sbFetch(`/rest/v1/sbd_attendance?staff_id=eq.${staffId}&select=*&order=date.desc`); },
@@ -965,6 +971,37 @@ function mapScheduleToBackend(sch){
     shift: sch.shift,
     assigned_staff_ids: sch.assignedStaff || [],
     zone_assignments: sch.zoneAssignments || {}
+  };
+}
+
+// Facility shift definitions. The frontend keeps these as
+// DB.facilityShifts[fid][shiftId] = {id,label,name,start,end,icon,color,bg,bd}.
+function mapShiftDefFromBackend(row){
+  return {
+    id: row.shift_id,
+    label: row.label,
+    name: row.name,
+    start: row.start_time,
+    end: row.end_time,
+    icon: row.icon || '',
+    color: row.color || '',
+    bg: row.bg || '',
+    bd: row.bd || ''
+  };
+}
+
+function mapShiftDefToBackend(fid, def){
+  return {
+    fid: fid,
+    shift_id: def.id,
+    label: def.label || def.id,
+    name: def.name,
+    start_time: def.start,
+    end_time: def.end,
+    icon: def.icon || null,
+    color: def.color || null,
+    bg: def.bg || null,
+    bd: def.bd || null
   };
 }
 

@@ -2681,6 +2681,44 @@ function updateObservationBadge(){
   }
 }
 
+// In-app half of the pending-review reminder (client ruling 2026-07-24). The email
+// half is sbd-review-reminders on a twice-daily cron; this is the same three queues
+// surfaced on screen so an admin signing in sees the backlog without waiting for mail.
+// Counts come from data already hydrated for these views, so it costs no extra fetch.
+function pendingReviewCounts(){
+  const u = ST.user || {};
+  const scoped = (rows, fidKey) => {
+    if(u.role==='staff_admin' && Array.isArray(u.assignedFids) && u.assignedFids.length)
+      return rows.filter(r => u.assignedFids.includes(r[fidKey]));
+    return rows;
+  };
+  const placements = scoped((DB.placementReviews||[]).filter(r => r.status==='pending'), 'fid');
+  const gates      = scoped((DB.queue||[]).filter(r => r.status==='pending'), 'fid');
+  const preceptors = (typeof prcPendingApplications==='function') ? prcPendingApplications() : [];
+  return {
+    placements: placements.length,
+    gates: gates.length,
+    preceptors: preceptors.length,
+    total: placements.length + gates.length + preceptors.length
+  };
+}
+function pendingReviewNoticeHTML(){
+  if(!(ST.user && ['master_admin','admin','staff_admin'].includes(ST.user.role))) return '';
+  const c = pendingReviewCounts();
+  if(!c.total) return '';
+  const bits = [];
+  if(c.placements) bits.push(c.placements+' placement review'+(c.placements===1?'':'s'));
+  if(c.gates)      bits.push(c.gates+' belt gate request'+(c.gates===1?'':'s'));
+  if(c.preceptors) bits.push(c.preceptors+' preceptor application'+(c.preceptors===1?'':'s'));
+  return '<div class="card mb16" style="border-color:var(--gold-bd);background:rgba(196,154,32,.06)">'
+    +'<div class="card-body" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
+    +'<svg viewBox="0 0 20 20" width="18" height="18" fill="none" style="flex-shrink:0"><circle cx="10" cy="10" r="8" stroke="#c49a20" stroke-width="1.4"/><path d="M10 6v4.5" stroke="#c49a20" stroke-width="1.5" stroke-linecap="round"/><circle cx="10" cy="13.5" r=".9" fill="#c49a20"/></svg>'
+    +'<div style="flex:1;min-width:200px">'
+      +'<div style="font-size:13px;font-weight:700;color:var(--txt1)">'+c.total+' review'+(c.total===1?'':'s')+' waiting for your decision</div>'
+      +'<div style="font-size:12px;color:var(--txt2);margin-top:2px">'+bits.join(' &middot; ')+'. These stay flagged until each one is approved or denied.</div>'
+    +'</div></div></div>';
+}
+
 // ═══════════════════════════════════════════════════════════════
 // ASSESSOR PLACEMENT REVIEWS PANEL
 // ═══════════════════════════════════════════════════════════════
@@ -10005,8 +10043,25 @@ let schBuilderYear  = new Date().getFullYear();
 // is on h-attendance (standalone) or h-schedule (combined tabs)
 function _refreshHAtt(){ if(ST.hView==='h-attendance') renderHAttendance(); else renderHSchedule(); }
 
+// Custom shift definitions live in facility_shifts but DB.facilityShifts started as {}
+// and was never filled from the server, so saved shifts never came back. Load them once
+// per facility, then re-render. Failures are non-blocking: the defaults still render.
+const _shiftDefsLoaded = {};
+function _loadFacilityShiftDefs(fid){
+  if(!fid || _shiftDefsLoaded[fid]) return;
+  if(!(typeof IS_LIVE!=='undefined' && IS_LIVE && typeof SB!=='undefined' && SB.getFacilityShiftDefs)) return;
+  _shiftDefsLoaded[fid] = true;
+  SB.getFacilityShiftDefs(fid).then(rows=>{
+    if(!Array.isArray(rows) || !rows.length) return;
+    if(!DB.facilityShifts) DB.facilityShifts = {};
+    if(!DB.facilityShifts[fid]) DB.facilityShifts[fid] = {...SHIFT_DEF_DEFAULT};
+    rows.forEach(r=>{ const d = mapShiftDefFromBackend(r); DB.facilityShifts[fid][d.id] = d; });
+    if(ST.hView==='h-schedule' && typeof renderHSchedule==='function') renderHSchedule();
+  }).catch(e=>{ _shiftDefsLoaded[fid] = false; console.warn('[shifts] definition load failed', e && e.message); });
+}
 function renderHSchedule(){
   const fid = ST.hFid||'test-a';
+  _loadFacilityShiftDefs(fid);
   const el = document.getElementById('h-schedule');
   const today = todayStr();
   const shifts = getFacilityShifts(fid);
@@ -10287,7 +10342,11 @@ function saveShiftDef(fid, editId){
   const bd=document.getElementById('cs-bd').value||'rgba(249,115,22,.3)';
   if(!id||!name||!start||!end){toast('Please fill all required fields.','err');return;}
   if(!DB.facilityShifts[fid]) DB.facilityShifts[fid]={...SHIFT_DEF_DEFAULT};
-  DB.facilityShifts[fid][id]={id,label:id,name,start,end,icon,color,bg,bd};
+  const def={id,label:id,name,start,end,icon,color,bg,bd};
+  DB.facilityShifts[fid][id]=def;
+  // Without this the shift only existed on screen and was gone on the next load.
+  if(IS_LIVE && typeof SB!=='undefined' && SB.upsertFacilityShiftDef)
+    SB.upsertFacilityShiftDef(mapShiftDefToBackend(fid, def)).catch(e => handleSyncError(e,'Shift definition sync'));
   closeModal();
   toast(`Shift "${name}" ${editId?'updated':'created'}.`,'ok');
   renderHSchedule();
@@ -10295,7 +10354,18 @@ function saveShiftDef(fid, editId){
 function deleteShift(fid, shiftId){
   if(!confirm('Delete this shift? Scheduled assignments for this shift will also be removed.')) return;
   if(DB.facilityShifts[fid]) delete DB.facilityShifts[fid][shiftId];
+  const removed = DB.schedule.filter(s=>s.fid===fid&&s.shift===shiftId);
   DB.schedule = DB.schedule.filter(s=>!(s.fid===fid&&s.shift===shiftId));
+  // Both the definition and the shift's scheduled days were only being dropped in
+  // memory, so the shift and its assignments came back on the next load.
+  if(IS_LIVE && typeof SB!=='undefined'){
+    if(SB.deleteFacilityShiftDef)
+      SB.deleteFacilityShiftDef(fid, shiftId).catch(e => handleSyncError(e,'Shift definition sync'));
+    removed.forEach(s=>{
+      if(SB.deleteSchedule && !String(s.id).startsWith('sch-'))
+        SB.deleteSchedule(s.id).catch(e => handleSyncError(e,'Schedule sync'));
+    });
+  }
   toast('Shift deleted.','ok');
   renderHSchedule();
 }
@@ -10472,7 +10542,15 @@ function saveShift(fid, date, shift){
 function clearShift(fid,date,shift){
   if(!confirm('Remove all staff from this shift?')) return;
   const existing = DB.schedule.find(s=>s.fid===fid&&s.date===date&&s.shift===shift);
-  if(existing) existing.assignedStaff=[];
+  if(existing){
+    existing.assignedStaff=[];
+    // Zone assignments belong to the staff who were just removed, so they go too;
+    // leaving them would strand zones against people no longer on the shift.
+    existing.zoneAssignments={};
+    // Mirror saveShift: without this the clear was in-memory only and the staff
+    // reappeared on the next load.
+    if(IS_LIVE) SB.updateSchedule(existing.id, mapScheduleToBackend(existing)).catch(e => handleSyncError(e,'Schedule sync'));
+  }
   closeModal();
   toast('Shift cleared.','ok');
   _refreshHAtt();
@@ -11797,6 +11875,7 @@ function renderAOverview(){
   const prcNet=(typeof prcFacilityRollup==='function')?scopedFacs.reduce((acc,f)=>{const r=prcFacilityRollup(f.id);acc.assignedCount+=r.assignedCount;acc.completeCount+=r.completeCount;return acc;},{assignedCount:0,completeCount:0}):null;
   const prcNetPct=prcNet&&prcNet.assignedCount?Math.round(prcNet.completeCount/prcNet.assignedCount*100):0;
   document.getElementById('a-overview').innerHTML=`
+    ${pendingReviewNoticeHTML()}
     <div class="stat-grid">
       <div class="stat-card"><div class="stat-accent" style="background:var(--gold)"></div><div class="stat-lbl">Active Facilities</div><div class="stat-val" style="color:var(--gold)">${scopedFacs.length}</div><div class="stat-sub">Active hospitals</div></div>
       <div class="stat-card"><div class="stat-accent" style="background:var(--blue)"></div><div class="stat-lbl">Total Staff Enrolled</div><div class="stat-val" style="color:var(--blue)">${n}</div><div class="stat-sub">Across all departments</div></div>
