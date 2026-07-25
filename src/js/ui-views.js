@@ -2681,6 +2681,44 @@ function updateObservationBadge(){
   }
 }
 
+// In-app half of the pending-review reminder (client ruling 2026-07-24). The email
+// half is sbd-review-reminders on a twice-daily cron; this is the same three queues
+// surfaced on screen so an admin signing in sees the backlog without waiting for mail.
+// Counts come from data already hydrated for these views, so it costs no extra fetch.
+function pendingReviewCounts(){
+  const u = ST.user || {};
+  const scoped = (rows, fidKey) => {
+    if(u.role==='staff_admin' && Array.isArray(u.assignedFids) && u.assignedFids.length)
+      return rows.filter(r => u.assignedFids.includes(r[fidKey]));
+    return rows;
+  };
+  const placements = scoped((DB.placementReviews||[]).filter(r => r.status==='pending'), 'fid');
+  const gates      = scoped((DB.queue||[]).filter(r => r.status==='pending'), 'fid');
+  const preceptors = (typeof prcPendingApplications==='function') ? prcPendingApplications() : [];
+  return {
+    placements: placements.length,
+    gates: gates.length,
+    preceptors: preceptors.length,
+    total: placements.length + gates.length + preceptors.length
+  };
+}
+function pendingReviewNoticeHTML(){
+  if(!(ST.user && ['master_admin','admin','staff_admin'].includes(ST.user.role))) return '';
+  const c = pendingReviewCounts();
+  if(!c.total) return '';
+  const bits = [];
+  if(c.placements) bits.push(c.placements+' placement review'+(c.placements===1?'':'s'));
+  if(c.gates)      bits.push(c.gates+' belt gate request'+(c.gates===1?'':'s'));
+  if(c.preceptors) bits.push(c.preceptors+' preceptor application'+(c.preceptors===1?'':'s'));
+  return '<div class="card mb16" style="border-color:var(--gold-bd);background:rgba(196,154,32,.06)">'
+    +'<div class="card-body" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
+    +'<svg viewBox="0 0 20 20" width="18" height="18" fill="none" style="flex-shrink:0"><circle cx="10" cy="10" r="8" stroke="#c49a20" stroke-width="1.4"/><path d="M10 6v4.5" stroke="#c49a20" stroke-width="1.5" stroke-linecap="round"/><circle cx="10" cy="13.5" r=".9" fill="#c49a20"/></svg>'
+    +'<div style="flex:1;min-width:200px">'
+      +'<div style="font-size:13px;font-weight:700;color:var(--txt1)">'+c.total+' review'+(c.total===1?'':'s')+' waiting for your decision</div>'
+      +'<div style="font-size:12px;color:var(--txt2);margin-top:2px">'+bits.join(' &middot; ')+'. These stay flagged until each one is approved or denied.</div>'
+    +'</div></div></div>';
+}
+
 // ═══════════════════════════════════════════════════════════════
 // ASSESSOR PLACEMENT REVIEWS PANEL
 // ═══════════════════════════════════════════════════════════════
@@ -11837,6 +11875,7 @@ function renderAOverview(){
   const prcNet=(typeof prcFacilityRollup==='function')?scopedFacs.reduce((acc,f)=>{const r=prcFacilityRollup(f.id);acc.assignedCount+=r.assignedCount;acc.completeCount+=r.completeCount;return acc;},{assignedCount:0,completeCount:0}):null;
   const prcNetPct=prcNet&&prcNet.assignedCount?Math.round(prcNet.completeCount/prcNet.assignedCount*100):0;
   document.getElementById('a-overview').innerHTML=`
+    ${pendingReviewNoticeHTML()}
     <div class="stat-grid">
       <div class="stat-card"><div class="stat-accent" style="background:var(--gold)"></div><div class="stat-lbl">Active Facilities</div><div class="stat-val" style="color:var(--gold)">${scopedFacs.length}</div><div class="stat-sub">Active hospitals</div></div>
       <div class="stat-card"><div class="stat-accent" style="background:var(--blue)"></div><div class="stat-lbl">Total Staff Enrolled</div><div class="stat-val" style="color:var(--blue)">${n}</div><div class="stat-sub">Across all departments</div></div>
