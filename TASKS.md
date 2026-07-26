@@ -96,7 +96,8 @@ becomes a judgement call, and rule 5 needs something concrete to test against.
 No client answer needed for any of these. After Phase 1, no control claims to save when it
 does not, and no signed-in user can read or write another facility's records.
 
-- [ ] **T22** Lock down `placement_reviews` (issue `S1`) · est 1.0d · **High**
+- [x] ~~**T22** Lock down `placement_reviews` (issue `S1`)~~
+  `done 2026-07-26` · est 1.0d · **High**
   Policy `pr_all_all` is `FOR ALL USING (true) WITH CHECK (true)` to `authenticated`, over
   49 live rows. Any signed-in user at any facility can read and modify every placement
   review. Replace with facility-scoped read plus master and assessor write.
@@ -104,7 +105,7 @@ does not, and no signed-in user can read or write another facility's records.
   per role.
   *Goal:* No user can see or change a placement review outside their own facility, and only master admins and granted assessors can change one at all.
   *Done when:* `pg_policy` shows the new policy and `pr_all_all` is gone; a staff_member token reads only their facility and is refused a write; a master admin write succeeds; all 49 existing rows still readable by the right people.
-  *Status 2026-07-26:* policy applied and measured. staff_member went from 49 rows readable and 49 writable to 1 readable and 0 writable; a facility leader sees only their own facility; a master admin still reads all 49 and writes all 49; a candidate can still insert their own row but not one for anyone else. **Not ticked**, because Pass 2 found the protection can be walked around entirely via T53. This box stays open until T53 is closed.
+  *Status 2026-07-26:* policy applied and measured. staff_member went from 49 rows readable and 49 writable to 1 readable and 0 writable; a facility leader sees only their own facility; a master admin still reads all 49 and writes all 49; a candidate can still insert their own row but not one for anyone else. Pass 2 found the protection could be walked around via T53, so this stayed open until T53 was closed on the same day. Re-measured afterwards: a staff member sees 1 row.
 - [ ] **T23** Lock down `sbd_assessment_queue` (issue `S2`) · est 0.75d · **High**
   UPDATE is gated only on `auth.role() = 'authenticated'` and SELECT is `USING (true)`,
   over 56 live rows. A candidate can approve their own belt gate request. Restrict status
@@ -271,7 +272,8 @@ does not, and no signed-in user can read or write another facility's records.
 
 ### Found during Phase 1
 
-- [ ] **T53** Stop users from editing their own role and capabilities · est 0.5d · **Critical**
+- [x] ~~**T53** Stop users from editing their own role and capabilities~~
+  `done 2026-07-26` · est 0.5d · **Critical**
   `sbd_portal_users` carries `authenticated_update_own_profile`, which is
   `FOR UPDATE USING (auth_uid = auth.uid()) WITH CHECK (auth_uid = auth.uid())` with no
   column restriction, and `authenticated` holds UPDATE on every column of that table
@@ -293,6 +295,21 @@ does not, and no signed-in user can read or write another facility's records.
   `capabilities`, `facility_id`, `assigned_facility_ids` and `active`; ordinary profile
   self-edits that the app performs today still succeed; the escalation probe that worked on
   2026-07-26 no longer reaches administrator state.
+  *Fixed by:* a `BEFORE UPDATE` trigger rather than a column grant. A column-level revoke
+  applies to the `authenticated` role, which is every signed-in user including master
+  admins, so it would also have broken the admin screen that changes a person's portal
+  access and could not tell an edge function from a candidate. RLS cannot express it
+  either: an update policy sees the old row in `USING` and the new row in `WITH CHECK` but
+  cannot compare them, and column immutability is exactly that comparison.
+  *Measured 2026-07-26, every probe rolled back:* self-promote to master_admin refused
+  (42501); self-grant of the assessor capability refused; moving one's own facility
+  refused; role after all three attacks still `staff_member`; placement_reviews visible to
+  that account 1, not 49. Still working: the self-service profile editor (name, initials,
+  title) 1 row updated; a master admin editing another user allowed; the service role
+  changing account state allowed, so registration approval and activate/deactivate are
+  intact. Bypass attempts also closed: deleting one's own profile row affects 0 rows,
+  inserting a new master_admin row is refused, and `sbd_set_user_capabilities` refuses a
+  self-grant. Role and capability counts re-read afterwards and unchanged.
 
 ### Blocked, not on the critical path
 
