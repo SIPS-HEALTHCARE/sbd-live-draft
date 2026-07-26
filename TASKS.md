@@ -108,10 +108,11 @@ does not, and no signed-in user can read or write another facility's records.
   `assessment_gate_override` and `window_override` by direct call.
   *Risk:* if an admin screen writes a restricted column through the staff-member path it
   will start failing. Check every write path before applying.
-- [ ] **T25** Scope `facility_shifts` and `free_agents` (issues `S5`, `S4`) · est 0.5d · Medium
-  Both carry `FOR ALL USING (true) WITH CHECK (true)`. `free_agents` has 12 live rows.
-  `facility_shifts` is empty but the feature that fills it shipped on 2026-07-24, so this
-  is cheapest now.
+- [ ] **T25** Scope `facility_shifts` (issue `S5`) · est 0.25d · Medium
+  Carries `FOR ALL USING (true) WITH CHECK (true)`. Empty today, but the feature that
+  fills it shipped on 2026-07-24, so this is cheapest right now.
+  - [ ] **T25a** Scope `free_agents` (issue `S4`) · est 0.25d · Medium
+    Same policy shape, 12 live rows. Shares the migration with T25.
 - [ ] **T26** Make Publish to Staff actually publish (issue `B1`) · est 1.0d · **High**
   The button's entire handler is
   `closeModal();toast('Schedule published. Staff can now view their shifts.','ok')`.
@@ -125,10 +126,11 @@ does not, and no signed-in user can read or write another facility's records.
   On an existing record they mutate local state and return. `SB.updateAttendance` is
   defined at `api-supabase.js:374` and called from nowhere. First mark saves; every
   correction after it is lost on reload.
-- [ ] **T28** Persist schedule overwrites (issues `B3`, `B4`) · est 0.5d · Medium
-  Quick-fill (`ui-views.js:10259`) and CSV import (`ui-views.js:17596`) save new rows but
-  only update local state for a date and shift that already exists, while the toast
-  reports the full count.
+- [ ] **T28** Persist quick-fill schedule overwrites (issue `B3`) · est 0.25d · Medium
+  `ui-views.js:10259`. New rows save, but for a date and shift that already exists only
+  local state changes, while the toast reports the full count as assigned.
+  - [ ] **T28a** Persist CSV import overwrites (issue `B4`) · est 0.25d · Medium
+    `ui-views.js:17596`. Same shape as T28 and shares the fix.
 - [ ] **T29** Collapse duplicate gate requests (issue `D1`) · est 0.75d · **High**
   One open request per person, per belt, per gate. A repeat refreshes the existing row
   instead of adding another. This alone removes 14 of the 24 queue rows.
@@ -189,9 +191,12 @@ does not, and no signed-in user can read or write another facility's records.
   `assessment_queue`, `assessment_history`, `promotion_approvals`, `attendance`,
   `schedule`. All empty, all unreferenced by application code, all writable by any signed
   in user.
-- [ ] **T45** Advisor cleanup (issues `S8`, `S9`, `S10`) · est 0.5d
-  Remove `SECURITY DEFINER` from the `david_analytics_summary` view, enable leaked
-  password protection, fix the mutable `search_path` on 35 functions.
+- [ ] **T45** Remove `SECURITY DEFINER` from the `david_analytics_summary` view (issue `S8`) · est 0.25d
+  The only ERROR-level item the advisor reports.
+  - [ ] **T45a** Enable leaked-password protection in Auth (issue `S9`) · est 0.1d
+    A single setting. Checks sign-ups against known breached passwords.
+  - [ ] **T45b** Fix the mutable `search_path` on 35 functions (issue `S10`) · est 0.25d
+    Hardening. No behaviour change expected.
 - [ ] **T46** David usage cost detail, cached versus new · est 0.5d
 - [ ] **T47** App packaging options document, web versus installed · est 0.5d
 - [ ] **T48** Arm the David chat protection · est 0.25d
