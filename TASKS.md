@@ -548,6 +548,45 @@ does not, and no signed-in user can read or write another facility's records.
   *Done when:* The four schedule tasks are verified and the account is deactivated, along
   with any schedule and attendance rows created purely for the test.
 
+- [ ] **T60** Every signed-in account can read 96 people's passwords in the clear · est 0.5d · **Critical**
+  Found 2026-07-26, by accident, while registering the test leader account for T59. This is
+  the worst thing in the audit and it outranks everything else still open.
+
+  `public.registrations` has a `password` column. 96 rows hold a value, none of them hashed:
+  no `$2`, `$argon` or `$scrypt` prefix, and lengths run 6 to 20 characters, which is the
+  shape of a typed password and not of any digest. The table then carries `reg_all_all`,
+  `FOR ALL USING (true) WITH CHECK (true)` to `authenticated`, plus two more permissive
+  policies on top.
+
+  So every signed-in account on the platform, all 35 staff members included, can read the
+  password of all 96 people who have ever registered. Those are real people at the client's
+  facilities with real work email addresses, and password reuse across systems is the normal
+  case, so the blast radius reaches well past this application.
+
+  *Measured as an ordinary `staff_member`, every probe rolled back:*
+
+  | Attempt | Result |
+  |---|---|
+  | read registration rows | 97 |
+  | read stored passwords | 96, covering 96 distinct people |
+  | approve a pending registration | 1 row |
+  | delete a pending registration | 1 row |
+  | overwrite other people's passwords | 12 rows |
+
+  So it is not only a disclosure. A staff member can approve their own account request, and
+  can rewrite or delete anybody's registration.
+
+  *Why the column cannot simply be blanked:* `sbd-approve-registration` reads
+  `regData.password` and uses it as the credential when it creates the auth user, so pending
+  rows still need it until they are approved. Already-approved rows do not: the auth user
+  exists and the copy here is pure residue.
+
+  *Goal:* No password is ever stored where anything but the auth system can read it, and a candidate cannot approve their own account.
+  *Done when:* The permissive policies are gone and registrations are readable and decidable
+  only by the roles that review them; the password on every non-pending row is purged; the
+  flow no longer parks a password in a table at all; and everyone whose password sat here is
+  told to change it.
+
 ### Blocked, not on the critical path
 
 - [ ] **T49** Strip and rotate the PSOP credentials, gate the public page
