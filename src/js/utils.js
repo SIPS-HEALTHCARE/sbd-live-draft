@@ -171,6 +171,19 @@ if(!DB.psCompletionRequests) DB.psCompletionRequests = [];
 if(!DB.schNextId) DB.schNextId = 1;
 if(!DB.attNextId) DB.attNextId = 1;
 
+// Schedule and attendance ids used to be counters ('sch-3', 'att-7'). Both tables key on
+// uuid, so every write was rejected and the rejection swallowed (T55). The id is generated
+// here rather than left to the database default because the local record and the stored
+// row have to agree: saveShift and clearShift later PATCH by the id they already hold.
+function newRecordId(){
+  if(typeof crypto!=='undefined'&&crypto.randomUUID) return crypto.randomUUID();
+  // Older browsers. Random enough for a row key; collisions are caught by the primary key.
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{
+    const r=Math.random()*16|0, v=c==='x'?r:(r&0x3|0x8);
+    return v.toString(16);
+  });
+}
+
 // ── Helpers (todayStr, dateLabel, dateShort, add30Days defined above — not re-declared)
 function getSchedule(fid,date,shift){
   return DB.schedule.find(s=>s.fid===fid&&s.date===date&&s.shift===shift)||null;
@@ -181,8 +194,12 @@ function getAttendance(fid,date,shift,staffId){
 function getSchedulesForFid(fid, startDate, endDate){
   return DB.schedule.filter(s=>s.fid===fid&&s.date>=startDate&&s.date<=endDate);
 }
+// T26. Staff see a shift only once their leader has published it. publishedBy is null until
+// Publish to Staff is pressed, which is the whole point of that button. This is the only
+// caller-facing definition of "my schedule"; leader and admin views read DB.schedule
+// directly and still see everything, published or not.
 function getStaffSchedule(staffId, startDate, endDate){
-  return DB.schedule.filter(s=>s.assignedStaff.includes(staffId)&&s.date>=startDate&&s.date<=endDate);
+  return DB.schedule.filter(s=>s.publishedBy&&s.assignedStaff.includes(staffId)&&s.date>=startDate&&s.date<=endDate);
 }
 function calcAttendancePoints(staff){
   let pts=0;

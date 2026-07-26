@@ -106,13 +106,31 @@ does not, and no signed-in user can read or write another facility's records.
   *Goal:* No user can see or change a placement review outside their own facility, and only master admins and granted assessors can change one at all.
   *Done when:* `pg_policy` shows the new policy and `pr_all_all` is gone; a staff_member token reads only their facility and is refused a write; a master admin write succeeds; all 49 existing rows still readable by the right people.
   *Status 2026-07-26:* policy applied and measured. staff_member went from 49 rows readable and 49 writable to 1 readable and 0 writable; a facility leader sees only their own facility; a master admin still reads all 49 and writes all 49; a candidate can still insert their own row but not one for anyone else. Pass 2 found the protection could be walked around via T53, so this stayed open until T53 was closed on the same day. Re-measured afterwards: a staff member sees 1 row.
-- [ ] **T23** Lock down `sbd_assessment_queue` (issue `S2`) · est 0.75d · **High**
+- [x] ~~**T23** Lock down `sbd_assessment_queue` (issue `S2`)~~
+  `done 2026-07-26` · est 0.75d · **High**
   UPDATE is gated only on `auth.role() = 'authenticated'` and SELECT is `USING (true)`,
   over 56 live rows. A candidate can approve their own belt gate request. Restrict status
   changes to master admin and granted assessors; keep candidate self-insert.
   *Goal:* A candidate can raise a belt gate request but cannot decide it. Only master admins and granted assessors change status.
   *Done when:* A candidate token can INSERT but its UPDATE is refused; a master admin UPDATE succeeds; the 56 existing rows are untouched; policy read back from `pg_policy`.
-- [ ] **T24** Restrict the `staff` UPDATE column grant (issue `S3`) · est 0.5d · **High**
+  *Status 2026-07-26:* the three old policies were not checks at all. `auth.role()` returns
+  `authenticated` for every signed-in user, so "Allow authenticated update" let anyone set
+  any request to approved. Replaced with four policies: candidate self-insert and self-read,
+  SIPS admins and granted assessors decide, facility leaders read their own facility, master
+  admin deletes. Assessors were included on update because all four `resolveAssessmentQueue`
+  call sites sit beside `SB.recordAssessment`, which is an assessor closing out a gate.
+  *Measured, every probe rolled back:* candidate sees 15 of 56 rather than all of them and
+  approves 0; a facility leader sees 12 and approves 0; an assessor and a master admin see
+  and decide all. Raising a request still works.
+  *Pass 2 caught a hole in the first version of this fix.* The insert policy checked whose
+  row it was but not what it said, so a candidate could insert a row already marked
+  `approved` and skip approval entirely. Pinned candidate self-inserts to `status = 'pending'`
+  and re-probed: inserting an already-approved row is refused, raising a request for someone
+  else is refused, approving one's own request affects 0 rows, and both normal submit paths
+  still work including the one that omits status. Data re-read afterwards: 56 rows, 20
+  pending, 7 approved, nothing created.
+- [x] ~~**T24** Restrict the `staff` UPDATE column grant (issue `S3`)~~
+  `done 2026-07-26` · est 0.5d · **High**
   `authenticated` holds UPDATE on every column and `staff_update` permits
   `staff_member AND id = auth.uid()`, so a staff member can set their own `belt`, `stars`,
   `assessment_gate_override` and `window_override` by direct call.
@@ -120,21 +138,75 @@ does not, and no signed-in user can read or write another facility's records.
   will start failing. Check every write path before applying.
   *Goal:* A staff member can no longer set their own belt, stars or gate overrides from outside the app.
   *Done when:* `information_schema.column_privileges` shows the restricted columns no longer granted on the staff-member path; every admin screen that writes to `staff` still saves; a direct write to `belt` as a staff_member is refused.
-- [ ] **T25** Scope `facility_shifts` (issue `S5`) · est 0.25d · Medium
+  *Status 2026-07-26:* solved with a `BEFORE UPDATE` trigger, not a column revoke, and the
+  full write audit is why. A revoke applies to `authenticated`, which is every signed-in
+  user, so it would have broken the administrator writes **and the candidate**: the staff
+  Position School view writes through `mapStaffPSToBackend`, which carries `stars`, so
+  revoking `stars` would have stopped candidates starting a track at all. Those paths write
+  `stars` with its existing value and never change it; only `completePSTrack` changes it,
+  and that is a leader control. A trigger comparing old to new therefore lets the candidate
+  through and stops the escalation.
+  *Measured, every probe rolled back:* setting own belt to Black, self-granting 9 stars, a
+  gate override, a window override, passing own gates, and making self an observer are all
+  refused. An update that leaves `fid` and `role` unchanged still passes, so the rule is not
+  over-strict. Still working: submitOIP, savePracticeScore, saveSbdBackground, placement
+  submit, and beginPSTrack carrying stars unchanged, plus master admin full writes and
+  service-role writes from `sbd-record-assessment`. Data re-read afterwards: 63 staff rows,
+  none touched, 0 black belts, 0 stars, 0 gate overrides.
+  *Note:* the probe first flagged `acknowledgePlacement` as broken. That was my own false
+  alarm, not the trigger: the column it writes does not exist. Recorded separately as T54.
+- [x] ~~**T25** Scope `facility_shifts` (issue `S5`)~~
+  `done 2026-07-26` · est 0.25d · Medium
   Carries `FOR ALL USING (true) WITH CHECK (true)`. Empty today, but the feature that
   fills it shipped on 2026-07-24, so this is cheapest right now.
   *Goal:* Shift definitions are readable and writable only within the facility they belong to.
   *Done when:* Policy read back from `pg_policy`; a leader at one facility cannot read or write another facility's shift definitions; the shift manager still saves.
-  - [ ] **T25a** Scope `free_agents` (issue `S4`) · est 0.25d · Medium
+  *Status 2026-07-26:* read deliberately left open to **any signed-in user at that facility**,
+  not leaders only. The staff schedule renders a shift label against each assigned block and
+  that label comes out of this table, so a leaders-only read would leave staff looking at
+  unlabelled shifts. Writes are SIPS admins anywhere, facility leaders on their own facility.
+  `fid` is uuid here so the comparison against `sbd_get_user_facility()` casts to text.
+  *Measured, every probe rolled back, two probe shifts seeded at two different facilities:*
+  staff at facility A reads 1 of 2, edits 0, is refused creating one. Leader at facility A
+  reads 1 of 2, edits their own, affects 0 rows on the other facility's, is refused creating
+  one there, deletes 0 there, and creating one at their own facility works. Leader at facility
+  B reads 1 of 2, the other one. Master admin reads all and edits any. Data re-read
+  afterwards: 0 rows, nothing created.
+  - [x] ~~**T25a** Scope `free_agents` (issue `S4`)~~
+    `done 2026-07-26` · est 0.25d · Medium
     Same policy shape, 12 live rows. Shares the migration with T25.
     *Goal:* The free agent pool is readable and writable only by the roles that manage it.
     *Done when:* Policy read back; the 12 existing rows still load in the free agent view; a staff_member token is refused a write.
+    *Status 2026-07-26:* tightened harder than T25 because the rows are more sensitive. Each
+    one holds a departed person's name, belt, star count, release reason, release notes and
+    their whole OIP blob, and it was readable by all 66 non-SIPS accounts. Now SIPS admins
+    only, with no browser INSERT policy at all: `purgeFreeAgent` exists at
+    `api-supabase.js:345` but is never called, and the real release and assign paths run
+    through the `sbd-release-to-free-agent` and `sbd-assign-free-agent` edge functions on the
+    service role, which bypasses RLS. Every `DB.freeAgents` consumer is an admin portal screen.
+    *Measured:* staff and facility leader both read 0 of 12 and change 0 rows; master admin
+    reads all 12 and writes all 12. Data re-read afterwards: 12 rows, no notes altered.
+    *Known effect:* `getFreeAgents()` runs during hydration for every signed-in user, so staff
+    and leaders now receive an empty list instead of 12 rows. That is a filtered read, not an
+    error, and nothing on their screens consumes it.
 - [ ] **T26** Make Publish to Staff actually publish (issue `B1`) · est 1.0d · **High**
   The button's entire handler is
   `closeModal();toast('Schedule published. Staff can now view their shifts.','ok')`.
   It changes nothing. `sbd_schedule` already has a `published_by` column, so this is an
   unfinished feature. Set `published_by` and surface the published schedule in the staff
   portal.
+  *Blocked on T55, found 2026-07-26 on opening this task.* `sbd_schedule` holds 0 rows and
+  has never accepted a write, so there is nothing to mark published. T55 has to land first.
+  *Code written 2026-07-26, box stays open until it is clicked through.* `publishSchedule`
+  replaces the toast-only handler and stamps `published_by` on every filled, unpublished
+  shift in the 30-day window. `getStaffSchedule` now returns only published rows, and it is
+  the single definition of "my schedule", so leader and admin views still see everything.
+  New shifts are created with `publishedBy: null`; previously they were stamped with the
+  author's id at creation, which would have made every shift look published the moment the
+  write started working. The modal now shows To Publish, Already Live and Unscheduled, and
+  the button is disabled with "Nothing to Publish" when there is nothing pending.
+  *Proven at the database level, rolled back:* staff sees 0 shifts before publish and 1
+  after. Not yet clicked through in a browser, which is why this is not ticked.
   *Note:* larger than it looks. It implies deciding what staff see before publication,
   which is a product decision as much as a code change.
   *Goal:* A manager who presses Publish actually publishes, and staff see the published schedule. The button never again claims something it did not do.
@@ -144,11 +216,31 @@ does not, and no signed-in user can read or write another facility's records.
   On an existing record they mutate local state and return. `SB.updateAttendance` is
   defined at `api-supabase.js:374` and called from nowhere. First mark saves; every
   correction after it is lost on reload.
+  *Corrected 2026-07-26 by T55:* "first mark saves" was wrong. `sbd_attendance` holds 0 rows
+  and the mapper sends three columns that do not exist plus a uuid into an integer column, so
+  the first mark never saved either. T55 has to land first.
+  *Code written 2026-07-26, box stays open until it is clicked through.* All three paths
+  (`markAttend`, `markAllAttend`, `assignCoverage`) now call `SB.updateAttendance` on an
+  existing record instead of mutating local state and returning.
+  A fourth fault turned up in `assignCoverage`: it ran `parseInt` on the selected staff id.
+  Staff ids are uuids, so that produced NaN, the lookup never matched, and the toast named
+  nobody. Now it uses the value as given.
+  *Proven at the database level, rolled back:* mark present then correct to absent updates
+  1 row as the leader. Not yet clicked through in a browser.
   *Goal:* Correcting somebody's attendance sticks. Present changed to absent survives a reload.
   *Done when:* Mark a person present, change to absent, reload, and the record still reads absent; the same for the mark-all and coverage paths; `SB.updateAttendance` appears in the call path.
 - [ ] **T28** Persist quick-fill schedule overwrites (issue `B3`) · est 0.25d · Medium
   `ui-views.js:10259`. New rows save, but for a date and shift that already exists only
   local state changes, while the toast reports the full count as assigned.
+  *Corrected 2026-07-26 by T55:* "new rows save" was wrong. No schedule row has ever saved.
+  The overwrite path is still a separate bug on top, but it cannot be tested until T55 lands.
+  *Code written 2026-07-26, box stays open until it is clicked through.* Quick fill and CSV
+  import both call `SB.updateSchedule` on a day that already has a row, so the toast count
+  and what is stored finally agree. The silent catches on both paths were replaced with
+  `handleSyncError`, so a rejected write now says so instead of vanishing. That swallowing
+  is what let this sit unnoticed.
+  *Proven at the database level, rolled back:* overwriting an existing day updates 1 row as
+  the leader. Not yet clicked through in a browser.
   *Goal:* Quick-fill writes every shift it claims to have filled, including days that already had a row.
   *Done when:* Run quick-fill over a range that includes an already-populated day, reload, and every day matches what the toast reported.
   - [ ] **T28a** Persist CSV import overwrites (issue `B4`) · est 0.25d · Medium
@@ -192,10 +284,40 @@ does not, and no signed-in user can read or write another facility's records.
   reviewed for whether that grant is intended. Revoke the ones that are not.
   *Goal:* Every function reachable by a signed-in or anonymous caller is reachable on purpose.
   *Done when:* Each of the 108 grants is either kept with a recorded reason or revoked; the advisor count drops; the app still works end to end after the revocations.
-- [ ] **T35** Profile redesign to the client's supplied layout · est 1.5d
+- [ ] **T35** Profile redesign to the client's supplied layout · est 1.0d
   Two-column bio card, avatar panel, labelled field pairs, badges, tags, availability
   pill. The SBD years values move into a proper card instead of the small meta line.
-  Example received 2026-07-26.
+  Example received 2026-07-26. Shawn confirmed on 2026-07-26 that it applies to **both**
+  the staff profile and My Profile, so the layout is built once as a shared component and
+  used in both places rather than written twice.
+  *Applies to:* `renderHProfile` (the staff record an admin or leader opens from the
+  roster).
+  *Goal:* The staff profile reads like the layout the client sent, and the SBD years are
+  legible rather than buried in the meta line.
+  *Done when:* The two-column bio card, avatar panel, badges, tags and availability pill
+  render on a staff profile; the years values sit in their own card; the client confirms it
+  matches.
+  - [ ] **T35a** Same layout on My Profile · est 0.5d
+    `renderSOIP` is currently the Operator Intelligence Profile assessment screen rather
+    than a profile page, so this means giving My Profile a real bio section built from the
+    shared component, with the assessment result becoming one part of it instead of the
+    whole page.
+    *Goal:* A staff member opening My Profile sees their own details in the same layout an
+    admin sees, not an assessment intro.
+    *Done when:* My Profile renders the shared bio card for the signed-in person, the
+    operator assessment still starts and displays from within it, and the SBD Background
+    editor added in T21 still saves.
+  - [ ] **T35b** Give administrators a profile page at all · est 0.5d
+    Found 2026-07-26 while checking the above: an administrator has no profile screen.
+    Clicking their own name in the sidebar footer lands on Account and Settings, which is a
+    form (display name, title, initials, read-only email, password, session info), not a
+    profile. So the client's design currently has nowhere to live for an admin account.
+    Decide whether the name click should open a profile with Settings reachable from it, or
+    whether administrators simply keep Settings and no profile.
+    *Goal:* Clicking your own name takes you somewhere that matches what the platform calls
+    a profile, whatever role you hold.
+    *Done when:* An administrator clicking their name reaches a profile in the shared
+    layout, and Account and Settings is still reachable in one step from there.
   *Goal:* The profile reads like the layout the client sent, and the SBD years are legible rather than buried.
   *Done when:* The two-column bio card, avatar panel, badges, tags and availability pill render; the years values sit in their own card; the client confirms it matches.
 - [ ] **T36** Reorganise the staff sidebar into sections, matching the admin panel · est 1.0d
@@ -310,6 +432,87 @@ does not, and no signed-in user can read or write another facility's records.
   intact. Bypass attempts also closed: deleting one's own profile row affects 0 rows,
   inserting a new master_admin row is refused, and `sbd_set_user_capabilities` refuses a
   self-grant. Role and capability counts re-read afterwards and unchanged.
+
+- [ ] **T54** Placement acknowledgement does not follow the person to another device · est 0.25d · Low
+  Found 2026-07-26 while auditing the `staff` write paths for T24. `acknowledgePlacement`
+  (`ui-views.js:7153`) writes `placement_acknowledged: true` to the `staff` table, and that
+  column does not exist. The request has always failed and is swallowed by a deliberately
+  silent catch, with the code comment "no console warnings if column doesn't exist yet".
+  It is not as bad as it first looks: the same function also writes to `localStorage`, so
+  the acknowledgement holds on the browser where it was given. It is lost on another device,
+  another browser, or after the browser is cleared, and it is invisible to any report.
+  *Goal:* Acknowledging a placement is recorded against the person, not against one browser.
+  *Done when:* The column exists, the acknowledgement survives signing in on a different
+  device, and anyone already acknowledged in `localStorage` is not asked to do it again.
+
+- [x] ~~**T55** The schedule, attendance and promotion tables have never been written to~~
+  `done 2026-07-26` · est 1.0d · **High**
+  Found 2026-07-26 while opening T26. The three tables behind Schedule, Attendance and
+  Promotions hold **0 rows each**, and the reason is not that nobody used the feature. The
+  data mappers in `api-supabase.js` do not match the tables they write to, so every write
+  has been rejected by the database and the rejection swallowed by a silent catch.
+
+  | What the code sends | What the table has | Result |
+  |---|---|---|
+  | `sbd_schedule.assigned_staff_ids` | column is `assigned_staff` | unknown column, insert rejected |
+  | `sbd_schedule.id` = `"sch-3"` | column is `uuid` | invalid uuid, insert rejected |
+  | `sbd_attendance.arrived_at`, `left_at`, `note` | none of the three exist | unknown column, insert rejected |
+  | `sbd_attendance.staff_id` = a uuid | column is `integer` | type mismatch |
+  | `sbd_promotions.staff_id` = a uuid | column is `integer` | type mismatch |
+
+  `published_by` and `notes` on `sbd_schedule` and `points` on `sbd_attendance` are never
+  mapped at all. Nothing here goes through an edge function, so there is no second path
+  quietly making it work: `SB.createSchedule` posts the mapper output verbatim.
+
+  There is also a duplicate set of tables, `schedule`, `attendance` and `promotion_approvals`,
+  also empty, which use `fid uuid` and `staff_id uuid` and are closer to what the app means.
+  The application talks to the `sbd_` prefixed set. Which set survives is part of the fix.
+
+  *This reframes four ledger items.* T26, T27, T28 and T28a were each written as "this one
+  path does not persist". They share one root cause and none of them can be verified until
+  this is fixed, because there is no saved row to check against.
+
+  *One thing it makes easier:* with every table empty there is no backfill and no migration
+  risk. T26 can make unpublished schedules invisible to staff without stranding anybody,
+  because there is no existing schedule to strand.
+
+  *Goal:* A schedule, an attendance mark and a promotion request written in the app are still there after a reload, on any device.
+  *Done when:* Creating one of each writes a real row; the row is read back into the app after a reload; a deliberate bad write surfaces an error to the user instead of being swallowed; and the duplicate table set is either adopted or dropped with the reason recorded.
+  *Status 2026-07-26:* fixed in two migrations and three browser files. Probing found two
+  more faults that reading the schema had missed, which is the only reason they were caught:
+  `sbd_schedule.assigned_staff` was **integer[]**, so even a master admin could not write a
+  schedule row; and neither `sbd_schedule` nor `sbd_attendance` granted INSERT or UPDATE to
+  `hospital` or `facility_admin`, although the schedule builder and the attendance register
+  are facility leader screens. Leaders now write their own facility, scoped the same way as
+  T22 and T25. DELETE is deliberately not granted: clearing a shift is an update that empties
+  the assignment, so nothing needs it and a mistake cannot erase who was scheduled.
+  *Measured end to end, rolled back:* leader saves a shift, overwrites an existing day,
+  marks present, corrects to absent (1 row each); saving at another facility is refused;
+  deleting affects 0 rows. Staff sees 0 shifts before publish and 1 after, reads their own
+  attendance, and editing the schedule affects 0 rows. Tables re-read afterwards: 0, 0, 0.
+  *Left open on purpose:* the duplicate `schedule` / `attendance` / `promotion_approvals`
+  tables were not touched. All three are empty and nothing reads them. Recorded as T57.
+  *Also confirmed:* a leader at one facility can still read another facility's schedule.
+  That is `auth_read_all` and it is T32, not a regression from this work.
+
+- [ ] **T56** A promotion with no belt change cannot be stored · est 0.25d · Low
+  Found 2026-07-26 while fixing T55. `sbd_promotions` requires `from_belt` and `to_belt` to
+  be NOT NULL, but `mapPromotionApprovalToBackend` sends `to_belt: ap.proposedBelt || null`.
+  A role promotion that does not move the person's belt therefore cannot be written. Not
+  guessed at here because it is a question about what such a request means, not a typo.
+  *Goal:* A promotion request that changes role but not belt can be raised and stored.
+  *Done when:* The intended meaning is settled, the column is either made nullable or given
+  a defined value, and a role-only promotion round-trips through a reload.
+
+- [ ] **T57** Decide what happens to the duplicate table set · est 0.25d · Low
+  Found 2026-07-26 during T55. `schedule`, `attendance` and `promotion_approvals` sit
+  alongside the `sbd_` prefixed tables the application actually uses. All three are empty,
+  nothing reads them, and their column types (`fid uuid`, `staff_id uuid`) are closer to
+  what the app means than the ones that were in use. They were left untouched rather than
+  dropped, because dropping a table is not something to do in passing.
+  *Goal:* One set of tables, with the reason the other went recorded.
+  *Done when:* The three are dropped after confirming nothing reads them, or kept with a
+  written reason.
 
 ### Blocked, not on the critical path
 
