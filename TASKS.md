@@ -195,6 +195,8 @@ does not, and no signed-in user can read or write another facility's records.
   It changes nothing. `sbd_schedule` already has a `published_by` column, so this is an
   unfinished feature. Set `published_by` and surface the published schedule in the staff
   portal.
+  *Blocked on T55, found 2026-07-26 on opening this task.* `sbd_schedule` holds 0 rows and
+  has never accepted a write, so there is nothing to mark published. T55 has to land first.
   *Note:* larger than it looks. It implies deciding what staff see before publication,
   which is a product decision as much as a code change.
   *Goal:* A manager who presses Publish actually publishes, and staff see the published schedule. The button never again claims something it did not do.
@@ -204,11 +206,16 @@ does not, and no signed-in user can read or write another facility's records.
   On an existing record they mutate local state and return. `SB.updateAttendance` is
   defined at `api-supabase.js:374` and called from nowhere. First mark saves; every
   correction after it is lost on reload.
+  *Corrected 2026-07-26 by T55:* "first mark saves" was wrong. `sbd_attendance` holds 0 rows
+  and the mapper sends three columns that do not exist plus a uuid into an integer column, so
+  the first mark never saved either. T55 has to land first.
   *Goal:* Correcting somebody's attendance sticks. Present changed to absent survives a reload.
   *Done when:* Mark a person present, change to absent, reload, and the record still reads absent; the same for the mark-all and coverage paths; `SB.updateAttendance` appears in the call path.
 - [ ] **T28** Persist quick-fill schedule overwrites (issue `B3`) · est 0.25d · Medium
   `ui-views.js:10259`. New rows save, but for a date and shift that already exists only
   local state changes, while the toast reports the full count as assigned.
+  *Corrected 2026-07-26 by T55:* "new rows save" was wrong. No schedule row has ever saved.
+  The overwrite path is still a separate bug on top, but it cannot be tested until T55 lands.
   *Goal:* Quick-fill writes every shift it claims to have filled, including days that already had a row.
   *Done when:* Run quick-fill over a range that includes an already-populated day, reload, and every day matches what the toast reported.
   - [ ] **T28a** Persist CSV import overwrites (issue `B4`) · est 0.25d · Medium
@@ -412,6 +419,39 @@ does not, and no signed-in user can read or write another facility's records.
   *Goal:* Acknowledging a placement is recorded against the person, not against one browser.
   *Done when:* The column exists, the acknowledgement survives signing in on a different
   device, and anyone already acknowledged in `localStorage` is not asked to do it again.
+
+- [ ] **T55** The schedule, attendance and promotion tables have never been written to · est 1.0d · **High**
+  Found 2026-07-26 while opening T26. The three tables behind Schedule, Attendance and
+  Promotions hold **0 rows each**, and the reason is not that nobody used the feature. The
+  data mappers in `api-supabase.js` do not match the tables they write to, so every write
+  has been rejected by the database and the rejection swallowed by a silent catch.
+
+  | What the code sends | What the table has | Result |
+  |---|---|---|
+  | `sbd_schedule.assigned_staff_ids` | column is `assigned_staff` | unknown column, insert rejected |
+  | `sbd_schedule.id` = `"sch-3"` | column is `uuid` | invalid uuid, insert rejected |
+  | `sbd_attendance.arrived_at`, `left_at`, `note` | none of the three exist | unknown column, insert rejected |
+  | `sbd_attendance.staff_id` = a uuid | column is `integer` | type mismatch |
+  | `sbd_promotions.staff_id` = a uuid | column is `integer` | type mismatch |
+
+  `published_by` and `notes` on `sbd_schedule` and `points` on `sbd_attendance` are never
+  mapped at all. Nothing here goes through an edge function, so there is no second path
+  quietly making it work: `SB.createSchedule` posts the mapper output verbatim.
+
+  There is also a duplicate set of tables, `schedule`, `attendance` and `promotion_approvals`,
+  also empty, which use `fid uuid` and `staff_id uuid` and are closer to what the app means.
+  The application talks to the `sbd_` prefixed set. Which set survives is part of the fix.
+
+  *This reframes four ledger items.* T26, T27, T28 and T28a were each written as "this one
+  path does not persist". They share one root cause and none of them can be verified until
+  this is fixed, because there is no saved row to check against.
+
+  *One thing it makes easier:* with every table empty there is no backfill and no migration
+  risk. T26 can make unpublished schedules invisible to staff without stranding anybody,
+  because there is no existing schedule to strand.
+
+  *Goal:* A schedule, an attendance mark and a promotion request written in the app are still there after a reload, on any device.
+  *Done when:* Creating one of each writes a real row; the row is read back into the app after a reload; a deliberate bad write surfaces an error to the user instead of being swallowed; and the duplicate table set is either adopted or dropped with the reason recorded.
 
 ### Blocked, not on the critical path
 
