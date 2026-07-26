@@ -536,6 +536,18 @@ does not, and no signed-in user can read or write another facility's records.
   portal, scoped by the facility switcher already on that screen, and the write rights they
   already hold are reachable from the interface.
 
+- [ ] **T59** Close out the test leader account when the schedule testing is done · est 0.1d · Medium
+  Created 2026-07-26 so that T26, T27, T28 and T28a could be verified in the interface at
+  all. There is no leader account at Test Hospital Facility and the SIPS admin portal has
+  no schedule screen (T58), so there was no other way to press the buttons.
+  `dev@thisisatest.com`, facility leader at Test Hospital Facility.
+  It is a real production account and it should not be left lying around: stray accounts in
+  this database have caused trouble before. The domain is not deliverable, so password
+  recovery will never work on it, which is a second reason not to keep it.
+  *Goal:* No account outlives the reason it was created.
+  *Done when:* The four schedule tasks are verified and the account is deactivated, along
+  with any schedule and attendance rows created purely for the test.
+
 ### Blocked, not on the critical path
 
 - [ ] **T49** Strip and rotate the PSOP credentials, gate the public page
