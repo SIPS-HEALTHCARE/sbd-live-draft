@@ -10256,10 +10256,16 @@ function execBulkSchedule(fid){
       const offset=((di*Object.keys(shifts).length+si)*count)%st.length;
       const assigned=[];
       for(let i=0;i<Math.min(count,st.length);i++) assigned.push(st[(offset+i)%st.length].id);
-      if(existing){ existing.assignedStaff=assigned; if(!existing.zoneAssignments) existing.zoneAssignments={}; }
+      if(existing){
+        existing.assignedStaff=assigned;
+        if(!existing.zoneAssignments) existing.zoneAssignments={};
+        // T28: an already-populated day only ever changed in memory, while the toast below
+        // counted it as filled. The overwrite is now written like any other.
+        if(IS_LIVE) SB.updateSchedule(existing.id, mapScheduleToBackend(existing)).catch(e => handleSyncError(e,'Schedule sync'));
+      }
       else {
-        const autoSched={id:'sch-'+DB.schNextId++,fid,date,shift:sk,assignedStaff:assigned,publishedBy:ST.user?.id||'',notes:'',zoneAssignments:{}};
-        if(IS_LIVE){ SB.createSchedule(mapScheduleToBackend(autoSched)).catch(e => { if (e instanceof ReferenceError || e instanceof TypeError || e instanceof SyntaxError) throw e; }); }
+        const autoSched={id:newRecordId(),fid,date,shift:sk,assignedStaff:assigned,publishedBy:null,notes:'',zoneAssignments:{}};
+        if(IS_LIVE){ SB.createSchedule(mapScheduleToBackend(autoSched)).catch(e => handleSyncError(e,'Schedule sync')); }
         DB.schedule.push(autoSched);
       }
       filled++;
@@ -10558,7 +10564,9 @@ function saveShift(fid, date, shift){
       SB.updateSchedule(existing.id, mapScheduleToBackend(existing)).catch(e => handleSyncError(e, 'Schedule sync'));
     }
   } else {
-    const newSched={id:'sch-'+DB.schNextId++,fid,date,shift,assignedStaff:[..._seAssigned],publishedBy:ST.user?.id||'',notes,zoneAssignments};
+    // publishedBy stays null until somebody presses Publish to Staff. Stamping the author
+    // here is what made every new shift look published while the button did nothing.
+    const newSched={id:newRecordId(),fid,date,shift,assignedStaff:[..._seAssigned],publishedBy:null,notes,zoneAssignments};
     if(IS_LIVE){
       SB.createSchedule(mapScheduleToBackend(newSched)).catch(e => handleSyncError(e, 'Schedule sync'));
     }
@@ -10591,23 +10599,64 @@ function clearShift(fid,date,shift){
   _refreshHAtt();
 }
 
+// T26. The button used to be `closeModal();toast('Schedule published...')` and nothing else,
+// so it announced a thing it had not done. A shift counts as published when published_by is
+// set on its row; that is what the staff portal reads.
+function _pendingPublish(fid){
+  const dates = add30Days(todayStr(),30);
+  const out = [];
+  dates.forEach(d=>{
+    Object.keys(getFacilityShifts(fid)).forEach(sh=>{
+      const sch=getSchedule(fid,d,sh);
+      if(sch && sch.assignedStaff.length>0 && !sch.publishedBy) out.push(sch);
+    });
+  });
+  return out;
+}
+
 function openPublishModal(fid){
   const st = staffOf(fid);
   const dates = add30Days(todayStr(),30);
-  let published=0, total=0;
-  dates.forEach(d=>{ ['AM','PM','NOC'].forEach(sh=>{ total++; const sch=getSchedule(fid,d,sh); if(sch&&sch.assignedStaff.length>0) published++; }); });
+  let filled=0, total=0, alreadyLive=0;
+  dates.forEach(d=>{ Object.keys(getFacilityShifts(fid)).forEach(sh=>{
+    total++;
+    const sch=getSchedule(fid,d,sh);
+    if(sch&&sch.assignedStaff.length>0){ filled++; if(sch.publishedBy) alreadyLive++; }
+  }); });
+  const pending = filled - alreadyLive;
   openModal('Publish Schedule',`
     <div class="modal-body">
       <div style="background:rgba(196,154,32,.06);border:1px solid var(--gold-bd);border-radius:var(--rs);padding:12px 14px;font-size:12.5px;color:var(--txt2);margin-bottom:14px;line-height:1.6">
-        Publishing makes the 30-day schedule visible to all staff in their portals. Shifts can still be edited after publishing.
+        Publishing releases the next 30 days to staff. Until you publish, staff do not see these shifts.
+        Shifts can still be edited afterwards, and edits are visible straight away.
       </div>
       <div style="display:flex;gap:14px;margin-bottom:14px">
-        <div class="stat-card" style="flex:1;text-align:center"><div class="stat-val" style="color:var(--ok)">${published}</div><div class="stat-lbl">Shifts Filled</div></div>
-        <div class="stat-card" style="flex:1;text-align:center"><div class="stat-val" style="color:${total-published>0?'var(--warn)':'var(--ok)'}">${total-published}</div><div class="stat-lbl">Unscheduled</div></div>
+        <div class="stat-card" style="flex:1;text-align:center"><div class="stat-val" style="color:var(--gold)">${pending}</div><div class="stat-lbl">To Publish</div></div>
+        <div class="stat-card" style="flex:1;text-align:center"><div class="stat-val" style="color:var(--ok)">${alreadyLive}</div><div class="stat-lbl">Already Live</div></div>
+        <div class="stat-card" style="flex:1;text-align:center"><div class="stat-val" style="color:${total-filled>0?'var(--warn)':'var(--ok)'}">${total-filled}</div><div class="stat-lbl">Unscheduled</div></div>
         <div class="stat-card" style="flex:1;text-align:center"><div class="stat-val" style="color:var(--blue)">${st.length}</div><div class="stat-lbl">Total Staff</div></div>
       </div>
     </div>
-    <div class="modal-ft"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-gold" onclick="closeModal();toast('Schedule published. Staff can now view their shifts.','ok')">Publish to Staff</button></div>`,'modal-md');
+    <div class="modal-ft"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-gold" ${pending?'':'disabled'} onclick="publishSchedule('${fid}')">${pending?`Publish ${pending} Shift${pending===1?'':'s'} to Staff`:'Nothing to Publish'}</button></div>`,'modal-md');
+}
+
+function publishSchedule(fid){
+  const pending = _pendingPublish(fid);
+  if(!pending.length){ closeModal(); toast('Nothing new to publish.','warn'); return; }
+  const by = ST.user?.id || null;
+  if(!by){ toast('Could not identify who is publishing. Please sign in again.','err'); return; }
+  pending.forEach(sch=>{
+    sch.publishedBy = by;
+    if(IS_LIVE){
+      SB.updateSchedule(sch.id, mapScheduleToBackend(sch)).catch(e => handleSyncError(e,'Publish schedule'));
+    }
+  });
+  closeModal();
+  // The count is what was sent. A rejected write reports itself through handleSyncError
+  // rather than being folded into a success message, which is the fault this task fixes.
+  toast(`${pending.length} shift${pending.length===1?'':'s'} published. Staff can now see ${pending.length===1?'it':'them'}.`,'ok');
+  if(ST.portal==='h') renderHSchedule();
+  if(ST.portal==='x') renderXSchedule();
 }
 
 
@@ -11004,9 +11053,14 @@ function renderHAttendance(){
 
 function markAttend(fid, date, shift, staffId, status){
   const existing = DB.attendance.find(a=>a.fid===fid&&a.date===date&&a.shift===shift&&a.staffId===staffId);
-  if(existing){ existing.status=status; }
+  if(existing){
+    existing.status=status;
+    // T27: a correction only changed local state, so present-then-absent came back present
+    // on the next load. SB.updateAttendance existed and was called from nowhere.
+    if(IS_LIVE) SB.updateAttendance(existing.id, mapAttendanceToBackend(existing)).catch(e => handleSyncError(e, 'Attendance sync'));
+  }
   else {
-    const att1={id:'att-'+DB.attNextId++,fid,date,shift,staffId,status,coverageFor:null,markedBy:ST.user?.id||''};
+    const att1={id:newRecordId(),fid,date,shift,staffId,status,coverageFor:null,markedBy:ST.user?.id||''};
     if(IS_LIVE) SB.recordAttendance(mapAttendanceToBackend(att1)).catch(e => handleSyncError(e, 'Attendance sync'));
     DB.attendance.push(att1);
   }
@@ -11022,10 +11076,13 @@ function markAllAttend(fid, date, shift, status){
   const sch = getSchedule(fid, date, shift); if(!sch) return;
   sch.assignedStaff.forEach(sid=>{
     const existing=DB.attendance.find(a=>a.fid===fid&&a.date===date&&a.shift===shift&&a.staffId===sid);
-    if(existing){ existing.status=status; }
+    if(existing){
+      existing.status=status;
+      if(IS_LIVE) SB.updateAttendance(existing.id, mapAttendanceToBackend(existing)).catch(e => handleSyncError(e, 'Attendance sync'));
+    }
     else {
-      const att2={id:'att-'+DB.attNextId++,fid,date,shift,staffId:sid,status,coverageFor:null,markedBy:ST.user?.id||''};
-      if(IS_LIVE) SB.recordAttendance(mapAttendanceToBackend(att2)).catch(e => { if (e instanceof ReferenceError || e instanceof TypeError || e instanceof SyntaxError) throw e; });
+      const att2={id:newRecordId(),fid,date,shift,staffId:sid,status,coverageFor:null,markedBy:ST.user?.id||''};
+      if(IS_LIVE) SB.recordAttendance(mapAttendanceToBackend(att2)).catch(e => handleSyncError(e, 'Attendance sync'));
       DB.attendance.push(att2);
     }
   });
@@ -11038,12 +11095,17 @@ function markAllAttend(fid, date, shift, status){
 function assignCoverage(fid, date, shift, absentId){
   const sel = document.getElementById('cov-'+absentId);
   if(!sel||!sel.value){ toast('Please select a coverage staff member.','err'); return; }
-  const covSid = parseInt(sel.value);
+  // Staff ids are uuids. parseInt on one gives NaN, so the lookup below never matched an
+  // existing record and getStaff() at the end of this function found nobody.
+  const covSid = sel.value;
   const existing = DB.attendance.find(a=>a.fid===fid&&a.date===date&&a.shift===shift&&a.staffId===covSid);
-  if(existing){ existing.status='coverage'; existing.coverageFor=absentId; }
+  if(existing){
+    existing.status='coverage'; existing.coverageFor=absentId;
+    if(IS_LIVE) SB.updateAttendance(existing.id, mapAttendanceToBackend(existing)).catch(e => handleSyncError(e, 'Attendance sync'));
+  }
   else {
-    const covAtt={id:'att-'+DB.attNextId++,fid,date,shift,staffId:covSid,status:'coverage',coverageFor:absentId,markedBy:ST.user?.id||''};
-    if(IS_LIVE) SB.recordAttendance(mapAttendanceToBackend(covAtt)).catch(e => { if (e instanceof ReferenceError || e instanceof TypeError || e instanceof SyntaxError) throw e; });
+    const covAtt={id:newRecordId(),fid,date,shift,staffId:covSid,status:'coverage',coverageFor:absentId,markedBy:ST.user?.id||''};
+    if(IS_LIVE) SB.recordAttendance(mapAttendanceToBackend(covAtt)).catch(e => handleSyncError(e, 'Attendance sync'));
     DB.attendance.push(covAtt);
   }
   // Inherit zone from the absent staff member for coverage worker
@@ -17593,10 +17655,15 @@ function importScheduleCSV(fid){
   let imported=0;
   Object.values(grouped).forEach(g=>{
     const existing=DB.schedule.find(s=>s.fid===fid&&s.date===g.date&&s.shift===g.shift);
-    if(existing){ existing.assignedStaff=g.staffIds; }
+    if(existing){
+      existing.assignedStaff=g.staffIds;
+      // T28a: same hole as quick-fill. An import that overlapped an existing day reported
+      // success and wrote nothing.
+      if(IS_LIVE) SB.updateSchedule(existing.id, mapScheduleToBackend(existing)).catch(e => handleSyncError(e,'Schedule sync'));
+    }
     else {
-      const bulkSched={id:'sch-'+DB.schNextId++,fid,date:g.date,shift:g.shift,assignedStaff:g.staffIds,publishedBy:ST.user?.id||'',notes:'CSV import'};
-      if(IS_LIVE){ SB.createSchedule(mapScheduleToBackend(bulkSched)).catch(e => { if (e instanceof ReferenceError || e instanceof TypeError || e instanceof SyntaxError) throw e; }); }
+      const bulkSched={id:newRecordId(),fid,date:g.date,shift:g.shift,assignedStaff:g.staffIds,publishedBy:null,notes:'CSV import',zoneAssignments:{}};
+      if(IS_LIVE){ SB.createSchedule(mapScheduleToBackend(bulkSched)).catch(e => handleSyncError(e,'Schedule sync')); }
       DB.schedule.push(bulkSched);
     }
     imported++;

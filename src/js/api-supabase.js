@@ -957,13 +957,22 @@ function mapUserToBackend(u){
   };
 }
 
+// The column is `assigned_staff`, not `assigned_staff_ids`. Sending the wrong name meant
+// every schedule write was rejected by the database and the table stayed empty (T55).
+// `published_by` and `notes` were never mapped at all, which is why Publish to Staff had
+// nothing to mark and shift notes never came back.
+//
+// published_by carries the publish state as well as the identity: null means the schedule
+// exists but has not been released to staff yet.
 function mapScheduleFromBackend(row){
   return {
     id: row.id,
     fid: row.facility_id,
     date: row.date,
     shift: row.shift,
-    assignedStaff: row.assigned_staff_ids || [],
+    assignedStaff: row.assigned_staff || [],
+    publishedBy: row.published_by || null,
+    notes: row.notes || '',
     zoneAssignments: row.zone_assignments || {}
   };
 }
@@ -974,7 +983,9 @@ function mapScheduleToBackend(sch){
     facility_id: sch.fid,
     date: sch.date,
     shift: sch.shift,
-    assigned_staff_ids: sch.assignedStaff || [],
+    assigned_staff: sch.assignedStaff || [],
+    published_by: sch.publishedBy || null,
+    notes: sch.notes || '',
     zone_assignments: sch.zoneAssignments || {}
   };
 }
@@ -1042,6 +1053,10 @@ function mapShiftDefToBackend(fid, def){
   };
 }
 
+// Unchanged in shape, but nothing this mapper produced could be stored until T55: staff_id
+// and coverage_for were integer columns being sent uuids, and arrived_at, left_at and note
+// did not exist on the table at all. `points` is deliberately not mapped; the app derives it
+// from status through calcAttendancePoints, so storing it would create a second truth.
 function mapAttendanceFromBackend(row){
   return {
     id: row.id,

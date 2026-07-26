@@ -197,6 +197,16 @@ does not, and no signed-in user can read or write another facility's records.
   portal.
   *Blocked on T55, found 2026-07-26 on opening this task.* `sbd_schedule` holds 0 rows and
   has never accepted a write, so there is nothing to mark published. T55 has to land first.
+  *Code written 2026-07-26, box stays open until it is clicked through.* `publishSchedule`
+  replaces the toast-only handler and stamps `published_by` on every filled, unpublished
+  shift in the 30-day window. `getStaffSchedule` now returns only published rows, and it is
+  the single definition of "my schedule", so leader and admin views still see everything.
+  New shifts are created with `publishedBy: null`; previously they were stamped with the
+  author's id at creation, which would have made every shift look published the moment the
+  write started working. The modal now shows To Publish, Already Live and Unscheduled, and
+  the button is disabled with "Nothing to Publish" when there is nothing pending.
+  *Proven at the database level, rolled back:* staff sees 0 shifts before publish and 1
+  after. Not yet clicked through in a browser, which is why this is not ticked.
   *Note:* larger than it looks. It implies deciding what staff see before publication,
   which is a product decision as much as a code change.
   *Goal:* A manager who presses Publish actually publishes, and staff see the published schedule. The button never again claims something it did not do.
@@ -209,6 +219,14 @@ does not, and no signed-in user can read or write another facility's records.
   *Corrected 2026-07-26 by T55:* "first mark saves" was wrong. `sbd_attendance` holds 0 rows
   and the mapper sends three columns that do not exist plus a uuid into an integer column, so
   the first mark never saved either. T55 has to land first.
+  *Code written 2026-07-26, box stays open until it is clicked through.* All three paths
+  (`markAttend`, `markAllAttend`, `assignCoverage`) now call `SB.updateAttendance` on an
+  existing record instead of mutating local state and returning.
+  A fourth fault turned up in `assignCoverage`: it ran `parseInt` on the selected staff id.
+  Staff ids are uuids, so that produced NaN, the lookup never matched, and the toast named
+  nobody. Now it uses the value as given.
+  *Proven at the database level, rolled back:* mark present then correct to absent updates
+  1 row as the leader. Not yet clicked through in a browser.
   *Goal:* Correcting somebody's attendance sticks. Present changed to absent survives a reload.
   *Done when:* Mark a person present, change to absent, reload, and the record still reads absent; the same for the mark-all and coverage paths; `SB.updateAttendance` appears in the call path.
 - [ ] **T28** Persist quick-fill schedule overwrites (issue `B3`) · est 0.25d · Medium
@@ -216,6 +234,13 @@ does not, and no signed-in user can read or write another facility's records.
   local state changes, while the toast reports the full count as assigned.
   *Corrected 2026-07-26 by T55:* "new rows save" was wrong. No schedule row has ever saved.
   The overwrite path is still a separate bug on top, but it cannot be tested until T55 lands.
+  *Code written 2026-07-26, box stays open until it is clicked through.* Quick fill and CSV
+  import both call `SB.updateSchedule` on a day that already has a row, so the toast count
+  and what is stored finally agree. The silent catches on both paths were replaced with
+  `handleSyncError`, so a rejected write now says so instead of vanishing. That swallowing
+  is what let this sit unnoticed.
+  *Proven at the database level, rolled back:* overwriting an existing day updates 1 row as
+  the leader. Not yet clicked through in a browser.
   *Goal:* Quick-fill writes every shift it claims to have filled, including days that already had a row.
   *Done when:* Run quick-fill over a range that includes an already-populated day, reload, and every day matches what the toast reported.
   - [ ] **T28a** Persist CSV import overwrites (issue `B4`) · est 0.25d · Medium
@@ -420,7 +445,8 @@ does not, and no signed-in user can read or write another facility's records.
   *Done when:* The column exists, the acknowledgement survives signing in on a different
   device, and anyone already acknowledged in `localStorage` is not asked to do it again.
 
-- [ ] **T55** The schedule, attendance and promotion tables have never been written to · est 1.0d · **High**
+- [x] ~~**T55** The schedule, attendance and promotion tables have never been written to~~
+  `done 2026-07-26` · est 1.0d · **High**
   Found 2026-07-26 while opening T26. The three tables behind Schedule, Attendance and
   Promotions hold **0 rows each**, and the reason is not that nobody used the feature. The
   data mappers in `api-supabase.js` do not match the tables they write to, so every write
@@ -452,6 +478,41 @@ does not, and no signed-in user can read or write another facility's records.
 
   *Goal:* A schedule, an attendance mark and a promotion request written in the app are still there after a reload, on any device.
   *Done when:* Creating one of each writes a real row; the row is read back into the app after a reload; a deliberate bad write surfaces an error to the user instead of being swallowed; and the duplicate table set is either adopted or dropped with the reason recorded.
+  *Status 2026-07-26:* fixed in two migrations and three browser files. Probing found two
+  more faults that reading the schema had missed, which is the only reason they were caught:
+  `sbd_schedule.assigned_staff` was **integer[]**, so even a master admin could not write a
+  schedule row; and neither `sbd_schedule` nor `sbd_attendance` granted INSERT or UPDATE to
+  `hospital` or `facility_admin`, although the schedule builder and the attendance register
+  are facility leader screens. Leaders now write their own facility, scoped the same way as
+  T22 and T25. DELETE is deliberately not granted: clearing a shift is an update that empties
+  the assignment, so nothing needs it and a mistake cannot erase who was scheduled.
+  *Measured end to end, rolled back:* leader saves a shift, overwrites an existing day,
+  marks present, corrects to absent (1 row each); saving at another facility is refused;
+  deleting affects 0 rows. Staff sees 0 shifts before publish and 1 after, reads their own
+  attendance, and editing the schedule affects 0 rows. Tables re-read afterwards: 0, 0, 0.
+  *Left open on purpose:* the duplicate `schedule` / `attendance` / `promotion_approvals`
+  tables were not touched. All three are empty and nothing reads them. Recorded as T57.
+  *Also confirmed:* a leader at one facility can still read another facility's schedule.
+  That is `auth_read_all` and it is T32, not a regression from this work.
+
+- [ ] **T56** A promotion with no belt change cannot be stored · est 0.25d · Low
+  Found 2026-07-26 while fixing T55. `sbd_promotions` requires `from_belt` and `to_belt` to
+  be NOT NULL, but `mapPromotionApprovalToBackend` sends `to_belt: ap.proposedBelt || null`.
+  A role promotion that does not move the person's belt therefore cannot be written. Not
+  guessed at here because it is a question about what such a request means, not a typo.
+  *Goal:* A promotion request that changes role but not belt can be raised and stored.
+  *Done when:* The intended meaning is settled, the column is either made nullable or given
+  a defined value, and a role-only promotion round-trips through a reload.
+
+- [ ] **T57** Decide what happens to the duplicate table set · est 0.25d · Low
+  Found 2026-07-26 during T55. `schedule`, `attendance` and `promotion_approvals` sit
+  alongside the `sbd_` prefixed tables the application actually uses. All three are empty,
+  nothing reads them, and their column types (`fid uuid`, `staff_id uuid`) are closer to
+  what the app means than the ones that were in use. They were left untouched rather than
+  dropped, because dropping a table is not something to do in passing.
+  *Goal:* One set of tables, with the reason the other went recorded.
+  *Done when:* The three are dropped after confirming nothing reads them, or kept with a
+  written reason.
 
 ### Blocked, not on the critical path
 
