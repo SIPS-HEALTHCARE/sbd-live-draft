@@ -514,6 +514,28 @@ does not, and no signed-in user can read or write another facility's records.
   *Done when:* The three are dropped after confirming nothing reads them, or kept with a
   written reason.
 
+- [ ] **T58** A SIPS admin has no schedule or attendance screen at all · est 0.5d · Medium
+  Found 2026-07-26 while trying to verify T26, T27 and T28 as a master admin. There is
+  nowhere to do it from. The SIPS admin portal has no Schedule or Attendance nav item, and
+  the facility drill-down offers Overview, Staff, Assessments, Intel & Focus and Reports
+  and nothing else. The schedule builder and the attendance register exist only in the
+  facility leader portal (`h-schedule`, `h-attendance`) and the system admin portal
+  (`x-schedule`).
+
+  Two consequences, both real today:
+
+  * A master admin holds the write rights on `sbd_schedule` and `sbd_attendance` and has no
+    screen to use them from. The rights and the interface disagree.
+  * The only accounts that can reach a schedule are facility leaders at Alta Bates, Boston
+    Children's and Mount Sinai, plus three system admin accounts that are all inactive. So
+    the test facility, which is the safe place to try any of this, has no account that can
+    open a schedule at all.
+
+  *Goal:* Somebody at SIPS can see and manage a facility's schedule and attendance without borrowing a leader's login.
+  *Done when:* A master admin can open a facility's schedule and attendance from the admin
+  portal, scoped by the facility switcher already on that screen, and the write rights they
+  already hold are reachable from the interface.
+
 ### Blocked, not on the critical path
 
 - [ ] **T49** Strip and rotate the PSOP credentials, gate the public page
