@@ -104,6 +104,7 @@ does not, and no signed-in user can read or write another facility's records.
   per role.
   *Goal:* No user can see or change a placement review outside their own facility, and only master admins and granted assessors can change one at all.
   *Done when:* `pg_policy` shows the new policy and `pr_all_all` is gone; a staff_member token reads only their facility and is refused a write; a master admin write succeeds; all 49 existing rows still readable by the right people.
+  *Status 2026-07-26:* policy applied and measured. staff_member went from 49 rows readable and 49 writable to 1 readable and 0 writable; a facility leader sees only their own facility; a master admin still reads all 49 and writes all 49; a candidate can still insert their own row but not one for anyone else. **Not ticked**, because Pass 2 found the protection can be walked around entirely via T53. This box stays open until T53 is closed.
 - [ ] **T23** Lock down `sbd_assessment_queue` (issue `S2`) · est 0.75d · **High**
   UPDATE is gated only on `auth.role() = 'authenticated'` and SELECT is `USING (true)`,
   over 56 live rows. A candidate can approve their own belt gate request. Restrict status
@@ -267,6 +268,31 @@ does not, and no signed-in user can read or write another facility's records.
   *Blocked on:* the client's answer, alert only versus auto-limit.
   *Goal:* Runaway David usage is caught before it becomes a bill.
   *Done when:* The threshold is set from real usage, the chosen policy is applied, and a synthetic spike triggers it while normal usage does not.
+
+### Found during Phase 1
+
+- [ ] **T53** Stop users from editing their own role and capabilities · est 0.5d · **Critical**
+  `sbd_portal_users` carries `authenticated_update_own_profile`, which is
+  `FOR UPDATE USING (auth_uid = auth.uid()) WITH CHECK (auth_uid = auth.uid())` with no
+  column restriction, and `authenticated` holds UPDATE on every column of that table
+  including `role` and `capabilities`.
+  A staff member can therefore run one update against their own row, set
+  `role = 'master_admin'`, and every access rule on the platform that reads
+  `sbd_get_user_role()`, `sbd_is_master_admin()` or `sbd_is_assessor()` then treats them as
+  an administrator. Reproduced end to end on 2026-07-26 inside a transaction that was
+  rolled back: after self-promotion the account read all 49 placement reviews and could
+  write all 49, and self-granting the assessor capability made `sbd_is_assessor()` return
+  true.
+  This sits underneath T22, T23, T24 and T32, and underneath the observation write lockdown
+  already shipped as T9 and T18. Those controls are correct but cannot hold while this is
+  open, so this is the first thing to fix in Phase 1 despite being numbered last.
+  *Goal:* A user can maintain their own profile details and cannot change what they are
+  allowed to do. Role, capabilities, facility assignment and active state move only through
+  an administrator.
+  *Done when:* A staff_member token updating its own `role` is refused; the same for
+  `capabilities`, `facility_id`, `assigned_facility_ids` and `active`; ordinary profile
+  self-edits that the app performs today still succeed; the escalation probe that worked on
+  2026-07-26 no longer reaches administrator state.
 
 ### Blocked, not on the critical path
 
