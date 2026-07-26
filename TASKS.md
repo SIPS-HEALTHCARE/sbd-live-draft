@@ -129,7 +129,8 @@ does not, and no signed-in user can read or write another facility's records.
   else is refused, approving one's own request affects 0 rows, and both normal submit paths
   still work including the one that omits status. Data re-read afterwards: 56 rows, 20
   pending, 7 approved, nothing created.
-- [ ] **T24** Restrict the `staff` UPDATE column grant (issue `S3`) · est 0.5d · **High**
+- [x] ~~**T24** Restrict the `staff` UPDATE column grant (issue `S3`)~~
+  `done 2026-07-26` · est 0.5d · **High**
   `authenticated` holds UPDATE on every column and `staff_update` permits
   `staff_member AND id = auth.uid()`, so a staff member can set their own `belt`, `stars`,
   `assessment_gate_override` and `window_override` by direct call.
@@ -137,6 +138,23 @@ does not, and no signed-in user can read or write another facility's records.
   will start failing. Check every write path before applying.
   *Goal:* A staff member can no longer set their own belt, stars or gate overrides from outside the app.
   *Done when:* `information_schema.column_privileges` shows the restricted columns no longer granted on the staff-member path; every admin screen that writes to `staff` still saves; a direct write to `belt` as a staff_member is refused.
+  *Status 2026-07-26:* solved with a `BEFORE UPDATE` trigger, not a column revoke, and the
+  full write audit is why. A revoke applies to `authenticated`, which is every signed-in
+  user, so it would have broken the administrator writes **and the candidate**: the staff
+  Position School view writes through `mapStaffPSToBackend`, which carries `stars`, so
+  revoking `stars` would have stopped candidates starting a track at all. Those paths write
+  `stars` with its existing value and never change it; only `completePSTrack` changes it,
+  and that is a leader control. A trigger comparing old to new therefore lets the candidate
+  through and stops the escalation.
+  *Measured, every probe rolled back:* setting own belt to Black, self-granting 9 stars, a
+  gate override, a window override, passing own gates, and making self an observer are all
+  refused. An update that leaves `fid` and `role` unchanged still passes, so the rule is not
+  over-strict. Still working: submitOIP, savePracticeScore, saveSbdBackground, placement
+  submit, and beginPSTrack carrying stars unchanged, plus master admin full writes and
+  service-role writes from `sbd-record-assessment`. Data re-read afterwards: 63 staff rows,
+  none touched, 0 black belts, 0 stars, 0 gate overrides.
+  *Note:* the probe first flagged `acknowledgePlacement` as broken. That was my own false
+  alarm, not the trigger: the column it writes does not exist. Recorded separately as T54.
 - [ ] **T25** Scope `facility_shifts` (issue `S5`) · est 0.25d · Medium
   Carries `FOR ALL USING (true) WITH CHECK (true)`. Empty today, but the feature that
   fills it shipped on 2026-07-24, so this is cheapest right now.
@@ -357,6 +375,18 @@ does not, and no signed-in user can read or write another facility's records.
   intact. Bypass attempts also closed: deleting one's own profile row affects 0 rows,
   inserting a new master_admin row is refused, and `sbd_set_user_capabilities` refuses a
   self-grant. Role and capability counts re-read afterwards and unchanged.
+
+- [ ] **T54** Placement acknowledgement does not follow the person to another device · est 0.25d · Low
+  Found 2026-07-26 while auditing the `staff` write paths for T24. `acknowledgePlacement`
+  (`ui-views.js:7153`) writes `placement_acknowledged: true` to the `staff` table, and that
+  column does not exist. The request has always failed and is swallowed by a deliberately
+  silent catch, with the code comment "no console warnings if column doesn't exist yet".
+  It is not as bad as it first looks: the same function also writes to `localStorage`, so
+  the acknowledgement holds on the browser where it was given. It is lost on another device,
+  another browser, or after the browser is cleared, and it is invisible to any report.
+  *Goal:* Acknowledging a placement is recorded against the person, not against one browser.
+  *Done when:* The column exists, the acknowledgement survives signing in on a different
+  device, and anyone already acknowledged in `localStorage` is not asked to do it again.
 
 ### Blocked, not on the critical path
 
