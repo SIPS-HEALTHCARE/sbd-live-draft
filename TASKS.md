@@ -155,15 +155,40 @@ does not, and no signed-in user can read or write another facility's records.
   none touched, 0 black belts, 0 stars, 0 gate overrides.
   *Note:* the probe first flagged `acknowledgePlacement` as broken. That was my own false
   alarm, not the trigger: the column it writes does not exist. Recorded separately as T54.
-- [ ] **T25** Scope `facility_shifts` (issue `S5`) · est 0.25d · Medium
+- [x] ~~**T25** Scope `facility_shifts` (issue `S5`)~~
+  `done 2026-07-26` · est 0.25d · Medium
   Carries `FOR ALL USING (true) WITH CHECK (true)`. Empty today, but the feature that
   fills it shipped on 2026-07-24, so this is cheapest right now.
   *Goal:* Shift definitions are readable and writable only within the facility they belong to.
   *Done when:* Policy read back from `pg_policy`; a leader at one facility cannot read or write another facility's shift definitions; the shift manager still saves.
-  - [ ] **T25a** Scope `free_agents` (issue `S4`) · est 0.25d · Medium
+  *Status 2026-07-26:* read deliberately left open to **any signed-in user at that facility**,
+  not leaders only. The staff schedule renders a shift label against each assigned block and
+  that label comes out of this table, so a leaders-only read would leave staff looking at
+  unlabelled shifts. Writes are SIPS admins anywhere, facility leaders on their own facility.
+  `fid` is uuid here so the comparison against `sbd_get_user_facility()` casts to text.
+  *Measured, every probe rolled back, two probe shifts seeded at two different facilities:*
+  staff at facility A reads 1 of 2, edits 0, is refused creating one. Leader at facility A
+  reads 1 of 2, edits their own, affects 0 rows on the other facility's, is refused creating
+  one there, deletes 0 there, and creating one at their own facility works. Leader at facility
+  B reads 1 of 2, the other one. Master admin reads all and edits any. Data re-read
+  afterwards: 0 rows, nothing created.
+  - [x] ~~**T25a** Scope `free_agents` (issue `S4`)~~
+    `done 2026-07-26` · est 0.25d · Medium
     Same policy shape, 12 live rows. Shares the migration with T25.
     *Goal:* The free agent pool is readable and writable only by the roles that manage it.
     *Done when:* Policy read back; the 12 existing rows still load in the free agent view; a staff_member token is refused a write.
+    *Status 2026-07-26:* tightened harder than T25 because the rows are more sensitive. Each
+    one holds a departed person's name, belt, star count, release reason, release notes and
+    their whole OIP blob, and it was readable by all 66 non-SIPS accounts. Now SIPS admins
+    only, with no browser INSERT policy at all: `purgeFreeAgent` exists at
+    `api-supabase.js:345` but is never called, and the real release and assign paths run
+    through the `sbd-release-to-free-agent` and `sbd-assign-free-agent` edge functions on the
+    service role, which bypasses RLS. Every `DB.freeAgents` consumer is an admin portal screen.
+    *Measured:* staff and facility leader both read 0 of 12 and change 0 rows; master admin
+    reads all 12 and writes all 12. Data re-read afterwards: 12 rows, no notes altered.
+    *Known effect:* `getFreeAgents()` runs during hydration for every signed-in user, so staff
+    and leaders now receive an empty list instead of 12 rows. That is a filtered read, not an
+    error, and nothing on their screens consumes it.
 - [ ] **T26** Make Publish to Staff actually publish (issue `B1`) · est 1.0d · **High**
   The button's entire handler is
   `closeModal();toast('Schedule published. Staff can now view their shifts.','ok')`.
