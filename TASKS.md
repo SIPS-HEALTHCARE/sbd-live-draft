@@ -106,12 +106,29 @@ does not, and no signed-in user can read or write another facility's records.
   *Goal:* No user can see or change a placement review outside their own facility, and only master admins and granted assessors can change one at all.
   *Done when:* `pg_policy` shows the new policy and `pr_all_all` is gone; a staff_member token reads only their facility and is refused a write; a master admin write succeeds; all 49 existing rows still readable by the right people.
   *Status 2026-07-26:* policy applied and measured. staff_member went from 49 rows readable and 49 writable to 1 readable and 0 writable; a facility leader sees only their own facility; a master admin still reads all 49 and writes all 49; a candidate can still insert their own row but not one for anyone else. Pass 2 found the protection could be walked around via T53, so this stayed open until T53 was closed on the same day. Re-measured afterwards: a staff member sees 1 row.
-- [ ] **T23** Lock down `sbd_assessment_queue` (issue `S2`) · est 0.75d · **High**
+- [x] ~~**T23** Lock down `sbd_assessment_queue` (issue `S2`)~~
+  `done 2026-07-26` · est 0.75d · **High**
   UPDATE is gated only on `auth.role() = 'authenticated'` and SELECT is `USING (true)`,
   over 56 live rows. A candidate can approve their own belt gate request. Restrict status
   changes to master admin and granted assessors; keep candidate self-insert.
   *Goal:* A candidate can raise a belt gate request but cannot decide it. Only master admins and granted assessors change status.
   *Done when:* A candidate token can INSERT but its UPDATE is refused; a master admin UPDATE succeeds; the 56 existing rows are untouched; policy read back from `pg_policy`.
+  *Status 2026-07-26:* the three old policies were not checks at all. `auth.role()` returns
+  `authenticated` for every signed-in user, so "Allow authenticated update" let anyone set
+  any request to approved. Replaced with four policies: candidate self-insert and self-read,
+  SIPS admins and granted assessors decide, facility leaders read their own facility, master
+  admin deletes. Assessors were included on update because all four `resolveAssessmentQueue`
+  call sites sit beside `SB.recordAssessment`, which is an assessor closing out a gate.
+  *Measured, every probe rolled back:* candidate sees 15 of 56 rather than all of them and
+  approves 0; a facility leader sees 12 and approves 0; an assessor and a master admin see
+  and decide all. Raising a request still works.
+  *Pass 2 caught a hole in the first version of this fix.* The insert policy checked whose
+  row it was but not what it said, so a candidate could insert a row already marked
+  `approved` and skip approval entirely. Pinned candidate self-inserts to `status = 'pending'`
+  and re-probed: inserting an already-approved row is refused, raising a request for someone
+  else is refused, approving one's own request affects 0 rows, and both normal submit paths
+  still work including the one that omits status. Data re-read afterwards: 56 rows, 20
+  pending, 7 approved, nothing created.
 - [ ] **T24** Restrict the `staff` UPDATE column grant (issue `S3`) · est 0.5d · **High**
   `authenticated` holds UPDATE on every column and `staff_update` permits
   `staff_member AND id = auth.uid()`, so a staff member can set their own `belt`, `stars`,
@@ -192,10 +209,40 @@ does not, and no signed-in user can read or write another facility's records.
   reviewed for whether that grant is intended. Revoke the ones that are not.
   *Goal:* Every function reachable by a signed-in or anonymous caller is reachable on purpose.
   *Done when:* Each of the 108 grants is either kept with a recorded reason or revoked; the advisor count drops; the app still works end to end after the revocations.
-- [ ] **T35** Profile redesign to the client's supplied layout · est 1.5d
+- [ ] **T35** Profile redesign to the client's supplied layout · est 1.0d
   Two-column bio card, avatar panel, labelled field pairs, badges, tags, availability
   pill. The SBD years values move into a proper card instead of the small meta line.
-  Example received 2026-07-26.
+  Example received 2026-07-26. Shawn confirmed on 2026-07-26 that it applies to **both**
+  the staff profile and My Profile, so the layout is built once as a shared component and
+  used in both places rather than written twice.
+  *Applies to:* `renderHProfile` (the staff record an admin or leader opens from the
+  roster).
+  *Goal:* The staff profile reads like the layout the client sent, and the SBD years are
+  legible rather than buried in the meta line.
+  *Done when:* The two-column bio card, avatar panel, badges, tags and availability pill
+  render on a staff profile; the years values sit in their own card; the client confirms it
+  matches.
+  - [ ] **T35a** Same layout on My Profile · est 0.5d
+    `renderSOIP` is currently the Operator Intelligence Profile assessment screen rather
+    than a profile page, so this means giving My Profile a real bio section built from the
+    shared component, with the assessment result becoming one part of it instead of the
+    whole page.
+    *Goal:* A staff member opening My Profile sees their own details in the same layout an
+    admin sees, not an assessment intro.
+    *Done when:* My Profile renders the shared bio card for the signed-in person, the
+    operator assessment still starts and displays from within it, and the SBD Background
+    editor added in T21 still saves.
+  - [ ] **T35b** Give administrators a profile page at all · est 0.5d
+    Found 2026-07-26 while checking the above: an administrator has no profile screen.
+    Clicking their own name in the sidebar footer lands on Account and Settings, which is a
+    form (display name, title, initials, read-only email, password, session info), not a
+    profile. So the client's design currently has nowhere to live for an admin account.
+    Decide whether the name click should open a profile with Settings reachable from it, or
+    whether administrators simply keep Settings and no profile.
+    *Goal:* Clicking your own name takes you somewhere that matches what the platform calls
+    a profile, whatever role you hold.
+    *Done when:* An administrator clicking their name reaches a profile in the shared
+    layout, and Account and Settings is still reachable in one step from there.
   *Goal:* The profile reads like the layout the client sent, and the SBD years are legible rather than buried.
   *Done when:* The two-column bio card, avatar panel, badges, tags and availability pill render; the years values sit in their own card; the client confirms it matches.
 - [ ] **T36** Reorganise the staff sidebar into sections, matching the admin panel · est 1.0d
