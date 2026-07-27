@@ -96,6 +96,13 @@ becomes a judgement call, and rule 5 needs something concrete to test against.
 No client answer needed for any of these. After Phase 1, no control claims to save when it
 does not, and no signed-in user can read or write another facility's records.
 
+**Closed 2026-07-26 and 27, except for four items waiting on a browser check.** It started as
+T22 to T29 and grew while it was being worked: T53, T54, T55, T56, T57, T58, T60, T61 and T62
+were all found inside it. Three of those, T53, T55 and T60, mattered more than anything on
+the original list. Every database change here was applied, then probed per role inside a
+transaction that was aborted, then the affected tables were re-read to confirm nothing
+persisted.
+
 - [x] ~~**T22** Lock down `placement_reviews` (issue `S1`)~~
   `done 2026-07-26` · est 1.0d · **High**
   Policy `pr_all_all` is `FOR ALL USING (true) WITH CHECK (true)` to `authenticated`, over
@@ -317,7 +324,8 @@ does not, and no signed-in user can read or write another facility's records.
   toggle. Leaders get visibility; SIPS stays the only editor.
   *Goal:* A facility leader can read the checklist their people are scored against, and still cannot change it.
   *Done when:* A facility_admin sees the active checklist for each belt with no edit control; a write attempt is refused; SIPS editing is unchanged.
-- [ ] **T31** Auto-close reviews with no real person behind them (issue `D2`) · est 0.5d
+- [x] ~~**T31** Auto-close reviews with no real person behind them (issue `D2`)~~
+  `done 2026-07-27` · est 0.5d
   Two placement reviews point at `staff_id` values with no staff row and no login, sitting
   since 8 May and 10 June. Close the review and record why.
   *Rule, set by the client:* key on the account being switched off or the record being
@@ -784,42 +792,70 @@ does not, and no signed-in user can read or write another facility's records.
 
 ## Totals
 
-| Phase | Open tasks | Est. days |
-|---|---|---|
-| Phase 1 | T22 to T29 | 5.5 |
-| Phase 2 | T30 to T38 | 7.75 |
-| Phase 3 | T39 to T48 | 9.75 |
-| Blocked | T49 to T52 | not counted |
-| **Total, excluding blocked** | **26 tasks** | **23.0** |
+**Updated 2026-07-27, after a working night.** 35 items done, 35 open.
 
-At five working days a week, Phase 1 and Phase 2 together are about **three weeks**, after
-which other projects can be scheduled. Phase 3 runs alongside rather than blocking.
+| Group | Open | Items | Est. days |
+|---|---|---|---|
+| Phase 1, awaiting a click-through | 5 | T26, T27, T28, T28a, T61 | 2.25 |
+| Phase 2 | 9 | T30, T32, T33, T34, T35, T35a, T35b, T36, T37 | 7.50 |
+| Phase 3 | 11 | T39 to T48 | 9.35 |
+| Found during Phase 1 | 6 | T54, T56, T58, T59, T60, T62 | 2.10 |
+| Blocked on somebody else | 4 | T49 to T52 | not counted |
+| **Total, excluding blocked** | **31** | | **21.2** |
+
+The five Phase 1 items are not really 2.25 days of building. The code for T26, T27, T28 and
+T28a is written, merged and live; what is left is somebody pressing the buttons in a browser
+and saying whether it behaved. T61 is a conversation, not a change.
+
+Phase 1 closed on 2026-07-26 and 27, and it grew while it was being closed. It started as
+T22 to T29 at 5.5 days. Eight items were found while working through it: T53, T54, T55, T56,
+T57, T58, T60, T61, T62. Three of them, T53, T55 and T60, were more serious than anything on
+the original list. That is what an audit is for, and it is also why the estimate moved.
+
+At five working days a week, what is left outside Phase 3 is about **two and a half weeks**.
+Phase 3 runs alongside rather than blocking.
 
 Estimates come from reading the code, not from having built these particular changes.
-Treat Phase 1 as firm, Phase 2 as good, Phase 3 as indicative.
+Treat what is left of Phase 1 as firm, Phase 2 as good, Phase 3 as indicative.
 
 ---
 
 ## Risks
 
-1. **New asks arriving mid-flight.** Four landed between 24 and 26 July that appear in no
-   earlier plan: See As, the profile redesign, the sidebar sections, the stale-review
-   trigger. This is only a closing scope if new asks append at the end under rule 3 rather
-   than being inserted into Phase 1 or Phase 2.
-2. **Tightening a permissive policy can break a working screen.** Every policy in Phase 1
-   currently lets everything through, so a screen may depend on that without anyone
-   knowing. Each change needs a per-role read and write check before it goes live. This is
-   inside the estimates and is still the most likely source of slippage.
-3. **T24 changes column grants on `staff`.** The most likely single breakage in Phase 1.
-4. **T26 is a product decision as much as a build.** Publishing implies defining what staff
-   see before publication.
-5. **T39 is the highest-risk item in the list.** Built with write access it would undo the
-   audit trail built between 22 and 24 July. The read-only position should be held.
-6. **One Supabase project hosts other SIPS properties.** The `bb_*`, `aip_*`, `demo_*`,
-   `tco_*`, `hfl_*`, `op44_*`, `underwriting_*` and `page_events` tables belong to other
-   sites and are outside this audit. They carry their own permissive policies. If a
+**Reviewed 2026-07-27.** Risks 2, 3 and 4 were live risks while Phase 1 was being built and
+are now settled. They are kept, marked closed, rather than deleted, because the record of
+what was feared and what actually happened is worth more than a tidy list.
+
+1. **New asks arriving mid-flight.** Still open, and it is now the main threat to a date.
+   Four landed between 24 and 26 July that appear in no earlier plan: See As, the profile
+   redesign, the sidebar sections, the stale-review trigger. This is only a closing scope if
+   new asks append at the end under rule 3 rather than being inserted into Phase 1 or 2.
+2. **~~Tightening a permissive policy can break a working screen.~~** Closed. Nine tables
+   were tightened between 26 and 27 July and each was probed per role, with the probe rolled
+   back and the data re-read. Two screens did change behaviour and both were expected and
+   recorded: staff and leaders now get an empty free agent list, and an empty registration
+   list. Nothing broke.
+3. **~~T24 changes column grants on `staff`.~~** Closed, and the fear was correct enough to
+   matter. A column revoke would have broken the candidate's own Position School writes,
+   which carry `stars`. That is why it shipped as a trigger comparing old to new instead.
+4. **~~T26 is a product decision as much as a build.~~** Closed. Staff see nothing until
+   Publish is pressed, and T55 made the question free: every schedule table was empty, so
+   there was no existing schedule to strand.
+5. **T39 is the highest-risk item in the list.** Unchanged. Built with write access it would
+   undo the audit trail built between 22 and 24 July. The read-only position should be held.
+6. **One Supabase project hosts other SIPS properties.** Unchanged. The `bb_*`, `aip_*`,
+   `demo_*`, `tco_*`, `hfl_*`, `op44_*`, `underwriting_*` and `page_events` tables belong to
+   other sites and are outside this audit. They carry their own permissive policies. If a
    compliance review covers the whole project rather than the belt platform, that is
    additional scope not counted here.
+7. **The exposure in T60 happened and cannot be un-happened.** 96 people's passwords were
+   readable by every signed-in account for as long as that table existed. The hole is shut,
+   the stored copies are cleared, and 64 accounts now see a notice asking them to change
+   their password. What is not known is whether anyone read them, because the sign-in
+   records have not been examined. Recorded as a standing risk rather than closed.
+8. **Five people can reach a schedule; nobody at SIPS can.** T58. The write rights and the
+   interface disagree, which is how a whole feature area went two months without anyone
+   noticing it had never saved a row.
 
 ---
 
@@ -838,7 +874,7 @@ Claims that did not survive Pass 2. Recorded so they are not raised again.
 | `foundations.js:851` observation confirm does not persist | False positive. The enclosing function calls `_fndSaveProgress(p)` before returning. |
 | `autoAssignZones` reports success without saving | True but not a defect. It fills the form controls and the user then saves the shift. At most the wording could be clearer. Not scheduled. |
 | Staff can escalate their own role | Overstated. `get_user_role()` reads `sbd_portal_users`, not `staff.role`, so writing `staff.role` grants nothing. The real and narrower issue is T24, training-record integrity. |
-| The review backlog is 24 decisions | Wrong reading of the same data. It is roughly 3 decisions plus duplicates, test accounts and orphans. Now T29 and T31. |
+| The review backlog is 24 decisions | Wrong reading of the same data. It is roughly 3 decisions plus duplicates, test accounts and orphans. Became T29 and T31, both now done: 27 open gate requests collapsed to 6, and the two orphan placement reviews closed. Measured on 2026-07-27, the real backlog was 6 gate requests across 3 people and 2 placement reviews. |
 | `staff_history`, `sbd_email_queue`, `sbd_password_resets` and similar are exposed | Checked and safe. RLS is on with no policy, so they are unreachable over the data interface and only the service role can read them. |
 | The oldest waiting review is six days old | Wrong. It is 8 May, 78 days. This went out in the 2026-07-24 report and has been corrected to the client in writing. |
 
