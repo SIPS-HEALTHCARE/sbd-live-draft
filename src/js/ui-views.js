@@ -2273,9 +2273,36 @@ const SBD_BELT_THRESHOLDS = [
   { belt: 'Yellow', blended: 78, k: 83, sim: 75 },
   { belt: 'White',  blended: 75, k: 80, sim: 72 },
 ];
+// Spec 5.2: knowledge overall is the AVERAGE OF THE FIVE LEVEL SCORES, and the spec says
+// in as many words not to use correct-over-total. The two agree only while every level has
+// the same number of questions. L5 has 7 since the TIR34 question was pulled at the client's
+// request, so they stopped agreeing: David Williams came out 97.4 (38/39) where the spec
+// gives 97.5 (the mean of 87.5, 100, 100, 100, 100). The client's own corrected report used
+// the spec figure and ours was the one that was wrong.
+//
+// Levels with no questions answered are skipped rather than counted as zero, otherwise a
+// partial assessment would read far below what the candidate actually scored.
+function sbdKnowledgeOverall(kResponses){
+  const byLevel = {};
+  (kResponses || []).forEach(r => {
+    const l = Number(r.level); if(!l) return;
+    (byLevel[l] = byLevel[l] || []).push(r);
+  });
+  const levelAverages = Object.keys(byLevel).map(l => {
+    const rows = byLevel[l];
+    const correct = rows.filter(r => r.correct).length;
+    return (correct / rows.length) * 100;
+  });
+  if(!levelAverages.length) return 0;
+  return levelAverages.reduce((a, b) => a + b, 0) / levelAverages.length;
+}
+
 function sbdSuggestBelt(kOverall, kL1, simOverall, blended, hasDangerousKAnswer){
-  // Step 1 -- dangerous knowledge answers block all belt issuance
-  if(hasDangerousKAnswer) return 'No Belt';
+  // A dangerous knowledge answer used to return 'No Belt' here and block issuance outright.
+  // The client ruled on 2026-07-28 that the belt is issued on the scores and the dangerous
+  // item becomes a provision on the person's account instead, which is also what the spec
+  // describes in section 8: the blended score sets the belt, floor failures set the
+  // conditions. The parameter stays because callers use it to raise the provision.
   // Step 2 -- highest belt where blended AND K both pass; sim decides Clean vs Conditional
   for(const t of SBD_BELT_THRESHOLDS){
     if(blended >= t.blended && kOverall >= t.k){
@@ -2299,7 +2326,7 @@ function prSuggestion(pr){
   // Blend the RAW averages, then round once — same as rptComputeModel(). Rounding the
   // component scores BEFORE blending (e.g. 87.5 -> 88) used to flip belts at a threshold
   // boundary (Bond: 77.5 read as 78 = Yellow), which made the card disagree with the report.
-  const kRaw = avg(kR.map(r => Number(r.score) || 0));
+  const kRaw = sbdKnowledgeOverall(kR);        // spec 5.2, not correct-over-total
   const simRaw = avg(simR.map(r => Number(r.aiScore) || 0));
   const kOverall = Math.round(kRaw);
   const kL1 = Math.round(avg(kR.filter(r => r.level === 1).map(r => Number(r.score) || 0)));
@@ -2430,7 +2457,7 @@ async function paPersistSubmission({ staffId, answers, questions, sessionId, ses
   const _avg = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
   // Blend the RAW averages, then round once (matches rptComputeModel + prSuggestion). Do NOT
   // round the component scores before blending -- that flips belts at threshold boundaries.
-  const _kRaw = _avg(_kResp.map(r => Number(r.score) || 0));
+  const _kRaw = sbdKnowledgeOverall(_kResp);   // spec 5.2, not correct-over-total
   const _simRaw = _avg(_simResp.map(r => Number(r.aiScore) || 0));
   const kOverall = Math.round(_kRaw);
   const kL1 = Math.round(_avg(_kResp.filter(r => r.level === 1).map(r => Number(r.score) || 0)));
@@ -2439,11 +2466,14 @@ async function paPersistSubmission({ staffId, answers, questions, sessionId, ses
   // Dangerous-answer block is wired but stays inert until SIPS supplies the per-question
   // dangerous-answer list (Governing Standards) and questions carry q.isDangerous.
   const hasDangerousKAnswer = _kResp.some(r => r.isDangerous && !r.correct);
-  // Full engine determination (e.g. "Brown Belt Conditional", "No Belt") is shown to the
-  // assessor as a suggestion chip; tentativeBelt stores the clean belt word the plumbing
-  // (badge, confirm dropdown) expects. "No Belt" falls back to White as a safe placeholder.
+  // The determination used to fall back to White whenever the engine returned something with
+  // no belt word in it. That is how a correct dangerous-answer flag came out as "White Belt
+  // Conditional" on a real candidate's report, measured against White thresholds, when the
+  // engine had actually said no belt. A placeholder must never be printed as a decision, so
+  // there is no fallback now: if the engine names no belt, nothing is stored.
   const _suggestion = sbdSuggestBelt(kOverall, kL1, simOverall, blended, hasDangerousKAnswer);
-  const suggestedBelt = (_suggestion.match(/White|Yellow|Green|Blue|Brown|Black/) || ['White'])[0];
+  const _beltWord = (_suggestion.match(/White|Yellow|Green|Blue|Brown|Black/) || [])[0] || null;
+  const suggestedBelt = _beltWord;
 
   // Create placement review record
   const s = getStaff(staffId);
@@ -3740,7 +3770,10 @@ function rptComputeModel(pr){
     kLevels.push({ level:l, pct:kPct, correct, of:ks.length, floor:RPT_STANDARDS.kLevelFloor, pass: kPct!==null && kPct>=RPT_STANDARDS.kLevelFloor });
     simLevels.push({ level:l, pct:simPct, scores, floor:sFloor, pass: simPct!==null && simPct>=sFloor });
   }
-  const kOverall = kTotal ? r1(kCorrect/kTotal*100) : 0;
+  // Spec 5.2: the average of the five LEVEL scores, not correct over total. kLevels already
+  // holds each level's percentage, so average those and skip levels with no questions.
+  const _kLevelPcts = kLevels.map(k => k.pct).filter(p => p !== null);
+  const kOverall = _kLevelPcts.length ? r1(_kLevelPcts.reduce((a,b)=>a+b,0)/_kLevelPcts.length) : 0;
   const simOverall = simN ? r1(simSum/simN) : 0;
   const blended = r1(RPT_STANDARDS.weights.k*kOverall + RPT_STANDARDS.weights.sim*simOverall);
   const belt = pr.confirmedBelt || pr.tentativeBelt || 'White';
@@ -4363,7 +4396,7 @@ function deriveOutcome(pr) {
 
   const kTotal = knowledge.length;
   const kCorrect = knowledge.filter(r => r.correct).length;
-  const knowledgeOverall = kTotal ? (kCorrect / kTotal) * 100 : 0;
+  const knowledgeOverall = sbdKnowledgeOverall(knowledge);   // spec 5.2, not correct-over-total
   const simScored = simulation.filter(r => r.aiScore != null);
   const simOverall = simScored.length ? simScored.reduce((a, r) => a + (Number(r.aiScore) || 0), 0) / simScored.length : 0;
   // 60% knowledge / 40% simulation -- the governed blend (matches rptComputeModel + the
@@ -5393,7 +5426,7 @@ function sbdYearsCardsHTML(s){
       <div class="stat-val" style="margin-bottom:0;color:var(--gold)">${val(v)}</div>
     </div>`;
   return `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;max-width:420px">
-    ${card('Years in SBD Program', s.sbdYears)}
+    ${card('Years in SPD', s.sbdYears)}
     ${card('Years Certified', s.certYears)}
   </div>`;
 }
@@ -5639,9 +5672,14 @@ function oipSelect(idx){ oipSelectOverlay(idx); }
 
 
 // ============================================================ DOWNLOAD: LEVEL 1  --  INDIVIDUAL STAFF
-// Profile "SBD Background" (Ignacio 2026-07-23): capture, from the profile tab, how
-// long the staff member has been in the SBD program and how many years certified in
-// SBD. Editor-gated (master/staff/facility admin); targeted staff PATCH (two columns).
+// Profile "SPD Background" (Ignacio 2026-07-23, corrected by him 2026-07-28): capture,
+// from the profile tab, how long the staff member has worked in sterile processing and
+// how many years they have held their certification. It was originally worded as years in
+// the SBD programme, which he corrected: everyone joining is new to SBD, so that number is
+// always zero and tells you nothing. What is worth knowing is the career behind them.
+// The stored columns are still named sbd_program_years / sbd_cert_years; renaming a live
+// column that the prod frontend reads is a breaking contract change for no user-visible
+// gain, so the labels moved and the storage did not. Editor-gated (master/staff/facility admin); targeted staff PATCH (two columns).
 // Shawn 2026-07-25: staff can also set their own two values from My Profile whenever they
 // like (context 'self'). No forced setup step; the fields display only and gate nothing.
 function _sbdBgCanEdit(staffId){
@@ -5650,22 +5688,22 @@ function _sbdBgCanEdit(staffId){
 }
 function openSbdBackgroundModal(staffId, context){
   const s = getStaff(staffId); if(!s){ toast('Staff record not found.','err'); return; }
-  if(!_sbdBgCanEdit(staffId)){ toast('You can only edit your own SBD background.','err'); return; }
+  if(!_sbdBgCanEdit(staffId)){ toast('You can only edit your own background.','err'); return; }
   const self = context === 'self';
   const inp = 'width:100%;padding:9px 11px;background:var(--s2);border:1px solid var(--bdr);border-radius:8px;color:var(--txt1);font-size:14px;box-sizing:border-box';
-  openModal('SBD Background &mdash; '+fullName(s), `
+  openModal('SPD Background: '+fullName(s), `
     <div class="modal-body">
-      <p style="font-size:12.5px;color:var(--txt2);margin:0 0 14px;line-height:1.5">${self?'How long have you been in the SBD program, and how many years have you been certified in SBD? Whole years; leave blank if you are not sure.':'How long has this staff member been in the SBD program, and how many years have they been certified in SBD? Whole years; leave blank if unknown.'}</p>
-      <label style="font-size:12px;color:var(--txt2);display:block;margin-bottom:4px">Years in the SBD program</label>
+      <p style="font-size:12.5px;color:var(--txt2);margin:0 0 14px;line-height:1.5">${self?'How long have you worked in sterile processing, and how many years have you held your certification? Whole years; leave blank if you are not sure.':'How long has this staff member worked in sterile processing, and how many years have they held their certification? Whole years; leave blank if unknown.'}</p>
+      <label style="font-size:12px;color:var(--txt2);display:block;margin-bottom:4px">Years in SPD</label>
       <input id="sbd-years" type="number" min="0" max="60" style="${inp};margin-bottom:14px" value="${s.sbdYears!=null?s.sbdYears:''}" placeholder="e.g. 3">
-      <label style="font-size:12px;color:var(--txt2);display:block;margin-bottom:4px">Years certified in SBD</label>
+      <label style="font-size:12px;color:var(--txt2);display:block;margin-bottom:4px">Years certified</label>
       <input id="sbd-cert" type="number" min="0" max="60" style="${inp}" value="${s.certYears!=null?s.certYears:''}" placeholder="e.g. 2">
     </div>
     <div class="modal-ft"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-gold" onclick="saveSbdBackground('${staffId}','${context}')">Save</button></div>`, 'modal-sm');
 }
 function saveSbdBackground(staffId, context){
   const s = getStaff(staffId); if(!s) return;
-  if(!_sbdBgCanEdit(staffId)){ toast('You can only edit your own SBD background.','err'); return; }
+  if(!_sbdBgCanEdit(staffId)){ toast('You can only edit your own background.','err'); return; }
   const parse = id => { const el = document.getElementById(id); if(!el) return null; const v = String(el.value).trim(); if(v==='') return null; const n = parseInt(v,10); return (isNaN(n)||n<0)?null:Math.min(n,60); };
   s.sbdYears = parse('sbd-years'); s.certYears = parse('sbd-cert');
   if(IS_LIVE && typeof SB!=='undefined' && SB.updateStaff){
@@ -5681,7 +5719,7 @@ function saveSbdBackground(staffId, context){
 function sbdBackgroundSelfCardHTML(s){
   const has = s.sbdYears!=null || s.certYears!=null;
   const line = has
-    ? `${s.sbdYears!=null?s.sbdYears+' yr(s) in the SBD program':''}${(s.sbdYears!=null&&s.certYears!=null)?' &bull; ':''}${s.certYears!=null?s.certYears+' yr(s) certified in SBD':''}`
+    ? `${s.sbdYears!=null?s.sbdYears+' yr(s) in SPD':''}${(s.sbdYears!=null&&s.certYears!=null)?' &bull; ':''}${s.certYears!=null?s.certYears+' yr(s) certified':''}`
     : 'Not set. Add it whenever you like, or leave it blank.';
   return `<div style="background:var(--s2);border:1px solid var(--bdr);border-radius:var(--r);padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
       <div style="flex:1;min-width:0;text-align:left">
@@ -5731,7 +5769,7 @@ function downloadStaffReport(staffId){
       <div>
         <div class="rpt-brand">SIPS Healthcare Solutions &bull; Sterile By Design</div>
         <div class="rpt-title">${fullName(s)}</div>
-        <div class="rpt-sub">${s.role} &bull; ${getFac(s.fid)?.name||'–'} &bull; Sterile Processing Department<br>Belt: ${s.belt} (${BELT_CERT[s.belt]}) &bull; Since ${s.since || '—'}${(s.sbdYears!=null||s.certYears!=null)?`<br>${s.sbdYears!=null?s.sbdYears+' yr(s) in SBD program':''}${(s.sbdYears!=null&&s.certYears!=null)?' &bull; ':''}${s.certYears!=null?s.certYears+' yr(s) certified in SBD':''}`:''}</div>
+        <div class="rpt-sub">${s.role} &bull; ${getFac(s.fid)?.name||'–'} &bull; Sterile Processing Department<br>Belt: ${s.belt} (${BELT_CERT[s.belt]}) &bull; Since ${s.since || '—'}${(s.sbdYears!=null||s.certYears!=null)?`<br>${s.sbdYears!=null?s.sbdYears+' yr(s) in SPD':''}${(s.sbdYears!=null&&s.certYears!=null)?' &bull; ':''}${s.certYears!=null?s.certYears+' yr(s) certified':''}`:''}</div>
       </div>
       <div class="rpt-grade-box">
         <div class="rpt-grade" style="color:${BELT_CLR_PRINT[s.belt]||'#0f172a'}">${psStars>0?Array(psStars).fill('★').join(''):'–'}</div>
@@ -10030,7 +10068,7 @@ function renderHProfile(sid,context){
         ) : ''}
         ${context==='admin'||context==='h'?`<button class="btn btn-blue btn-sm" onclick="openPromoteModal('${s.id}','${context}')">&#x2B06; Promote</button>`:''}
         <button class="btn btn-ghost btn-sm" onclick="downloadStaffReport('${s.id}')">${ICO.dl} Report</button>
-        ${(ST.user&&['master_admin','staff_admin','facility_admin'].includes(ST.user.role))?`<button class="btn btn-ghost btn-sm" onclick="openSbdBackgroundModal('${s.id}','${context}')" title="Set SBD program tenure and years certified"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg> SBD Background</button>`:''}
+        ${(ST.user&&['master_admin','staff_admin','facility_admin'].includes(ST.user.role))?`<button class="btn btn-ghost btn-sm" onclick="openSbdBackgroundModal('${s.id}','${context}')" title="Set years in sterile processing and years certified"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg> SPD Background</button>`:''}
         ${(ST.user&&ST.user.role==='master_admin')?`<button class="btn btn-ghost btn-sm" onclick="openBeltOverrideModal('${s.id}','${context}')" style="border-color:var(--gold-bd);color:var(--gold)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Override Belt</button>`:''}
         ${(ST.user&&ST.user.role==='master_admin')?(
           (s.assessmentGateOverride && s.assessmentGateOverride.waived)
