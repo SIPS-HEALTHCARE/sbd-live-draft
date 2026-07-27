@@ -296,7 +296,15 @@ persisted.
     view before writing the migration rather than assumed.
     *Result:* 8 open rows to 6, one per real decision, which is what the T29 goal asked for.
 
-- [ ] **T61** A real candidate has been waiting 12 days on an approved assessment · est 0.25d · **High**
+- [x] ~~**T61** A real candidate has been waiting 12 days on an approved assessment~~
+  `closed 2026-07-27 by the client` · est 0.25d
+  *Ignacio answered directly:* "Jody is good... no worries there". So the 14 day and 12 day
+  waits were not a service failure, and no chasing is needed. Closed as answered rather than
+  as fixed, because nothing was changed.
+  *Kept on the record anyway:* the finding was still worth raising. It was only visible
+  because T29 collapsed eleven copies of the same request; before that the queue was noise.
+  The software half of it stands and moves to T64: the review reminder covers pending
+  requests and not approved-but-unactioned ones, so if a real one does stall, nothing says so.
   Found 2026-07-27 underneath the T29a duplicate. The duplicate was the symptom; this is the
   thing worth acting on.
   Jody Mays at Boston Children's, Shift Supervisor, still on White belt:
@@ -383,7 +391,8 @@ persisted.
     *Done when:* My Profile renders the shared bio card for the signed-in person, the
     operator assessment still starts and displays from within it, and the SBD Background
     editor added in T21 still saves.
-  - [ ] **T35c** Make the years line legible now, ahead of the full redesign · est 0.25d · **committed to the client**
+  - [x] ~~**T35c** Make the years line legible now, ahead of the full redesign~~
+    `done 2026-07-27` · est 0.25d · **was committed to the client**
     Shawn told Ignacio on 2026-07-27, at 2:16 AM in the thread, "I will make it bigger in
     the meantime". That is a commitment and it comes before the rest of T35, which is a
     full day's work and needs the layout built properly.
@@ -418,7 +427,8 @@ persisted.
     both cards in every case, including two "Not set" when nothing is filled. staff_member and
     a signed-out render still hide the block when both values are absent, and still show it
     when either is present.
-    *Not ticked:* the render logic is tested but this has not been looked at in a browser.
+    *Signed off 2026-07-27.* Checked on the live site: the two cards render under the belt
+    badge and read "Not set" where nothing has been entered.
   - [ ] **T35b** Give administrators a profile page at all · est 0.5d
     Found 2026-07-26 while checking the above: an administrator has no profile screen.
     Clicking their own name in the sidebar footer lands on Account and Settings, which is a
@@ -763,7 +773,8 @@ persisted.
   password in a table for as long as a request is pending, and nothing here can undo what
   may already have been read.
 
-- [ ] **T62** In-app notice asking the affected people to change their password · est 0.5d · **High**
+- [x] ~~**T62** In-app notice asking the affected people to change their password~~
+  `done 2026-07-27` · est 0.5d · **High**
   Built 2026-07-27. Closes the part of T60 that no migration could: T60 shut the hole and
   cleared the stored copies, but neither undoes what was read while `registrations` was open
   to every signed-in account. Those people still hold that password, and many will have
@@ -802,8 +813,10 @@ persisted.
   *Goal:* Everyone whose password was exposed is told, in the app, and can act on it in two clicks.
   *Done when:* An affected account signing in sees the notice; Later returns it next sign in;
   changing the password stops it permanently; an unaffected account never sees it.
-  *Not ticked:* the behaviour is proven at the database level but has not been clicked
-  through in a browser, the same standing as T26, T27 and T28.
+  *Signed off 2026-07-27.* Checked on the live site: the notice appears after sign in, Later
+  closes it for the session and it returns at the next sign in, Change my password lands on
+  the right field, and it never blocks a sign in. That last one was the condition it was not
+  allowed to fail.
   - [x] ~~**T62a** Cover the people whose password was exposed but who have no account~~
     `done 2026-07-27`
     T62 reaches 64 of the 75 accounts, but 96 people had a password stored. About 32 of them
@@ -824,6 +837,49 @@ persisted.
     *Also covers T59.* The test leader registration went in on 2026-07-26, before the cutoff,
     so that account will carry the notice when it is approved. Correct rather than incidental:
     its password sat in the open table for the few minutes before step 1 landed.
+
+- [ ] **T63** Clean up the assessment authorisation queue · est 0.5d · Medium
+  Requested by the client 2026-07-27: "all people from Scrubball SBD can be removed from the
+  auth que (jun 26 date) and let's see where we stand".
+  The queue is `DB.staff.filter(s => s.placementNeeded)`, so removing somebody means setting
+  `placement_needed = false`. It touches no account, which matters given the standing rule
+  that no account is ever deleted.
+
+  **What he asked for is 2 rows. What is actually in there is 24.** Counted 2026-07-27:
+
+  | Facility | In the queue | Note |
+  |---|---|---|
+  | **no facility at all** | **15** | the `--` rows on his screenshot |
+  | Test Hospital Facility | 2 | |
+  | Alta Bates | 2 | |
+  | Mount Sinai | 2 | |
+  | **Scrubball Sbd** | **2** | the facility is switched off |
+  | DEV TEST HP | 1 | the test account made last night |
+
+  Scrubball Sbd is inactive, so removing those two matches the rule already agreed for T31:
+  key on the facility or record being switched off, never on Free Agent membership.
+
+  The 15 with no facility are the real mess and he has not asked for them yet. They are a
+  mix of plain test data (TEST TEST, TEST USER, Test David OG, Shan -, Royond, Darius) and
+  real-looking names (Aaron Law, Andre Westmoreland, Krystal Westmoreland, Stacey Law,
+  Michael Gudejko, David Williams, Darius Love), plus **Regina Randle twice**. Some hold a
+  login. Guessing which is which is exactly how somebody real gets removed by accident.
+
+  *Also worth telling him:* not one of the 24 has a placement review against them. Nobody in
+  this queue has ever sat their placement, so this is not a backlog of half-finished work.
+
+  *Goal:* The authorisation queue lists only people somebody actually intends to assess.
+  *Done when:* The Scrubball pair are out; the no-facility 15 are resolved one way or the
+  other with his answer on the record; no account is deleted; and the remaining list is short
+  enough to read at a glance.
+
+- [ ] **T64** The review reminder ignores approved-but-unactioned requests · est 0.25d · Medium
+  Split out of T61 when the client closed it. The reminder chases `pending` requests only, so
+  a request that is approved and then never assessed is chased by nobody. Jody Mays sat that
+  way for 12 days and it took collapsing eleven duplicates to make it visible.
+  *Goal:* A request that stalls after approval is chased the same way a pending one is.
+  *Done when:* The reminder counts approved requests with no assessment recorded, and one
+  that has sat past the threshold appears in the reminder and on the admin notice.
 
 ### Blocked, not on the critical path
 
