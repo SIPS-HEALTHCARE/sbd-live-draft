@@ -395,6 +395,17 @@ persisted.
     *Done when:* The years read clearly on the profile at phone and desktop width, the
     background card and the report still show them, and nothing shifts when both values are
     absent.
+    *Built 2026-07-27.* The chip is gone from the meta row. The two values now render as a
+    pair of cards under the belt badge, using the platform's existing `stat-card` styles
+    rather than a bespoke look, so the full redesign in T35 replaces them cleanly instead of
+    having to undo something one-off. Reusing that class also means they already scale on a
+    phone the way every other figure on the platform does.
+    *Logic verified across every input shape:* both values set renders both; one set renders
+    the other as "Not set"; neither set renders nothing at all, so the many profiles with no
+    values do not grow an empty block; **0 renders as 0** rather than being treated as
+    missing, which matters for somebody in their first year.
+    The background card and the report subtitle are untouched and still show the values.
+    *Not ticked:* the render logic is tested but this has not been looked at in a browser.
   - [ ] **T35b** Give administrators a profile page at all · est 0.5d
     Found 2026-07-26 while checking the above: an administrator has no profile screen.
     Clicking their own name in the sidebar footer lands on Account and Settings, which is a
