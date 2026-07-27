@@ -383,6 +383,18 @@ persisted.
     *Done when:* My Profile renders the shared bio card for the signed-in person, the
     operator assessment still starts and displays from within it, and the SBD Background
     editor added in T21 still saves.
+  - [ ] **T35c** Make the years line legible now, ahead of the full redesign · est 0.25d · **committed to the client**
+    Shawn told Ignacio on 2026-07-27, at 2:16 AM in the thread, "I will make it bigger in
+    the meantime". That is a commitment and it comes before the rest of T35, which is a
+    full day's work and needs the layout built properly.
+    Today the values render three different ways and all three are small: `9983` puts
+    `3y in SBD . 2y certified` into a `pmeta` chip in the profile meta row, `5646` writes
+    `3 yr(s) in the SBD program` into the background card, and `5696` folds it into the
+    report subtitle. The profile one is the one Ignacio is looking at.
+    *Goal:* Somebody opening a profile can read the two year values without hunting for them.
+    *Done when:* The years read clearly on the profile at phone and desktop width, the
+    background card and the report still show them, and nothing shifts when both values are
+    absent.
   - [ ] **T35b** Give administrators a profile page at all · est 0.5d
     Found 2026-07-26 while checking the above: an administrator has no profile screen.
     Clicking their own name in the sidebar footer lands on Account and Settings, which is a
