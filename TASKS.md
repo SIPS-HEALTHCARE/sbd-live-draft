@@ -296,7 +296,15 @@ persisted.
     view before writing the migration rather than assumed.
     *Result:* 8 open rows to 6, one per real decision, which is what the T29 goal asked for.
 
-- [ ] **T61** A real candidate has been waiting 12 days on an approved assessment · est 0.25d · **High**
+- [x] ~~**T61** A real candidate has been waiting 12 days on an approved assessment~~
+  `closed 2026-07-27 by the client` · est 0.25d
+  *Ignacio answered directly:* "Jody is good... no worries there". So the 14 day and 12 day
+  waits were not a service failure, and no chasing is needed. Closed as answered rather than
+  as fixed, because nothing was changed.
+  *Kept on the record anyway:* the finding was still worth raising. It was only visible
+  because T29 collapsed eleven copies of the same request; before that the queue was noise.
+  The software half of it stands and moves to T64: the review reminder covers pending
+  requests and not approved-but-unactioned ones, so if a real one does stall, nothing says so.
   Found 2026-07-27 underneath the T29a duplicate. The duplicate was the symptom; this is the
   thing worth acting on.
   Jody Mays at Boston Children's, Shift Supervisor, still on White belt:
@@ -383,7 +391,8 @@ persisted.
     *Done when:* My Profile renders the shared bio card for the signed-in person, the
     operator assessment still starts and displays from within it, and the SBD Background
     editor added in T21 still saves.
-  - [ ] **T35c** Make the years line legible now, ahead of the full redesign · est 0.25d · **committed to the client**
+  - [x] ~~**T35c** Make the years line legible now, ahead of the full redesign~~
+    `done 2026-07-27` · est 0.25d · **was committed to the client**
     Shawn told Ignacio on 2026-07-27, at 2:16 AM in the thread, "I will make it bigger in
     the meantime". That is a commitment and it comes before the rest of T35, which is a
     full day's work and needs the layout built properly.
@@ -418,7 +427,8 @@ persisted.
     both cards in every case, including two "Not set" when nothing is filled. staff_member and
     a signed-out render still hide the block when both values are absent, and still show it
     when either is present.
-    *Not ticked:* the render logic is tested but this has not been looked at in a browser.
+    *Signed off 2026-07-27.* Checked on the live site: the two cards render under the belt
+    badge and read "Not set" where nothing has been entered.
   - [ ] **T35b** Give administrators a profile page at all · est 0.5d
     Found 2026-07-26 while checking the above: an administrator has no profile screen.
     Clicking their own name in the sidebar footer lands on Account and Settings, which is a
@@ -763,7 +773,8 @@ persisted.
   password in a table for as long as a request is pending, and nothing here can undo what
   may already have been read.
 
-- [ ] **T62** In-app notice asking the affected people to change their password · est 0.5d · **High**
+- [x] ~~**T62** In-app notice asking the affected people to change their password~~
+  `done 2026-07-27` · est 0.5d · **High**
   Built 2026-07-27. Closes the part of T60 that no migration could: T60 shut the hole and
   cleared the stored copies, but neither undoes what was read while `registrations` was open
   to every signed-in account. Those people still hold that password, and many will have
@@ -802,8 +813,10 @@ persisted.
   *Goal:* Everyone whose password was exposed is told, in the app, and can act on it in two clicks.
   *Done when:* An affected account signing in sees the notice; Later returns it next sign in;
   changing the password stops it permanently; an unaffected account never sees it.
-  *Not ticked:* the behaviour is proven at the database level but has not been clicked
-  through in a browser, the same standing as T26, T27 and T28.
+  *Signed off 2026-07-27.* Checked on the live site: the notice appears after sign in, Later
+  closes it for the session and it returns at the next sign in, Change my password lands on
+  the right field, and it never blocks a sign in. That last one was the condition it was not
+  allowed to fail.
   - [x] ~~**T62a** Cover the people whose password was exposed but who have no account~~
     `done 2026-07-27`
     T62 reaches 64 of the 75 accounts, but 96 people had a password stored. About 32 of them
@@ -824,6 +837,109 @@ persisted.
     *Also covers T59.* The test leader registration went in on 2026-07-26, before the cutoff,
     so that account will carry the notice when it is approved. Correct rather than incidental:
     its password sat in the open table for the few minutes before step 1 landed.
+
+- [ ] **T63** Clean up the assessment authorisation queue · est 0.5d · Medium
+  Requested by the client 2026-07-27: "all people from Scrubball SBD can be removed from the
+  auth que (jun 26 date) and let's see where we stand".
+  The queue is `DB.staff.filter(s => s.placementNeeded)`, so removing somebody means setting
+  `placement_needed = false`. It touches no account, which matters given the standing rule
+  that no account is ever deleted.
+
+  **What he asked for is 2 rows. What is actually in there is 24.** Counted 2026-07-27:
+
+  | Facility | In the queue | Note |
+  |---|---|---|
+  | **no facility at all** | **15** | the `--` rows on his screenshot |
+  | Test Hospital Facility | 2 | |
+  | Alta Bates | 2 | |
+  | Mount Sinai | 2 | |
+  | **Scrubball Sbd** | **2** | the facility is switched off |
+  | DEV TEST HP | 1 | the test account made last night |
+
+  Scrubball Sbd is inactive, so removing those two matches the rule already agreed for T31:
+  key on the facility or record being switched off, never on Free Agent membership.
+
+  The 15 with no facility are the real mess and he has not asked for them yet. They are a
+  mix of plain test data (TEST TEST, TEST USER, Test David OG, Shan -, Royond, Darius) and
+  real-looking names (Aaron Law, Andre Westmoreland, Krystal Westmoreland, Stacey Law,
+  Michael Gudejko, David Williams, Darius Love), plus **Regina Randle twice**. Some hold a
+  login. Guessing which is which is exactly how somebody real gets removed by accident.
+
+  *Also worth telling him:* not one of the 24 has a placement review against them. Nobody in
+  this queue has ever sat their placement, so this is not a backlog of half-finished work.
+
+  *Goal:* The authorisation queue lists only people somebody actually intends to assess.
+  *Done when:* The Scrubball pair are out; the no-facility 15 are resolved one way or the
+  other with his answer on the record; no account is deleted; and the remaining list is short
+  enough to read at a glance.
+
+- [ ] **T64** The review reminder ignores approved-but-unactioned requests · est 0.25d · Medium
+  Split out of T61 when the client closed it. The reminder chases `pending` requests only, so
+  a request that is approved and then never assessed is chased by nobody. Jody Mays sat that
+  way for 12 days and it took collapsing eleven duplicates to make it visible.
+  *Goal:* A request that stalls after approval is chased the same way a pending one is.
+  *Done when:* The reminder counts approved requests with no assessment recorded, and one
+  that has sat past the threshold appears in the reminder and on the admin notice.
+
+- [ ] **T65** Placement scoring: one threshold table, no placeholder belts, and the Dangerous provision · est 1d · **High**
+  Raised 2026-07-27 from the client's own reading of David Williams' report, and confirmed
+  against the Scoring Logic Specification v2.0 (Dr. Jake, 12 May 2026).
+
+  **Four defects, all in the same place.** The placement report was carrying its own copies of
+  the spec's numbers instead of reading the one table the platform already has.
+
+  1. **A placeholder printed as a determination.** `deriveOutcome` fell back to `'White'`
+     whenever the review carried no stored belt. Williams had none, so his report came out
+     headed WHITE BELT with White's thresholds, White's floors and a certification basis
+     written against White. The engine had actually placed him at Green.
+  2. **Three copies of the section 9 table.** `SBD_BELT_THRESHOLDS`, `RPT_STANDARDS.belts`
+     and `BELT_THRESHOLDS`, one of them annotated "these MUST match" -- the note you write
+     when nothing enforces it. Section 9 says in as many words not to hardcode these inline.
+     The real table lives in `belt-test-engine.js` as `BELT_TEST_CONFIG` and the belt test
+     already reads it.
+  3. **Flat per-level floors.** Knowledge 80 at every level, simulation 75/70/65/65/65, the
+     same for every belt. The spec gates by belt and gates fewer levels lower down: at Green
+     simulation L4 and L5 are not gated at all. Williams scored 67.5 on both and the report
+     marked them FAIL against floors that do not apply to him.
+  4. **Knowledge overall computed as correct-over-total.** Section 5.2 says the average of
+     the five level scores. The two agreed until L5 dropped to 7 questions when TIR34 was
+     pulled at the client's request. Williams came out 97.4 where the spec gives 97.5. **The
+     client was right and we were wrong**, and his corrected report had the right figure.
+
+  **The Dangerous provision.** The client ruled on 2026-07-28: the belt is issued on the
+  scores, and the dangerous answer becomes a patient-safety provision on the person's
+  account. It does not touch the belt already held; it holds advancement to the next belt
+  until a master admin or a SIPS admin clears it, and the record keeps who cleared it and
+  when. *Who may clear, confirmed 2026-07-27:* `master_admin` and `staff_admin`, the same pair
+  the belt override uses. Facility-side roles are deliberately not on the list, since the
+  provision is a SIPS determination and the facility is not the party that clears it. Until now the
+  flag existed only inside the report, recomputed every time it was opened, so there was
+  nowhere for a provision to live. `staff.dangerous_provisions` gives it one, and the T24
+  guard was extended to it so a candidate cannot clear their own.
+
+  *Goal:* One threshold table, read not copied; a report that never prints a belt nobody
+  earned; and a safety finding that lives on the person rather than inside a PDF.
+  *Done when:* Williams comes out Green Belt Conditional with K 97.5 and blended 83.5, his
+  L4/L5 read "not gated" rather than FAIL, the two scoring engines return the same belt for
+  the same responses, an open provision blocks the next-belt request while leaving the
+  current belt alone, and a master admin clearing one is recorded by name and date.
+
+  **Measured 2026-07-27, 51 checks, all passing** (`scratchpad/t65/harness.js`, run against
+  Williams' stored responses with no DB and no DOM):
+  K overall 97.50 · simulation 62.50 · blended 83.50 · belt Green, derived from the scores
+  with nothing stored · outcome Conditional · simulation floors 78/75/70/none/none · L4 and
+  L5 not failures · knowledge floors 90/85/80/none/none · both engines agree on belt,
+  blended and knowledge overall · a candidate below every threshold is awarded nothing rather
+  than being handed White.
+
+  **One deliberate difference from the fix note.** The note expected three blocking
+  conditions from the individual responses, reading against the old flat 50. That 50 appears
+  nowhere in the spec; section 9 sets the individual minimum per belt and Green's is 72. On
+  Williams that produces 12, not 3. His simulation overall is 62.5 against a 78 floor, so a
+  dozen responses under 72 is what actually happened. Flagged rather than quietly changed.
+
+  *Not in this change, and deliberately:* Williams' own row is untouched. Regenerating it is
+  a production write and waits for an explicit go-ahead after this deploys.
 
 ### Blocked, not on the critical path
 
@@ -848,7 +964,7 @@ persisted.
 
 ## Totals
 
-**Updated 2026-07-27, after a working night.** 35 items done, 35 open.
+**Updated 2026-07-27, after a working night.** 35 items done, 36 open.
 
 | Group | Open | Items | Est. days |
 |---|---|---|---|
@@ -856,8 +972,9 @@ persisted.
 | Phase 2 | 9 | T30, T32, T33, T34, T35, T35a, T35b, T36, T37 | 7.50 |
 | Phase 3 | 11 | T39 to T48 | 9.35 |
 | Found during Phase 1 | 6 | T54, T56, T58, T59, T60, T62 | 2.10 |
+| Raised by the client | 3 | T63, T64, T65 | 1.75 |
 | Blocked on somebody else | 4 | T49 to T52 | not counted |
-| **Total, excluding blocked** | **31** | | **21.2** |
+| **Total, excluding blocked** | **34** | | **22.95** |
 
 The five Phase 1 items are not really 2.25 days of building. The code for T26, T27, T28 and
 T28a is written, merged and live; what is left is somebody pressing the buttons in a browser
