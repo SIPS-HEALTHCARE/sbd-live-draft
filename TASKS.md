@@ -909,7 +909,10 @@ persisted.
   **The Dangerous provision.** The client ruled on 2026-07-28: the belt is issued on the
   scores, and the dangerous answer becomes a patient-safety provision on the person's
   account. It does not touch the belt already held; it holds advancement to the next belt
-  until a SIPS admin clears it, and the record keeps who cleared it and when. Until now the
+  until a master admin or a SIPS admin clears it, and the record keeps who cleared it and
+  when. *Who may clear, confirmed 2026-07-27:* `master_admin` and `staff_admin`, the same pair
+  the belt override uses. Facility-side roles are deliberately not on the list, since the
+  provision is a SIPS determination and the facility is not the party that clears it. Until now the
   flag existed only inside the report, recomputed every time it was opened, so there was
   nowhere for a provision to live. `staff.dangerous_provisions` gives it one, and the T24
   guard was extended to it so a candidate cannot clear their own.

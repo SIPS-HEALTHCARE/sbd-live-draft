@@ -2340,10 +2340,17 @@ function sbdHasOpenProvision(staff){
   return sbdOpenProvisions(staff).length > 0;
 }
 
-// Who may clear. SIPS admins only for this build, per the ruling. A role-management toggle
-// for this capability is queued separately and deliberately not wired here.
+// Who may clear: a master admin or a SIPS admin, per the client's ruling and confirmed
+// 2026-07-27 as the position for now. That is the same pair the belt override uses
+// (isOverrideAdmin), which is the closest existing decision of this weight. Facility-side
+// roles are deliberately not on this list: the provision is a SIPS determination, and the
+// facility the person works at is not the party that clears it.
+//
+// A role-management toggle for this capability is queued separately, so this is one function
+// rather than a check scattered through the interface.
+const SBD_PROVISION_CLEAR_ROLES = ['master_admin', 'staff_admin'];
 function sbdCanClearProvision(){
-  return !!(ST.user && ST.user.role === 'master_admin');
+  return !!(ST.user && SBD_PROVISION_CLEAR_ROLES.includes(ST.user.role));
 }
 
 // The three overall gates for a belt, named the way the report templates read them.
@@ -5686,7 +5693,7 @@ function sbdProvisionsHTML(s, context){
 async function clearDangerousProvision(staffId, index, context){
   const s = getStaff(staffId);
   if(!s) { toast('Staff member not found','err'); return; }
-  if(!sbdCanClearProvision()){ toast('Only a SIPS administrator can clear a patient safety provision.','err'); return; }
+  if(!sbdCanClearProvision()){ toast('Only a master admin or a SIPS admin can clear a patient safety provision.','err'); return; }
   const list = (s.dangerousProvisions || []).slice();
   const p = list[index];
   if(!p){ toast('Provision not found','err'); return; }
