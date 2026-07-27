@@ -935,7 +935,11 @@ function mapUserFromBackend(row){
     assignedFids: row.assigned_facility_ids || [],
     active:       row.active,
     protected:    row.protected,
-    capabilities: row.capabilities || {}
+    capabilities: row.capabilities || {},
+    // T62: the password-change notice. `at` is when it became due, `ackAt` is when the
+    // person actually changed their password. Dismissing the dialog never sets ackAt.
+    passwordNoticeAt:    row.password_notice_at    || null,
+    passwordNoticeAckAt: row.password_notice_ack_at || null
   };
 }
 function mapUserToBackend(u){

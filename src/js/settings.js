@@ -196,6 +196,8 @@ async function changePasswordFromSettings() {
     await SB_AUTH.updatePassword(token, pass);
     if (passEl) passEl.value = ''; if (pass2El) pass2El.value = '';
     if (typeof updateSettingsStrengthBar === 'function') updateSettingsStrengthBar('');
+    // T62: only a successful change clears the security notice. Dismissing it does not.
+    if (typeof markPasswordNoticeDone === 'function') markPasswordNoticeDone();
     _showSettingsMsg(resultEl,'✓ Password updated successfully.','ok');
     setTimeout(() => { if (resultEl) resultEl.style.display = 'none'; }, 4000);
   } catch (e) {

@@ -271,7 +271,43 @@ does not, and no signed-in user can read or write another facility's records.
   on 15 July is straddled by pending requests from 25 June to 16 July. Whether a request
   raised after an approval is a duplicate or a genuine second attempt is a question about how
   the programme works, not a data-cleaning question, so those pairs were left standing rather
-  than guessed at. **This needs a decision.**
+  than guessed at.
+  - [x] ~~**T29a** Close the two approved-beside-pending pairs~~
+    `done 2026-07-27`
+    Both answered, each for a different reason, so they were handled separately rather than
+    by one rule.
+    *Jake Jacobs, Yellow Competency:* Jake sits on the Free Agent facility and the client has
+    already identified him as an active test account, the same fact T31 was written around.
+    Test traffic, not a question about the programme. Shawn spotted this.
+    *Jody Mays, Yellow Competency:* Boston Children's, Shift Supervisor, a real candidate.
+    Her approval on 15 July was never acted on: `resolved_at` is null and her belt is still
+    White. The request she raised on 16 July is therefore the same person asking again
+    because nothing moved, not a second attempt at a gate she had already sat, so it
+    collapses like any other repeat.
+    *Nothing is hidden by this.* The admin queue screen buckets `status = 'approved'` into
+    `adminQueue`, so Jody's approved Competency stays visible and actionable. Checked in the
+    view before writing the migration rather than assumed.
+    *Result:* 8 open rows to 6, one per real decision, which is what the T29 goal asked for.
+
+- [ ] **T61** A real candidate has been waiting 12 days on an approved assessment · est 0.25d · **High**
+  Found 2026-07-27 underneath the T29a duplicate. The duplicate was the symptom; this is the
+  thing worth acting on.
+  Jody Mays at Boston Children's, Shift Supervisor, still on White belt:
+
+  | Request | Status | Asked | Days open |
+  |---|---|---|---|
+  | Yellow Simulation | pending | 13 Jul | 14 |
+  | Yellow Competency | approved | 15 Jul | 12 |
+
+  She asked repeatedly through late June and July, was approved on 15 July, and no assessment
+  has followed. The eleven duplicate requests T29 collapsed were her asking again and again
+  because nothing was happening. Shandolyn Harris and Jake Jacobs are at 5 days, which is
+  ordinary; Jody is not.
+  *This is a service question before it is a software one.* The queue now shows it clearly,
+  which it did not while eleven copies of the same request were burying it.
+  *Goal:* Nobody waits weeks on an approved assessment without somebody noticing.
+  *Done when:* Jody's two Yellow gates are scheduled or explicitly deferred with a reason,
+  and the review reminder covers approved-but-unactioned requests and not only pending ones.
 
 ### Phase 2: close the security tail and the committed client asks
 
@@ -682,6 +718,48 @@ does not, and no signed-in user can read or write another facility's records.
   **Step 3 is still open and this is not closed until it lands.** The flow still parks a
   password in a table for as long as a request is pending, and nothing here can undo what
   may already have been read.
+
+- [ ] **T62** In-app notice asking the affected people to change their password · est 0.5d · **High**
+  Built 2026-07-27. Closes the part of T60 that no migration could: T60 shut the hole and
+  cleared the stored copies, but neither undoes what was read while `registrations` was open
+  to every signed-in account. Those people still hold that password, and many will have
+  reused it elsewhere.
+
+  **A notice, not an enforcement.** It never blocks a sign in, never expires a password and
+  never forces a reset. Somebody who closes it carries on exactly as before. That is
+  deliberate: the point is to give people the information, not to take their access away
+  over something that was not their fault.
+
+  *What they see, once the portal has painted:*
+
+  > 🔒 Security update
+  > As part of a security review we have tightened how account details are stored. Please
+  > change your password.
+  > If you use the same password on another system, change it there too.
+  > [ Later ]  [ Change my password ]
+
+  *Behaviour:* **Change my password** opens Settings and puts the cursor in the password
+  field. **Later** and the close cross both dismiss for that session only, so it returns at
+  the next sign in. Only a successful password change stops it for good, recorded in
+  `password_notice_ack_at`. Dismissing never writes that column. A notice shown once and
+  then silent is a notice most people never act on, which is why it comes back.
+
+  *Who sees it:* 64 of the 75 portal accounts, keyed on the person's email appearing in
+  `registrations`. 96 of those 97 rows held a stored password, so membership is the accurate
+  marker; the passwords themselves were cleared in T60 step 2, which is why the column itself
+  could not be used.
+
+  *Measured as an ordinary staff_member, rolled back:* sees the notice, records their own
+  acknowledgement (1 row), cannot acknowledge for anybody else (0 rows), and an attempt to
+  smuggle `role = 'master_admin'` alongside the acknowledgement is refused, so the T53 guard
+  still holds over the new columns. Counts after: 75 accounts, 64 with a notice due, 0
+  acknowledged.
+
+  *Goal:* Everyone whose password was exposed is told, in the app, and can act on it in two clicks.
+  *Done when:* An affected account signing in sees the notice; Later returns it next sign in;
+  changing the password stops it permanently; an unaffected account never sees it.
+  *Not ticked:* the behaviour is proven at the database level but has not been clicked
+  through in a browser, the same standing as T26, T27 and T28.
 
 ### Blocked, not on the critical path
 

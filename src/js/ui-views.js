@@ -273,10 +273,80 @@ function logout(){
   if(typeof OB !== 'undefined'){ OB.tourRunning = false; OB.step = 0; if(OB.skipReminderTimer){ clearTimeout(OB.skipReminderTimer); } }
 }
 
+// T62. The people whose password sat in the registrations table while it was readable by
+// every signed-in account still hold that password, and many will have reused it elsewhere.
+// T60 closed the hole and cleared the stored copies, but neither can undo what was read.
+//
+// This is a notice and nothing more. It never blocks a sign in, never expires a password and
+// never forces a reset. Somebody who closes it carries on exactly as before, which is
+// deliberate: the point is to give people the information, not to take their access away
+// over something that was not their fault.
+//
+// Dismissing is remembered for the session only, so it returns at the next sign in. Only a
+// successful password change stops it for good, and that is recorded by
+// markPasswordNoticeDone() from the settings screen. A notice shown once and then silent is
+// a notice most people never act on.
+let _pwNoticeDismissedThisSession = false;
+
+function maybeShowPasswordNotice(){
+  const u = ST.user;
+  if(!u || !u.passwordNoticeAt || u.passwordNoticeAckAt) return;
+  if(_pwNoticeDismissedThisSession) return;
+  // Let the portal finish painting first, so this lands on top of a drawn screen rather
+  // than an empty one.
+  setTimeout(()=>{
+    if(!ST.user || ST.user.passwordNoticeAckAt) return;
+    openModal('🔒 Security update', `
+      <div class="modal-body" style="line-height:1.7">
+        <p style="margin:0 0 12px">As part of a security review we have tightened how account
+        details are stored. Please change your password.</p>
+        <p style="margin:0;color:var(--txt2);font-size:12.5px">If you use the same password on
+        another system, change it there too.</p>
+      </div>
+      <div class="modal-ft">
+        <button class="btn btn-ghost" onclick="dismissPasswordNotice()">Later</button>
+        <button class="btn btn-gold" onclick="goChangePassword()">Change my password</button>
+      </div>`, 'modal-sm');
+  }, 900);
+}
+
+function dismissPasswordNotice(){
+  _pwNoticeDismissedThisSession = true;
+  closeModal();
+}
+
+function goChangePassword(){
+  _pwNoticeDismissedThisSession = true;
+  closeModal();
+  const settingsView = { admin:'a-settings', hospital:'h-settings',
+                         system_admin:'x-settings', staff_member:'s-settings' }[ST.portal];
+  const nav = settingsView && document.querySelector(`.nav-item[data-view="${settingsView}"]`);
+  if(nav){ nav.click(); }
+  else { toast('Open Account and Settings to change your password.','warn'); return; }
+  setTimeout(()=>{
+    document.getElementById('settings-pass')?.scrollIntoView({behavior:'smooth', block:'center'});
+    document.getElementById('settings-pass')?.focus();
+  }, 400);
+}
+
+// Called from the settings screen once a password change actually succeeds. Dismissing the
+// dialog deliberately does not reach here.
+function markPasswordNoticeDone(){
+  if(!ST.user || !ST.user.passwordNoticeAt || ST.user.passwordNoticeAckAt) return;
+  const stamp = new Date().toISOString();
+  ST.user.passwordNoticeAckAt = stamp;
+  if(typeof IS_LIVE !== 'undefined' && IS_LIVE && ST.user.authUid){
+    SB.updateUserProfile(ST.user.authUid, { password_notice_ack_at: stamp })
+      .catch(e => handleSyncError(e, 'Password notice'));
+  }
+}
+
 function enterPortal(type){
   document.getElementById('login').classList.add('hidden');
   ST.portal=type;
   const u=ST.user;
+  // Deferred inside, so it lands on a painted screen and survives the early returns below.
+  maybeShowPasswordNotice();
 
   if(type==='staff_member'){
     // Individual staff login
