@@ -5360,6 +5360,34 @@ DB.schedule.forEach(sch=>{
 });
 
 // ============================================================ BELT BADGE
+// T35c. The two SBD year values used to sit in the profile meta row as an 11px chip
+// reading "3y in SBD . 2y certified", which the client could not read. They now get their
+// own cards, using the platform's existing stat-card styles so they scale on a phone the
+// way every other figure does.
+//
+// This is the interim step promised on 2026-07-27, ahead of the full profile redesign in
+// T35. It deliberately reuses stat-card rather than inventing a look, so the redesign
+// replaces it cleanly instead of having to undo something bespoke.
+//
+// Nothing renders when neither value is set, which is most of the roster today, so no
+// profile grows an empty block. When only one is set the other reads "Not set", because at
+// that point somebody has started filling this in and the gap is worth showing.
+function sbdYearsCardsHTML(s){
+  if(!s || (s.sbdYears==null && s.certYears==null)) return '';
+  const val = v => v!=null
+    ? v
+    : '<span style="font-size:14px;font-weight:600;color:var(--txt3)">Not set</span>';
+  const card = (label, v) => `
+    <div class="stat-card" style="flex:1 1 160px;padding:12px 14px">
+      <div class="stat-lbl">${label}</div>
+      <div class="stat-val" style="margin-bottom:0;color:var(--gold)">${val(v)}</div>
+    </div>`;
+  return `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;max-width:420px">
+    ${card('Years in SBD Program', s.sbdYears)}
+    ${card('Years Certified', s.certYears)}
+  </div>`;
+}
+
 function beltBadge(belt, staff){
   if(staff){
     const s = (typeof staff === 'object') ? staff : getStaff(staff);
@@ -9980,7 +10008,8 @@ function renderHProfile(sid,context){
           })()}
         </div>
         <div style="margin-bottom:8px">${beltBadge(s.belt)} <span style="font-size:12px;color:var(--txt3);margin-left:6px">${BELT_CERT[s.belt]}</span></div>
-        <div class="prof-meta"><span class="pmeta"><svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="2" y="3" width="10" height="10" rx="1" stroke="currentColor" stroke-width="1.3"/><path d="M5 1v3M9 1v3M2 7h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>Since ${s.since || '—'}</span><span class="pmeta">${daysAtPhrase(s.since)} at current belt</span>${s.stars>0?`<span class="pmeta tc-gold">${'* '.repeat(s.stars).trim()}</span>`:''}${(s.sbdYears!=null||s.certYears!=null)?`<span class="pmeta">${s.sbdYears!=null?s.sbdYears+'y in SBD':''}${(s.sbdYears!=null&&s.certYears!=null)?' &middot; ':''}${s.certYears!=null?s.certYears+'y certified':''}</span>`:''}</div>
+        <div class="prof-meta"><span class="pmeta"><svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="2" y="3" width="10" height="10" rx="1" stroke="currentColor" stroke-width="1.3"/><path d="M5 1v3M9 1v3M2 7h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>Since ${s.since || '—'}</span><span class="pmeta">${daysAtPhrase(s.since)} at current belt</span>${s.stars>0?`<span class="pmeta tc-gold">${'* '.repeat(s.stars).trim()}</span>`:''}</div>
+        ${sbdYearsCardsHTML(s)}
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         ${context==='admin'?`<button class="btn btn-gold btn-sm" onclick="openRecordModal('${s.id}')">${ICO.record} Record Assessment</button>`:''}
