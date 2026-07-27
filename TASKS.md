@@ -768,6 +768,26 @@ persisted.
   changing the password stops it permanently; an unaffected account never sees it.
   *Not ticked:* the behaviour is proven at the database level but has not been clicked
   through in a browser, the same standing as T26, T27 and T28.
+  - [x] ~~**T62a** Cover the people whose password was exposed but who have no account~~
+    `done 2026-07-27`
+    T62 reaches 64 of the 75 accounts, but 96 people had a password stored. About 32 of them
+    have no account at all: denied, still waiting, or never approved. A popup cannot reach
+    somebody who cannot sign in.
+    *Shawn's instruction, and it was the right shape:* do nothing special for them now, and
+    if they ever do get in, show them the notice then. This makes that automatic rather than
+    something to remember.
+    A `BEFORE INSERT` trigger on `sbd_portal_users` sets the notice when the new account's
+    email matches a registration submitted before **2026-07-27 00:04:35 UTC**, the moment
+    migration `20260727000435_registrations_rls_t60` closed the table. Before that a stored
+    password was readable by every signed-in account; after it, only SIPS admins could read
+    one and the purge trigger clears it as soon as the request stops being pending. So a
+    registration after the cutoff was never exposed and its owner should not be told it was.
+    *Measured, rolled back:* an account created for a pre-cutoff registration carries the
+    notice; one for a post-cutoff registration correctly does not; one for somebody who never
+    registered correctly does not. Counts after: 75 accounts, 64 with a notice due, unchanged.
+    *Also covers T59.* The test leader registration went in on 2026-07-26, before the cutoff,
+    so that account will carry the notice when it is approved. Correct rather than incidental:
+    its password sat in the open table for the few minutes before step 1 landed.
 
 ### Blocked, not on the critical path
 
