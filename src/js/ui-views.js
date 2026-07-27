@@ -5369,11 +5369,21 @@ DB.schedule.forEach(sch=>{
 // T35. It deliberately reuses stat-card rather than inventing a look, so the redesign
 // replaces it cleanly instead of having to undo something bespoke.
 //
-// Nothing renders when neither value is set, which is most of the roster today, so no
-// profile grows an empty block. When only one is set the other reads "Not set", because at
-// that point somebody has started filling this in and the gap is worth showing.
+// Who sees an empty pair of cards, and why it is not the same for everyone:
+//
+// 62 of the 63 staff records have neither value set. These two fields are filled in by an
+// administrator or a facility leader through the SBD Background button, and an empty field
+// that renders nothing is a field nobody knows to fill, which is almost certainly why only
+// one person has them today. So a leader or an administrator sees both cards on every
+// profile, reading "Not set" where there is no value, and the work to do is visible.
+//
+// A staff member looking at their own profile sees them only once there is something to
+// show. They cannot set these themselves, so an empty pair on their own screen would be two
+// boxes telling them about a gap they cannot close.
 function sbdYearsCardsHTML(s){
-  if(!s || (s.sbdYears==null && s.certYears==null)) return '';
+  if(!s) return '';
+  const viewerCanSetThem = !!(ST.user && ST.user.role !== 'staff_member');
+  if(s.sbdYears==null && s.certYears==null && !viewerCanSetThem) return '';
   const val = v => v!=null
     ? v
     : '<span style="font-size:14px;font-weight:600;color:var(--txt3)">Not set</span>';

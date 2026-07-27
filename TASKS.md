@@ -405,6 +405,19 @@ persisted.
     values do not grow an empty block; **0 renders as 0** rather than being treated as
     missing, which matters for somebody in their first year.
     The background card and the report subtitle are untouched and still show the values.
+    *Amended the same day, and the number is the reason.* 62 of the 63 staff records have
+    neither value set, so hiding the cards when empty meant almost every profile would show
+    nothing and look untouched. Worse, these fields are filled in by an administrator or a
+    facility leader, and a field that renders nothing is a field nobody knows to fill, which
+    is very likely why exactly one person has them.
+    So a leader or an administrator now sees both cards on every profile, reading "Not set"
+    where there is no value. A staff member looking at their own profile still sees them only
+    once there is something to show: they cannot set these themselves, and an empty pair on
+    their screen would be two boxes describing a gap they cannot close.
+    *Re-tested across viewer and value:* master_admin, facility_admin and hospital all see
+    both cards in every case, including two "Not set" when nothing is filled. staff_member and
+    a signed-out render still hide the block when both values are absent, and still show it
+    when either is present.
     *Not ticked:* the render logic is tested but this has not been looked at in a browser.
   - [ ] **T35b** Give administrators a profile page at all · est 0.5d
     Found 2026-07-26 while checking the above: an administrator has no profile screen.
