@@ -271,7 +271,43 @@ does not, and no signed-in user can read or write another facility's records.
   on 15 July is straddled by pending requests from 25 June to 16 July. Whether a request
   raised after an approval is a duplicate or a genuine second attempt is a question about how
   the programme works, not a data-cleaning question, so those pairs were left standing rather
-  than guessed at. **This needs a decision.**
+  than guessed at.
+  - [x] ~~**T29a** Close the two approved-beside-pending pairs~~
+    `done 2026-07-27`
+    Both answered, each for a different reason, so they were handled separately rather than
+    by one rule.
+    *Jake Jacobs, Yellow Competency:* Jake sits on the Free Agent facility and the client has
+    already identified him as an active test account, the same fact T31 was written around.
+    Test traffic, not a question about the programme. Shawn spotted this.
+    *Jody Mays, Yellow Competency:* Boston Children's, Shift Supervisor, a real candidate.
+    Her approval on 15 July was never acted on: `resolved_at` is null and her belt is still
+    White. The request she raised on 16 July is therefore the same person asking again
+    because nothing moved, not a second attempt at a gate she had already sat, so it
+    collapses like any other repeat.
+    *Nothing is hidden by this.* The admin queue screen buckets `status = 'approved'` into
+    `adminQueue`, so Jody's approved Competency stays visible and actionable. Checked in the
+    view before writing the migration rather than assumed.
+    *Result:* 8 open rows to 6, one per real decision, which is what the T29 goal asked for.
+
+- [ ] **T61** A real candidate has been waiting 12 days on an approved assessment · est 0.25d · **High**
+  Found 2026-07-27 underneath the T29a duplicate. The duplicate was the symptom; this is the
+  thing worth acting on.
+  Jody Mays at Boston Children's, Shift Supervisor, still on White belt:
+
+  | Request | Status | Asked | Days open |
+  |---|---|---|---|
+  | Yellow Simulation | pending | 13 Jul | 14 |
+  | Yellow Competency | approved | 15 Jul | 12 |
+
+  She asked repeatedly through late June and July, was approved on 15 July, and no assessment
+  has followed. The eleven duplicate requests T29 collapsed were her asking again and again
+  because nothing was happening. Shandolyn Harris and Jake Jacobs are at 5 days, which is
+  ordinary; Jody is not.
+  *This is a service question before it is a software one.* The queue now shows it clearly,
+  which it did not while eleven copies of the same request were burying it.
+  *Goal:* Nobody waits weeks on an approved assessment without somebody noticing.
+  *Done when:* Jody's two Yellow gates are scheduled or explicitly deferred with a reason,
+  and the review reminder covers approved-but-unactioned requests and not only pending ones.
 
 ### Phase 2: close the security tail and the committed client asks
 
