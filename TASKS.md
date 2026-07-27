@@ -330,12 +330,13 @@ does not, and no signed-in user can read or write another facility's records.
   than an authorisation hole.
   *Goal:* Who observed an assessment is decided by the server, not by the browser.
   *Done when:* The PIN comparison happens server side; a forged client-side unlock does not produce a valid observation; the normal observer flow is unchanged.
-- [ ] **T38** Consolidate Avery onto the work account (issue `D3`) · est 0.25d
+- [x] ~~**T38** Consolidate Avery onto the work account (issue `D3`)~~
+  `closed 2026-07-27, not needed` · est 0.25d
   Client confirmed: SIPS employee, home office, no facility, work address is the real
-  account. Move the training history across and close the personal login.
-  *Gate:* production write. Needs an explicit go on the day.
-  *Goal:* There is one Avery on the platform, on the work account, with the training history intact.
-  *Done when:* The training record resolves under the work account; the personal login no longer signs in; no observation or queue history is lost; the account is closed rather than deleted.
+  account. The plan was to move the training history across and close the personal login.
+  *Closed by Shawn's decision on 2026-07-27:* both accounts are genuinely in use, so there
+  is nothing to consolidate. Two logins for one person is the intended state here, not a
+  duplicate. No production write was made.
 
 ### Phase 3: remaining scope, can run alongside other projects
 
@@ -513,6 +514,12 @@ does not, and no signed-in user can read or write another facility's records.
   *Goal:* One set of tables, with the reason the other went recorded.
   *Done when:* The three are dropped after confirming nothing reads them, or kept with a
   written reason.
+  *Checked 2026-07-27, at Shawn's request, before anything is dropped:* nothing references
+  them. No foreign key points at any of the three; their own keys only point outwards at
+  `facilities` and `staff`. No view, materialised view or function mentions them. No browser
+  code calls `/rest/v1/schedule`, `/rest/v1/attendance` or `/rest/v1/promotion_approvals`,
+  and no edge function touches them. All three are empty. So dropping them breaks no
+  referential integrity and orphans nothing.
 
 - [ ] **T58** A SIPS admin has no schedule or attendance screen at all · est 0.5d · Medium
   Found 2026-07-26 while trying to verify T26, T27 and T28 as a master admin. There is
@@ -609,11 +616,26 @@ does not, and no signed-in user can read or write another facility's records.
   Login was never in scope and never at risk: authentication runs against `auth.users`
   through `/auth/v1/token` and has no relationship to this table.
 
-  **Steps 2 and 3 are still open and this is not closed until they land.** Step 2 purges the
-  password on every non-pending row, which is a destructive write and needs its own go. Step
-  3 changes the flow so no password is parked in a table at all, which is the only real fix.
-  Neither step can undo whatever has already been read, so the people whose passwords sat
-  here still need to be told.
+  *Step 2 of 3 applied 2026-07-27.* 95 stored passwords cleared: 85 approved and 10 denied.
+  The single pending row keeps its password on purpose, because approving it is what turns
+  that value into the auth credential; without it the account could not be created.
+  A `BEFORE INSERT OR UPDATE` trigger now nulls the column the moment a row stops being
+  pending, so the residue cannot build up again. That is safe against the approval path:
+  `sbd-approve-registration` sets the status only after it has created the auth user, and it
+  keeps the password in a local variable for the welcome email, so nothing it still needs is
+  taken away.
+  *Counts after:* approved 86 rows holding 0 passwords, denied 10 holding 0, pending 1
+  holding 1.
+
+  *Decision recorded 2026-07-27, Shawn's call:* nobody is being asked to change their
+  password for now, and the client is not being told separately. Written down rather than
+  left implicit, because the exposure was real while it lasted and this decision is the
+  reason no notice went out. If it is ever revisited, the window is from whenever the table
+  was created until 2026-07-27, and it covered every signed-in account.
+
+  **Step 3 is still open and this is not closed until it lands.** The flow still parks a
+  password in a table for as long as a request is pending, and nothing here can undo what
+  may already have been read.
 
 ### Blocked, not on the critical path
 
