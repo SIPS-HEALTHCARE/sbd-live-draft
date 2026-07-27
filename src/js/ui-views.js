@@ -7418,6 +7418,13 @@ function submitApply(sid,gate,targetBelt){
   // #120: defense in depth — never queue a request when the current-belt practice gate isn't met.
   if(!canRequestAssessment(s.id, s.belt)){ toast('Complete both practice tests at 80% or above before requesting.','err'); return; }
   const gateLabel={c:'Competency',s:'Simulation',o:'Observation'}[gate];
+  // T29: this path had no duplicate check, which is how one person ended up with eleven
+  // pending copies of the same request. The real rule is a partial unique index on
+  // sbd_assessment_queue, since this check only sees what the browser holds. It is here so
+  // the candidate gets told plainly rather than meeting a database error.
+  const alreadyOpen = DB.queue.find(q => q.sid === s.id && q.targetBelt === targetBelt
+                                      && q.type === gateLabel && (q.status || 'pending') === 'pending');
+  if(alreadyOpen){ toast('You already have a pending request for this assessment.','err'); closeModal(); return; }
   const qid='q'+Date.now();
   const newQItem={id:qid,sid,fid:s.fid,type:gateLabel,targetBelt,date:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})};
   if(IS_LIVE){ SB.submitAssessmentQueue(mapQueueToBackend(newQItem)).catch(e => handleSyncError(e, 'Queue sync')); }

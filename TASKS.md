@@ -3,7 +3,7 @@
 **Living document.** This is the single record of what has been built and what is left.
 It is not regenerated. It is edited in place.
 
-**Last updated:** 2026-07-26
+**Last updated:** 2026-07-27
 **Audit basis:** 2026-07-25, verified against the live project and the live code.
 
 ---
@@ -247,11 +247,31 @@ does not, and no signed-in user can read or write another facility's records.
     `ui-views.js:17596`. Same shape as T28 and shares the fix.
     *Goal:* CSV import writes every assignment it claims to have imported, including days that already had a row.
     *Done when:* Import a CSV that overlaps existing days, reload, and the schedule matches the file.
-- [ ] **T29** Collapse duplicate gate requests (issue `D1`) · est 0.75d · **High**
+- [x] ~~**T29** Collapse duplicate gate requests (issue `D1`)~~
+  `done 2026-07-27` · est 0.75d · **High**
   One open request per person, per belt, per gate. A repeat refreshes the existing row
-  instead of adding another. This alone removes 14 of the 24 queue rows.
+  instead of adding another.
   *Goal:* The review queue shows one row per real decision. Re-submitting the same request refreshes it rather than stacking another row.
-  *Done when:* Submitting a repeat for the same person, belt and gate produces no new row; the queue count drops from 24 to roughly 10 once the existing duplicates collapse.
+  *Done when:* Submitting a repeat for the same person, belt and gate produces no new row; the queue count drops once the existing duplicates collapse.
+  *Correction:* the earlier note said 14 of 24 rows. Measured, it was **27 open rows standing
+  for 6 real decisions**. The worst case was Jody Mays with 11 pending copies of the same
+  Yellow Competency request, first asked 25 June and re-asked until 16 July.
+  *Cause:* `submitApply` inserted with no duplicate check at all. The other submit path, in
+  the study view, did check, but only against the copy of the queue held in the browser, so
+  it could not see a row that RLS filtered out or that another device created.
+  *Fixed in the database, not just the browser:* a partial unique index on
+  (staff_id, target_belt, assessment_type) where status is pending. The browser check was
+  added to `submitApply` as well, so the candidate gets told plainly instead of meeting a
+  database error, but the index is what actually holds.
+  *Result:* 27 open rows to 8. 19 marked `superseded`, nothing deleted, so how often somebody
+  asked is still on the record. Eleven requests in three weeks says something about that
+  person's experience of the feature and is worth keeping.
+  *Stopped short on purpose:* two people hold an `approved` row and a `pending` row for the
+  same belt and gate at once. Jake Jacobs on Yellow Competency, and Jody Mays whose approval
+  on 15 July is straddled by pending requests from 25 June to 16 July. Whether a request
+  raised after an approval is a duplicate or a genuine second attempt is a question about how
+  the programme works, not a data-cleaning question, so those pairs were left standing rather
+  than guessed at. **This needs a decision.**
 
 ### Phase 2: close the security tail and the committed client asks
 
@@ -269,6 +289,18 @@ does not, and no signed-in user can read or write another facility's records.
   Free Agent. **No account is ever deleted.**
   *Goal:* The queue only ever shows items somebody can actually act on. Nothing sits there pointing at a person who is gone.
   *Done when:* The two orphan placement reviews leave the queue with a recorded reason; every account still exists afterwards, `kbansil` and Jake included; a Free Agent member with an active account keeps their pending items.
+  *Done 2026-07-27.* Both were verified individually rather than matched by a pattern: no row
+  in `staff`, and no row in `sbd_portal_users` by either `auth_uid` or `staff_id`. Closed as
+  `closed_no_person`, not as denied or confirmed, because nobody judged the work; the subject
+  stopped existing. The reason is written into `review_notes` on each row.
+  *The client's rule was followed exactly.* This keys on the record being gone. Free Agent
+  membership is not consulted anywhere in the change. No account was touched: the migration
+  writes to `placement_reviews` and nothing else.
+  *Measured:* pending 4 to 2. The two that remain are Jake Jacobs and Theresa Mills, both
+  real people who still exist, and Jake is a Free Agent test account keeping his pending item,
+  which is the case the rule was written to protect.
+  *Left alone on purpose:* six further orphan reviews exist, already marked confirmed or
+  adjusted. They are in nobody's queue, and rewriting closed history would serve nothing.
 - [ ] **T32** Remove the cross-facility read leak (issue `S6`) · est 0.5d
   `sbd_schedule`, `sbd_attendance` and `sbd_promotions` each carry an `auth_read_all`
   SELECT policy `USING (true)`. Writes on all three are correctly scoped; reads are not.
@@ -364,12 +396,25 @@ does not, and no signed-in user can read or write another facility's records.
 - [ ] **T43** Voice dictation for typed answers and David · est 1.5d
   *Goal:* Anywhere a person types a long answer they can speak it instead.
   *Done when:* Dictation works in assessment writing and in David; the privacy claim about where audio goes is verified before it ships.
-- [ ] **T44** Lock or drop the five unused legacy tables (issue `S7`) · est 0.5d
+- [x] ~~**T44** Lock or drop the five unused legacy tables (issue `S7`)~~
+  `done 2026-07-27` · est 0.5d
   `assessment_queue`, `assessment_history`, `promotion_approvals`, `attendance`,
   `schedule`. All empty, all unreferenced by application code, all writable by any signed
   in user.
   *Goal:* No table exists that is writable by anyone and used by nobody.
   *Done when:* The five legacy tables are locked or dropped; the application is confirmed not to reference them; nothing breaks after the change.
+  *Dropped, not locked, and checked first because a drop does not come back.* Every one of
+  the five: 0 rows, 0 incoming foreign keys, no view or function mentioning it, no browser
+  call, no edge function. Their own keys only pointed outwards at `facilities` and `staff`.
+  `restrict` rather than `cascade`, so an unexpected dependency would have failed the drop
+  loudly instead of being taken along quietly. Verified afterwards: 0 of the five remain.
+  The full column definitions are written into the migration so the shapes are recoverable
+  from version control, not only from a backup.
+  *T57 was a subset of this and is closed by the same migration.*
+  *Worth recording:* the duplicate set was typed more correctly than the tables actually in
+  use, `fid uuid` and `staff_id uuid` against `facility_id text` and `staff_id integer`,
+  which is exactly the mismatch T55 had to repair. The application had been pointed at the
+  weaker pair.
 - [ ] **T45** Remove `SECURITY DEFINER` from the `david_analytics_summary` view (issue `S8`) · est 0.25d
   The only ERROR-level item the advisor reports.
   *Goal:* The advisor reports no ERROR-level item.
@@ -505,7 +550,8 @@ does not, and no signed-in user can read or write another facility's records.
   *Done when:* The intended meaning is settled, the column is either made nullable or given
   a defined value, and a role-only promotion round-trips through a reload.
 
-- [ ] **T57** Decide what happens to the duplicate table set · est 0.25d · Low
+- [x] ~~**T57** Decide what happens to the duplicate table set~~
+  `done 2026-07-27, closed by T44` · est 0.25d · Low
   Found 2026-07-26 during T55. `schedule`, `attendance` and `promotion_approvals` sit
   alongside the `sbd_` prefixed tables the application actually uses. All three are empty,
   nothing reads them, and their column types (`fid uuid`, `staff_id uuid`) are closer to
