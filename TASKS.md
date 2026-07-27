@@ -587,6 +587,34 @@ does not, and no signed-in user can read or write another facility's records.
   flow no longer parks a password in a table at all; and everyone whose password sat here is
   told to change it.
 
+  *Step 1 of 3 applied 2026-07-27.* The three permissive policies are gone. Reading and
+  deciding is SIPS admins only; deleting is master admin only; the anonymous submit policy
+  is untouched, because without it nobody could request an account.
+  *Measured, every probe rolled back:*
+
+  | Who | Before | After |
+  |---|---|---|
+  | staff_member reads rows | 97 | **0** |
+  | staff_member reads passwords | 96 | **0** |
+  | staff_member approves a request | 1 row | **0** |
+  | staff_member deletes a request | 1 row | **0** |
+  | staff_member rewrites passwords | 12 rows | **0** |
+  | facility leader reads rows | 97 | **0** |
+  | master admin reads rows | 97 | 97 |
+  | master admin presses Deny | works | 1 row |
+  | anonymous submits a registration | works | ALLOWED |
+  | anonymous reads rows | | 0 |
+
+  Data re-read afterwards: 97 rows, 1 pending, 86 approved, 10 denied, no probe row left.
+  Login was never in scope and never at risk: authentication runs against `auth.users`
+  through `/auth/v1/token` and has no relationship to this table.
+
+  **Steps 2 and 3 are still open and this is not closed until they land.** Step 2 purges the
+  password on every non-pending row, which is a destructive write and needs its own go. Step
+  3 changes the flow so no password is parked in a table at all, which is the only real fix.
+  Neither step can undo whatever has already been read, so the people whose passwords sat
+  here still need to be told.
+
 ### Blocked, not on the critical path
 
 - [ ] **T49** Strip and rotate the PSOP credentials, gate the public page
