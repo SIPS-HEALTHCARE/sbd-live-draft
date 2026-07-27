@@ -882,6 +882,12 @@ persisted.
   that has sat past the threshold appears in the reminder and on the admin notice.
 
 - [ ] **T65** Placement scoring: one threshold table, no placeholder belts, and the Dangerous provision · est 1d · **High**
+  **Status 2026-07-27: built, merged, live and measured. Open only on the QA sign-off.**
+  Shipped in three parts, each verified on production after merge: T65 (v189), T65a (v190),
+  T65b (v191). 64 automated checks pass in `tools/verify/t65-scoring-check.js`. Williams' row
+  is corrected and his report regenerated. What is left is a live click-through, and the one
+  piece of wording that is waiting on the client (below). Not ticked until both passes are in.
+
   Raised 2026-07-27 from the client's own reading of David Williams' report, and confirmed
   against the Scoring Logic Specification v2.0 (Dr. Jake, 12 May 2026).
 
@@ -1017,8 +1023,19 @@ persisted.
 | Phase 3 | 11 | T39 to T48 | 9.35 |
 | Found during Phase 1 | 6 | T54, T56, T58, T59, T60, T62 | 2.10 |
 | Raised by the client | 3 | T63, T64, T65 | 1.75 |
+| &nbsp;&nbsp;of which awaiting QA sign-off only | 1 | T65 (built, live, measured) | 0 |
 | Blocked on somebody else | 4 | T49 to T52 | not counted |
 | **Total, excluding blocked** | **34** | | **22.95** |
+
+**Waiting on a live QA pass, not on building:** T26, T27, T28, T28a and now T65. All five are
+written, merged and running on production with measurements recorded here. What they need is
+somebody working through them in a browser and saying whether it behaved.
+
+**Waiting on the client, not on us:** the wording of the patient-safety finding in the report.
+He said on 2026-07-27 that he wants to check with Dr. Jake how it should be displayed, so the
+per-option risk statement in the question bank is deliberately not built yet. Building it
+before that answer lands means building it twice, which is the same trap the per-level floors
+nearly walked into.
 
 The five Phase 1 items are not really 2.25 days of building. The code for T26, T27, T28 and
 T28a is written, merged and live; what is left is somebody pressing the buttons in a browser
