@@ -209,7 +209,7 @@ const SB = {
     return sbFetch(`/rest/v1/sbd_assessment_queue?id=eq.${id}`, { method:'PATCH', body });
   },
   // ── Dynamic Belt Test (A4) ──
-  generateBeltTest(staffId, targetBelt){ return sbFetch('/functions/v1/sbd-generate-belt-test', { method:'POST', body:{ staff_id:staffId, target_belt:targetBelt } }); },
+  generateBeltTest(staffId, targetBelt, component){ return sbFetch('/functions/v1/sbd-generate-belt-test', { method:'POST', body:{ staff_id:staffId, target_belt:targetBelt, component: component || undefined } }); },
   getMyBeltTest(staffId, targetBelt){ return sbFetch(`/rest/v1/sbd_belt_tests?staff_id=eq.${staffId}&target_belt=eq.${encodeURIComponent(targetBelt)}&status=eq.active&select=*&limit=1`); },
   insertBeltTestResult(data){ return sbFetch('/rest/v1/sbd_belt_test_results', { method:'POST', body:data }); },
   getBeltTestResults(fid){ const f=fid?`&facility_id=eq.${encodeURIComponent(fid)}`:''; return sbFetch(`/rest/v1/sbd_belt_test_results?select=*&order=submitted_at.desc${f}`); },
@@ -256,10 +256,23 @@ const SB = {
   upsertInstrumentProgress(row){ return sbFetch('/rest/v1/instrument_progress?on_conflict=staff_id,module_id', { method:'POST', prefer:'resolution=merge-duplicates,return=minimal', body:row }); },
   updateInstrumentAssignmentStatus(staffId, moduleId, status){ return sbFetch(`/rest/v1/instrument_assignments?staff_id=eq.${staffId}&module_id=eq.${encodeURIComponent(moduleId)}`, { method:'PATCH', prefer:'return=minimal', body:{ status } }); },
   deleteInstrumentAssignment(staffId, moduleId){ return sbFetch(`/rest/v1/instrument_assignments?staff_id=eq.${staffId}&module_id=eq.${encodeURIComponent(moduleId)}`, { method:'DELETE', prefer:'return=minimal' }); },
+  // ── SBD Preceptor Certification (#78 Ph1) — mirrors the Foundations/Instruments matrix, table prefix swapped ──
+  getPreceptorModules(){ return sbFetch('/rest/v1/preceptor_modules?select=*&order=seq.asc'); },
+  getPreceptorAssignments(){ return sbFetch('/rest/v1/preceptor_assignments?select=*'); },
+  getPreceptorProgress(){ return sbFetch('/rest/v1/preceptor_progress?select=*'); },
+  createPreceptorAssignment(data){ return sbFetch('/rest/v1/preceptor_assignments?on_conflict=staff_id,module_id', { method:'POST', prefer:'resolution=ignore-duplicates,return=minimal', body:data }); },
+  upsertPreceptorProgress(row){ return sbFetch('/rest/v1/preceptor_progress?on_conflict=staff_id,module_id', { method:'POST', prefer:'resolution=merge-duplicates,return=minimal', body:row }); },
+  updatePreceptorAssignmentStatus(staffId, moduleId, status){ return sbFetch(`/rest/v1/preceptor_assignments?staff_id=eq.${staffId}&module_id=eq.${encodeURIComponent(moduleId)}`, { method:'PATCH', prefer:'return=minimal', body:{ status } }); },
+  deletePreceptorAssignment(staffId, moduleId){ return sbFetch(`/rest/v1/preceptor_assignments?staff_id=eq.${staffId}&module_id=eq.${encodeURIComponent(moduleId)}`, { method:'DELETE', prefer:'return=minimal' }); },
+  // ── SBD Preceptor Certification (#78 Ph3) — master-admin access control (RLS: read own-or-leader, write master-admin only) ──
+  getPreceptorAccess(){ return sbFetch('/rest/v1/preceptor_access?select=*'); },
+  upsertPreceptorAccess(row){ return sbFetch('/rest/v1/preceptor_access?on_conflict=staff_id', { method:'POST', prefer:'resolution=merge-duplicates,return=minimal', body:row }); },
   // ── User Profiles ──
   getUserProfile(userId){ return sbFetch(`/rest/v1/sbd_portal_users?auth_uid=eq.${userId}&select=*`); },
   getAllAdminProfiles(){ return sbFetch('/rest/v1/sbd_portal_users?select=*&order=name.asc'); },
   updateUserProfile(userId, data){ return sbFetch(`/rest/v1/sbd_portal_users?auth_uid=eq.${userId}`, { method:'PATCH', body:data }); },
+  // #73 v1.1: master-admin-only capability write via the SECURITY DEFINER RPC (role-checked server-side).
+  setUserCapabilities(authUid, caps){ return sbFetch('/rest/v1/rpc/sbd_set_user_capabilities', { method:'POST', body:{ p_staff_id: authUid, p_caps: caps || {} } }); },
   syncUserClaims(data){ return sbFetch('/functions/v1/sbd-sync-user-claims', { method:'POST', body:data }); },
   // ── David OG access ──
   // Mirrors supabase/functions/david-chat/auth.ts so the nav matches what the
@@ -343,6 +356,17 @@ const SB = {
   createSchedule(data){ return sbFetch('/rest/v1/sbd_schedule', { method:'POST', body:data }); },
   updateSchedule(id, data){ return sbFetch(`/rest/v1/sbd_schedule?id=eq.${id}`, { method:'PATCH', body:data }); },
   deleteSchedule(id){ return sbFetch(`/rest/v1/sbd_schedule?id=eq.${id}`, { method:'DELETE' }); },
+  // ── Position School completion requests ──
+  // A candidate asks for sign-off on a track; a leader approves or denies it.
+  getPSCompletionRequests(){ return sbFetch('/rest/v1/ps_completion_requests?select=*&order=created_at.desc'); },
+  createPSCompletionRequest(data){ return sbFetch('/rest/v1/ps_completion_requests', { method:'POST', body:data }); },
+  decidePSCompletionRequest(id, data){ return sbFetch(`/rest/v1/ps_completion_requests?id=eq.${id}`, { method:'PATCH', body:data }); },
+  // ── Facility shift definitions ──
+  // Custom shifts a facility defines on top of SHIFT_DEF_DEFAULT. Upsert is keyed on
+  // (fid, shift_id) so re-saving an existing shift edits it rather than duplicating.
+  getFacilityShiftDefs(fid){ return sbFetch(`/rest/v1/facility_shifts?fid=eq.${encodeURIComponent(fid)}&select=*`); },
+  upsertFacilityShiftDef(data){ return sbFetch('/rest/v1/facility_shifts?on_conflict=fid,shift_id', { method:'POST', prefer:'resolution=merge-duplicates', body:data }); },
+  deleteFacilityShiftDef(fid, shiftId){ return sbFetch(`/rest/v1/facility_shifts?fid=eq.${encodeURIComponent(fid)}&shift_id=eq.${encodeURIComponent(shiftId)}`, { method:'DELETE' }); },
   // ── Attendance ──
   getAttendance(fid, date){ return sbFetch(`/rest/v1/sbd_attendance?facility_id=eq.${encodeURIComponent(fid)}&date=eq.${date}&select=*`); },
   getStaffAttendance(staffId){ return sbFetch(`/rest/v1/sbd_attendance?staff_id=eq.${staffId}&select=*&order=date.desc`); },
@@ -388,6 +412,10 @@ function resetDB(){
   DB.foundationsProgress = [];
   DB.instrumentAssignments = [];
   DB.instrumentProgress = [];
+  DB.preceptorAssignments = [];
+  DB.preceptorProgress = [];
+  DB.preceptorModules = [];
+  DB.preceptorAccess = [];
   console.log('SBD Platform: Global state reset.');
 }
 
@@ -409,6 +437,8 @@ function mapFreeAgentFromBackend(row){
     role:           row.role        || '',
     belt:           row.belt        || 'White',
     since:          row.since       || null,
+    sbdYears:       row.sbd_program_years != null ? row.sbd_program_years : null,
+    certYears:      row.sbd_cert_years    != null ? row.sbd_cert_years    : null,
     stars:          row.stars       || 0,
     promo:          false,
     cur:            { c: null, s: null, o: null },
@@ -561,6 +591,8 @@ function mapStaffFromBackend(row){
     updated_at: row.updated_at,
     placementNeeded: row.placement_needed,
     placementAcknowledged: row.placement_acknowledged || false,
+    windowOverride: row.window_override || null,
+    assessmentGateOverride: row.assessment_gate_override || null,
   };
 }
 
@@ -574,6 +606,8 @@ function mapStaffToBackend(staff){
     role: staff.role,
     belt: staff.belt,
     since: staff.since || null,
+    sbd_program_years: staff.sbdYears != null ? staff.sbdYears : null,
+    sbd_cert_years: staff.certYears != null ? staff.certYears : null,
     stars: staff.stars || 0,
     promo: staff.promo || false,
     ps_enrolled: staff.ps?.enrolled || false,
@@ -583,7 +617,9 @@ function mapStaffToBackend(staff){
     ps_tracks: staff.ps?.tracks || null,
     oip: staff.oip || null,
     history: staff.history || null,
-    practice_scores: staff.practiceScores || null
+    practice_scores: staff.practiceScores || null,
+    window_override: staff.windowOverride || null,
+    assessment_gate_override: staff.assessmentGateOverride || null
   };
   if(staff.cur){
     obj.cur_comp = staff.cur.c || null;
@@ -755,6 +791,7 @@ function mapBeltTestResultFromBackend(row){
     staffId:          row.staff_id,
     fid:              row.facility_id,
     targetBelt:       row.target_belt,
+    component:        row.component || 'combined',
     submittedAt:      row.submitted_at,
     scoredAt:         row.scored_at,
     kLevelScores:     row.k_level_scores || {},
@@ -780,6 +817,8 @@ function mapBeltTestResultFromBackend(row){
     overrideBy:       row.override_by,
     overrideJustification: row.override_justification,
     overrideAt:       row.override_at,
+    notes:            row.notes || null,
+    componentDetail:  row.component_detail || null,
     status:           row.status,
     createdAt:        row.created_at
   };
@@ -792,6 +831,7 @@ function mapBeltTestResultToBackend(engineResult, ctx){
     staff_id:                ctx.staffId,
     facility_id:             ctx.fid || null,
     target_belt:             engineResult.target_belt || ctx.targetBelt,
+    component:               engineResult.component || ctx.component || 'combined',
     submitted_at:            ctx.submittedAt || new Date().toISOString(),
     scored_at:               engineResult._scored_at || new Date().toISOString(),
     k_level_scores:          engineResult.k_level_scores || {},
@@ -812,6 +852,8 @@ function mapBeltTestResultToBackend(engineResult, ctx){
     conditions:              engineResult.conditions || [],
     watch_flags:             engineResult.watch_flags || [],
     remediation_flags:       engineResult.remediation_flags || [],
+    component_detail:        engineResult.component_detail || null,
+    notes:                   ctx.notes != null ? ctx.notes : (engineResult.notes || null),
     status:                  engineResult.status || 'PENDING_REVIEW'
   };
 }
@@ -892,7 +934,12 @@ function mapUserFromBackend(row){
     sid:          row.staff_id || row.auth_uid || row.id || null,
     assignedFids: row.assigned_facility_ids || [],
     active:       row.active,
-    protected:    row.protected
+    protected:    row.protected,
+    capabilities: row.capabilities || {},
+    // T62: the password-change notice. `at` is when it became due, `ackAt` is when the
+    // person actually changed their password. Dismissing the dialog never sets ackAt.
+    passwordNoticeAt:    row.password_notice_at    || null,
+    passwordNoticeAckAt: row.password_notice_ack_at || null
   };
 }
 function mapUserToBackend(u){
@@ -914,13 +961,22 @@ function mapUserToBackend(u){
   };
 }
 
+// The column is `assigned_staff`, not `assigned_staff_ids`. Sending the wrong name meant
+// every schedule write was rejected by the database and the table stayed empty (T55).
+// `published_by` and `notes` were never mapped at all, which is why Publish to Staff had
+// nothing to mark and shift notes never came back.
+//
+// published_by carries the publish state as well as the identity: null means the schedule
+// exists but has not been released to staff yet.
 function mapScheduleFromBackend(row){
   return {
     id: row.id,
     fid: row.facility_id,
     date: row.date,
     shift: row.shift,
-    assignedStaff: row.assigned_staff_ids || [],
+    assignedStaff: row.assigned_staff || [],
+    publishedBy: row.published_by || null,
+    notes: row.notes || '',
     zoneAssignments: row.zone_assignments || {}
   };
 }
@@ -931,11 +987,80 @@ function mapScheduleToBackend(sch){
     facility_id: sch.fid,
     date: sch.date,
     shift: sch.shift,
-    assigned_staff_ids: sch.assignedStaff || [],
+    assigned_staff: sch.assignedStaff || [],
+    published_by: sch.publishedBy || null,
+    notes: sch.notes || '',
     zone_assignments: sch.zoneAssignments || {}
   };
 }
 
+// Position School completion requests. Frontend shape predates the table, so the
+// mapper keeps the original field names the views already use.
+function mapPSCompletionRequestFromBackend(row){
+  return {
+    id: row.id,
+    sid: row.staff_id,
+    fid: row.facility_id,
+    tid: row.track_id,
+    trackName: row.track_name,
+    practiceK: row.practice_k,
+    practiceS: row.practice_s,
+    status: row.status,
+    decidedBy: row.decided_by,
+    decidedAt: row.decided_at,
+    requestedAt: row.created_at
+      ? new Date(row.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
+      : ''
+  };
+}
+
+function mapPSCompletionRequestToBackend(r){
+  return {
+    staff_id: r.sid,
+    facility_id: r.fid || null,
+    track_id: r.tid,
+    track_name: r.trackName || null,
+    practice_k: r.practiceK != null ? r.practiceK : null,
+    practice_s: r.practiceS != null ? r.practiceS : null,
+    status: r.status || 'pending'
+  };
+}
+
+// Facility shift definitions. The frontend keeps these as
+// DB.facilityShifts[fid][shiftId] = {id,label,name,start,end,icon,color,bg,bd}.
+function mapShiftDefFromBackend(row){
+  return {
+    id: row.shift_id,
+    label: row.label,
+    name: row.name,
+    start: row.start_time,
+    end: row.end_time,
+    icon: row.icon || '',
+    color: row.color || '',
+    bg: row.bg || '',
+    bd: row.bd || ''
+  };
+}
+
+function mapShiftDefToBackend(fid, def){
+  return {
+    fid: fid,
+    shift_id: def.id,
+    label: def.label || def.id,
+    name: def.name,
+    start_time: def.start,
+    end_time: def.end,
+    icon: def.icon || null,
+    color: def.color || null,
+    bg: def.bg || null,
+    bd: def.bd || null
+  };
+}
+
+// Unchanged in shape, but nothing this mapper produced could be stored until T55: staff_id
+// and coverage_for were integer columns being sent uuids, and arrived_at, left_at and note
+// did not exist on the table at all. `points` is deliberately not mapped; the app derives it
+// from status through calcAttendancePoints, so storing it would create a second truth.
 function mapAttendanceFromBackend(row){
   return {
     id: row.id,

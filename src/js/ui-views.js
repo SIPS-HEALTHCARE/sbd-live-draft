@@ -273,10 +273,80 @@ function logout(){
   if(typeof OB !== 'undefined'){ OB.tourRunning = false; OB.step = 0; if(OB.skipReminderTimer){ clearTimeout(OB.skipReminderTimer); } }
 }
 
+// T62. The people whose password sat in the registrations table while it was readable by
+// every signed-in account still hold that password, and many will have reused it elsewhere.
+// T60 closed the hole and cleared the stored copies, but neither can undo what was read.
+//
+// This is a notice and nothing more. It never blocks a sign in, never expires a password and
+// never forces a reset. Somebody who closes it carries on exactly as before, which is
+// deliberate: the point is to give people the information, not to take their access away
+// over something that was not their fault.
+//
+// Dismissing is remembered for the session only, so it returns at the next sign in. Only a
+// successful password change stops it for good, and that is recorded by
+// markPasswordNoticeDone() from the settings screen. A notice shown once and then silent is
+// a notice most people never act on.
+let _pwNoticeDismissedThisSession = false;
+
+function maybeShowPasswordNotice(){
+  const u = ST.user;
+  if(!u || !u.passwordNoticeAt || u.passwordNoticeAckAt) return;
+  if(_pwNoticeDismissedThisSession) return;
+  // Let the portal finish painting first, so this lands on top of a drawn screen rather
+  // than an empty one.
+  setTimeout(()=>{
+    if(!ST.user || ST.user.passwordNoticeAckAt) return;
+    openModal('🔒 Security update', `
+      <div class="modal-body" style="line-height:1.7">
+        <p style="margin:0 0 12px">As part of a security review we have tightened how account
+        details are stored. Please change your password.</p>
+        <p style="margin:0;color:var(--txt2);font-size:12.5px">If you use the same password on
+        another system, change it there too.</p>
+      </div>
+      <div class="modal-ft">
+        <button class="btn btn-ghost" onclick="dismissPasswordNotice()">Later</button>
+        <button class="btn btn-gold" onclick="goChangePassword()">Change my password</button>
+      </div>`, 'modal-sm');
+  }, 900);
+}
+
+function dismissPasswordNotice(){
+  _pwNoticeDismissedThisSession = true;
+  closeModal();
+}
+
+function goChangePassword(){
+  _pwNoticeDismissedThisSession = true;
+  closeModal();
+  const settingsView = { admin:'a-settings', hospital:'h-settings',
+                         system_admin:'x-settings', staff_member:'s-settings' }[ST.portal];
+  const nav = settingsView && document.querySelector(`.nav-item[data-view="${settingsView}"]`);
+  if(nav){ nav.click(); }
+  else { toast('Open Account and Settings to change your password.','warn'); return; }
+  setTimeout(()=>{
+    document.getElementById('settings-pass')?.scrollIntoView({behavior:'smooth', block:'center'});
+    document.getElementById('settings-pass')?.focus();
+  }, 400);
+}
+
+// Called from the settings screen once a password change actually succeeds. Dismissing the
+// dialog deliberately does not reach here.
+function markPasswordNoticeDone(){
+  if(!ST.user || !ST.user.passwordNoticeAt || ST.user.passwordNoticeAckAt) return;
+  const stamp = new Date().toISOString();
+  ST.user.passwordNoticeAckAt = stamp;
+  if(typeof IS_LIVE !== 'undefined' && IS_LIVE && ST.user.authUid){
+    SB.updateUserProfile(ST.user.authUid, { password_notice_ack_at: stamp })
+      .catch(e => handleSyncError(e, 'Password notice'));
+  }
+}
+
 function enterPortal(type){
   document.getElementById('login').classList.add('hidden');
   ST.portal=type;
   const u=ST.user;
+  // Deferred inside, so it lands on a painted screen and survives the early returns below.
+  maybeShowPasswordNotice();
 
   if(type==='staff_member'){
     // Individual staff login
@@ -375,6 +445,8 @@ function enterPortal(type){
   document.getElementById('a-topbar-pill').textContent=isMaster?'Master Admin':'Staff Admin';
   document.getElementById('admin-mgmt-lbl').style.display=isMaster?'block':'none';
   document.getElementById('nav-adminusers').style.display=isMaster?'flex':'none';
+  const _navRoleMgmt = document.getElementById('nav-rolemgmt');
+  if (_navRoleMgmt) _navRoleMgmt.style.display = isMaster ? 'flex' : 'none';
   const _navDavidDash = document.getElementById('nav-daviddashboard');
   if (_navDavidDash) _navDavidDash.style.display = isMaster ? 'flex' : 'none';
   document.getElementById('nav-freeagents').style.display=isMaster?'flex':'none';
@@ -385,8 +457,10 @@ function enterPortal(type){
   if(_navPlacement) _navPlacement.style.display='flex';
   if(typeof updatePlacementBadge === 'function') updatePlacementBadge();
   if(typeof updateObservationBadge === 'function') updateObservationBadge();
-  // Observer module (shell) — visible to SIPS admins. Per-observer role gating
-  // and the candidate request/PIN flow land in later Observer milestones.
+  // Observer console — visible to SIPS admins. The candidate request/PIN flow and the
+  // two-PIN capture handshake are live (#58). The queue is facility-scoped, which is the
+  // per-observer scope under the D2a decision, and in-progress rows show which observer
+  // holds them; DB-level per-observer isolation would be a separate D3-DB migration.
   const _navObs=document.getElementById('nav-observations');
   if(_navObs) _navObs.style.display='flex';
   const _navObsRev=document.getElementById('nav-observationreviews');
@@ -495,7 +569,7 @@ function renderSView(view){
     toast('RBAC Guard: Unauthorized access to Staff Portal', 'err');
     return;
   }
-  ['s-dashboard','s-belt','s-window','s-scoreboard','s-posschool','s-report','s-oip','s-schedule','s-history','s-study','s-foundations','s-instruments','s-guide','s-settings','s-david'].forEach(v=>{
+  ['s-dashboard','s-belt','s-window','s-scoreboard','s-posschool','s-report','s-oip','s-schedule','s-history','s-study','s-foundations','s-instruments','s-preceptor','s-guide','s-settings','s-david'].forEach(v=>{
     const el=document.getElementById(v);
     if(el){el.classList.add('hidden');el.classList.remove('fade-in');}
   });
@@ -516,6 +590,7 @@ function renderSView(view){
     's-study':renderSStudy,
     's-foundations':()=>{ if(typeof renderSFoundations==='function') renderSFoundations(); },
     's-instruments':()=>{ if(typeof renderSInstruments==='function') renderSInstruments(); },
+    's-preceptor':()=>{ if(typeof renderSPreceptor==='function') renderSPreceptor(); },
     's-guide':()=>renderGuideView('s'),
     's-settings':renderSettingsView,
     's-david':()=>renderDavidView('s-david'),
@@ -577,7 +652,7 @@ function renderHView(view){
     toast('RBAC Guard: Unauthorized access to Facility Portal', 'err');
     return;
   }
-  ['h-dashboard','h-staff','h-profile','h-milestones','h-posschool','h-training','h-instruments','h-scoreboard','h-schedule','h-attendance','h-reports','h-assessments','h-progression','h-guide','h-settings','h-david'].forEach(v=>{
+  ['h-dashboard','h-staff','h-profile','h-milestones','h-posschool','h-training','h-instruments','h-preceptor','h-scoreboard','h-schedule','h-attendance','h-reports','h-assessments','h-progression','h-guide','h-settings','h-david'].forEach(v=>{
     const el=document.getElementById(v);
     if(el){ el.classList.add('hidden'); el.classList.remove('fade-in'); }
   });
@@ -598,6 +673,7 @@ function renderHView(view){
     'h-posschool':()=>renderHPosSchool(),
     'h-training':()=>{ if(typeof renderHTraining==='function') renderHTraining(); },
     'h-instruments':()=>{ if(typeof renderHInstruments==='function') renderHInstruments(); },
+    'h-preceptor':()=>{ if(typeof renderHPreceptor==='function') renderHPreceptor(); },
     'h-scoreboard':()=>renderHScoreboard(),
     'h-schedule':()=>renderHSchedule(),
     'h-attendance':()=>renderHAttendance(),
@@ -618,7 +694,7 @@ function renderAView(view){
     toast('RBAC Guard: Unauthorized access to Network Portal', 'err');
     return;
   }
-  ['a-overview','a-leaderboard','a-allstaff','a-scoreboard','a-facilities','a-facility','a-registrations','a-assessments','a-progression','a-foundations','a-instruments','a-upload','a-reports','a-david','a-daviddashboard','a-adminusers','a-promoqueue','a-freeagents','a-placementreviews','a-observations','a-observationreviews','a-guide','a-settings','a-systems','a-systems-dashboard'].forEach(v=>{
+  ['a-overview','a-leaderboard','a-allstaff','a-scoreboard','a-facilities','a-facility','a-registrations','a-assessments','a-progression','a-foundations','a-instruments','a-preceptor','a-upload','a-reports','a-david','a-daviddashboard','a-adminusers','a-rolemgmt','a-promoqueue','a-freeagents','a-placementreviews','a-observations','a-observationreviews','a-guide','a-settings','a-systems','a-systems-dashboard'].forEach(v=>{
     const el=document.getElementById(v);
     if(el){ el.classList.add('hidden'); el.classList.remove('fade-in'); }
   });
@@ -633,10 +709,12 @@ function renderAView(view){
     'a-assessments':()=>{ _inProgressCache=null; renderAAssessments(); },'a-progression':renderAProgression,'a-upload':renderAUpload,
     'a-foundations':()=>{ if(typeof renderHTraining==='function') renderHTraining(); },
     'a-instruments':()=>{ if(typeof renderHInstruments==='function') renderHInstruments(); },
+    'a-preceptor':()=>{ if(typeof renderHPreceptor==='function') renderHPreceptor(); },
     'a-reports':renderAReports,
     'a-david':renderADavidView,
     'a-daviddashboard':renderADavidDashboardView,
     'a-adminusers':renderAAdminUsers,
+    'a-rolemgmt':renderARoleMgmt,
     'a-promoqueue':renderAPromoQueue,
     'a-freeagents':renderAFreeAgents,
     'a-placementreviews':renderAPlacementReviews,
@@ -687,7 +765,7 @@ function renderADavidDashboardView() {
   const container = document.getElementById('a-daviddashboard');
   if (!container) return;
   // Load the premium Command Center UI directly
-  container.innerHTML = `<iframe src="/david-command-center.html?v=9" style="width:100%;height:calc(100vh - 64px);border:none;border-radius:12px;background:var(--bg);" allowfullscreen></iframe>`;
+  container.innerHTML = `<iframe src="/david-command-center.html?v=11" style="width:100%;height:calc(100vh - 64px);border:none;border-radius:12px;background:var(--bg);" allowfullscreen></iframe>`;
 }
 
 window.refreshDashboard = function() {
@@ -1760,6 +1838,10 @@ async function submitPinGate(staffId, assessmentType){
     }, 1500);
   } catch(e){
     errEl.textContent = e.message || 'Authorization failed. Please try again.';
+    // Clear the rejected PIN so Enter can't resubmit the same wrong digits
+    // (each resubmit logs another failed attempt toward the #60 lockout).
+    for(let i=0;i<6;i++){ const d=document.getElementById('pin-d'+i); if(d) d.value=''; }
+    document.getElementById('pin-d0')?.focus();
     btn.textContent = 'Authorize \u0026 Begin';
     updatePinSubmitState();
   }
@@ -1773,7 +1855,7 @@ function showGeneratePinModal(staffId, assessmentType='placement'){
     <div class="modal-body" style="text-align:center">
       <div style="font-size:13px;color:var(--txt2);margin-bottom:16px;line-height:1.6">
         Generate a one-time PIN for <strong style="color:var(--txt1)">${fullName(s)}</strong> to begin their
-        <strong style="color:var(--gold)">${assessmentType === 'placement' ? 'Placement' : 'Belt'} Assessment</strong>.
+        <strong style="color:var(--gold)">${assessmentType === 'placement' ? 'Placement' : assessmentType === 'preceptor' ? 'Preceptor' : 'Belt'} Assessment</strong>.
       </div>
       <div id="gen-pin-area">
         <button class="btn btn-gold" style="padding:12px 32px;font-size:14px" onclick="executeGeneratePin('${staffId}','${assessmentType}')">&#128274; Generate PIN</button>
@@ -1979,6 +2061,7 @@ function renderPAScreen(){
       <div style="margin-bottom:20px">
         <div style="font-size:11px;color:#64748b;margin-bottom:8px;font-style:italic">Describe your approach in your own words. Be specific.</div>
         <textarea id="pa-sim-input" style="width:100%;min-height:140px;background:#0e1328;border:1.5px solid rgba(139,92,246,.3);border-radius:8px;padding:12px 14px;color:#e2e8f0;font-size:13.5px;line-height:1.6;resize:vertical;font-family:'Poppins',sans-serif;box-sizing:border-box" placeholder="Type your response here..." oninput="paSimInput('${q.id}',this.value)">${savedAns||''}</textarea>
+        <div style="text-align:right;margin-top:6px">${(window.micButtonHTML?micButtonHTML('pa-sim-input'):'')}</div>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">
           <div id="pa-sim-hint" style="font-size:11px;color:${charCount<minChars?'#f59e0b':'#22c55e'}">${charCount<minChars?`Minimum ${minChars} characters (${charCount}/${minChars})`:'Response recorded'}</div>
         </div>
@@ -2216,10 +2299,10 @@ function prSuggestion(pr){
   // Blend the RAW averages, then round once — same as rptComputeModel(). Rounding the
   // component scores BEFORE blending (e.g. 87.5 -> 88) used to flip belts at a threshold
   // boundary (Bond: 77.5 read as 78 = Yellow), which made the card disagree with the report.
-  const kRaw = avg(kR.map(r => r.score));
-  const simRaw = avg(simR.map(r => r.aiScore));
+  const kRaw = avg(kR.map(r => Number(r.score) || 0));
+  const simRaw = avg(simR.map(r => Number(r.aiScore) || 0));
   const kOverall = Math.round(kRaw);
-  const kL1 = Math.round(avg(kR.filter(r => r.level === 1).map(r => r.score)));
+  const kL1 = Math.round(avg(kR.filter(r => r.level === 1).map(r => Number(r.score) || 0)));
   const simOverall = Math.round(simRaw);
   const blended = Math.round(kRaw * 0.6 + simRaw * 0.4);
   const dangerous = kR.some(r => r.isDangerous && !r.correct);
@@ -2332,7 +2415,7 @@ async function paPersistSubmission({ staffId, answers, questions, sessionId, ses
     let aiFeedback = keywordFeedback;
     const settled = aiResults[i];
     if(settled.status === 'fulfilled' && settled.value && settled.value.score !== undefined){
-      aiScore = settled.value.score;
+      const _s = Number(settled.value.score); aiScore = Number.isFinite(_s) ? _s : aiScore;
       aiFeedback = settled.value.feedback || aiFeedback;
     }
     responses.push({qId:q.id, level:q.level, type:'simulation', question:q.q, answer:ans||'', aiScore, aiFeedback});
@@ -2347,10 +2430,10 @@ async function paPersistSubmission({ staffId, answers, questions, sessionId, ses
   const _avg = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
   // Blend the RAW averages, then round once (matches rptComputeModel + prSuggestion). Do NOT
   // round the component scores before blending -- that flips belts at threshold boundaries.
-  const _kRaw = _avg(_kResp.map(r => r.score));
-  const _simRaw = _avg(_simResp.map(r => r.aiScore));
+  const _kRaw = _avg(_kResp.map(r => Number(r.score) || 0));
+  const _simRaw = _avg(_simResp.map(r => Number(r.aiScore) || 0));
   const kOverall = Math.round(_kRaw);
-  const kL1 = Math.round(_avg(_kResp.filter(r => r.level === 1).map(r => r.score)));
+  const kL1 = Math.round(_avg(_kResp.filter(r => r.level === 1).map(r => Number(r.score) || 0)));
   const simOverall = Math.round(_simRaw);
   const blended = Math.round(_kRaw * 0.6 + _simRaw * 0.4);
   // Dangerous-answer block is wired but stays inert until SIPS supplies the per-question
@@ -2610,6 +2693,13 @@ async function scoreSimulationWithAI(question, answer, answerKey, failIndicator)
     const body = { question, answer };
     if(answerKey) body.answer_key = answerKey;
     if(failIndicator) body.fail_indicator = failIndicator;
+    // #14: attribute grading cost to the current session's facility + auth uid so the
+    // edge function can log a source='assessment' row in david_usage_logs. Attribution
+    // only (not auth); the row is written server-side. Signature unchanged so both callers
+    // (paPersistSubmission here + belt-test-flow.js) need no edit.
+    const _u = (typeof ST !== 'undefined' && ST.user) ? ST.user : null;
+    if(_u && _u.fid) body.facility_id = _u.fid;
+    if(_u && _u.authUid) body.user_id = _u.authUid;
     const result = await sbFetch('/functions/v1/sbd-score-assessment', {
       method: 'POST',
       body
@@ -2661,6 +2751,44 @@ function updateObservationBadge(){
   }
 }
 
+// In-app half of the pending-review reminder (client ruling 2026-07-24). The email
+// half is sbd-review-reminders on a twice-daily cron; this is the same three queues
+// surfaced on screen so an admin signing in sees the backlog without waiting for mail.
+// Counts come from data already hydrated for these views, so it costs no extra fetch.
+function pendingReviewCounts(){
+  const u = ST.user || {};
+  const scoped = (rows, fidKey) => {
+    if(u.role==='staff_admin' && Array.isArray(u.assignedFids) && u.assignedFids.length)
+      return rows.filter(r => u.assignedFids.includes(r[fidKey]));
+    return rows;
+  };
+  const placements = scoped((DB.placementReviews||[]).filter(r => r.status==='pending'), 'fid');
+  const gates      = scoped((DB.queue||[]).filter(r => r.status==='pending'), 'fid');
+  const preceptors = (typeof prcPendingApplications==='function') ? prcPendingApplications() : [];
+  return {
+    placements: placements.length,
+    gates: gates.length,
+    preceptors: preceptors.length,
+    total: placements.length + gates.length + preceptors.length
+  };
+}
+function pendingReviewNoticeHTML(){
+  if(!(ST.user && ['master_admin','admin','staff_admin'].includes(ST.user.role))) return '';
+  const c = pendingReviewCounts();
+  if(!c.total) return '';
+  const bits = [];
+  if(c.placements) bits.push(c.placements+' placement review'+(c.placements===1?'':'s'));
+  if(c.gates)      bits.push(c.gates+' belt gate request'+(c.gates===1?'':'s'));
+  if(c.preceptors) bits.push(c.preceptors+' preceptor application'+(c.preceptors===1?'':'s'));
+  return '<div class="card mb16" style="border-color:var(--gold-bd);background:rgba(196,154,32,.06)">'
+    +'<div class="card-body" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
+    +'<svg viewBox="0 0 20 20" width="18" height="18" fill="none" style="flex-shrink:0"><circle cx="10" cy="10" r="8" stroke="#c49a20" stroke-width="1.4"/><path d="M10 6v4.5" stroke="#c49a20" stroke-width="1.5" stroke-linecap="round"/><circle cx="10" cy="13.5" r=".9" fill="#c49a20"/></svg>'
+    +'<div style="flex:1;min-width:200px">'
+      +'<div style="font-size:13px;font-weight:700;color:var(--txt1)">'+c.total+' review'+(c.total===1?'':'s')+' waiting for your decision</div>'
+      +'<div style="font-size:12px;color:var(--txt2);margin-top:2px">'+bits.join(' &middot; ')+'. These stay flagged until each one is approved or denied.</div>'
+    +'</div></div></div>';
+}
+
 // ═══════════════════════════════════════════════════════════════
 // ASSESSOR PLACEMENT REVIEWS PANEL
 // ═══════════════════════════════════════════════════════════════
@@ -2706,7 +2834,7 @@ function reviewFilterBar(onChangeFn){
     </div>`;
 }
 // Lightweight page search: shared state + caret-preserving input + box markup
-const PAGE_Q = { reg:'', fa:'', users:'' };
+const PAGE_Q = { reg:'', fa:'', users:'', rolemgmt:'' };
 function pageSearchInput(el, key, renderFn){
   PAGE_Q[key]=el.value; const c=el.selectionStart;
   if(typeof window[renderFn]==='function') window[renderFn]();
@@ -2923,6 +3051,7 @@ function renderAObservations(){
   if(ovsCapture){ el.innerHTML = ovsRenderCapture(); return; }
 
   const u = ST.user;
+  const canWrite = _canWriteObs(u);
   let pool = (DB.observations || []).filter(o => ['requested','in_progress','returned'].includes(o.status));
   // Role scope (RLS Addendum v1.1) — mirror the Foundations/Instruments model:
   // system-wide admins (master/admin/staff_admin/assessor/system_admin) see all
@@ -2972,14 +3101,14 @@ function renderAObservations(){
     const statusPill = o.status === 'returned'
       ? '<span class="pill" style="color:#f59e0b;background:#f59e0b1a;border:1px solid #f59e0b55">Returned</span>'
       : o.status === 'in_progress'
-      ? '<span class="pill" style="color:#0ea5e9;background:#0ea5e91a;border:1px solid #0ea5e955">In progress</span>'
+      ? `<span class="pill" style="color:#0ea5e9;background:#0ea5e91a;border:1px solid #0ea5e955">In progress${o.observerName?' &middot; '+(typeof esc==='function'?esc(o.observerName):o.observerName):''}</span>`
       : '<span class="pill" style="color:#94a3b8;background:#94a3b81a;border:1px solid #94a3b855">Awaiting observer</span>';
     return `<tr style="border-top:1px solid var(--bdr)">
       <td style="padding:10px 8px"><div style="font-weight:700">${s?fullName(s):'Unknown'}</div><div style="font-size:11px;color:var(--txt3)">${fac?fac.name:'—'}</div></td>
       <td style="padding:10px 8px">${beltBadge(o.targetBelt)}</td>
       <td style="padding:10px 8px;font-size:12px;color:var(--txt2)">${items} items</td>
       <td style="padding:10px 8px">${statusPill}</td>
-      <td style="padding:10px 8px;text-align:right"><button class="btn btn-gold btn-sm" onclick="ovsOpenCapture('${o.id}')">${o.status==='in_progress'?'Resume':'Conduct'}</button></td>
+      <td style="padding:10px 8px;text-align:right">${canWrite ? `<button class="btn btn-gold btn-sm" onclick="ovsOpenCapture('${o.id}')">${o.status==='in_progress'?'Resume':'Conduct'}</button>` : `<span class="pill" style="color:#94a3b8;background:#94a3b81a;border:1px solid #94a3b855">View only</span>`}</td>
     </tr>`;
   }).join('');
 
@@ -2987,6 +3116,7 @@ function renderAObservations(){
     <div>
       <h2 style="margin:0 0 6px">Observations${isSystemWide?' <span style="font-size:11px;color:#64748b;font-weight:500">(all facilities)</span>':''}</h2>
       <p style="color:var(--txt2);font-size:13px;margin:0 0 16px">On-the-floor performance checks &mdash; the third assessment gate, alongside Competency and Simulation.</p>
+      ${canWrite ? '' : `<div style="background:#94a3b81a;border:1px solid #94a3b855;border-radius:8px;padding:10px 12px;font-size:12px;color:var(--txt2);margin:0 0 14px">View-only access. Recording and confirming observations is limited to master admins and granted assessors. A master admin can grant Assessor access in the Role Management tab.</div>`}
       ${isSystemWide && scopeFacs.length>1 ? `<div style="margin-bottom:14px"><select class="form-select" style="max-width:280px" onchange="ST._obsFacFilter=this.value;renderAObservations()"><option value="all"${obsFac==='all'?' selected':''}>All Facilities</option>${scopeFacs.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(f=>`<option value="${f.id}"${obsFac===f.id?' selected':''}>${f.name}</option>`).join('')}</select></div>` : ''}
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px">
         <div class="stat-card"><div class="stat-accent" style="background:#94a3b8"></div><div class="stat-lbl">Awaiting Observer</div><div class="stat-val">${requested}</div><div class="stat-sub">candidate requested</div></div>
@@ -3030,6 +3160,7 @@ function renderAObservations(){
 
 // Enter the capture flow for one observation.
 function ovsOpenCapture(obsId){
+  if(!_canWriteObs()){ toast('Recording observations is limited to master admins and granted assessors. Ask a master admin for Assessor access in the Role Management tab.','err'); return; }
   const o = (DB.observations||[]).find(x => x.id === obsId);
   if(!o){ toast('Observation not found.','err'); return; }
   ovsCapture = { obsId, unlocked:false, observerStaffId:null, observerName:null };
@@ -3201,6 +3332,7 @@ function ovsRenderCapture(){
 
 // Submit: two-tap, then persist the record (status submitted, review pending).
 function ovsSubmit(){
+  if(!_canWriteObs()){ toast('Recording observations is limited to master admins and granted assessors.','err'); return; }
   if(!ovsCapture || !ovsCapture.unlocked) return;
   const o = (DB.observations||[]).find(x => x.id === ovsCapture.obsId); if(!o) return;
   const cl = ovsInstrument(o.checklistBelt || o.targetBelt);
@@ -3296,6 +3428,7 @@ function renderAObservationReviews(){
   const el = document.getElementById('a-observationreviews');
   if(!el) return;
   const u = ST.user;
+  const canWrite = _canWriteObs(u);
   let pool = (DB.observations || []).filter(o => o.status === 'submitted' || o.status === 'reviewed');
   if(u && u.role === 'staff_admin' && u.assignedFids && u.assignedFids.length)
     pool = pool.filter(o => u.assignedFids.includes(o.fid));
@@ -3314,7 +3447,9 @@ function renderAObservationReviews(){
     const s = getStaff(o.staffId); const fac = getFac(o.fid);
     const armedC = ovsArmed && ovsArmed.action==='confirm' && ovsArmed.id===o.id;
     const armedR = ovsArmed && ovsArmed.action==='return'  && ovsArmed.id===o.id;
-    const actions = o.status === 'submitted'
+    const actions = !canWrite
+      ? `<span class="pill" style="font-size:11px;color:#94a3b8;background:#94a3b81a;border:1px solid #94a3b855">View only</span>`
+      : o.status === 'submitted'
       ? `<button class="btn btn-sm ${armedC?'btn-gold':'btn-primary'}" onclick="confirmObservation('${o.id}')">${armedC?'Confirm?':'Confirm & write gate'}</button>
          <button class="btn btn-ghost btn-sm" onclick="returnObservation('${o.id}')" style="margin-left:6px">${armedR?'Return?':'Return'}</button>`
       : `<span class="pill p-ok" style="font-size:11px">Gate written</span>`;
@@ -3363,6 +3498,7 @@ function renderAObservationReviews(){
 
 // Confirm a submission → write the Observation gate (nxt.o) via a targeted PATCH.
 function confirmObservation(obsId){
+  if(!_canWriteObs()){ toast('Confirming a gate is limited to master admins and granted assessors.','err'); return; }
   const o = (DB.observations||[]).find(x => x.id === obsId); if(!o) return;
   // Two-tap arm (sandbox-safe; never a native confirm()).
   if(!(ovsArmed && ovsArmed.action==='confirm' && ovsArmed.id===obsId)){
@@ -3394,6 +3530,7 @@ function confirmObservation(obsId){
 
 // Return a submission to the observer (no gate write).
 function returnObservation(obsId){
+  if(!_canWriteObs()){ toast('Returning an observation is limited to master admins and granted assessors.','err'); return; }
   const o = (DB.observations||[]).find(x => x.id === obsId); if(!o) return;
   if(!(ovsArmed && ovsArmed.action==='return' && ovsArmed.id===obsId)){
     ovsArmed = { action:'return', id:obsId };
@@ -3523,7 +3660,7 @@ function renderAPlacementReviews(){
     ${total === 0 ? '' : `<div class="stat-grid" style="margin-bottom:16px">
       <div class="stat-card"><div class="stat-accent" style="background:#a78bfa"></div><div class="stat-lbl">Awaiting Review</div><div class="stat-val" style="color:#a78bfa">${pendCount}</div><div class="stat-sub">pending placement</div></div>
       <div class="stat-card"><div class="stat-accent" style="background:var(--ok)"></div><div class="stat-lbl">Reviewed</div><div class="stat-val" style="color:var(--ok)">${total-pendCount}</div><div class="stat-sub">confirmed</div></div>
-      <div class="stat-card"><div class="stat-accent" style="background:var(--gold)"></div><div class="stat-lbl">Avg Blended Score</div><div class="stat-val" style="color:var(--gold)">${(()=>{const bs=pool.map(r=>r._blended).filter(x=>x!=null);return bs.length?Math.round(bs.reduce((a,b)=>a+b,0)/bs.length)+'%':'--';})()}</div><div class="stat-sub">across ${total}</div></div>
+      <div class="stat-card"><div class="stat-accent" style="background:var(--gold)"></div><div class="stat-lbl">Avg Blended Score</div><div class="stat-val" style="color:var(--gold)">${(()=>{const bs=pool.map(r=>r._blended).filter(x=>x!=null).map(Number).filter(x=>Number.isFinite(x));return bs.length?Math.round(bs.reduce((a,b)=>a+b,0)/bs.length)+'%':'--';})()}</div><div class="stat-sub">across ${total}</div></div>
     </div>`}
     ${total === 0 ? '' : reviewTabs({pending:pendCount, reviewed:total-pendCount, all:total}, 'renderAPlacementReviews')}
     ${total === 0 ? '' : reviewFilterBar('renderAPlacementReviews')}
@@ -3596,7 +3733,7 @@ function rptComputeModel(pr){
     const correct = ks.filter(q=>q.correct).length;
     kCorrect += correct; kTotal += ks.length;
     const kPct = ks.length ? r1(correct/ks.length*100) : null;
-    const scores = ss.map(q=>q.aiScore||0);
+    const scores = ss.map(q=>Number(q.aiScore)||0);
     scores.forEach(s=>{ simSum+=s; simN++; });
     const simPct = scores.length ? r1(scores.reduce((a,b)=>a+b,0)/scores.length) : null;
     const sFloor = RPT_STANDARDS.simLevelFloors[l];
@@ -4228,7 +4365,7 @@ function deriveOutcome(pr) {
   const kCorrect = knowledge.filter(r => r.correct).length;
   const knowledgeOverall = kTotal ? (kCorrect / kTotal) * 100 : 0;
   const simScored = simulation.filter(r => r.aiScore != null);
-  const simOverall = simScored.length ? simScored.reduce((a, r) => a + r.aiScore, 0) / simScored.length : 0;
+  const simOverall = simScored.length ? simScored.reduce((a, r) => a + (Number(r.aiScore) || 0), 0) / simScored.length : 0;
   // 60% knowledge / 40% simulation -- the governed blend (matches rptComputeModel + the
   // card). This was a 50/50 average, which made the confirmed report disagree with the card.
   const blended = (knowledgeOverall * 0.6) + (simOverall * 0.4);
@@ -4933,6 +5070,105 @@ function pPSStatus(status){
 }
 
 
+// ── Foundations & Instruments report sections (Ph.2b) ─────────────────────────
+// Report-domain rendering over the pure helpers in foundations.js
+// (fiSummaryForStaff / fiFacilityRollup). On-screen (rpt*/pill) and print (p*/badge)
+// variants share the same data, different markup. Each section self-hides when there
+// is nothing assigned. See docs/decisions/2026-07-17-ph2-development-plan.md §2.
+// ⚠️ These read the RLS-filtered in-memory arrays — correct for self/own-facility
+//    reports (this Ph.2b), NOT cross-facility network rollups (Ph.2c server fetch).
+
+// A staffer's ASSIGNED F&I modules as one list, each tagged by domain.
+function _fiAssignedRows(sum){
+  return [
+    ...sum.foundations.modules.filter(m=>m.assigned).map(m=>Object.assign({domain:'Foundations'},m)),
+    ...sum.instruments.modules.filter(m=>m.assigned).map(m=>Object.assign({domain:'Instruments'},m))
+  ];
+}
+// Compact gate-progress cell text, e.g. "K 2/3 (90%) · S 3/3 (88%) · Obs ✓".
+function _fiGateText(m){
+  const g=m.gates, r=m.passesRequired;
+  const ks=g.knowledge.score?` (${g.knowledge.score}%)`:'';
+  const ss=g.simulation.score?` (${g.simulation.score}%)`:'';
+  return `K ${g.knowledge.passes}/${r}${ks} · S ${g.simulation.passes}/${r}${ss} · Obs ${g.observation.status==='pass'?'✓':'–'}`;
+}
+
+// Personal report — on-screen (renderSReport).
+function fiStaffSectionHTML(staffId){
+  const sum=fiSummaryForStaff(staffId);
+  const rows=_fiAssignedRows(sum);
+  if(!rows.length) return '';
+  return `${rptSection('Foundations & Instruments', sum.completeCount+'/'+sum.assignedCount+' complete ('+sum.completionPct+'%)')}
+    <div class="card mb16">
+      <div style="overflow-x:auto"><table class="tbl" style="min-width:520px">
+        <thead><tr><th>Module</th><th>Type</th><th>Status</th><th>Gate Progress (K/S/Obs)</th><th>Started</th><th>Completed*</th></tr></thead>
+        <tbody>${rows.map(m=>`<tr>
+          <td style="font-size:12px;font-weight:600">${m.title}</td>
+          <td><span style="font-size:9.5px;font-weight:700;color:${m.domain==='Foundations'?'var(--blue)':'var(--gold)'}">${m.domain==='Foundations'?'FND':'INST'}</span></td>
+          <td>${m.complete?'<span class="pill p-ok">Complete</span>':'<span class="pill p-warn">In Progress</span>'}</td>
+          <td style="font-size:11.5px;color:var(--txt2)">${_fiGateText(m)}</td>
+          <td style="font-size:11px;color:var(--txt3)">${m.assignedDate||'--'}</td>
+          <td style="font-size:11px;color:${m.complete?'var(--ok)':'var(--txt3)'};font-weight:${m.complete?'600':'400'}">${m.completedDateApprox||'--'}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+      <div style="font-size:10px;color:var(--txt3);margin-top:6px;padding:0 2px">* Completion date is derived from the observation sign-off and is approximate.</div>
+    </div>`;
+}
+
+// Personal report — PDF (downloadStaffReport).
+function fiStaffSectionPDF(staffId){
+  const sum=fiSummaryForStaff(staffId);
+  const rows=_fiAssignedRows(sum);
+  if(!rows.length) return '';
+  return `${pSection('Foundations & Instruments', sum.completeCount+'/'+sum.assignedCount+' complete ('+sum.completionPct+'%)')}
+    <table class="no-break"><thead><tr><th>Module</th><th>Type</th><th>Status</th><th>Gate Progress (K/S/Obs)</th><th>Started</th><th>Completed*</th></tr></thead>
+    <tbody>${rows.map(m=>`<tr>
+      <td style="font-weight:600">${m.title}</td>
+      <td style="font-size:7.5pt;font-weight:700;color:${m.domain==='Foundations'?'#2563eb':'#d97706'}">${m.domain==='Foundations'?'FND':'INST'}</td>
+      <td><span class="badge ${m.complete?'badge-green':'badge-warn'}">${m.complete?'Complete':'In Progress'}</span></td>
+      <td style="font-size:8pt">${_fiGateText(m)}</td>
+      <td style="color:#64748b">${m.assignedDate||'–'}</td>
+      <td style="color:${m.complete?'#16a34a':'#64748b'};font-weight:${m.complete?'700':'400'}">${m.completedDateApprox||'–'}</td>
+    </tr>`).join('')}</tbody></table>
+    <div style="font-size:7.5pt;color:#64748b;margin-top:4px">* Completion date is derived from the observation sign-off and is approximate.</div>`;
+}
+
+// Facility report — on-screen (renderHReports). rollup = fiFacilityRollup(fid).
+function fiFacilitySectionHTML(rollup, profileFn){
+  if(!rollup || rollup.assignedCount===0) return '';
+  const opener=profileFn||'openHProfile'; // manager view uses openHProfile; admin view passes openAdminProfile
+  const rows=rollup.perStaff.filter(p=>p.summary.assignedCount>0).sort((a,b)=>b.summary.completionPct-a.summary.completionPct);
+  return `${rptSection('Foundations & Instruments', rollup.completeCount+'/'+rollup.assignedCount+' modules complete ('+rollup.completionPct+'%)')}
+    <div class="card mb16">
+      <div style="overflow-x:auto"><table class="tbl" style="min-width:460px">
+        <thead><tr><th>Staff</th><th>Assigned</th><th>Complete</th><th>In Progress</th><th>Completion</th></tr></thead>
+        <tbody>${rows.map(p=>`<tr onclick="${opener}('${p.staffId}')" style="cursor:pointer">
+          <td class="fw7">${p.name||'--'}</td>
+          <td>${p.summary.assignedCount}</td>
+          <td style="color:var(--ok);font-weight:600">${p.summary.completeCount}</td>
+          <td style="color:var(--warn)">${p.summary.inProgressCount}</td>
+          <td><span style="font-weight:700;color:${p.summary.completionPct>=80?'var(--ok)':p.summary.completionPct>=50?'var(--warn)':'var(--err)'}">${p.summary.completionPct}%</span></td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+    </div>`;
+}
+
+// Facility report — PDF (downloadFacilityReportV2). rollup = fiFacilityRollup(facId).
+function fiFacilitySectionPDF(rollup){
+  if(!rollup || rollup.assignedCount===0) return '';
+  const rows=rollup.perStaff.filter(p=>p.summary.assignedCount>0).sort((a,b)=>b.summary.completionPct-a.summary.completionPct);
+  return `${pSection('Foundations & Instruments', rollup.completeCount+'/'+rollup.assignedCount+' modules complete ('+rollup.completionPct+'%)')}
+    <table class="no-break"><thead><tr><th>Staff</th><th>Assigned</th><th>Complete</th><th>In Progress</th><th>Completion</th></tr></thead>
+    <tbody>${rows.map(p=>`<tr>
+      <td style="font-weight:700">${p.name||'–'}</td>
+      <td>${p.summary.assignedCount}</td>
+      <td style="color:#16a34a;font-weight:700">${p.summary.completeCount}</td>
+      <td style="color:#d97706">${p.summary.inProgressCount}</td>
+      <td><span class="badge ${p.summary.completionPct>=80?'badge-green':p.summary.completionPct>=60?'badge-warn':'badge-err'}">${p.summary.completionPct}%</span></td>
+    </tr>`).join('')}</tbody></table>`;
+}
+
+
 // ============================================================ USER PROMOTION ENGINE
 // Roles hierarchy: staff_member → hospital (manager) → system_admin → staff_admin → master_admin
 // Position levels for staff records
@@ -5124,6 +5360,44 @@ DB.schedule.forEach(sch=>{
 });
 
 // ============================================================ BELT BADGE
+// T35c. The two SBD year values used to sit in the profile meta row as an 11px chip
+// reading "3y in SBD . 2y certified", which the client could not read. They now get their
+// own cards, using the platform's existing stat-card styles so they scale on a phone the
+// way every other figure does.
+//
+// This is the interim step promised on 2026-07-27, ahead of the full profile redesign in
+// T35. It deliberately reuses stat-card rather than inventing a look, so the redesign
+// replaces it cleanly instead of having to undo something bespoke.
+//
+// Who sees an empty pair of cards, and why it is not the same for everyone:
+//
+// 62 of the 63 staff records have neither value set. These two fields are filled in by an
+// administrator or a facility leader through the SBD Background button, and an empty field
+// that renders nothing is a field nobody knows to fill, which is almost certainly why only
+// one person has them today. So a leader or an administrator sees both cards on every
+// profile, reading "Not set" where there is no value, and the work to do is visible.
+//
+// A staff member looking at their own profile sees them only once there is something to
+// show. They cannot set these themselves, so an empty pair on their own screen would be two
+// boxes telling them about a gap they cannot close.
+function sbdYearsCardsHTML(s){
+  if(!s) return '';
+  const viewerCanSetThem = !!(ST.user && ST.user.role !== 'staff_member');
+  if(s.sbdYears==null && s.certYears==null && !viewerCanSetThem) return '';
+  const val = v => v!=null
+    ? v
+    : '<span style="font-size:14px;font-weight:600;color:var(--txt3)">Not set</span>';
+  const card = (label, v) => `
+    <div class="stat-card" style="flex:1 1 160px;padding:12px 14px">
+      <div class="stat-lbl">${label}</div>
+      <div class="stat-val" style="margin-bottom:0;color:var(--gold)">${val(v)}</div>
+    </div>`;
+  return `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;max-width:420px">
+    ${card('Years in SBD Program', s.sbdYears)}
+    ${card('Years Certified', s.certYears)}
+  </div>`;
+}
+
 function beltBadge(belt, staff){
   if(staff){
     const s = (typeof staff === 'object') ? staff : getStaff(staff);
@@ -5365,6 +5639,58 @@ function oipSelect(idx){ oipSelectOverlay(idx); }
 
 
 // ============================================================ DOWNLOAD: LEVEL 1  --  INDIVIDUAL STAFF
+// Profile "SBD Background" (Ignacio 2026-07-23): capture, from the profile tab, how
+// long the staff member has been in the SBD program and how many years certified in
+// SBD. Editor-gated (master/staff/facility admin); targeted staff PATCH (two columns).
+// Shawn 2026-07-25: staff can also set their own two values from My Profile whenever they
+// like (context 'self'). No forced setup step; the fields display only and gate nothing.
+function _sbdBgCanEdit(staffId){
+  if(ST.user && ['master_admin','staff_admin','facility_admin'].includes(ST.user.role)) return true;
+  return !!staffId && staffId === ST.staffId;
+}
+function openSbdBackgroundModal(staffId, context){
+  const s = getStaff(staffId); if(!s){ toast('Staff record not found.','err'); return; }
+  if(!_sbdBgCanEdit(staffId)){ toast('You can only edit your own SBD background.','err'); return; }
+  const self = context === 'self';
+  const inp = 'width:100%;padding:9px 11px;background:var(--s2);border:1px solid var(--bdr);border-radius:8px;color:var(--txt1);font-size:14px;box-sizing:border-box';
+  openModal('SBD Background &mdash; '+fullName(s), `
+    <div class="modal-body">
+      <p style="font-size:12.5px;color:var(--txt2);margin:0 0 14px;line-height:1.5">${self?'How long have you been in the SBD program, and how many years have you been certified in SBD? Whole years; leave blank if you are not sure.':'How long has this staff member been in the SBD program, and how many years have they been certified in SBD? Whole years; leave blank if unknown.'}</p>
+      <label style="font-size:12px;color:var(--txt2);display:block;margin-bottom:4px">Years in the SBD program</label>
+      <input id="sbd-years" type="number" min="0" max="60" style="${inp};margin-bottom:14px" value="${s.sbdYears!=null?s.sbdYears:''}" placeholder="e.g. 3">
+      <label style="font-size:12px;color:var(--txt2);display:block;margin-bottom:4px">Years certified in SBD</label>
+      <input id="sbd-cert" type="number" min="0" max="60" style="${inp}" value="${s.certYears!=null?s.certYears:''}" placeholder="e.g. 2">
+    </div>
+    <div class="modal-ft"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-gold" onclick="saveSbdBackground('${staffId}','${context}')">Save</button></div>`, 'modal-sm');
+}
+function saveSbdBackground(staffId, context){
+  const s = getStaff(staffId); if(!s) return;
+  if(!_sbdBgCanEdit(staffId)){ toast('You can only edit your own SBD background.','err'); return; }
+  const parse = id => { const el = document.getElementById(id); if(!el) return null; const v = String(el.value).trim(); if(v==='') return null; const n = parseInt(v,10); return (isNaN(n)||n<0)?null:Math.min(n,60); };
+  s.sbdYears = parse('sbd-years'); s.certYears = parse('sbd-cert');
+  if(IS_LIVE && typeof SB!=='undefined' && SB.updateStaff){
+    SB.updateStaff(s.id, { sbd_program_years: s.sbdYears, sbd_cert_years: s.certYears }).catch(e => handleSyncError(e,'SBD background'));
+  }
+  toast('SBD background saved.','ok');
+  closeModal();
+  if(context === 'self'){ if(typeof renderSOIP==='function') renderSOIP(); return; }
+  if(typeof renderHProfile==='function') renderHProfile(staffId, context);
+}
+// The card the staff member sees on My Profile. Purely optional; shows what is on record
+// and opens the same modal to set or change it.
+function sbdBackgroundSelfCardHTML(s){
+  const has = s.sbdYears!=null || s.certYears!=null;
+  const line = has
+    ? `${s.sbdYears!=null?s.sbdYears+' yr(s) in the SBD program':''}${(s.sbdYears!=null&&s.certYears!=null)?' &bull; ':''}${s.certYears!=null?s.certYears+' yr(s) certified in SBD':''}`
+    : 'Not set. Add it whenever you like, or leave it blank.';
+  return `<div style="background:var(--s2);border:1px solid var(--bdr);border-radius:var(--r);padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
+      <div style="flex:1;min-width:0;text-align:left">
+        <div style="font-size:11px;font-weight:700;color:var(--txt3);letter-spacing:.06em;margin-bottom:5px">SBD BACKGROUND</div>
+        <div style="font-size:12.5px;color:${has?'var(--txt1)':'var(--txt3)'};line-height:1.5">${line}</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="openSbdBackgroundModal('${s.id}','self')">${has?'Edit':'Add'}</button>
+    </div>`;
+}
 function downloadStaffReport(staffId){
   const s = getStaff(staffId||ST.staffId);
   if(!s){ toast('Staff record not found.','err'); return; }
@@ -5405,7 +5731,7 @@ function downloadStaffReport(staffId){
       <div>
         <div class="rpt-brand">SIPS Healthcare Solutions &bull; Sterile By Design</div>
         <div class="rpt-title">${fullName(s)}</div>
-        <div class="rpt-sub">${s.role} &bull; ${getFac(s.fid)?.name||'–'} &bull; Sterile Processing Department<br>Belt: ${s.belt} (${BELT_CERT[s.belt]}) &bull; Since ${s.since || '—'}</div>
+        <div class="rpt-sub">${s.role} &bull; ${getFac(s.fid)?.name||'–'} &bull; Sterile Processing Department<br>Belt: ${s.belt} (${BELT_CERT[s.belt]}) &bull; Since ${s.since || '—'}${(s.sbdYears!=null||s.certYears!=null)?`<br>${s.sbdYears!=null?s.sbdYears+' yr(s) in SBD program':''}${(s.sbdYears!=null&&s.certYears!=null)?' &bull; ':''}${s.certYears!=null?s.certYears+' yr(s) certified in SBD':''}`:''}</div>
       </div>
       <div class="rpt-grade-box">
         <div class="rpt-grade" style="color:${BELT_CLR_PRINT[s.belt]||'#0f172a'}">${psStars>0?Array(psStars).fill('★').join(''):'–'}</div>
@@ -5461,6 +5787,10 @@ function downloadStaffReport(staffId){
       <td style="color:#64748b">${td.startedAt||'–'}</td>
       <td style="color:${status==='complete'?'#16a34a':'#64748b'};font-weight:${status==='complete'?'700':'400'}">${td.completedAt||'–'}</td>
     </tr>`).join('')}</tbody></table>`:''}
+
+    ${fiStaffSectionPDF(s.id)}
+
+    ${prcStaffSectionPDF(s.id)}
 
     ${oipSection}
 
@@ -5589,6 +5919,10 @@ function downloadFacilityReportV2(fid){
         <td style="color:#d97706">${elig}</td>
       </tr>`;
     }).join('')}</tbody></table>
+
+    ${fiFacilitySectionPDF(fiFacilityRollup(facId))}
+
+    ${prcFacilitySectionPDF(prcFacilityRollup(facId))}
 
     ${pSection('OIP Team Composition')}
     <div class="grid-4 no-break" style="gap:10px;margin-bottom:14px">
@@ -5997,6 +6331,12 @@ async function renderSReport(){
         </tr>`).join('')}</tbody>
       </table></div>
     </div>`:''}
+
+    <!-- Foundations & Instruments -->
+    ${fiStaffSectionHTML(s.id)}
+
+    <!-- Preceptor Certification -->
+    ${prcStaffSectionHTML(s.id)}
 
     <!-- Belt Progression Timeline -->
     ${rptSection('Belt Progression Timeline')}
@@ -6618,7 +6958,7 @@ function requestPSCompletion(tid) {
   const existing = DB.psCompletionRequests.find(r => r.sid === s.id && r.tid === tid && r.status === 'pending');
   if (existing) { toast('You already have a pending completion request for this track.', 'err'); return; }
   const track = PS_TRACKS[tid];
-  DB.psCompletionRequests.push({
+  const req = {
     id: 'psr-' + Date.now(),
     sid: s.id, fid: s.fid, tid,
     trackName: track ? track.name : tid,
@@ -6626,7 +6966,15 @@ function requestPSCompletion(tid) {
     practiceS: s.psPracticeScores?.[tid]?.simulation || null,
     requestedAt: new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),
     status: 'pending'
-  });
+  };
+  DB.psCompletionRequests.push(req);
+  // The request used to live only in memory, so it disappeared on refresh and no
+  // leader ever saw it, despite the candidate being told it would be reviewed.
+  if(IS_LIVE && typeof SB!=='undefined' && SB.createPSCompletionRequest){
+    SB.createPSCompletionRequest(mapPSCompletionRequestToBackend(req))
+      .then(rows=>{ const row=Array.isArray(rows)?rows[0]:rows; if(row&&row.id) req.id=row.id; })
+      .catch(e=>handleSyncError(e,'Position School sign-off request'));
+  }
   toast((track ? track.name : 'Track') + ' completion request submitted. Your supervisor will review.', 'ok');
   closeModal();
   renderSPosSchool();
@@ -6818,7 +7166,8 @@ function renderSOIP(){
   if(!s.oip.completed){
     el.innerHTML=`
       <div style="max-width:520px;margin:0 auto">
-        <div style="text-align:center;padding:32px 0 24px">
+        <div style="padding-top:24px">${sbdBackgroundSelfCardHTML(s)}</div>
+        <div style="text-align:center;padding:8px 0 24px">
           <div style="width:64px;height:64px;border-radius:50%;background:rgba(196,154,32,.12);border:2px solid var(--gold-bd);display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 16px">&#9670;</div>
           <div style="font-size:20px;font-weight:800;margin-bottom:8px">Operator Intelligence Profile</div>
           <div style="font-size:13px;color:var(--txt2);line-height:1.7;margin-bottom:24px">A 30-question scenario-based assessment that identifies your natural operator style. Every question is rooted in real SPD situations. There are no right or wrong answers.<br><br>Most staff complete it in 15 to 20 minutes.</div>
@@ -6846,6 +7195,7 @@ function renderSOIP(){
 
   el.innerHTML=`
     <div style="max-width:560px;margin:0 auto">
+      ${sbdBackgroundSelfCardHTML(s)}
       <div style="background:${pType.bg};border:1.5px solid ${pType.bd};border-radius:var(--r);padding:20px;margin-bottom:16px;text-align:center">
         <div style="font-size:10.5px;font-weight:700;color:${pType.color};letter-spacing:.1em;margin-bottom:10px">YOUR OPERATOR TYPE</div>
         <div style="font-size:52px;line-height:1;margin-bottom:10px">${pType.icon}</div>
@@ -7028,7 +7378,22 @@ function renderSDashboard(){
       </div>
       <div style="color:var(--txt3)"><svg viewBox="0 0 18 18" fill="none" width="14" height="14"><path d="M6 3l6 6-6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
     </div>` : '';
-  document.getElementById('s-dashboard').innerHTML= placementCallout + placementBanner + oipCallout + psCalloutHtml + studyCallout + `
+  // #121 (Ignacio, Loom 2026-07-22): a candidate with an assessor-approved gate must see the
+  // Begin card as the FIRST thing on login, not only inside Study & Practice. Reuses the same
+  // beltTestEntryCard; it renders only while a component gate is eligible and auto-clears once
+  // the test is taken (btComponentEligible -> false on PENDING_REVIEW), so it "hangs until complete".
+  // #121 (Ignacio, Loom Jul 22): the dashboard shows a persistent "assessment ready" NOTIFICATION that
+  // routes into Study & Practice to begin — not the direct-launch card (that stays inside Study & Practice).
+  const beltEntry = (nb && typeof btEligible==='function' && btEligible(s.id, nb))
+    ? `<div style="background:rgba(139,92,246,.08);border:1.5px solid rgba(139,92,246,.4);border-radius:var(--r);padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+         <div style="flex:1;min-width:0">
+           <div style="font-size:12.5px;font-weight:800;color:#a78bfa;margin-bottom:3px">&#127894; Assessment ready to take</div>
+           <div style="font-size:12px;color:var(--txt2);line-height:1.5">Your assessor approved a gate for your ${nb} Belt. Go to Study &amp; Practice to begin your proctored test.</div>
+         </div>
+         <button class="btn btn-sm" style="background:#8b5cf6;color:#fff;border:none;white-space:nowrap" onclick="sNav(document.querySelector('#s-portal .nav-item[data-view=s-study]'),'s-study','Study &amp; Practice')">Go to Study &amp; Practice</button>
+       </div>`
+    : '';
+  document.getElementById('s-dashboard').innerHTML= beltEntry + placementCallout + placementBanner + oipCallout + psCalloutHtml + studyCallout + `
     <div class="stat-grid">
       <div class="stat-card"><div class="stat-accent" style="background:${BELT_CLR[s.belt]}"></div>
         <div class="stat-lbl">Current Belt</div>
@@ -7077,7 +7442,10 @@ function renderSDashboard(){
             <div style="font-size:12px;color:var(--txt3);margin-top:4px">${win.cfg?win.cfg.label:''}</div>
           </div>
           <div class="prog mt8 mb12" style="height:10px"><div class="prog-fill" style="width:${win.pct||0}%;background:${win.status==='open'?'var(--ok)':'var(--warn)'}"></div></div>
-          ${win.status==='open'&&nb?`<button class="btn btn-gold" style="width:100%;justify-content:center;margin-top:8px" onclick="openApplyModal('${s.id}')">${ICO.record} Apply for ${nb} Belt Assessment</button>`:''}
+          ${win.status==='open'&&nb?(canRequestAssessment(s.id,s.belt)
+            ? `<button class="btn btn-gold" style="width:100%;justify-content:center;margin-top:8px" onclick="openApplyModal('${s.id}')">${ICO.record} Apply for ${nb} Belt Assessment</button>`
+            : `<div style="padding:11px 14px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:var(--rs);font-size:12px;color:var(--txt2);text-align:center;margin-top:8px;line-height:1.5">Complete your ${s.belt} Belt Knowledge and Simulation practice tests at 80% or higher to unlock your assessment request.<div style="margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="sNav(document.querySelector('#s-portal .nav-item[data-view=s-study]'),'s-study','Study &amp; Practice')">Go to Study &amp; Practice</button></div></div>`
+          ):''}
           ${win.status==='closed'?`<div style="padding:10px;background:var(--err-bg);border:1px solid var(--err-bd);border-radius:var(--rs);font-size:12px;color:var(--err);text-align:center;margin-top:8px">Window closed. Keep training – it reopens automatically.</div>`:''}
           `}
         </div>
@@ -7119,6 +7487,22 @@ function openApplyModal(sid){
   if(!nb){toast('Already at maximum belt level.','info');return;}
   const win=getWindowStatus(s);
   if(win.status!=='open'){toast('Assessment window is not currently open.','err');return;}
+  // #120 (Ignacio, 2026-07-22): the Study & Practice request path already gates on the current-belt
+  // practice tests (canRequestAssessment); this Apply path did not, so a request could be filed with
+  // no practice done. Close that same gate here. (Master-admin override is a separate additive flag.)
+  if(!canRequestAssessment(s.id, s.belt)){
+    const psc=getPracticeScores(s.id, s.belt)||{};
+    openModal(`Apply for ${nb} Belt Assessment`,`
+      <div class="modal-body">
+        <div style="padding:14px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:var(--rs);font-size:12.5px;color:var(--txt2);line-height:1.6">
+          <div style="font-weight:700;color:var(--warn);margin-bottom:6px">Practice tests required</div>
+          Complete your <strong>${s.belt} Belt</strong> Knowledge and Simulation practice tests at 80% or higher before requesting an assessment.
+          <div style="margin-top:8px;font-size:12px">Knowledge: <strong>${psc.knowledge||0}%</strong> &bull; Simulation: <strong>${psc.simulation||0}%</strong></div>
+        </div>
+      </div>
+      <div class="modal-ft"><button class="btn btn-ghost" onclick="closeModal()">Close</button><button class="btn btn-gold" onclick="closeModal();sNav(document.querySelector('#s-portal .nav-item[data-view=s-study]'),'s-study','Study &amp; Practice')">Go to Study &amp; Practice</button></div>`,'modal-md');
+    return;
+  }
   const gatesNeeded=[{key:'c',label:'Competency'},{key:'s',label:'Simulation'},{key:'o',label:'Observation'}].filter(g=>s.nxt[g.key]!=='pass');
   openModal(`Apply for ${nb} Belt Assessment`,`
     <div class="modal-body">
@@ -7139,7 +7523,16 @@ function openApplyModal(sid){
 function submitApply(sid,gate,targetBelt){
   const s=getStaff(sid);
   if(!s)return;
+  // #120: defense in depth — never queue a request when the current-belt practice gate isn't met.
+  if(!canRequestAssessment(s.id, s.belt)){ toast('Complete both practice tests at 80% or above before requesting.','err'); return; }
   const gateLabel={c:'Competency',s:'Simulation',o:'Observation'}[gate];
+  // T29: this path had no duplicate check, which is how one person ended up with eleven
+  // pending copies of the same request. The real rule is a partial unique index on
+  // sbd_assessment_queue, since this check only sees what the browser holds. It is here so
+  // the candidate gets told plainly rather than meeting a database error.
+  const alreadyOpen = DB.queue.find(q => q.sid === s.id && q.targetBelt === targetBelt
+                                      && q.type === gateLabel && (q.status || 'pending') === 'pending');
+  if(alreadyOpen){ toast('You already have a pending request for this assessment.','err'); closeModal(); return; }
   const qid='q'+Date.now();
   const newQItem={id:qid,sid,fid:s.fid,type:gateLabel,targetBelt,date:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})};
   if(IS_LIVE){ SB.submitAssessmentQueue(mapQueueToBackend(newQItem)).catch(e => handleSyncError(e, 'Queue sync')); }
@@ -7188,7 +7581,8 @@ function renderSWindow(){
       <div class="card-hd"><div class="card-ttl">Assessment Window: ${s.belt} Belt</div></div>
       <div class="card-body" style="text-align:center;padding:28px">
         <div style="font-size:48px;font-weight:800;color:${win.status==='open'?'var(--ok)':win.status==='closed'?'var(--err)':'var(--txt3)'};margin-bottom:8px">${win.status==='open'?'OPEN':win.status==='max'?'MAX':win.status==='locked'?'LOCKED':'CLOSED'}</div>
-        <div style="font-size:14px;color:var(--txt2);margin-bottom:20px">${win.label||'No window applicable'}</div>
+        <div style="font-size:14px;color:var(--txt2);margin-bottom:${win.manual?'6px':'20px'}">${win.label||'No window applicable'}</div>
+        ${win.manual?`<div style="font-size:11.5px;color:var(--gold);margin-bottom:18px">Opened early by ${win.openedBy||'an assessor'}</div>`:''}
         ${win.cfg?`
         <div class="prog" style="height:12px;margin-bottom:8px"><div class="prog-fill" style="width:${win.pct||0}%;background:${win.status==='open'?'var(--ok)':'var(--warn)'}"></div></div>
         <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--txt3);margin-bottom:20px"><span>Cycle start</span><span>${cycleDays}-day cycle</span></div>
@@ -8323,7 +8717,10 @@ function savePracticeScore(belt, mode, score, total) {
 
 function canRequestAssessment(staffId, belt) {
   const s = getStaff(staffId || ST.staffId);
-  if (!s || !s.practiceScores || !s.practiceScores[belt]) return false;
+  if (!s) return false;
+  // #120 master-admin override: an explicit waiver lets this candidate request regardless of practice.
+  if (s.assessmentGateOverride && s.assessmentGateOverride.waived) return true;
+  if (!s.practiceScores || !s.practiceScores[belt]) return false;
   const scores = s.practiceScores[belt];
   return (scores.knowledge || 0) >= 80 && (scores.simulation || 0) >= 80;
 }
@@ -9281,11 +9678,15 @@ function renderHDashboard(){
   const pending=DB.queue.filter(q=>q.fid===fid).length;
   const beltCounts=BELT_ORDER.map(b=>st.filter(s=>s.belt===b).length);
   const hs=buildHealthScore(fid);
+  const fiRoll=(typeof fiFacilityRollup==='function')?fiFacilityRollup(fid):null;
+  const prcRoll=(typeof prcFacilityRollup==='function')?prcFacilityRollup(fid):null;
 
   document.getElementById('h-dashboard').innerHTML=`
     <div class="stat-grid">
       <div class="stat-card"><div class="stat-accent" style="background:var(--blue)"></div><div class="stat-lbl">Total Staff</div><div class="stat-val" style="color:var(--blue)">${n}</div><div class="stat-sub">Department members</div></div>
       <div class="stat-card"><div class="stat-accent" style="background:var(--ok)"></div><div class="stat-lbl">Green Belt Compliance</div><div class="stat-val" style="color:var(--ok)">${pct}%</div><div class="stat-sub">${aboveGreen} of ${n} at Green+</div></div>
+      <div class="stat-card"><div class="stat-accent" style="background:var(--gold)"></div><div class="stat-lbl">F&amp;I Completion</div><div class="stat-val" style="color:var(--gold)">${fiRoll&&fiRoll.assignedCount?fiRoll.completionPct+'%':'--'}</div><div class="stat-sub">${fiRoll&&fiRoll.assignedCount?fiRoll.completeCount+' of '+fiRoll.assignedCount+' modules':'No modules assigned'}</div></div>
+      <div class="stat-card"><div class="stat-accent" style="background:var(--gold)"></div><div class="stat-lbl">Preceptor Certification</div><div class="stat-val" style="color:var(--gold)">${prcRoll&&prcRoll.assignedCount?prcRoll.completionPct+'%':'--'}</div><div class="stat-sub">${prcRoll&&prcRoll.assignedCount?prcRoll.completeCount+' of '+prcRoll.assignedCount+' modules':'No modules assigned'}</div></div>
       <div class="stat-card"><div class="stat-accent" style="background:${hs.gradeColor}"></div>
         <div class="stat-lbl">Health Grade</div>
         <div class="stat-val" style="color:${hs.gradeColor};font-size:26px">${hs.grade} <span style="font-size:14px;font-weight:700">${hs.totalScore}/100</span></div>
@@ -9394,6 +9795,31 @@ function renderHStaff(){
 // ── Role helpers ──────────────────────────────────────────────────────────────
 function isFacilityAdmin(){ return ST.user && ST.user.role === 'facility_admin'; }
 function isAdminOrFacAdmin(){ return ST.user && (ST.user.role==='master_admin'||ST.user.role==='staff_admin'||ST.user.role==='facility_admin'); }
+// #73 v1.1: EFFECTIVE role = base role OR a granted capability. A granted user's own UI treats them
+// exactly like the role they were granted (assessor = system-wide; educator = the granted facilities).
+// Mirrors the server-side RLS (sbd_is_assessor / sbd_leads_facility_of), so UI and enforcement agree.
+function _capsOf(u){ return (u && u.capabilities) || {}; }
+function effIsAssessor(u){ u=u||ST.user; if(!u) return false; return u.role==='staff_admin'||u.role==='assessor'||!!_capsOf(u).assessor; }
+// Observation WRITE permission — mirrors the backend RLS (sbd_is_master_admin OR
+// sbd_is_assessor): master/admin, the 'assessor' role, or a granted Assessor
+// capability. Deliberately EXCLUDES base staff_admin: per the #50/#54 ruling,
+// staff_admin assessors must be granted the Assessor capability (Role Management)
+// to record, so the UI matches the lock and read-only users never hit an RLS
+// error mid-action. (effIsAssessor stays staff_admin-inclusive for non-write UI.)
+function _canWriteObs(u){ u=u||ST.user; if(!u) return false; return u.role==='master_admin'||u.role==='admin'||u.role==='assessor'||!!_capsOf(u).assessor; }
+function effLeadsFacility(fid, u){ u=u||ST.user; if(!u||fid==null) return false;
+  if(u.role==='educator'||u.role==='hospital'||u.role==='facility_admin'){
+    if(u.fid!=null && String(u.fid)===String(fid)) return true;
+    if(Array.isArray(u.assignedFids) && u.assignedFids.map(String).indexOf(String(fid))>=0) return true;
+  }
+  var ef=_capsOf(u).educator_facilities;
+  return Array.isArray(ef) && ef.map(String).indexOf(String(fid))>=0;
+}
+// True if the current user leads ANY facility (base leader role or an educator capability grant).
+function effIsFacilityLeader(u){ u=u||ST.user; if(!u) return false;
+  if(u.role==='educator'||u.role==='hospital'||u.role==='facility_admin') return true;
+  var ef=_capsOf(u).educator_facilities; return Array.isArray(ef) && ef.length>0;
+}
 // Resolve context string for profile rendering  --  facility admins get admin-level capabilities
 function hProfileContext(){ return isFacilityAdmin() ? 'admin' : 'h'; }
 
@@ -9593,16 +10019,29 @@ function renderHProfile(sid,context){
         </div>
         <div style="margin-bottom:8px">${beltBadge(s.belt)} <span style="font-size:12px;color:var(--txt3);margin-left:6px">${BELT_CERT[s.belt]}</span></div>
         <div class="prof-meta"><span class="pmeta"><svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="2" y="3" width="10" height="10" rx="1" stroke="currentColor" stroke-width="1.3"/><path d="M5 1v3M9 1v3M2 7h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>Since ${s.since || '—'}</span><span class="pmeta">${daysAtPhrase(s.since)} at current belt</span>${s.stars>0?`<span class="pmeta tc-gold">${'* '.repeat(s.stars).trim()}</span>`:''}</div>
+        ${sbdYearsCardsHTML(s)}
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         ${context==='admin'?`<button class="btn btn-gold btn-sm" onclick="openRecordModal('${s.id}')">${ICO.record} Record Assessment</button>`:''}
+        ${((ST.user&&(ST.user.role==='master_admin'||ST.user.role==='staff_admin')) && (typeof BELT_WINDOWS!=='undefined') && BELT_WINDOWS[s.belt]) ? (
+          (s.windowOverride && s.windowOverride.until && new Date(s.windowOverride.until).getTime() >= Date.now())
+            ? `<span class="pill p-ok" style="align-self:center;font-size:11px">Window open early &middot; exp ${s.windowOverride.until}</span><button class="btn btn-ghost btn-sm" onclick="adminCloseWindow('${s.id}','${context}')" title="Close the manually-opened window now">Close Window</button>`
+            : `<button class="btn btn-ghost btn-sm" onclick="adminOpenWindow('${s.id}','${context}')" style="border-color:var(--gold-bd);color:var(--gold)" title="Open this staffer's assessment window ahead of the automatic cycle"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg> Open Window Early</button>`
+        ) : ''}
         ${context==='admin'||context==='h'?`<button class="btn btn-blue btn-sm" onclick="openPromoteModal('${s.id}','${context}')">&#x2B06; Promote</button>`:''}
         <button class="btn btn-ghost btn-sm" onclick="downloadStaffReport('${s.id}')">${ICO.dl} Report</button>
+        ${(ST.user&&['master_admin','staff_admin','facility_admin'].includes(ST.user.role))?`<button class="btn btn-ghost btn-sm" onclick="openSbdBackgroundModal('${s.id}','${context}')" title="Set SBD program tenure and years certified"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg> SBD Background</button>`:''}
         ${(ST.user&&ST.user.role==='master_admin')?`<button class="btn btn-ghost btn-sm" onclick="openBeltOverrideModal('${s.id}','${context}')" style="border-color:var(--gold-bd);color:var(--gold)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Override Belt</button>`:''}
+        ${(ST.user&&ST.user.role==='master_admin')?(
+          (s.assessmentGateOverride && s.assessmentGateOverride.waived)
+            ? `<span class="pill p-ok" style="align-self:center;font-size:11px" title="${s.assessmentGateOverride.reason?('Reason: '+s.assessmentGateOverride.reason):'Practice-test gate waived'}">Practice gate waived</span><button class="btn btn-ghost btn-sm" onclick="clearAssessmentOverride('${s.id}','${context}')" title="Remove the practice-gate waiver">Clear Waiver</button>`
+            : `<button class="btn btn-ghost btn-sm" onclick="grantAssessmentOverride('${s.id}','${context}')" style="border-color:var(--gold-bd);color:var(--gold)" title="Let this candidate request an assessment without completing the practice tests"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg> Waive Practice Gate</button>`
+        ):''}
         ${(ST.user&&ST.user.role==='master_admin')?`<button class="btn btn-ghost btn-sm" onclick="toggleObserver('${s.id}','${context}')" style="border-color:${s.observer?'#0ea5e9':'var(--bdr)'};color:${s.observer?'#0ea5e9':'var(--txt2)'}" title="${s.observer?'Revoke observer access':'Grant observer access'}"><svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 10s3-5.5 8-5.5S18 10 18 10s-3 5.5-8 5.5S2 10 2 10z"/><circle cx="10" cy="10" r="2.3"/></svg> ${s.observer?'Observer: On':'Make Observer'}</button>`:''}
         ${(ST.user&&ST.user.role==='master_admin'&&s.observer)?(s.observationPin?`<span class="pill" style="background:#0ea5e91a;color:#0ea5e9;border:1px solid #0ea5e955;font-size:11px;padding:5px 9px;border-radius:8px;font-weight:700;align-self:center">Observer PIN: ${s.observationPin}</span>`:`<button class="btn btn-ghost btn-sm" onclick="generateObserverPin('${s.id}','${context}')" style="border-color:#0ea5e9;color:#0ea5e9">&#128273; Generate PIN</button>`):''}
         ${context==='admin'&&(ST.user&&ST.user.role==='master_admin')?`<button class="btn btn-err btn-sm" onclick="releaseToFreeAgent('${s.id}')" title="Release staff member to Free Agent Registry" style="margin-left:auto"><svg width="13" height="13" viewBox="0 0 18 18" fill="none"><path d="M12 14H15a1 1 0 001-1V5a1 1 0 00-1-1H12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M9 12l3-3-3-3M12 9H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Release</button>`:''}
       </div>
+      ${(ST.user&&ST.user.role==='master_admin'&&typeof prcAccessControlHTML==='function')?`<div style="margin-top:8px">${prcAccessControlHTML(s.id,context)}</div>`:''}
     </div>
     <div class="g2 mb16">
       <div class="card"><div class="card-hd"><div class="card-ttl">Current Belt Assessments</div><span style="font-size:11.5px;color:${isWhiteBaseline(s)?'var(--txt3)':curSt.p===3?'var(--ok)':'var(--warn)'}">${currentGateCountLabel(s)}</span></div>
@@ -9755,8 +10194,25 @@ let schBuilderYear  = new Date().getFullYear();
 // is on h-attendance (standalone) or h-schedule (combined tabs)
 function _refreshHAtt(){ if(ST.hView==='h-attendance') renderHAttendance(); else renderHSchedule(); }
 
+// Custom shift definitions live in facility_shifts but DB.facilityShifts started as {}
+// and was never filled from the server, so saved shifts never came back. Load them once
+// per facility, then re-render. Failures are non-blocking: the defaults still render.
+const _shiftDefsLoaded = {};
+function _loadFacilityShiftDefs(fid){
+  if(!fid || _shiftDefsLoaded[fid]) return;
+  if(!(typeof IS_LIVE!=='undefined' && IS_LIVE && typeof SB!=='undefined' && SB.getFacilityShiftDefs)) return;
+  _shiftDefsLoaded[fid] = true;
+  SB.getFacilityShiftDefs(fid).then(rows=>{
+    if(!Array.isArray(rows) || !rows.length) return;
+    if(!DB.facilityShifts) DB.facilityShifts = {};
+    if(!DB.facilityShifts[fid]) DB.facilityShifts[fid] = {...SHIFT_DEF_DEFAULT};
+    rows.forEach(r=>{ const d = mapShiftDefFromBackend(r); DB.facilityShifts[fid][d.id] = d; });
+    if(ST.hView==='h-schedule' && typeof renderHSchedule==='function') renderHSchedule();
+  }).catch(e=>{ _shiftDefsLoaded[fid] = false; console.warn('[shifts] definition load failed', e && e.message); });
+}
 function renderHSchedule(){
   const fid = ST.hFid||'test-a';
+  _loadFacilityShiftDefs(fid);
   const el = document.getElementById('h-schedule');
   const today = todayStr();
   const shifts = getFacilityShifts(fid);
@@ -9916,10 +10372,16 @@ function execBulkSchedule(fid){
       const offset=((di*Object.keys(shifts).length+si)*count)%st.length;
       const assigned=[];
       for(let i=0;i<Math.min(count,st.length);i++) assigned.push(st[(offset+i)%st.length].id);
-      if(existing){ existing.assignedStaff=assigned; if(!existing.zoneAssignments) existing.zoneAssignments={}; }
+      if(existing){
+        existing.assignedStaff=assigned;
+        if(!existing.zoneAssignments) existing.zoneAssignments={};
+        // T28: an already-populated day only ever changed in memory, while the toast below
+        // counted it as filled. The overwrite is now written like any other.
+        if(IS_LIVE) SB.updateSchedule(existing.id, mapScheduleToBackend(existing)).catch(e => handleSyncError(e,'Schedule sync'));
+      }
       else {
-        const autoSched={id:'sch-'+DB.schNextId++,fid,date,shift:sk,assignedStaff:assigned,publishedBy:ST.user?.id||'',notes:'',zoneAssignments:{}};
-        if(IS_LIVE){ SB.createSchedule(mapScheduleToBackend(autoSched)).catch(e => { if (e instanceof ReferenceError || e instanceof TypeError || e instanceof SyntaxError) throw e; }); }
+        const autoSched={id:newRecordId(),fid,date,shift:sk,assignedStaff:assigned,publishedBy:null,notes:'',zoneAssignments:{}};
+        if(IS_LIVE){ SB.createSchedule(mapScheduleToBackend(autoSched)).catch(e => handleSyncError(e,'Schedule sync')); }
         DB.schedule.push(autoSched);
       }
       filled++;
@@ -10037,7 +10499,11 @@ function saveShiftDef(fid, editId){
   const bd=document.getElementById('cs-bd').value||'rgba(249,115,22,.3)';
   if(!id||!name||!start||!end){toast('Please fill all required fields.','err');return;}
   if(!DB.facilityShifts[fid]) DB.facilityShifts[fid]={...SHIFT_DEF_DEFAULT};
-  DB.facilityShifts[fid][id]={id,label:id,name,start,end,icon,color,bg,bd};
+  const def={id,label:id,name,start,end,icon,color,bg,bd};
+  DB.facilityShifts[fid][id]=def;
+  // Without this the shift only existed on screen and was gone on the next load.
+  if(IS_LIVE && typeof SB!=='undefined' && SB.upsertFacilityShiftDef)
+    SB.upsertFacilityShiftDef(mapShiftDefToBackend(fid, def)).catch(e => handleSyncError(e,'Shift definition sync'));
   closeModal();
   toast(`Shift "${name}" ${editId?'updated':'created'}.`,'ok');
   renderHSchedule();
@@ -10045,7 +10511,18 @@ function saveShiftDef(fid, editId){
 function deleteShift(fid, shiftId){
   if(!confirm('Delete this shift? Scheduled assignments for this shift will also be removed.')) return;
   if(DB.facilityShifts[fid]) delete DB.facilityShifts[fid][shiftId];
+  const removed = DB.schedule.filter(s=>s.fid===fid&&s.shift===shiftId);
   DB.schedule = DB.schedule.filter(s=>!(s.fid===fid&&s.shift===shiftId));
+  // Both the definition and the shift's scheduled days were only being dropped in
+  // memory, so the shift and its assignments came back on the next load.
+  if(IS_LIVE && typeof SB!=='undefined'){
+    if(SB.deleteFacilityShiftDef)
+      SB.deleteFacilityShiftDef(fid, shiftId).catch(e => handleSyncError(e,'Shift definition sync'));
+    removed.forEach(s=>{
+      if(SB.deleteSchedule && !String(s.id).startsWith('sch-'))
+        SB.deleteSchedule(s.id).catch(e => handleSyncError(e,'Schedule sync'));
+    });
+  }
   toast('Shift deleted.','ok');
   renderHSchedule();
 }
@@ -10203,7 +10680,9 @@ function saveShift(fid, date, shift){
       SB.updateSchedule(existing.id, mapScheduleToBackend(existing)).catch(e => handleSyncError(e, 'Schedule sync'));
     }
   } else {
-    const newSched={id:'sch-'+DB.schNextId++,fid,date,shift,assignedStaff:[..._seAssigned],publishedBy:ST.user?.id||'',notes,zoneAssignments};
+    // publishedBy stays null until somebody presses Publish to Staff. Stamping the author
+    // here is what made every new shift look published while the button did nothing.
+    const newSched={id:newRecordId(),fid,date,shift,assignedStaff:[..._seAssigned],publishedBy:null,notes,zoneAssignments};
     if(IS_LIVE){
       SB.createSchedule(mapScheduleToBackend(newSched)).catch(e => handleSyncError(e, 'Schedule sync'));
     }
@@ -10222,29 +10701,78 @@ function saveShift(fid, date, shift){
 function clearShift(fid,date,shift){
   if(!confirm('Remove all staff from this shift?')) return;
   const existing = DB.schedule.find(s=>s.fid===fid&&s.date===date&&s.shift===shift);
-  if(existing) existing.assignedStaff=[];
+  if(existing){
+    existing.assignedStaff=[];
+    // Zone assignments belong to the staff who were just removed, so they go too;
+    // leaving them would strand zones against people no longer on the shift.
+    existing.zoneAssignments={};
+    // Mirror saveShift: without this the clear was in-memory only and the staff
+    // reappeared on the next load.
+    if(IS_LIVE) SB.updateSchedule(existing.id, mapScheduleToBackend(existing)).catch(e => handleSyncError(e,'Schedule sync'));
+  }
   closeModal();
   toast('Shift cleared.','ok');
   _refreshHAtt();
 }
 
+// T26. The button used to be `closeModal();toast('Schedule published...')` and nothing else,
+// so it announced a thing it had not done. A shift counts as published when published_by is
+// set on its row; that is what the staff portal reads.
+function _pendingPublish(fid){
+  const dates = add30Days(todayStr(),30);
+  const out = [];
+  dates.forEach(d=>{
+    Object.keys(getFacilityShifts(fid)).forEach(sh=>{
+      const sch=getSchedule(fid,d,sh);
+      if(sch && sch.assignedStaff.length>0 && !sch.publishedBy) out.push(sch);
+    });
+  });
+  return out;
+}
+
 function openPublishModal(fid){
   const st = staffOf(fid);
   const dates = add30Days(todayStr(),30);
-  let published=0, total=0;
-  dates.forEach(d=>{ ['AM','PM','NOC'].forEach(sh=>{ total++; const sch=getSchedule(fid,d,sh); if(sch&&sch.assignedStaff.length>0) published++; }); });
+  let filled=0, total=0, alreadyLive=0;
+  dates.forEach(d=>{ Object.keys(getFacilityShifts(fid)).forEach(sh=>{
+    total++;
+    const sch=getSchedule(fid,d,sh);
+    if(sch&&sch.assignedStaff.length>0){ filled++; if(sch.publishedBy) alreadyLive++; }
+  }); });
+  const pending = filled - alreadyLive;
   openModal('Publish Schedule',`
     <div class="modal-body">
       <div style="background:rgba(196,154,32,.06);border:1px solid var(--gold-bd);border-radius:var(--rs);padding:12px 14px;font-size:12.5px;color:var(--txt2);margin-bottom:14px;line-height:1.6">
-        Publishing makes the 30-day schedule visible to all staff in their portals. Shifts can still be edited after publishing.
+        Publishing releases the next 30 days to staff. Until you publish, staff do not see these shifts.
+        Shifts can still be edited afterwards, and edits are visible straight away.
       </div>
       <div style="display:flex;gap:14px;margin-bottom:14px">
-        <div class="stat-card" style="flex:1;text-align:center"><div class="stat-val" style="color:var(--ok)">${published}</div><div class="stat-lbl">Shifts Filled</div></div>
-        <div class="stat-card" style="flex:1;text-align:center"><div class="stat-val" style="color:${total-published>0?'var(--warn)':'var(--ok)'}">${total-published}</div><div class="stat-lbl">Unscheduled</div></div>
+        <div class="stat-card" style="flex:1;text-align:center"><div class="stat-val" style="color:var(--gold)">${pending}</div><div class="stat-lbl">To Publish</div></div>
+        <div class="stat-card" style="flex:1;text-align:center"><div class="stat-val" style="color:var(--ok)">${alreadyLive}</div><div class="stat-lbl">Already Live</div></div>
+        <div class="stat-card" style="flex:1;text-align:center"><div class="stat-val" style="color:${total-filled>0?'var(--warn)':'var(--ok)'}">${total-filled}</div><div class="stat-lbl">Unscheduled</div></div>
         <div class="stat-card" style="flex:1;text-align:center"><div class="stat-val" style="color:var(--blue)">${st.length}</div><div class="stat-lbl">Total Staff</div></div>
       </div>
     </div>
-    <div class="modal-ft"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-gold" onclick="closeModal();toast('Schedule published. Staff can now view their shifts.','ok')">Publish to Staff</button></div>`,'modal-md');
+    <div class="modal-ft"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-gold" ${pending?'':'disabled'} onclick="publishSchedule('${fid}')">${pending?`Publish ${pending} Shift${pending===1?'':'s'} to Staff`:'Nothing to Publish'}</button></div>`,'modal-md');
+}
+
+function publishSchedule(fid){
+  const pending = _pendingPublish(fid);
+  if(!pending.length){ closeModal(); toast('Nothing new to publish.','warn'); return; }
+  const by = ST.user?.id || null;
+  if(!by){ toast('Could not identify who is publishing. Please sign in again.','err'); return; }
+  pending.forEach(sch=>{
+    sch.publishedBy = by;
+    if(IS_LIVE){
+      SB.updateSchedule(sch.id, mapScheduleToBackend(sch)).catch(e => handleSyncError(e,'Publish schedule'));
+    }
+  });
+  closeModal();
+  // The count is what was sent. A rejected write reports itself through handleSyncError
+  // rather than being folded into a success message, which is the fault this task fixes.
+  toast(`${pending.length} shift${pending.length===1?'':'s'} published. Staff can now see ${pending.length===1?'it':'them'}.`,'ok');
+  if(ST.portal==='h') renderHSchedule();
+  if(ST.portal==='x') renderXSchedule();
 }
 
 
@@ -10641,9 +11169,14 @@ function renderHAttendance(){
 
 function markAttend(fid, date, shift, staffId, status){
   const existing = DB.attendance.find(a=>a.fid===fid&&a.date===date&&a.shift===shift&&a.staffId===staffId);
-  if(existing){ existing.status=status; }
+  if(existing){
+    existing.status=status;
+    // T27: a correction only changed local state, so present-then-absent came back present
+    // on the next load. SB.updateAttendance existed and was called from nowhere.
+    if(IS_LIVE) SB.updateAttendance(existing.id, mapAttendanceToBackend(existing)).catch(e => handleSyncError(e, 'Attendance sync'));
+  }
   else {
-    const att1={id:'att-'+DB.attNextId++,fid,date,shift,staffId,status,coverageFor:null,markedBy:ST.user?.id||''};
+    const att1={id:newRecordId(),fid,date,shift,staffId,status,coverageFor:null,markedBy:ST.user?.id||''};
     if(IS_LIVE) SB.recordAttendance(mapAttendanceToBackend(att1)).catch(e => handleSyncError(e, 'Attendance sync'));
     DB.attendance.push(att1);
   }
@@ -10659,10 +11192,13 @@ function markAllAttend(fid, date, shift, status){
   const sch = getSchedule(fid, date, shift); if(!sch) return;
   sch.assignedStaff.forEach(sid=>{
     const existing=DB.attendance.find(a=>a.fid===fid&&a.date===date&&a.shift===shift&&a.staffId===sid);
-    if(existing){ existing.status=status; }
+    if(existing){
+      existing.status=status;
+      if(IS_LIVE) SB.updateAttendance(existing.id, mapAttendanceToBackend(existing)).catch(e => handleSyncError(e, 'Attendance sync'));
+    }
     else {
-      const att2={id:'att-'+DB.attNextId++,fid,date,shift,staffId:sid,status,coverageFor:null,markedBy:ST.user?.id||''};
-      if(IS_LIVE) SB.recordAttendance(mapAttendanceToBackend(att2)).catch(e => { if (e instanceof ReferenceError || e instanceof TypeError || e instanceof SyntaxError) throw e; });
+      const att2={id:newRecordId(),fid,date,shift,staffId:sid,status,coverageFor:null,markedBy:ST.user?.id||''};
+      if(IS_LIVE) SB.recordAttendance(mapAttendanceToBackend(att2)).catch(e => handleSyncError(e, 'Attendance sync'));
       DB.attendance.push(att2);
     }
   });
@@ -10675,12 +11211,17 @@ function markAllAttend(fid, date, shift, status){
 function assignCoverage(fid, date, shift, absentId){
   const sel = document.getElementById('cov-'+absentId);
   if(!sel||!sel.value){ toast('Please select a coverage staff member.','err'); return; }
-  const covSid = parseInt(sel.value);
+  // Staff ids are uuids. parseInt on one gives NaN, so the lookup below never matched an
+  // existing record and getStaff() at the end of this function found nobody.
+  const covSid = sel.value;
   const existing = DB.attendance.find(a=>a.fid===fid&&a.date===date&&a.shift===shift&&a.staffId===covSid);
-  if(existing){ existing.status='coverage'; existing.coverageFor=absentId; }
+  if(existing){
+    existing.status='coverage'; existing.coverageFor=absentId;
+    if(IS_LIVE) SB.updateAttendance(existing.id, mapAttendanceToBackend(existing)).catch(e => handleSyncError(e, 'Attendance sync'));
+  }
   else {
-    const covAtt={id:'att-'+DB.attNextId++,fid,date,shift,staffId:covSid,status:'coverage',coverageFor:absentId,markedBy:ST.user?.id||''};
-    if(IS_LIVE) SB.recordAttendance(mapAttendanceToBackend(covAtt)).catch(e => { if (e instanceof ReferenceError || e instanceof TypeError || e instanceof SyntaxError) throw e; });
+    const covAtt={id:newRecordId(),fid,date,shift,staffId:covSid,status:'coverage',coverageFor:absentId,markedBy:ST.user?.id||''};
+    if(IS_LIVE) SB.recordAttendance(mapAttendanceToBackend(covAtt)).catch(e => handleSyncError(e, 'Attendance sync'));
     DB.attendance.push(covAtt);
   }
   // Inherit zone from the absent staff member for coverage worker
@@ -10999,6 +11540,64 @@ function renderHMilestones(){
 }
 
 // ============================================================ H POS SCHOOL
+// Pending Position School sign-off requests for this facility. Candidates were being
+// told a supervisor would review, but nothing surfaced the request to anyone. This is
+// that missing surface: approve runs the same completePSTrack path as Award Star, so
+// there is still exactly one way a track gets completed.
+function psPendingRequestsFor(fid){
+  return (DB.psCompletionRequests||[]).filter(r =>
+    r.status === 'pending' && (fid == null || String(r.fid) === String(fid))
+  );
+}
+function psCompletionQueueHTML(fid){
+  if(!(ST.user && ['master_admin','admin','staff_admin','assessor','educator','hospital','facility_admin'].includes(ST.user.role))) return '';
+  const pend = psPendingRequestsFor(fid);
+  if(!pend.length) return '';
+  const rows = pend.map(r=>{
+    const s = getStaff(r.sid);
+    return `<tr>
+      <td class="fw7">${s?fullName(s):'Unknown'}</td>
+      <td style="font-size:12px;color:var(--txt2)">${esc0(r.trackName||r.tid)}</td>
+      <td style="font-size:11px;color:var(--txt3)">K ${r.practiceK!=null?r.practiceK:'--'} &middot; S ${r.practiceS!=null?r.practiceS:'--'}</td>
+      <td style="font-size:11px;color:var(--txt3)">${esc0(r.requestedAt||'')}</td>
+      <td style="white-space:nowrap;text-align:right">
+        <button class="btn btn-ok btn-xs" onclick="approvePSCompletion('${r.id}')">Approve &amp; award star</button>
+        <button class="btn btn-ghost btn-xs" style="margin-left:6px;border-color:rgba(239,68,68,.4);color:#f87171" onclick="denyPSCompletion('${r.id}')">Deny</button>
+      </td></tr>`;
+  }).join('');
+  return `<div class="card mb16" style="border-color:var(--gold-bd)">
+    <div class="card-hd"><div class="card-ttl">Sign-off requests<span class="pill p-gold" style="margin-left:8px">${pend.length}</span></div></div>
+    <div class="card-body" style="padding:0"><div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th>Staff</th><th>Track</th><th>Practice</th><th>Requested</th><th style="text-align:right">Action</th></tr></thead>
+      <tbody>${rows}</tbody></table></div></div></div>`;
+}
+function esc0(v){ return (typeof Security!=='undefined'&&Security.sanitize)?Security.sanitize(String(v==null?'':v)):String(v==null?'':v); }
+function _psDecide(reqId, status){
+  const r = (DB.psCompletionRequests||[]).find(x=>String(x.id)===String(reqId));
+  if(!r) return null;
+  r.status = status;
+  r.decidedBy = ST.user?.id || null;
+  r.decidedAt = new Date().toISOString();
+  if(IS_LIVE && typeof SB!=='undefined' && SB.decidePSCompletionRequest && !String(r.id).startsWith('psr-')){
+    SB.decidePSCompletionRequest(r.id, { status, decided_by: r.decidedBy, decided_at: r.decidedAt })
+      .catch(e=>handleSyncError(e,'Position School sign-off decision'));
+  }
+  return r;
+}
+function approvePSCompletion(reqId){
+  const r = _psDecide(reqId, 'approved');
+  if(!r) return;
+  // Award through the existing path so the 3-pass gate and star rules still apply.
+  completePSTrack(r.sid, r.tid);
+  toast('Sign-off approved for '+(r.trackName||r.tid)+'.','ok');
+  if(typeof renderHPosSchool==='function') renderHPosSchool();
+}
+function denyPSCompletion(reqId){
+  const r = _psDecide(reqId, 'denied');
+  if(!r) return;
+  toast('Sign-off request denied.','err');
+  if(typeof renderHPosSchool==='function') renderHPosSchool();
+}
 function renderHPosSchool(){
   const fid=ST.hFid||'test-a';
   const st=staffOf(fid);
@@ -11084,6 +11683,7 @@ function renderHPosSchool(){
   }
 
   document.getElementById('h-posschool').innerHTML=`
+    ${psCompletionQueueHTML(fid)}
     <div class="stat-grid mb16">
       <div class="stat-card"><div class="stat-accent" style="background:var(--ok)"></div>
         <div class="stat-lbl">Track Completions</div><div class="stat-val" style="color:var(--ok)">${completeCount}</div>
@@ -11300,6 +11900,10 @@ function renderHReports(){
         }).join('')}
       </div>
     </div>
+
+    ${fiFacilitySectionHTML(fiFacilityRollup(fid))}
+
+    ${prcFacilitySectionHTML(prcFacilityRollup(fid))}
 
     ${rptSection('OIP Team Composition')}
     <div class="card mb16">
@@ -11537,7 +12141,13 @@ function renderAOverview(){
   const allSt=DB.staff.filter(s=>scopedFacs.find(f=>f.id===s.fid));
   const n=allSt.length;
   const aboveG=allSt.filter(s=>beltIdx(s.belt)>=2).length;
+  // Network-scoped preceptor rollup: sum the per-facility rollup over scoped
+  // facilities (respects the master/assignedFids scope; prcFacilityRollup(null)
+  // would ignore it). Minimal glue over the preceptor.js data fn (B7).
+  const prcNet=(typeof prcFacilityRollup==='function')?scopedFacs.reduce((acc,f)=>{const r=prcFacilityRollup(f.id);acc.assignedCount+=r.assignedCount;acc.completeCount+=r.completeCount;return acc;},{assignedCount:0,completeCount:0}):null;
+  const prcNetPct=prcNet&&prcNet.assignedCount?Math.round(prcNet.completeCount/prcNet.assignedCount*100):0;
   document.getElementById('a-overview').innerHTML=`
+    ${pendingReviewNoticeHTML()}
     <div class="stat-grid">
       <div class="stat-card"><div class="stat-accent" style="background:var(--gold)"></div><div class="stat-lbl">Active Facilities</div><div class="stat-val" style="color:var(--gold)">${scopedFacs.length}</div><div class="stat-sub">Active hospitals</div></div>
       <div class="stat-card"><div class="stat-accent" style="background:var(--blue)"></div><div class="stat-lbl">Total Staff Enrolled</div><div class="stat-val" style="color:var(--blue)">${n}</div><div class="stat-sub">Across all departments</div></div>
@@ -11545,6 +12155,7 @@ function renderAOverview(){
       <div class="stat-card"><div class="stat-accent" style="background:var(--warn)"></div><div class="stat-lbl">Pending Assessments</div><div class="stat-val" style="color:var(--warn)">${DB.queue.filter(q=>!assignedFids||assignedFids.includes(q.fid)).length}</div><div class="stat-sub">Awaiting SBD decision</div></div>
       <div class="stat-card"><div class="stat-accent" style="background:#0ea5e9"></div><div class="stat-lbl">Authorized Observers</div><div class="stat-val" style="color:#0ea5e9">${allSt.filter(s=>s.observer).length}</div><div class="stat-sub">Can conduct observations</div></div>
       <div class="stat-card"><div class="stat-accent" style="background:#8b5cf6"></div><div class="stat-lbl">Observation Gate Passed</div><div class="stat-val" style="color:#8b5cf6">${allSt.filter(s=>s.cur&&s.cur.o==='pass').length}</div><div class="stat-sub">${n?Math.round(allSt.filter(s=>s.cur&&s.cur.o==='pass').length/n*100):0}% of ${n} staff</div></div>
+      <div class="stat-card"><div class="stat-accent" style="background:var(--gold)"></div><div class="stat-lbl">Preceptor Certification</div><div class="stat-val" style="color:var(--gold)">${prcNet&&prcNet.assignedCount?prcNetPct+'%':'--'}</div><div class="stat-sub">${prcNet&&prcNet.assignedCount?prcNet.completeCount+' of '+prcNet.assignedCount+' modules':'No modules assigned'}</div></div>
     </div>
     ${(()=>{
       const eligible=DB.staff.filter(s=>beltIdx(s.belt)>=2);
@@ -12775,6 +13386,8 @@ function renderFacReports(el){
         ${Object.keys(PS_TRACKS).map(tid=>{const t=PS_TRACKS[tid];const done=st.filter(s=>getTrackStatus(s,tid)==='complete').length;const act=st.filter(s=>['active','testing','observation'].includes(getTrackStatus(s,tid))).length;const elig=st.filter(s=>getTrackStatus(s,tid)==='eligible').length;return`<div style="background:var(--s2);border:1px solid var(--bdr);border-radius:var(--rs);padding:10px"><div style="font-size:9.5px;color:${t.tier==='green'?'var(--blt-gr)':'var(--blue)'};font-weight:700;margin-bottom:3px">${tid}</div><div style="font-size:11.5px;font-weight:700;margin-bottom:6px">${t.name}</div><div style="font-size:10.5px;display:flex;justify-content:space-between"><span style="color:var(--ok)">${done}✓</span><span style="color:var(--warn)">${act} act</span><span style="color:var(--gold)">${elig} avail</span></div></div>`;}).join('')}
       </div>
     </div>
+    ${fiFacilitySectionHTML(fiFacilityRollup(fid), 'openAdminProfile')}
+    ${prcFacilitySectionHTML(prcFacilityRollup(fid), 'openAdminProfile')}
     ${stagnation.length?`${rptSection('Stagnation Alerts',stagnation.length+' flagged')}
     <div class="card mb16"><div style="overflow-x:auto"><table class="tbl" style="min-width:360px"><thead><tr><th>Name</th><th>Belt</th><th>Days at Belt</th><th>Expected</th><th>Overage</th></tr></thead>
     <tbody>${stagnation.slice(0,8).map(({s,actual,expected,over})=>`<tr onclick="openAdminProfile('${s.id}')" style="cursor:pointer"><td class="fw7">${fullName(s)}</td><td>${beltBadge(s.belt)}</td><td style="color:var(--err);font-weight:600">${actual}d</td><td style="color:var(--txt3)">${expected}d</td><td><span class="pill p-err" style="font-size:9px">+${over}d</span></td></tr>`).join('')}</tbody></table></div></div>`:''}
@@ -12837,16 +13450,22 @@ function openAdminProfile(sid){
 
 // Grant / revoke Observer access (master-admin only). Flips the staff.observer
 // flag via a targeted single-column write -- never touches other staff fields.
+// #73: after a role/capability action, re-render the surface it was invoked from
+// ('rolemgmt' = the Role Management console; anything else = the staff profile).
+function _accessActionRerender(sid, context){
+  if(context==='rolemgmt' && typeof renderARoleMgmt==='function'){ renderARoleMgmt(); return; }
+  if(typeof renderHProfile==='function') renderHProfile(sid, context);
+}
 function toggleObserver(sid, context){
   const s=getStaff(sid); if(!s) return;
   if(!(ST.user&&ST.user.role==='master_admin')){toast('Only master admins can grant observer access.','err');return;}
   const next=!s.observer;
   s.observer=next;
   if(IS_LIVE && typeof SB!=='undefined' && SB.updateStaff){
-    SB.updateStaff(sid,{observer:next}).catch(e=>{ s.observer=!next; handleSyncError(e,'Observer toggle'); if(typeof renderHProfile==='function') renderHProfile(sid,context); });
+    SB.updateStaff(sid,{observer:next}).catch(e=>{ s.observer=!next; handleSyncError(e,'Observer toggle'); _accessActionRerender(sid,context); });
   }
   toast(`${fullName(s)} ${next?'is now an authorized observer.':'is no longer an observer.'}`, next?'ok':'err');
-  if(typeof renderHProfile==='function') renderHProfile(sid,context);
+  _accessActionRerender(sid,context);
 }
 
 // Generate a reusable observation PIN for an authorized observer (master-admin only).
@@ -12864,6 +13483,139 @@ function generateObserverPin(sid, context){
   }
   toast(`${fullName(s)}'s observer PIN: ${pin}`,'ok');
   if(typeof renderHProfile==='function') renderHProfile(sid,context);
+}
+
+// ── MANUAL ASSESSMENT-WINDOW OVERRIDE ─────────────────────────────────────────
+// master_admin / staff_admin (SIPS assessor) can open a staffer's assessment
+// window ahead of the automatic cycle. Timing-only (the current-belt gate-lock in
+// getWindowStatus() still applies), lasts the belt's NORMAL open period, then
+// auto-reverts. Writes only the window_override column (targeted PATCH, cannot
+// touch oip/history/ps_tracks). Decisions: docs/decisions/2026-07-16-manual-window-override.md.
+function _canOverrideWindow(){
+  return !!(ST.user && (ST.user.role==='master_admin' || ST.user.role==='staff_admin'));
+}
+
+function adminOpenWindow(staffId, context){
+  if(!_canOverrideWindow()){ toast('Not permitted.','err'); return; }
+  const s=getStaff(staffId);
+  if(!s){ toast('Staff not found.','err'); return; }
+  const cfg=(typeof BELT_WINDOWS!=='undefined') ? BELT_WINDOWS[s.belt] : null;
+  if(!cfg){ toast('No assessment window applies to this belt (max level or unconfigured).','err'); return; }
+  const wk=cfg.open;
+  openModal(`Open Assessment Window — ${fullName(s)}`,`
+    <div class="modal-body">
+      <div style="font-size:12.5px;color:var(--txt2);margin-bottom:14px;line-height:1.5">
+        This opens ${fullName(s)}'s window now, ahead of the automatic cycle. It stays open for their
+        belt's normal window (<strong>${wk} week${wk===1?'':'s'}</strong>), then closes on its own and
+        the regular cadence resumes. It does <strong>not</strong> skip any current-belt gate requirements.
+      </div>
+      <label class="form-label">Reason (optional)</label>
+      <input id="ow-reason" class="form-input" placeholder="e.g. ready early / assessor scheduling" />
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-gold" onclick="confirmOpenWindow('${s.id}','${context||'admin'}')">Open Window</button>
+    </div>`,'modal-md');
+}
+
+async function confirmOpenWindow(staffId, context){
+  if(!_canOverrideWindow()){ toast('Not permitted.','err'); return; }
+  const s=getStaff(staffId);
+  if(!s) return;
+  const cfg=(typeof BELT_WINDOWS!=='undefined') ? BELT_WINDOWS[s.belt] : null;
+  if(!cfg){ toast('No assessment window applies to this belt.','err'); return; }
+  const reason=(document.getElementById('ow-reason')?.value || '').trim();
+  const untilMs=Date.now() + cfg.open*7*86400000;            // belt's NORMAL open period
+  const until=new Date(untilMs).toISOString().slice(0,10);
+  const prev=s.windowOverride || null;
+  s.windowOverride={
+    until,
+    by: (ST.user && ST.user.id) || null,
+    byName: (ST.user && (ST.user.name || ST.user.email)) || ST.name || 'Admin',
+    at: new Date().toISOString(),
+    reason
+  };
+  if(IS_LIVE && typeof SB!=='undefined' && SB.updateStaff){
+    try { await SB.updateStaff(s.id, { window_override: s.windowOverride }); }  // targeted single-column write
+    catch(e){
+      s.windowOverride=prev;
+      if(typeof handleSyncError==='function') handleSyncError(e,'Open window'); else toast('Could not save — please retry.','err');
+      return;
+    }
+  }
+  if(typeof logActivity==='function') logActivity('window_override_open', {staffId:s.id, until, weeks:cfg.open, reason});
+  closeModal();
+  toast(`${fullName(s)}: assessment window opened for ${cfg.open} week${cfg.open===1?'':'s'}.`,'ok');
+  if(typeof renderHProfile==='function') renderHProfile(s.id, context||'admin');
+}
+
+// #120 master-admin override: waive / restore the practice-test gate for belt assessment requests.
+// Mirrors the window-override handlers: targeted single-column PATCH, master-admin only, audit-logged.
+async function grantAssessmentOverride(staffId, context){
+  if(!(ST.user && ST.user.role==='master_admin')){ toast('Not permitted.','err'); return; }
+  const s=getStaff(staffId);
+  if(!s) return;
+  const reason=prompt('Reason for waiving the practice-test gate for '+fullName(s)+'? (optional)');
+  if(reason===null) return; // cancelled
+  const prev=s.assessmentGateOverride || null;
+  s.assessmentGateOverride={
+    waived:true,
+    by: (ST.user && ST.user.id) || null,
+    byName: (ST.user && (ST.user.name || ST.user.email)) || ST.name || 'Admin',
+    at: new Date().toISOString(),
+    reason: reason.trim()
+  };
+  if(IS_LIVE && typeof SB!=='undefined' && SB.updateStaff){
+    try { await SB.updateStaff(s.id, { assessment_gate_override: s.assessmentGateOverride }); } // targeted single-column write
+    catch(e){
+      s.assessmentGateOverride=prev;
+      if(typeof handleSyncError==='function') handleSyncError(e,'Waive practice gate'); else toast('Could not save — please retry.','err');
+      return;
+    }
+  }
+  if(typeof logActivity==='function') logActivity('assessment_gate_override_grant', {staffId:s.id, reason:reason.trim()});
+  toast(`${fullName(s)}: practice gate waived. They can request an assessment now.`,'ok');
+  _accessActionRerender(s.id, context||'admin');
+}
+
+async function clearAssessmentOverride(staffId, context){
+  if(!(ST.user && ST.user.role==='master_admin')){ toast('Not permitted.','err'); return; }
+  const s=getStaff(staffId);
+  if(!s || !s.assessmentGateOverride) return;
+  if(!confirm(`Remove the practice-gate waiver for ${fullName(s)}? They will need to complete the practice tests to request.`)) return;
+  const prev=s.assessmentGateOverride;
+  s.assessmentGateOverride=null;
+  if(IS_LIVE && typeof SB!=='undefined' && SB.updateStaff){
+    try { await SB.updateStaff(s.id, { assessment_gate_override: null }); }
+    catch(e){
+      s.assessmentGateOverride=prev;
+      if(typeof handleSyncError==='function') handleSyncError(e,'Clear practice-gate waiver'); else toast('Could not save — please retry.','err');
+      return;
+    }
+  }
+  if(typeof logActivity==='function') logActivity('assessment_gate_override_clear', {staffId:s.id});
+  toast(`${fullName(s)}: practice-gate waiver removed.`,'ok');
+  _accessActionRerender(s.id, context||'admin');
+}
+
+async function adminCloseWindow(staffId, context){
+  if(!_canOverrideWindow()){ toast('Not permitted.','err'); return; }
+  const s=getStaff(staffId);
+  if(!s || !s.windowOverride) return;
+  if(!confirm(`Close ${fullName(s)}'s manually-opened window now? It will revert to the normal cadence.`)) return;
+  const prev=s.windowOverride;
+  s.windowOverride=null;
+  if(IS_LIVE && typeof SB!=='undefined' && SB.updateStaff){
+    try { await SB.updateStaff(s.id, { window_override: null }); }
+    catch(e){
+      s.windowOverride=prev;
+      if(typeof handleSyncError==='function') handleSyncError(e,'Close window'); else toast('Could not save — please retry.','err');
+      return;
+    }
+  }
+  if(typeof logActivity==='function') logActivity('window_override_close', {staffId:s.id});
+  toast(`${fullName(s)}: manual window closed.`,'ok');
+  if(typeof renderHProfile==='function') renderHProfile(s.id, context||'admin');
 }
 
 // ============================================================ A ASSESSMENTS (global)
@@ -13015,7 +13767,7 @@ function adaptBeltResultToReview(r){
   else if (outcome === 'KNOWLEDGE FOUNDATION') timeframe = '30 days recommended';
   const levelScores = {};
   Object.keys(r.kLevelScores || {}).forEach(k => { const n = k.replace('L', ''); if (r.kLevelScores[k] != null) levelScores[n] = Math.round(r.kLevelScores[k]); });
-  const responses = (r.simResponses || []).map(sr => ({ qId: sr.question_id, level: sr.level, type: 'simulation', question: sr.question || '', answer: sr.answer || '', aiScore: sr.score }));
+  const responses = (r.simResponses || []).map(sr => ({ qId: sr.question_id, level: sr.level, type: 'simulation', question: sr.question || '', answer: sr.answer || '', aiScore: Number(sr.score) || 0 }));
   const _precomputed = {
     outcome, classification, tone, conditions, timeframe,
     blended: r.blendedScore, knowledgeOverall: r.kOverall, simOverall: r.simOverall,
@@ -13034,17 +13786,102 @@ function adaptBeltResultToReview(r){
 function downloadBeltTestReport(id){
   const r = (DB.beltTestResults || []).find(x => x.id === id);
   if (!r) { toast('Result not found', 'err'); return; }
-  const pr = adaptBeltResultToReview(r);
+  // Per-gate rows carry only one half; a full report needs both gates. Pair them
+  // into the combined shape when the sibling exists, else defer.
+  let reviewRow = r;
+  if ((r.component || 'combined') !== 'combined') {
+    const combo = btComponentRows(r.staffId, r.targetBelt);
+    if (!combo.combined) { toast('Full report is available once both gates are scored.', 'warn'); return; }
+    reviewRow = _btCombinedRowShape(combo);
+  }
+  const pr = adaptBeltResultToReview(reviewRow);
   const staff = getStaff(r.staffId) || { first: pr.staffName, last: '', role: pr.staffTitle };
   const fac = getFac(r.fid) || { name: 'Facility' };
   openPrintWindow('SBD Belt Assessment Report', buildAssessmentReportHTML(pr, staff, fac));
 }
 
+// ── Per-gate belt test (Ph.2b) assessor helpers ──────────────────────────────
+// The two per-component result rows for a candidate+belt, plus the deferred
+// combined recommendation (null until BOTH are scored). combineComponents reads
+// the persisted component_detail blobs — the same inputs the candidate scored.
+function btComponentRows(staffId, targetBelt){
+  const rows = (DB.beltTestResults || []).filter(r => r.staffId === staffId && r.targetBelt === targetBelt);
+  const pick = (c) => rows.filter(r => (r.component || 'combined') === c)
+    .sort((a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0))[0] || null;
+  const k = pick('knowledge'), s = pick('simulation');
+  let combined = null;
+  if (k && s && k.componentDetail && s.componentDetail && window.BeltTestEngine) {
+    combined = BeltTestEngine.combineComponents(k.componentDetail, s.componentDetail, targetBelt);
+  }
+  return { k, s, combined };
+}
+function _btNotesValue(id){ const el = document.getElementById('bt-notes-' + id); return el ? el.value.trim() : ''; }
+// Merge the two component rows + the combined engine result into the camelCase
+// shape adaptBeltResultToReview expects, for a full (both-gate) report.
+function _btCombinedRowShape(combo){
+  const e = combo.combined, k = combo.k, s = combo.s;
+  return {
+    id: k.id, staffId: k.staffId, fid: k.fid, targetBelt: k.targetBelt,
+    submittedAt: s.submittedAt || k.submittedAt,
+    kLevelScores: e.k_level_scores || {}, kOverall: e.k_overall, kFloorResults: e.k_floor_results || [], kOverallPassed: e.k_overall_passed,
+    simResponses: s.simResponses || [], simLevelAvgs: e.sim_level_avgs || {}, simOverall: e.sim_overall,
+    simFloorResults: e.sim_floor_results || [], simIndividualMin: e.sim_individual_min, simOverallPassed: e.sim_overall_passed,
+    blendedScore: e.blended_score, blendedPassed: e.blended_passed,
+    systemSuggestion: e.system_suggestion, outcome: e.outcome,
+    reasonCodes: e.suggestion_reason_codes || [], conditions: e.conditions || [], watchFlags: e.watch_flags || [], remediationFlags: e.remediation_flags || [],
+    finalBelt: null, status: 'PENDING_REVIEW'
+  };
+}
+
+// Accept: dispatch on component. Per-gate rows record ONLY their own gate;
+// legacy 'combined' rows keep the atomic both-gate path.
 async function acceptBeltTestResult(id){
   const r = (DB.beltTestResults || []).find(x => x.id === id);
   if (!r) return;
   const s = getStaff(r.staffId);
   if (!s) { toast('Staff member not found.', 'err'); return; }
+  const component = r.component || 'combined';
+  if (component === 'knowledge' || component === 'simulation') return acceptBeltTestGate(r, s, component);
+  return acceptBeltTestCombined(r, s);
+}
+
+// Record ONE gate (Competency ← knowledge / Simulation ← simulation) at the
+// target belt, with optional assessor notes. §B11: recordAssessment spreads the
+// full staff record (mapStaffToBackend) — never a partial PATCH.
+async function acceptBeltTestGate(r, s, component){
+  const gateType = component === 'knowledge' ? 'Competency' : 'Simulation';
+  const gateKey  = component === 'knowledge' ? 'c' : 's';
+  const gateLabel = component === 'knowledge' ? 'Knowledge' : 'Situational';
+  const pass = r.outcome === 'PASS';
+  const targetBelt = r.targetBelt;
+  const notes = _btNotesValue(r.id) || `Dynamic Belt Test — ${gateLabel} ${pass ? 'PASS' : 'FAIL'} (assessor accepted)`;
+  if (!confirm(`Record ${gateType} = ${pass ? 'PASS' : 'FAIL'} for ${fullName(s)} at ${targetBelt} Belt?\n\nThis gate stands on its own. The other gate and Observation remain separate.`)) return;
+  try {
+    const curIdx = beltIdx(s.belt), tgtIdx = beltIdx(targetBelt);
+    if (tgtIdx === curIdx) s.cur[gateKey] = pass ? 'pass' : 'fail';
+    else if (tgtIdx === curIdx + 1) s.nxt[gateKey] = pass ? 'pass' : 'fail';
+    s.history = s.history || [];
+    s.history.push({ dt: new Date().toISOString().slice(0, 10), type: gateType, belt: targetBelt, res: pass ? 'pass' : 'fail' });
+    if (IS_LIVE) {
+      await SB.recordAssessment(mapStaffToBackend(s), gateType, targetBelt, pass ? 'pass' : 'fail', notes, ST.user?.id, new Date().toISOString());
+      DB.queue.filter(q => q.sid === s.id && q.targetBelt === targetBelt && q.type === gateType && q.status === 'approved').forEach(q => {
+        SB.resolveAssessmentQueue(q.id, 'resolved').catch(() => {});
+        q.status = pass ? 'pass' : 'fail';
+      });
+      await SB.updateBeltTestResult(r.id, { status: 'ACCEPTED', notes, override_at: new Date().toISOString(), override_by: ST.user?.id || null });
+    }
+    r.status = 'ACCEPTED'; r.notes = notes;
+    DB.queue = DB.queue.filter(q => !(q.sid === s.id && q.targetBelt === targetBelt && q.type === gateType && (q.status === 'pass' || q.status === 'fail')));
+    const combo = btComponentRows(s.id, targetBelt).combined;
+    toast(`${fullName(s)}: ${gateType} recorded (${pass ? 'PASS' : 'FAIL'}) for ${targetBelt} Belt.` +
+      (combo ? ` Both gates in — recommendation: ${combo.system_suggestion}.` : ''), 'ok');
+    if (ST.aView === 'a-assessments') renderAAssessments();
+  } catch (e) {
+    if (typeof handleSyncError === 'function') handleSyncError(e, 'Belt gate accept'); else toast('Accept failed: ' + (e.message || e), 'err');
+  }
+}
+
+async function acceptBeltTestCombined(r, s){
   const targetBelt = (r.systemSuggestion && r.systemSuggestion !== 'REMEDIATION') ? r.systemSuggestion : r.targetBelt;
   const remediation = r.outcome === 'REMEDIATION';
   const kPass = !remediation && r.kOverallPassed;
@@ -13082,10 +13919,11 @@ async function remediateBeltTestResult(id){
   const r = (DB.beltTestResults || []).find(x => x.id === id);
   if (!r) return;
   const s = getStaff(r.staffId);
+  const notes = _btNotesValue(id);
   if (!confirm(`Send ${s ? fullName(s) : 'this candidate'} to remediation? No belt is recorded; the result is marked REMEDIATION_REQUIRED.`)) return;
   try {
-    if (IS_LIVE) await SB.updateBeltTestResult(r.id, { status: 'REMEDIATION_REQUIRED' });
-    r.status = 'REMEDIATION_REQUIRED';
+    if (IS_LIVE) await SB.updateBeltTestResult(r.id, notes ? { status: 'REMEDIATION_REQUIRED', notes } : { status: 'REMEDIATION_REQUIRED' });
+    r.status = 'REMEDIATION_REQUIRED'; if (notes) r.notes = notes;
     toast(`${s ? fullName(s) : 'Candidate'}: marked for remediation.`, 'warn');
     if (ST.aView === 'a-assessments') renderAAssessments();
   } catch (e) { if (typeof handleSyncError === 'function') handleSyncError(e, 'Belt remediation'); }
@@ -13115,7 +13953,7 @@ function renderBeltPinAuthBlock(assignedFids){
       </div>
       <div class="card">
         <div style="padding:10px 14px;background:rgba(139,92,246,.06);border-bottom:1px solid var(--bdr2);font-size:11.5px;color:var(--txt3);line-height:1.5">
-          These staff have approved Competency + Simulation gates and can take their proctored belt test. Generate a one-time PIN (valid 10 min) and enter it on the candidate's device to begin.
+          These staff have at least one approved gate (Competency and/or Simulation) and can take that proctored belt test. Generate a one-time PIN (valid 10 min) and enter it on the candidate's device to begin whichever gate is ready.
         </div>
         <div style="overflow-x:auto">
           <table class="tbl tbl-static" style="min-width:560px">
@@ -13141,13 +13979,27 @@ function renderBeltTestReviewSection(assignedFids){
     (asmFilter === 'all' || r.fid === asmFilter)
   );
   if (!pending.length) return '';
-  const sugBadge = (r) => {
-    const o = r.outcome;
-    const c = o === 'PASS' ? 'p-ok' : o === 'CONDITIONAL_PASS' ? 'p-blue' : 'p-err';
-    const label = o === 'REMEDIATION' ? 'Remediation' : `${r.systemSuggestion} · ${o === 'PASS' ? 'Pass' : 'Conditional'}`;
-    return `<span class="pill ${c}">${label}</span>`;
-  };
   const num = (v) => v == null ? '--' : (Math.round(v * 10) / 10) + '%';
+  const compLabel = { knowledge: 'Knowledge', simulation: 'Situational', combined: 'Combined' };
+  // Per-gate score + its own pass/fail. Legacy 'combined' rows show blended.
+  const scoreOf = (r) => { const c = r.component || 'combined'; return c === 'knowledge' ? r.kOverall : c === 'simulation' ? r.simOverall : r.blendedScore; };
+  const scorePass = (r) => { const c = r.component || 'combined'; return c === 'knowledge' ? r.kOverallPassed : c === 'simulation' ? r.simOverallPassed : r.blendedPassed; };
+  const resultBadge = (r) => {
+    const c = r.component || 'combined';
+    if (c === 'combined') {
+      const o = r.outcome, cls = o === 'PASS' ? 'p-ok' : o === 'CONDITIONAL_PASS' ? 'p-blue' : 'p-err';
+      return `<span class="pill ${cls}">${o === 'REMEDIATION' ? 'Remediation' : `${r.systemSuggestion} · ${o === 'PASS' ? 'Pass' : 'Conditional'}`}</span>`;
+    }
+    return r.outcome === 'PASS' ? '<span class="pill p-ok">Pass</span>' : '<span class="pill p-err">Fail</span>';
+  };
+  const comboBadge = (r) => {
+    if ((r.component || 'combined') === 'combined') return '<span style="color:var(--txt3);font-size:11px">--</span>';
+    const combo = btComponentRows(r.staffId, r.targetBelt).combined;
+    if (!combo) return '<span style="color:var(--txt3);font-size:11px">awaiting other gate</span>';
+    const o = combo.outcome, cls = o === 'PASS' ? 'p-ok' : o === 'CONDITIONAL_PASS' ? 'p-blue' : 'p-err';
+    return `<span class="pill ${cls}">${o === 'REMEDIATION' ? 'Remediation' : `${combo.system_suggestion} · ${o === 'PASS' ? 'Pass' : 'Conditional'}`}</span>`;
+  };
+  const esc = (t) => String(t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const floorFailCount = (r) => (r.conditions || []).length;
   return `
     <div style="margin-bottom:20px">
@@ -13157,13 +14009,13 @@ function renderBeltTestReviewSection(assignedFids){
       </div>
       <div class="card">
         <div style="padding:10px 14px;background:rgba(139,92,246,.06);border-bottom:1px solid var(--bdr2);font-size:11.5px;color:var(--txt3);line-height:1.5">
-          System suggestion is advisory. Review the report, then Accept (records Competency + Simulation gates) or send to remediation. Observation remains a separate manual gate.
+          Each gate stands on its own &mdash; Accept records just that gate. A combined belt recommendation appears once both gates are scored. Add optional notes per gate. Observation remains a separate manual gate.
         </div>
         <div style="overflow-x:auto">
-          <table class="tbl tbl-static" style="min-width:760px">
+          <table class="tbl tbl-static" style="min-width:940px">
             <thead><tr>
-              <th>Candidate</th><th>Facility</th><th>Target</th><th>Suggestion</th>
-              <th>Knowledge</th><th>Simulation</th><th>Blended</th><th>Conditions</th><th>Submitted</th><th>Action</th>
+              <th>Candidate</th><th>Facility</th><th>Target</th><th>Gate</th>
+              <th>Score</th><th>Result</th><th>Conditions</th><th>Combined Rec.</th><th>Assessor Notes</th><th>Action</th>
             </tr></thead>
             <tbody>
               ${pending.map(r => {
@@ -13173,12 +14025,12 @@ function renderBeltTestReviewSection(assignedFids){
                   <td class="fw7">${s ? fullName(s) : 'Candidate'}</td>
                   <td style="font-size:11.5px;color:var(--txt3)">${fac ? fac.name : (r.fid || '--')}</td>
                   <td>${beltBadge(r.targetBelt)}</td>
-                  <td>${sugBadge(r)}</td>
-                  <td style="text-align:center;font-weight:700;color:${r.kOverallPassed ? 'var(--ok)' : 'var(--err)'}">${num(r.kOverall)}</td>
-                  <td style="text-align:center;font-weight:700;color:${r.simOverallPassed ? 'var(--ok)' : 'var(--err)'}">${num(r.simOverall)}</td>
-                  <td style="text-align:center;font-weight:700;color:${r.blendedPassed ? 'var(--ok)' : 'var(--err)'}">${num(r.blendedScore)}</td>
+                  <td><span class="pill p-slate">${compLabel[r.component || 'combined']}</span></td>
+                  <td style="text-align:center;font-weight:700;color:${scorePass(r) ? 'var(--ok)' : 'var(--err)'}">${num(scoreOf(r))}</td>
+                  <td style="text-align:center">${resultBadge(r)}</td>
                   <td style="text-align:center">${floorFailCount(r) ? `<span class="pill p-warn">${floorFailCount(r)}</span>` : '<span style="color:var(--txt3)">0</span>'}</td>
-                  <td style="font-size:11px;color:var(--txt3)">${r.submittedAt ? new Date(r.submittedAt).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '--'}</td>
+                  <td style="text-align:center">${comboBadge(r)}</td>
+                  <td><textarea id="bt-notes-${r.id}" rows="2" placeholder="Optional notes for this gate…" style="width:170px;min-width:150px;background:var(--bg2,#0e1328);border:1px solid var(--bdr2);border-radius:6px;padding:6px 8px;color:var(--txt1);font-size:11.5px;font-family:inherit;resize:vertical;box-sizing:border-box">${esc(r.notes)}</textarea><div style="text-align:right;margin-top:4px">${(window.micButtonHTML?micButtonHTML('bt-notes-'+r.id):'')}</div></td>
                   <td><div style="display:flex;gap:5px;flex-wrap:wrap">
                     <button class="btn btn-ghost btn-xs" onclick="downloadBeltTestReport('${r.id}')">Report</button>
                     <button class="btn btn-ok btn-xs" onclick="acceptBeltTestResult('${r.id}')">Accept</button>
@@ -14234,7 +15086,7 @@ function openRecordModal(sid){
         <button type="button" class="btn" id="ra-pass" style="justify-content:center;padding:12px;background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-bd)" onclick="selectResult('pass')">${ICO.check} Pass</button>
         <button type="button" class="btn" id="ra-fail" style="justify-content:center;padding:12px;background:var(--s2);color:var(--txt3);border:1px solid var(--bdr2)" onclick="selectResult('fail')">${ICO.x} Fail</button>
       </div></div>
-      <div class="form-group"><label class="form-label">Notes (optional)</label><textarea class="form-textarea" id="ra-notes" placeholder="Assessment notes..."></textarea></div>
+      <div class="form-group"><label class="form-label">Notes (optional)</label><textarea class="form-textarea" id="ra-notes" placeholder="Assessment notes..."></textarea><div style="text-align:right;margin-top:6px">${(window.micButtonHTML?micButtonHTML('ra-notes'):'')}</div></div>
     </div>
     <div class="modal-ft"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-gold" onclick="submitAssessment('${sid||''}')">${ICO.record} Submit Assessment</button></div>`,'modal-md');
 }
@@ -14692,15 +15544,12 @@ async function denyReg(rid){
   r.status='denied';
   if(IS_LIVE){ 
     SB.denyRegistration(rid, window.ST?.user?.id).catch(e => handleSyncError(e, 'Deny sync'));
-    // Queue denial notification email
+    // Queue denial notification email — server-side via sbd-emails (P0-2, 2026-07-18).
+    // sbd_email_queue is now service-role-only; the browser no longer writes it directly.
     if(r.email){
-      sbFetch('/rest/v1/sbd_email_queue', { method:'POST', prefer:'return=minimal', body:{
-        recipient_email: r.email,
-        template: 'registration_denied',
-        body_data: { contact_name: r.name||r.contact||'Applicant', facility_name: facilityName },
-        status: 'pending',
-        attempts: 0,
-        created_at: new Date().toISOString()
+      sbFetch('/functions/v1/sbd-emails', { method:'POST', body:{
+        type: 'registration_denied',
+        data: { recipient_email: r.email, contact_name: r.name||r.contact||'Applicant', facility_name: facilityName }
       }}).catch(e=>console.warn('Denial email queue failed:', e));
     }
   }
@@ -15786,6 +16635,177 @@ async function executeReleaseToFA(staffId){
 }
 
 
+// ============================================================ ROLE MANAGEMENT (#73 v1)
+// Master-admin console to search any person across every system/facility and review or change
+// their role and role-independent capabilities in one place, with an audit trail. Reuses the
+// existing write paths (syncUserClaims for role, toggleObserver/prcSetAccess/assessment waiver
+// for capabilities); those handlers re-render this console when invoked with context 'rolemgmt'.
+let ROLEMGMT_SEL = null;
+const ROLE_LABELS = {master_admin:'Master Admin',staff_admin:'Assessor',system_admin:'System Admin',hospital:'Hospital Manager',facility_admin:'Facility Admin',staff_member:'Staff Member'};
+
+function _rmPeople(){
+  const q=(PAGE_Q.rolemgmt||'').trim().toLowerCase();
+  let list=(DB.staff||[]).map(s=>{
+    const fac=(typeof getFac==='function')?getFac(s.fid):null;
+    const sys=fac&&fac.systemId&&typeof getSystem==='function'?getSystem(fac.systemId):null;
+    const u=(DB.users||[]).find(x=>x.sid===s.id);
+    return { s, fac, sys, u, role:(u&&u.role)||s.role||'staff_member', email:(u&&u.email)||'' };
+  });
+  if(q) list=list.filter(p=>[fullName(p.s),p.email,p.fac?p.fac.name:'',p.sys?p.sys.name:'',ROLE_LABELS[p.role]||p.role].join(' ').toLowerCase().includes(q));
+  return list.sort((a,b)=>fullName(a.s).localeCompare(fullName(b.s)));
+}
+
+function _rmCapBadges(s){
+  const prc=(typeof prcAccessState==='function')?prcAccessState(s.id):'default';
+  const wv=s.assessmentGateOverride&&s.assessmentGateOverride.waived;
+  const cap=((DB.users||[]).find(x=>x.sid===s.id)||{}).capabilities||{};
+  const eduN=Array.isArray(cap.educator_facilities)?cap.educator_facilities.length:0;
+  const chip=(on,txt,col)=>`<span class="pill" style="font-size:10px;padding:2px 7px;border:1px solid ${on?col+'55':'var(--bdr)'};background:${on?col+'1a':'transparent'};color:${on?col:'var(--txt3)'}">${txt}</span>`;
+  const out=[ chip(!!s.observer,'Observer','#0ea5e9'),
+           chip(prc==='granted',prc==='revoked'?'Preceptor (revoked)':'Preceptor', prc==='revoked'?'#f87171':'#22c55e'),
+           chip(!!wv,'Gate waiver','#c49a20') ];
+  if(cap.assessor) out.push(chip(true,'Assessor','#a78bfa'));
+  if(eduN) out.push(chip(true,'Educator ×'+eduN,'#a78bfa'));
+  return out.join(' ');
+}
+
+function selectRoleMgmt(sid){ ROLEMGMT_SEL=sid; renderARoleMgmt(); }
+
+function _rmUserFor(staffId){ return (DB.users||[]).find(u=>u.sid===staffId) || null; }
+// #73 v1.1: master-admin capability write. Reads the person's current capabilities, applies a
+// mutation, and persists via the role-checked RPC (SB.setUserCapabilities). Optimistic with rollback.
+async function rmSetCapability(staffId, mutate){
+  if(!(ST.user&&ST.user.role==='master_admin')){ toast('Only master admins can change capabilities.','err'); return; }
+  const u=_rmUserFor(staffId);
+  if(!u || !u.authUid){ toast('This person has no login account to grant capabilities to.','err'); return; }
+  const caps = JSON.parse(JSON.stringify(u.capabilities||{}));
+  mutate(caps);
+  if(caps.assessor!==true) delete caps.assessor;
+  if(Array.isArray(caps.educator_facilities) && caps.educator_facilities.length===0) delete caps.educator_facilities;
+  const prev=u.capabilities;
+  u.capabilities=caps;
+  try{
+    if(IS_LIVE && typeof SB!=='undefined' && SB.setUserCapabilities) await SB.setUserCapabilities(u.authUid, caps);
+    if(typeof logActivity==='function') logActivity('capability_change', {staffId, capabilities:caps});
+    toast('Capabilities updated for '+fullName(getStaff(staffId)||{first:'',last:''})+'.','ok');
+  }catch(e){
+    u.capabilities=prev;
+    if(typeof handleSyncError==='function') handleSyncError(e,'Capability update'); else toast('Could not save — please retry.','err');
+  }
+  renderARoleMgmt();
+}
+function rmToggleAssessor(staffId){
+  const u=_rmUserFor(staffId); const cur=!!(u&&u.capabilities&&u.capabilities.assessor);
+  rmSetCapability(staffId, c=>{ if(cur) delete c.assessor; else c.assessor=true; });
+}
+function rmAddEducatorFac(staffId){
+  const sel=document.getElementById('rm-edu-fac-'+staffId); if(!sel||!sel.value) return; const fid=sel.value;
+  rmSetCapability(staffId, c=>{ c.educator_facilities=Array.isArray(c.educator_facilities)?c.educator_facilities:[]; if(c.educator_facilities.map(String).indexOf(String(fid))<0) c.educator_facilities.push(fid); });
+}
+function rmRemoveEducatorFac(staffId, fid){
+  rmSetCapability(staffId, c=>{ if(Array.isArray(c.educator_facilities)) c.educator_facilities=c.educator_facilities.filter(x=>String(x)!==String(fid)); });
+}
+
+function _rmPanel(s){
+  const u=(DB.users||[]).find(x=>x.sid===s.id);
+  const fac=(typeof getFac==='function')?getFac(s.fid):null;
+  const sys=fac&&fac.systemId&&typeof getSystem==='function'?getSystem(fac.systemId):null;
+  const role=(u&&u.role)||s.role||'staff_member';
+  const wv=s.assessmentGateOverride&&s.assessmentGateOverride.waived;
+  const cap=(u&&u.capabilities)||{};
+  const eduFacs=Array.isArray(cap.educator_facilities)?cap.educator_facilities:[];
+  return `<div class="card">
+    <div class="card-hd"><div class="card-ttl">${fullName(s)}</div>
+      <button class="btn btn-ghost btn-xs" onclick="ROLEMGMT_SEL=null;renderARoleMgmt()">Close</button></div>
+    <div class="card-body" style="display:flex;flex-direction:column;gap:14px">
+      <div style="font-size:11.5px;color:var(--txt3)">${fac?fac.name:'No facility'}${sys?' &middot; '+sys.name:''} &middot; ${s.belt} Belt</div>
+      <div>
+        <div style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Account Role</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span class="pill" style="background:rgba(139,92,246,.12);color:#a78bfa;border:1px solid rgba(139,92,246,.3)">${ROLE_LABELS[role]||role}</span>
+          ${u?`<button class="btn btn-ghost btn-sm" onclick="openEditUserModal('${u.id}')">Change role</button>`:'<span style="font-size:11px;color:var(--txt3)">No login account</span>'}
+        </div>
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Access &amp; capabilities (independent of role)</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--bdr);border-radius:8px;padding:8px 11px">
+            <div><div style="font-size:12.5px;font-weight:600">Observer</div><div style="font-size:11px;color:var(--txt3)">Can conduct observations</div></div>
+            <button class="btn btn-ghost btn-sm" onclick="toggleObserver('${s.id}','rolemgmt')" style="border-color:${s.observer?'#0ea5e9':'var(--bdr)'};color:${s.observer?'#0ea5e9':'var(--txt2)'}">${s.observer?'On':'Grant'}</button>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--bdr);border-radius:8px;padding:8px 11px;flex-wrap:wrap">
+            <div><div style="font-size:12.5px;font-weight:600">Preceptor access</div><div style="font-size:11px;color:var(--txt3)">Curriculum access, overrides belt</div></div>
+            ${typeof prcAccessControlHTML==='function'?prcAccessControlHTML(s.id,'rolemgmt'):''}
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--bdr);border-radius:8px;padding:8px 11px">
+            <div><div style="font-size:12.5px;font-weight:600">Assessment practice-gate waiver</div><div style="font-size:11px;color:var(--txt3)">Request an assessment without the practice tests</div></div>
+            ${wv?`<button class="btn btn-ghost btn-sm" onclick="clearAssessmentOverride('${s.id}','rolemgmt')">Clear</button>`:`<button class="btn btn-ghost btn-sm" onclick="grantAssessmentOverride('${s.id}','rolemgmt')" style="border-color:var(--gold-bd);color:var(--gold)">Waive</button>`}
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--bdr);border-radius:8px;padding:8px 11px">
+            <div><div style="font-size:12.5px;font-weight:600">Assessor rights</div><div style="font-size:11px;color:var(--txt3)">System-wide assessor access (observe + confirm), on top of their role</div></div>
+            <button class="btn btn-ghost btn-sm" onclick="rmToggleAssessor('${s.id}')" style="border-color:${cap.assessor?'#22c55e':'var(--bdr)'};color:${cap.assessor?'#22c55e':'var(--txt2)'}"${u?'':' disabled title="No login account"'}>${cap.assessor?'On':'Grant'}</button>
+          </div>
+          <div style="border:1px solid var(--bdr);border-radius:8px;padding:8px 11px">
+            <div style="font-size:12.5px;font-weight:600">Facility educator</div>
+            <div style="font-size:11px;color:var(--txt3);margin:2px 0 7px">Educator/leader access at specific facilities, on top of their role</div>
+            <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:7px">${eduFacs.length?eduFacs.map(fid=>{const f=getFac(fid);return `<span class="pill" style="font-size:10px;padding:2px 6px;border:1px solid #22c55e55;background:#22c55e1a;color:#22c55e">${f?f.name:fid} <span style="cursor:pointer;font-weight:800" onclick="rmRemoveEducatorFac('${s.id}','${fid}')">&times;</span></span>`;}).join(''):'<span style="font-size:11px;color:var(--txt3)">None</span>'}</div>
+            ${u?`<div style="display:flex;gap:6px"><select id="rm-edu-fac-${s.id}" class="form-select" style="flex:1;font-size:12px;padding:5px 8px">${(DB.facilities||[]).map(f=>`<option value="${f.id}">${f.name}</option>`).join('')}</select><button class="btn btn-ghost btn-sm" onclick="rmAddEducatorFac('${s.id}')">Add</button></div>`:'<span style="font-size:11px;color:var(--txt3)">No login account to grant to.</span>'}
+          </div>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Audit trail</div>
+        <div id="rm-audit" style="font-size:11.5px;color:var(--txt3)">Loading recent activity...</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function _rmLoadAudit(sid){
+  const box=document.getElementById('rm-audit'); if(!box) return;
+  try{
+    const rows=(IS_LIVE && typeof SB!=='undefined' && SB.getStaffActivity)?await SB.getStaffActivity(sid,40):[];
+    if(ROLEMGMT_SEL!==sid) return;
+    const box2=document.getElementById('rm-audit'); if(!box2) return;
+    const accessTypes=['role_change','capability_change','capability_grant','capability_revoke','window_override_open','window_override_close','assessment_gate_override_grant','assessment_gate_override_clear'];
+    const filtered=(rows||[]).filter(r=>accessTypes.indexOf(r.event_type)>=0);
+    const show=(filtered.length?filtered:(rows||[])).slice(0,15);
+    box2.innerHTML=show.length?show.map(r=>{
+      const d=r.created_at?new Date(r.created_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'';
+      let meta=''; if(r.event_meta){ meta=(typeof r.event_meta==='string')?r.event_meta:(r.event_meta.reason||''); }
+      return `<div style="padding:6px 0;border-bottom:1px solid var(--bdr)"><span style="color:var(--txt2);font-weight:600">${String(r.event_type||'').replace(/_/g,' ')}</span> <span style="color:var(--txt3)">${d}</span>${meta?`<div style="color:var(--txt3);font-size:11px">${String(meta).slice(0,120)}</div>`:''}</div>`;
+    }).join(''):'<div style="color:var(--txt3)">No recorded activity yet.</div>';
+  }catch(e){ const b=document.getElementById('rm-audit'); if(b) b.innerHTML='<div style="color:var(--txt3)">Audit log unavailable right now.</div>'; }
+}
+
+function renderARoleMgmt(){
+  const el=document.getElementById('a-rolemgmt'); if(!el) return;
+  if(!(ST.user&&ST.user.role==='master_admin')){ el.innerHTML='<div class="empty-state"><div class="empty-ttl">Master Admin only</div></div>'; return; }
+  const people=_rmPeople();
+  const sel=ROLEMGMT_SEL?getStaff(ROLEMGMT_SEL):null;
+  el.innerHTML=`
+    <div class="card mb12">
+      <div class="card-hd" style="gap:10px;flex-wrap:wrap"><div class="card-ttl">Role &amp; Access Management</div>
+        ${pageSearchBox('rolemgmt','renderARoleMgmt','Search person, facility, or system...')}
+      </div>
+      <div class="card-body" style="font-size:11.5px;color:var(--txt3)">Search anyone across every system and facility, review their role and access, and grant or remove capabilities independent of their staff role. Master-admin only; every change is recorded in the audit trail.</div>
+    </div>
+    <div style="display:grid;grid-template-columns:${sel?'minmax(0,1fr) minmax(0,1.3fr)':'1fr'};gap:12px;align-items:start">
+      <div class="card"><div class="card-hd"><div class="card-ttl">People</div><span class="pill p-muted">${people.length}</span></div>
+        <div style="max-height:540px;overflow-y:auto">
+          ${people.length?people.map(p=>`
+            <div onclick="selectRoleMgmt('${p.s.id}')" style="padding:11px 14px;border-bottom:1px solid var(--bdr);cursor:pointer;background:${ROLEMGMT_SEL===p.s.id?'rgba(139,92,246,.08)':'transparent'}">
+              <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${fullName(p.s)}</div>
+              <div style="font-size:11px;color:var(--txt3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${ROLE_LABELS[p.role]||p.role} &middot; ${p.fac?p.fac.name:'No facility'}${p.sys?' &middot; '+p.sys.name:''}</div>
+              <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">${_rmCapBadges(p.s)}</div>
+            </div>`).join(''):'<div style="padding:24px;text-align:center;color:var(--txt3);font-size:12px">No people match that search.</div>'}
+        </div>
+      </div>
+      ${sel?_rmPanel(sel):'<div class="card"><div class="card-body" style="text-align:center;color:var(--txt3);font-size:12px;padding:40px 20px">Select a person to review and manage their role and access.</div></div>'}
+    </div>`;
+  if(sel) _rmLoadAudit(sel.id);
+}
+
 function renderAAdminUsers(){
   const isMaster = ST.user && ST.user.role === 'master_admin';
   if(!isMaster) {
@@ -16751,10 +17771,15 @@ function importScheduleCSV(fid){
   let imported=0;
   Object.values(grouped).forEach(g=>{
     const existing=DB.schedule.find(s=>s.fid===fid&&s.date===g.date&&s.shift===g.shift);
-    if(existing){ existing.assignedStaff=g.staffIds; }
+    if(existing){
+      existing.assignedStaff=g.staffIds;
+      // T28a: same hole as quick-fill. An import that overlapped an existing day reported
+      // success and wrote nothing.
+      if(IS_LIVE) SB.updateSchedule(existing.id, mapScheduleToBackend(existing)).catch(e => handleSyncError(e,'Schedule sync'));
+    }
     else {
-      const bulkSched={id:'sch-'+DB.schNextId++,fid,date:g.date,shift:g.shift,assignedStaff:g.staffIds,publishedBy:ST.user?.id||'',notes:'CSV import'};
-      if(IS_LIVE){ SB.createSchedule(mapScheduleToBackend(bulkSched)).catch(e => { if (e instanceof ReferenceError || e instanceof TypeError || e instanceof SyntaxError) throw e; }); }
+      const bulkSched={id:newRecordId(),fid,date:g.date,shift:g.shift,assignedStaff:g.staffIds,publishedBy:null,notes:'CSV import',zoneAssignments:{}};
+      if(IS_LIVE){ SB.createSchedule(mapScheduleToBackend(bulkSched)).catch(e => handleSyncError(e,'Schedule sync')); }
       DB.schedule.push(bulkSched);
     }
     imported++;

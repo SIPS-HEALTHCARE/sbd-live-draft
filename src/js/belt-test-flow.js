@@ -18,6 +18,7 @@ let BT = JSON.parse(localStorage.getItem('sbd_bt_state') || 'null') || {
   active: false,
   staffId: null,
   targetBelt: null,
+  component: null,   // 'knowledge' | 'simulation' (per-gate); 'combined' = legacy
   testId: null,
   test: null,        // { target_belt, questions:{knowledge:[],simulation:[]} }
   items: null,       // flattened delivery list
@@ -29,53 +30,93 @@ let BT = JSON.parse(localStorage.getItem('sbd_bt_state') || 'null') || {
 
 function saveBTState(){ try{ localStorage.setItem('sbd_bt_state', JSON.stringify(BT)); }catch(e){} }
 function resetBTState(){
-  BT = { active:false, staffId:null, targetBelt:null, testId:null, test:null, items:null, answers:{}, currentQ:0, submitting:false, submitted:false };
+  BT = { active:false, staffId:null, targetBelt:null, component:null, testId:null, test:null, items:null, answers:{}, currentQ:0, submitting:false, submitted:false };
   saveBTState();
 }
 
-// Eligibility: approved Competency AND Simulation for the target belt, and no
-// result already pending assessor review for that belt.
-function btEligible(staffId, targetBelt){
+// Per-gate belt test (Ph.2b): each written component populates and is delivered
+// on its OWN approved gate. Knowledge ↔ Competency gate; Situational ↔ Simulation.
+const BT_COMPONENTS = [
+  { key:'knowledge',  gate:'Competency', label:'Knowledge Test',   gateName:'Competency' },
+  { key:'simulation', gate:'Simulation', label:'Situational Test', gateName:'Simulation' }
+];
+
+// A single component is eligible when its gate is approved for the belt and it
+// has no result already awaiting assessor review.
+function btComponentEligible(staffId, targetBelt, component){
   if(!targetBelt) return false;
-  const hasC = DB.queue.some(q => q.sid===staffId && q.targetBelt===targetBelt && q.type==='Competency' && q.status==='approved');
-  const hasS = DB.queue.some(q => q.sid===staffId && q.targetBelt===targetBelt && q.type==='Simulation' && q.status==='approved');
-  const pending = (DB.beltTestResults||[]).some(r => r.staffId===staffId && r.targetBelt===targetBelt && r.status==='PENDING_REVIEW');
-  return hasC && hasS && !pending;
+  const gate = component==='knowledge' ? 'Competency' : 'Simulation';
+  const hasGate = DB.queue.some(q => q.sid===staffId && q.targetBelt===targetBelt && q.type===gate && q.status==='approved');
+  const pending = (DB.beltTestResults||[]).some(r => r.staffId===staffId && r.targetBelt===targetBelt && (r.component||'combined')===component && r.status==='PENDING_REVIEW');
+  return hasGate && !pending;
 }
 
-// Entry / resume card for renderSStudy.
+// Aggregate: ready for a belt PIN if EITHER component is eligible. Used by the
+// assessor "ready" list (one single-use belt PIN authorizes whichever component
+// the candidate starts next).
+function btEligible(staffId, targetBelt){
+  return btComponentEligible(staffId, targetBelt, 'knowledge')
+      || btComponentEligible(staffId, targetBelt, 'simulation');
+}
+
+// Entry / resume cards for renderSStudy — up to two independent component cards,
+// each appearing as soon as its own gate is approved.
 function beltTestEntryCard(s, targetBelt){
   if(!s || !targetBelt) return '';
-  const resuming = BT.active && BT.staffId===s.id && BT.targetBelt===targetBelt && !BT.submitted;
-  if(!resuming && !btEligible(s.id, targetBelt)) return '';
-  const label = resuming ? 'Resume Belt Test' : `Begin ${targetBelt} Belt Test`;
-  const action = resuming ? `btResume()` : `startBeltTest('${s.id}','${targetBelt}')`;
+  let html = '';
+  // Legacy in-progress combined test (mid-rollout) keeps a single resume card.
+  if(BT.active && BT.staffId===s.id && BT.targetBelt===targetBelt && !BT.submitted
+     && (BT.component==null || BT.component==='combined')){
+    html += _btCard(`btResume()`, 'Resume Belt Test',
+      'You have a belt test in progress. Continue where you left off.');
+  }
+  BT_COMPONENTS.forEach(function(comp){
+    html += _btComponentCard(s, targetBelt, comp);
+  });
+  return html;
+}
+
+function _btComponentCard(s, targetBelt, comp){
+  const resuming = BT.active && BT.staffId===s.id && BT.targetBelt===targetBelt
+                && (BT.component||'combined')===comp.key && !BT.submitted;
+  if(!resuming && !btComponentEligible(s.id, targetBelt, comp.key)) return '';
+  const label = resuming ? `Resume ${comp.label}` : `Begin ${comp.label}`;
+  const action = resuming ? `btResume()` : `startBeltTest('${s.id}','${targetBelt}','${comp.key}')`;
   const sub = resuming
-    ? 'You have a belt test in progress. Continue where you left off.'
-    : `Your Competency and Simulation gates for ${targetBelt} Belt are approved. This proctored test requires an assessor PIN to begin.`;
+    ? `Your ${comp.label} is in progress. Continue where you left off.`
+    : `Your ${comp.gateName} gate for ${targetBelt} Belt is approved. This proctored ${comp.label.toLowerCase()} requires an assessor PIN to begin.`;
+  return _btCard(action, label, sub, comp.label);
+}
+
+function _btCard(action, label, sub, tag){
+  const title = tag ? `Dynamic Belt Test &mdash; ${tag}` : 'Dynamic Belt Test Available';
   return `<div style="background:rgba(139,92,246,.08);border:1.5px solid rgba(139,92,246,.4);border-radius:var(--r);padding:14px 16px;margin-bottom:14px">
-    <div style="font-size:12.5px;font-weight:800;color:#a78bfa;margin-bottom:5px">&#127894; Dynamic Belt Test Available</div>
+    <div style="font-size:12.5px;font-weight:800;color:#a78bfa;margin-bottom:5px">&#127894; ${title}</div>
     <div style="font-size:12px;color:var(--txt2);margin-bottom:10px;line-height:1.55">${sub}</div>
     <button class="btn btn-sm" style="background:#8b5cf6;color:#fff;border:none" onclick="${action}">${label}</button>
   </div>`;
 }
 
 // ── Launch ──────────────────────────────────────────────────────────────────
-function startBeltTest(staffId, targetBelt){
+// component: 'knowledge' | 'simulation'. A single-use assessor 'belt' PIN
+// authorizes whichever component the candidate begins ("same as placement").
+function startBeltTest(staffId, targetBelt, component){
   if(!IS_LIVE){ toast('Belt test requires live mode.','err'); return; }
-  showAssessorPinGate(staffId, 'belt', function(){ btOnAuthorized(staffId, targetBelt); });
+  showAssessorPinGate(staffId, 'belt', function(){ btOnAuthorized(staffId, targetBelt, component); });
 }
 
-async function btOnAuthorized(staffId, targetBelt){
+async function btOnAuthorized(staffId, targetBelt, component){
+  component = component || 'combined';
   _btOpenOverlay();
   document.getElementById('placement-content').innerHTML = _btLoading('Preparing your unique belt test…');
   try {
-    const res = await SB.generateBeltTest(staffId, targetBelt);
+    const res = await SB.generateBeltTest(staffId, targetBelt, component);
     const row = res && res.test ? res.test : res;
     if(!row || !row.questions) throw new Error(res && res.error ? res.error : 'Test generation failed.');
     BT.active = true;
     BT.staffId = staffId;
     BT.targetBelt = targetBelt;
+    BT.component = row.component || component;
     BT.testId = row.id;
     BT.test = { target_belt: row.target_belt, questions: row.questions };
     BT.items = _btFlatten(row.questions);
@@ -157,6 +198,7 @@ function renderBTScreen(){
     qHtml = `<div style="margin-bottom:20px">
       <div style="font-size:11px;color:#64748b;margin-bottom:8px;font-style:italic">Describe your approach in your own words. Be specific.</div>
       <textarea id="bt-sim-input" style="width:100%;min-height:140px;background:#0e1328;border:1.5px solid rgba(139,92,246,.3);border-radius:8px;padding:12px 14px;color:#e2e8f0;font-size:13.5px;line-height:1.6;resize:vertical;font-family:'Poppins',sans-serif;box-sizing:border-box" placeholder="Type your response here..." oninput="btSimInput('${q.id}',this.value)">${savedAns||''}</textarea>
+      <div style="text-align:right;margin-top:6px">${(window.micButtonHTML?micButtonHTML('bt-sim-input'):'')}</div>
       <div style="margin-top:6px"><div id="bt-sim-hint" style="font-size:11px;color:${charCount<minChars?'#f59e0b':'#22c55e'}">${charCount<minChars?`Minimum ${minChars} characters (${charCount}/${minChars})`:'Response recorded'}</div></div>
     </div>`;
   }
@@ -212,11 +254,21 @@ async function submitBeltTest(trigger){
     else simItems.push(it);
   });
 
-  let simScores;
-  try { simScores = await _btScoreSims(simItems, BT.answers); }
-  catch(e){ simScores = {}; simItems.forEach(q => { simScores[q.id] = scoreByKeywords(BT.answers[q.id]||'', q.rubric||[]); }); }
-
-  const result = BeltTestEngine.scoreBeltTest(BT.test, mcqAnswers, simScores);
+  // Score ONLY the delivered component (Ph.2b). Knowledge needs no AI sim pass.
+  // The deferred combined recommendation is computed assessor-side once both
+  // component results exist. 'combined' keeps the legacy single-pass path.
+  const component = BT.component || 'combined';
+  let result;
+  if(component === 'knowledge'){
+    result = BeltTestEngine.scoreComponentKnowledge(BT.test, mcqAnswers);
+  } else {
+    let simScores;
+    try { simScores = await _btScoreSims(simItems, BT.answers); }
+    catch(e){ simScores = {}; simItems.forEach(q => { simScores[q.id] = scoreByKeywords(BT.answers[q.id]||'', q.rubric||[]); }); }
+    result = (component === 'simulation')
+      ? BeltTestEngine.scoreComponentSimulation(BT.test, simScores)
+      : BeltTestEngine.scoreBeltTest(BT.test, mcqAnswers, simScores);
+  }
   // Enrich sim responses with the scenario text + the candidate's written answer so the
   // assessor report can show them. The engine only carries {question_id, level, score};
   // the scenario lives on BT.items and the answer in BT.answers — neither is otherwise
@@ -234,7 +286,7 @@ async function submitBeltTest(trigger){
   try {
     await SB.insertBeltTestResult(mapBeltTestResultToBackend(result, {
       testId: BT.testId, staffId: BT.staffId, fid: s ? s.fid : null,
-      targetBelt: BT.targetBelt, submittedAt
+      targetBelt: BT.targetBelt, component: component, submittedAt
     }));
     await SB.markBeltTestSubmitted(BT.testId).catch(()=>{});
     if(ASSESSMENT_SESSION.token){
@@ -244,7 +296,7 @@ async function submitBeltTest(trigger){
     }
     // Keep a local mirror so the entry card hides immediately (PENDING_REVIEW).
     if(!DB.beltTestResults) DB.beltTestResults = [];
-    DB.beltTestResults.push({ staffId: BT.staffId, fid: s?s.fid:null, targetBelt: BT.targetBelt, status:'PENDING_REVIEW', submittedAt });
+    DB.beltTestResults.push({ staffId: BT.staffId, fid: s?s.fid:null, targetBelt: BT.targetBelt, component: component, status:'PENDING_REVIEW', submittedAt });
     BT.submitted = true; BT.submitting = false; BT.active = false; saveBTState();
     renderBTComplete(trigger === 'timer');
   } catch(e){
@@ -298,7 +350,7 @@ function btGoToDashboard(){
 
 if (typeof window !== 'undefined') {
   Object.assign(window, {
-    BT, startBeltTest, btResume, btEligible, beltTestEntryCard,
+    BT, startBeltTest, btResume, btEligible, btComponentEligible, beltTestEntryCard,
     renderBTScreen, btSelectKnowledge, btSimInput, btNext, btPrev,
     submitBeltTest, renderBTComplete, btGoToDashboard
   });

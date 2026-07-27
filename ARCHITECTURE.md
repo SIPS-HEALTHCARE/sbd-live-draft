@@ -21,7 +21,7 @@ It is NOT a framework project. It is a **vanilla HTML/CSS/JS single-page applica
 | Frontend | Vanilla HTML/CSS/JS | Single `index.html` entry point |
 | Backend | Supabase (PostgreSQL) | Project ID: `mhijaqahbceuahfzezbh` |
 | Auth | Supabase Auth (JWT) | Custom claims via `sbd-sync-user-claims` edge function |
-| Edge Functions | Deno (Supabase Functions) | 12 functions in `supabase/functions/` |
+| Edge Functions | Deno (Supabase Functions) | 22 functions in `supabase/functions/` (2 orphaned — see §9) |
 | AI Chat | DAVID AI | SSE streaming via `david-chat` edge function |
 | Deployment | Vercel | Static deploy, `vercel.json` copies files to `public/` |
 | CSS | Single `src/css/index.css` | 77KB, dark theme with gold accent (`#c49a20`) |
@@ -174,9 +174,12 @@ Every view has this pattern:
 | `sbd_free_agents` | Released/unassigned staff | — |
 | `david_chat_sessions` | DAVID AI conversation history | `user_id` → `auth.users` |
 | `david_facility_access` | Per-facility DAVID AI access control | `facility_id` → `facilities` |
+| `david_usage_logs` | AI usage metering (tokens + ground-truth cost). **`source` col (#14):** `'chat'` = David chat, `'assessment'` = grading. Chat readers filter `source='chat'`. | `facility_id` → `facilities`, `user_id` → `auth.users` |
 | `sbd_facility_trends` | Analytics trend data | `facility_id` → `facilities` |
 | `sbd_report_audit_log` | Report download audit trail | — |
 | `sbd_onboarding_state` | Tour/walkthrough completion state | — |
+| `foundations_assignments` / `foundations_progress` | Foundations curriculum: one assignment + one 3-gate progress row per staff+module. RLS via `sbd_fi_leader_scope`. See §16A. | `staff_id` → `staff`, `facility_id` → `facilities` |
+| `instrument_assignments` / `instrument_progress` | Instruments curriculum (mirror of Foundations, same 3-gate engine). RLS via `sbd_fi_leader_scope`. See §16A. | `staff_id` → `staff`, `facility_id` → `facilities` |
 
 ### Row Level Security (RLS)
 Every table uses RLS. Access is controlled via JWT claims:
@@ -208,7 +211,9 @@ Located in `supabase/functions/`. Each is a Deno serverless function.
 | Function | Purpose | Called By |
 |---|---|---|
 | `david-chat` | DAVID AI chat (SSE streaming via Anthropic API) | `DavidChat.js` |
-| `david-admin-api` | DAVID admin dashboard API (facility access, tiers) | `DavidAdminDashboard.js` |
+| `david-admin-api` | DAVID admin dashboard API (facility access, tiers). `GET_METRICS` reads `david_usage_logs`/`david_analytics_summary` scoped to `source='chat'` (#14). | `DavidAdminDashboard.js` |
+| `david-anomaly-detector` | Background chat-abuse burn detector (#59). Reads `david_usage_logs` where `source='chat'` (#14); enforcement gated by `ANOMALY_ENFORCE_ENABLED` (default OFF). | Scheduled/background |
+| `sbd-score-assessment` | AI simulation-response grader (OpenRouter). Logs a `source='assessment'` row in `david_usage_logs` for cost tracking (#14) — never touches the chat question allowance. | `scoreSimulationWithAI()` (ui-views.js, belt-test-flow.js) |
 | `sbd-approve-registration` | Approve new facility registration (creates auth user + facility + profile) | `renderARegistrations()` |
 | `sbd-record-assessment` | Record assessment result (atomic: updates staff + creates history + audit) | `submitAssessment()` |
 | `sbd-sync-user-claims` | Sync user profile data to JWT custom claims | User management flows |
@@ -217,7 +222,8 @@ Located in `supabase/functions/`. Each is a Deno serverless function.
 | `bulk-upload-staff` | CSV bulk staff import | `processBulkUpload()` |
 | `sbd-emails` / `sbd-send-emails` | Email notifications | Various triggers |
 | `sbd-assessment-notifications` | Notify on assessment events | Assessment flows |
-| `sbd-matrix-seeder` | Seed assessment matrix data | Admin tools |
+| `david-grade-assessment` | 🗑️ **RETIRED (#61)** — was an orphaned AIP open-ended grader duplicating `sbd-score-assessment`. Removed from repo; delete the deployed function from the Supabase dashboard to fully undeploy. | Zero callers — retired |
+| `sbd-matrix-seeder` | 🗑️ **RETIRED (#61)** — was a policy hazard that seeded fake auth users/facilities (`test-sbd.com`, hardcoded password) and remained deployed with `verify_jwt=false`. Removed from repo + local `scripts/seed-30-agents.js`. **Deployed function must still be deleted from the Supabase dashboard to fully undeploy.** | Zero callers — retired |
 
 ---
 
@@ -251,6 +257,14 @@ After earning a belt, staff have a timed window to apply for the next:
 - White: 2 weeks open / 2 weeks closed
 - Yellow: 4/4, Green: 6/6, Blue: 8/8, Brown: 12/12
 
+**Manual override (added 2026-07-16):** `master_admin` / `staff_admin` (SIPS assessor) can open a
+staffer's window early via the "Open Window Early" button on the admin staffer profile
+(`renderHProfile`, admin context). Stored in `staff.window_override` (jsonb, nullable):
+`{until, by, byName, at, reason}`. `getWindowStatus()` honors it **only after** the current-belt
+gate-lock passes and **only while** `until` is in the future, then reverts to the normal
+since-based cadence. Timing-only — it never skips gates and never touches `staff.since`.
+See `docs/decisions/2026-07-16-manual-window-override.md`.
+
 ### Points System
 ```
 Belt earned:    White=100, Yellow=250, Green=500, Blue=1000, Brown=2000, Black=5000
@@ -268,6 +282,46 @@ New hires take a placement assessment to determine starting belt. This is a mult
 3. Scores responses (AI-assisted or keyword-based fallback)
 4. Creates a `placement_review` for admin approval
 5. Admin reviews and confirms or adjusts the recommended belt
+
+### Dynamic Belt Test (Track A4) — per-gate (added 2026-07-17)
+
+The proctored belt test for the two **written** gates. **Observation is separate**
+(`ovsUnlock`, a distinct two-PIN handshake — not part of this system).
+
+**Files:** candidate delivery `belt-test-flow.js`; scoring engine `belt-test-engine.js`
+(spec-governed, dual-exported for the Node harness `scripts/verify-belt-test-generation.js`);
+generation edge fn `supabase/functions/sbd-generate-belt-test`; tables `sbd_belt_tests`
+(generated test) + `sbd_belt_test_results` (persisted `AssessmentResult`, never recomputed on
+read) + `sbd_belt_bank` (answer key, service-role only). Mappers `mapBeltTestResult{To,From}Backend`.
+
+**Per-gate model (`2026-07-17-belt-test-per-gate-ph2a-implementation-design.md`).** Each written
+component populates, delivers, and scores on its **own** approved gate:
+
+| `component` | Gate (`sbd_assessment_queue.type`) | Staff gate | Bank half |
+|---|---|---|---|
+| `'knowledge'` | `Competency` (`s.cur/nxt.c`) | Knowledge (40 MCQ) | `questions.knowledge` |
+| `'simulation'` | `Simulation` (`s.cur/nxt.s`) | Situational (20 scenarios) | `questions.simulation` |
+| `'combined'` | both (legacy single-pass) | — | both |
+
+- **PIN:** single-use assessor **`'belt'`** PIN (same pattern as placement); the component is
+  set by which card the candidate starts, NOT the PIN — so `sbd-assessor-pin` is unchanged.
+- **Candidate:** `btComponentEligible()` gates each card; `startBeltTest(staffId,belt,component)`
+  → PIN → `SB.generateBeltTest(staffId,belt,component)` (server samples only that half; test row
+  carries `component`; unique index is `(staff_id,target_belt,component) WHERE status='active'`)
+  → deliver → `submitBeltTest()` scores that half via `scoreComponentKnowledge` /
+  `scoreComponentSimulation` → one `sbd_belt_test_results` row per component (`component`,
+  per-gate `outcome` PASS/REMEDIATION, and a private `component_detail` reconstruction blob).
+- **Scoring:** each gate reports its own **pass/fail** at the target belt; the **combined belt
+  recommendation** (blended 0.60·K + 0.40·S → suggested belt) is **deferred** until BOTH
+  components exist and is computed assessor-side by `combineComponents(kDetail,sDetail,belt)` —
+  byte-identical to the legacy single-pass `scoreBeltTest` (asserted by the harness).
+- **Assessor** (`renderBeltTestReviewSection`, `renderBeltPinAuthBlock` in `ui-views.js`):
+  reviews each gate on its own row (score, pass/fail, conditions, the combined recommendation
+  once both are in, and an **assessor notes** field → `sbd_belt_test_results.notes`); `Accept`
+  (`acceptBeltTestGate`) records ONLY that gate via the atomic `recordAssessment` path — never a
+  partial staff PATCH. Legacy `combined` rows keep `acceptBeltTestCombined`.
+- **Migration:** `20260717140000_belt_tests_per_component.sql` (adds `component`/`notes` to both
+  tables + `component_detail` to results, amends the unique index). Applied by the user.
 
 ---
 
@@ -390,6 +444,21 @@ Position School is a training/certification track system.
 
 ---
 
+## 16A. Foundations & Instruments (F&I)
+
+Two parallel curriculum systems that share **one 3-gate engine** (mirrors of each other).
+
+- **Files:** `src/js/foundations.js` (owns the shared engine), `src/js/instruments.js` (mirror; reuses foundations' gate helpers `fndGatePasses` / `FND_PASSES_REQUIRED`). Loaded before `ui-views.js`.
+- **Modules:** `FOUNDATIONS_MODULES` / `INSTRUMENT_MODULES` (content + MCQ/simulation banks + observation checklist).
+- **Tables:** `foundations_assignments`/`foundations_progress`, `instrument_assignments`/`instrument_progress` — one assignment + one progress row per (staff, module).
+- **In-memory:** `DB.foundationsAssignments`/`DB.foundationsProgress`, `DB.instrumentAssignments`/`DB.instrumentProgress` (hydrated at login in `auth-init.js`). Accessors: `getFoundationsAssignments()`/`getInstrumentAssignments()`, `getModuleGates()`/`getInstModuleGates()`, `isModuleComplete()`.
+- **3-gate model:** G1 Knowledge + G2 Simulation each need **3 passing attempts (≥80%)** (`FND_PASSES_REQUIRED=3`, best score kept); G3 Observation is a leader-confirmed checklist that unlocks only after 3+3 K/S passes. A module is `complete` at 3 K + 3 S + G3 pass. **"In Progress" is derived** (assigned & not complete) — never stored.
+- **RLS:** `sbd_fi_leader_scope(target_staff)` (migration `20260702130000`): master_admin/SIPS-email → all; `staff_admin` (Assessor) → `assigned_facility_ids` (empty = all); `facility_admin`/`hospital` → own facility. ⚠️ **`system_admin` is NOT in this helper** (those users get zero F&I rows) and all live `staff_admin` are facility-scoped — so multi-facility/network reports viewed by those roles under-populate F&I. Network/system F&I must use a **server-side scoped fetch**, not the in-memory arrays (open Ph.2c risk — see `docs/decisions/2026-07-17-ph2-development-plan.md` §2).
+- **#55 (`20260707120000`):** blocks `staff_admin`/staff from INSERT/UPDATE on the two *assignment* tables at the RLS layer. Do not re-open it (see the Preceptor decision doc).
+- **Reporting (Ph.2b):** pure read helpers `fiModuleSummary()` / `fiDomainSummaryForStaff()` / `fndSummaryForStaff()` / `fiSummaryForStaff()` / `fiFacilityRollup()` (foundations.js) + `instSummaryForStaff()` (instruments.js). Rendered by `fiStaffSectionHTML`/`fiStaffSectionPDF` + `fiFacilitySectionHTML`/`fiFacilitySectionPDF` (ui-views.js), wired into `renderSReport`/`downloadStaffReport` (personal), `renderHReports`/`downloadFacilityReportV2` (facility), and an F&I completion card in `renderHDashboard`. Completion date shown is **derived/approximate** (no `completed_at` column yet — Ph.3a).
+
+---
+
 ## 17. Deployment
 
 ### Vercel Configuration (`vercel.json`)
@@ -487,7 +556,7 @@ JS files use `?v=N` query params (e.g., `ui-views.js?v=40`). **Bump version afte
 | Bulk upload | `ui-views.js` | 10536–10565, 13220–13295 |
 | Role change inline | `ui-views.js` | 14378+ |
 | Points calculation | `logic.js` | 98–128 |
-| Window status | `logic.js` | 60–96 |
+| Window status (+ manual override) | `logic.js` | 60–120 |
 | Projection engine | `logic.js` | 130–172 |
 | DAVID AI chat | `DavidChat.js` | Full file |
 | DAVID admin panel | `DavidAdminDashboard.js` | Full file |

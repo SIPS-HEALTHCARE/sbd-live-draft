@@ -67,7 +67,8 @@ serve(async (req) => {
         }
 
         if (!callerRole) {
-            const metaRole = user.app_metadata?.role || user.user_metadata?.role;
+            // app_metadata only — user_metadata is self-writable, self-promote hole
+            const metaRole = user.app_metadata?.role;
             if (metaRole && allowedRoles.includes(metaRole)) callerRole = metaRole;
         }
 

@@ -8,9 +8,14 @@ const OB = {
   cameFromGuide: false,
 };
 
-// ── Tour Steps Per Role ──
-// Each step: { target: CSS selector (within the portal), title, desc, group }
-const TOUR_STEPS = {
+// ── Nav registry (single source of truth for per-view tour metadata) — #8b ──
+// Each portal role maps to an ordered list of nav views, each carrying its tour
+// metadata: { target: CSS selector, title, desc, group }. TOUR_STEPS is DERIVED from
+// this registry below (each step also gains an explicit `view` id), so the tour is
+// "nav-registry-driven": adding a view here is all that's needed to cover it in the
+// tour. The staleness guard `auditTourCoverage()` cross-checks this registry against
+// the live sidebar DOM and warns (dev-only) when a nav item has no entry here.
+const NAV_REGISTRY = {
   admin: [
     { target:'[data-view="a-overview"]', title:'Network Overview', desc:'This is your command center. Right now you are looking at belt distribution across all facilities, compliance rates, and network-wide KPIs. Everything rolls up here so you can spot trends at a glance.', group:'Network' },
     { target:'[data-view="a-leaderboard"]', title:'Facility Leaderboard', desc:'Here you can compare every facility side by side. The rankings show compliance scores, belt progression velocity, and staffing health. Use this to identify which locations need attention.', group:'Network' },
@@ -22,6 +27,7 @@ const TOUR_STEPS = {
     { target:'[data-view="a-observations"]', title:'Observations', desc:'On-the-floor performance checks live here — the third assessment gate, alongside Competency and Simulation. When a candidate requests an observation it lands here for an authorized observer to conduct. You unlock scoring with the two-PIN handshake: your observer PIN plus the candidate\'s PIN, so the record always shows exactly who was assessed and who scored them.', group:'Development' },
     { target:'[data-view="a-foundations"]', title:'SBD Foundations', desc:'SBD Foundations is the knowledge curriculum — the belt-by-belt scripts, protocols, and study sections every staff member works through. Open any track to review what a belt covers and how far people have progressed across the network. Track assignments are created by facility leaders and master admins.', group:'Development' },
     { target:'[data-view="a-instruments"]', title:'SBD Instruments', desc:'SBD Instruments is the hands-on instrument training. Each module runs through three gates — Knowledge, Simulation, and Observation — and this view shows each staff member\'s assignment status and their pass progress (K x/3, S x/3). Observation unlocks after three passes of each test. Assignments themselves are created by facility leaders and master admins.', group:'Development' },
+    { target:'[data-view="a-preceptor"]', title:'Preceptor Certification', desc:'Preceptor Certification is the pathway that develops your facilitators and preceptors. It runs 15 modules across three levels — Facilitator, Advanced, and Master — and this view shows each candidate\'s progress across the network. Every module has a scored Knowledge gate the candidate passes here, while the Simulation and the Observation capstone are administered by an assessor.', group:'Development' },
     { target:'[data-view="a-progression"]', title:'Staff Progression', desc:'This view tracks every staff member\'s journey through the belt system. You can see who is ready for promotion, who needs support, and filter by belt level or facility.', group:'Development' },
     { target:'[data-view="a-placementreviews"]', title:'Placement Reviews', desc:'Placement submissions land here for review. Open each one to see the candidate\'s proposed belt placement and the supporting record, then approve it or send it back with a reason.', group:'Reviews' },
     { target:'[data-view="a-observationreviews"]', title:'Observation Reviews', desc:'Completed observation assessments collect here for sign-off. Review the observer\'s scoring and the two-PIN record before finalizing, so every observation carries an auditable trail of who was assessed and who scored them.', group:'Reviews' },
@@ -29,6 +35,7 @@ const TOUR_STEPS = {
     { target:'[data-view="a-freeagents"]', title:'Free Agents', desc:'Staff not currently attached to a facility sit in this pool. You can review their profiles and assign them to a facility when a spot opens.', group:'People' },
     { target:'[data-view="a-systems"]', title:'Hospital Systems', desc:'Group facilities into hospital systems here. A system admin sees a rolled-up view of every facility under their system.', group:'Operations' },
     { target:'[data-view="a-adminusers"]', title:'Admin Users', desc:'Manage the admin accounts themselves here: who has portal access, their role, and their facility scope.', group:'Tools' },
+    { target:'[data-view="a-rolemgmt"]', title:'Role Management', desc:'Search any person across every system and facility, then review or change their role and grant or remove capabilities — Observer, Preceptor access, and the assessment practice-gate waiver — independent of their staff role. Every change is recorded in the audit trail. Master-admin only.', group:'Tools' },
     { target:'[data-view="a-daviddashboard"]', title:'David Command Center', desc:'The operational view of David: usage per platform and facility, spend, throttles, and the serving model. This is where you keep an eye on cost and volume.', group:'David' },
     { target:'[data-view="a-david"]', title:'David OG', desc:'David OG is your AI intelligence hub. Ask about network trends, staff readiness, and platform data in plain language — it is grounded in your real facility and belt data, so you get answers without digging through every view.', group:'David' },
     { target:'[data-view="a-upload"]', title:'Bulk Upload', desc:'Use this tool to import staff rosters via CSV. Upload a file, map the columns, and add entire teams in one operation. Great for onboarding new facilities.', group:'Tools' },
@@ -42,6 +49,7 @@ const TOUR_STEPS = {
     { target:'[data-view="h-posschool"]', title:'Position School', desc:'Here is the structured curriculum for each belt track. You can see what your staff are learning, browse the modules, and see who has enrolled or completed their track.', group:'Development' },
     { target:'[data-view="h-training"]', title:'SBD Foundations', desc:'SBD Foundations is the knowledge curriculum — the belt-by-belt scripts, protocols, and study sections your team works through. Browse any track to see what your staff are learning and how the belt content is structured.', group:'Development' },
     { target:'[data-view="h-instruments"]', title:'SBD Instruments', desc:'SBD Instruments is the hands-on instrument training. Each module runs through three gates — Knowledge, Simulation, and Observation — and here you can monitor each staff member\'s assignment status and their pass progress (K x/3, S x/3). Assigning and scoring are handled by your Facility Admin and assessors.', group:'Development' },
+    { target:'[data-view="h-preceptor"]', title:'Preceptor Certification', desc:'Preceptor Certification is the pathway that develops facilitators and preceptors. It runs 15 modules across three levels — Facilitator, Advanced, and Master — and here you can monitor each candidate\'s progress. Every module has a scored Knowledge gate the candidate passes on their own, while the Simulation and the Observation capstone are administered by an assessor.', group:'Development' },
     { target:'[data-view="h-scoreboard"]', title:'Staff Scoreboard', desc:'These are performance rankings for your team. Points come from assessments, attendance, and gate completions. Use this to recognize top performers and spot coaching needs.', group:'Development' },
     { target:'[data-view="h-schedule"]', title:'Schedule', desc:'View the weekly shift schedule for your department here. You can see coverage and who is on each shift; schedule changes are made by your Facility Admin.', group:'Operations' },
     { target:'[data-view="h-attendance"]', title:'Attendance', desc:'View daily attendance and coverage patterns here. Attendance is recorded by your Facility Admin — this view lets you monitor who showed up and spot coverage gaps.', group:'Operations' },
@@ -56,6 +64,7 @@ const TOUR_STEPS = {
     { target:'[data-view="h-posschool"]', title:'Position School', desc:'The structured curriculum for each belt track. Monitor which staff are enrolled and where they are in their training modules.', group:'Development' },
     { target:'[data-view="h-training"]', title:'SBD Foundations', desc:'SBD Foundations is the knowledge curriculum — belt-by-belt scripts, protocols, and study sections. Assign tracks to your staff and monitor how far each person has progressed through their belt content.', group:'Development' },
     { target:'[data-view="h-instruments"]', title:'SBD Instruments', desc:'SBD Instruments is the hands-on instrument training. Each module runs through three gates — Knowledge, Simulation, and Observation. Assign instruments to your staff and track each person\'s pass progress (K x/3, S x/3); Observation unlocks after three passes of each test.', group:'Development' },
+     { target:'[data-view="h-preceptor"]', title:'Preceptor Certification', desc:'The certification pathway for your facilitators and preceptors — 15 modules across three levels (Facilitator, Advanced, Master). Each module has a scored Knowledge gate; the Simulation and the Observation capstone are assessor-administered. Assign the pathway and track each candidate\'s progress here.', group:'Development' },
     { target:'[data-view="h-scoreboard"]', title:'Staff Scoreboard', desc:'Performance rankings for your team. Points from assessments, attendance, and gate completions are tallied here.', group:'Development' },
     { target:'[data-view="h-schedule"]', title:'Schedule', desc:'Build and manage weekly shift schedules for your facility from this view.', group:'Operations' },
     { target:'[data-view="h-attendance"]', title:'Attendance', desc:'Record daily attendance and track coverage patterns here. The data feeds into staff performance scores.', group:'Operations' },
@@ -73,6 +82,7 @@ const TOUR_STEPS = {
     { target:'[data-view="s-posschool"]', title:'Position School', desc:'This is your training hub. Access study materials, scripts, procedures, and knowledge content for your current belt track. Everything you need to prepare for assessments.', group:'Learning' },
     { target:'[data-view="s-foundations"]', title:'SBD Foundations', desc:'SBD Foundations is your knowledge curriculum — the scripts, protocols, and study sections for your belt track. Work through each section to build the knowledge your assessments check.', group:'Learning' },
     { target:'[data-view="s-instruments"]', title:'SBD Instruments', desc:'SBD Instruments is your hands-on instrument training. Each module has three gates — Knowledge, Simulation, and Observation. Pass Knowledge and Simulation three times each (fresh questions every attempt) to unlock Observation and complete the module.', group:'Learning' },
+    { target:'[data-view="s-preceptor"]', title:'Preceptor Certification', desc:'Preceptor Certification is your pathway to becoming a facilitator and preceptor. It runs 15 modules across three levels — Facilitator, Advanced, and Master — and each module has a scored Knowledge gate you pass here, while the Simulation and the Observation capstone are administered by your assessor.', group:'Development' },
     { target:'[data-view="s-report"]', title:'My Report', desc:'Your personal performance report is here. Belt history, gate status, attendance record, and skill summary all in one view. You can download this as a PDF.', group:'Profile' },
     { target:'[data-view="s-oip"]', title:'My Profile', desc:'This is your OIP (Operational Identity Profile). Complete your profile assessment here so your facility can understand your strengths and place you on the right belt track.', group:'Profile' },
     { target:'[data-view="s-schedule"]', title:'My Schedule', desc:'Your assigned shifts and upcoming work schedule are shown here. Check this regularly so you always know when you are expected.', group:'Operations' },
@@ -91,6 +101,62 @@ const TOUR_STEPS = {
     { target:'[data-view="x-guide"]', title:'Platform Guide', desc:'Your always-available guide to the System Admin portal. Relaunch the tour or browse features anytime.', group:'Support' },
   ],
 };
+
+// Parse the view id out of a step's target selector (e.g. '[data-view="a-overview"]' → 'a-overview').
+function navView(target){ const m = /data-view="([^"]+)"/.exec(target || ''); return m ? m[1] : null; }
+
+// ── Tour steps, DERIVED from NAV_REGISTRY (#8b) ──
+// Same shape the engine already consumes (target/title/desc/group), plus an explicit
+// `view` id so consumers no longer need to regex the selector. Keyed by tour-role.
+const TOUR_STEPS = Object.fromEntries(
+  Object.entries(NAV_REGISTRY).map(function(entry){
+    var role = entry[0], steps = entry[1];
+    return [role, steps.map(function(s){ return Object.assign({}, s, { view: s.view || navView(s.target) }); })];
+  })
+);
+
+// ── Tour coverage staleness guard (#8b) ──
+// Dev-only. Cross-checks each portal's sidebar nav items (the nav-truth) against
+// NAV_REGISTRY and warns when a nav view has no tour metadata, or a registry entry
+// targets a view that has no nav item. Never runs / logs in production.
+// Views intentionally excluded: drill-down-only views reached by click, not the sidebar.
+const TOUR_COVERAGE_IGNORE = new Set(['a-facility','x-facility']);
+function tourCoverageIsDev(){
+  try {
+    if (window.SBD_DEBUG === true) return true;
+    var h = location.hostname;
+    return h === 'localhost' || h === '127.0.0.1' || h === '' || h.endsWith('.local');
+  } catch(e){ return false; }
+}
+function auditTourCoverage(){
+  if (!tourCoverageIsDev()) return;
+  try {
+    // Which registry roles feed each sidebar prefix (hospital + facility_admin share 'h-').
+    var prefixRoles = { a:['admin'], h:['facility_admin','hospital'], s:['staff_member'], x:['system_admin'] };
+    Object.keys(prefixRoles).forEach(function(prefix){
+      var navEls = document.querySelectorAll('.nav-item[data-view^="' + prefix + '-"]');
+      if (!navEls.length) return; // that portal isn't in the DOM right now — skip
+      var navViews = new Set();
+      navEls.forEach(function(el){ navViews.add(el.getAttribute('data-view')); });
+      // Union of covered views across the roles that map to this prefix.
+      var covered = new Set();
+      prefixRoles[prefix].forEach(function(role){
+        (NAV_REGISTRY[role] || []).forEach(function(s){ var v = navView(s.target); if (v) covered.add(v); });
+      });
+      navViews.forEach(function(v){
+        if (!covered.has(v) && !TOUR_COVERAGE_IGNORE.has(v)) {
+          console.warn('[tour][staleness] nav view "' + v + '" has NO tour metadata in NAV_REGISTRY (prefix ' + prefix + '-). Add a step so the tour stays current.');
+        }
+      });
+      covered.forEach(function(v){
+        if (!navViews.has(v) && !TOUR_COVERAGE_IGNORE.has(v)) {
+          console.warn('[tour][staleness] NAV_REGISTRY step targets "' + v + '" but no sidebar nav item exists (prefix ' + prefix + '-). Dead tour step?');
+        }
+      });
+    });
+  } catch(e){ /* guard must never break the app */ }
+}
+if (typeof window !== 'undefined') window.auditTourCoverage = auditTourCoverage;
 
 // ── Role-to-portal prefix mapping ──
 function getPortalPrefix(){

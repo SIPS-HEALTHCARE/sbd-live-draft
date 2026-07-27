@@ -628,6 +628,24 @@ class DavidChat {
             .david-send-btn:hover { filter: brightness(1.08); }
             .david-send-btn:active { transform: scale(.94); }
             .david-send-btn:disabled { background: var(--s3); color: var(--txt3); cursor: not-allowed; filter: none; }
+            .david-mic-btn {
+                background: var(--s3);
+                border: 1px solid var(--glass-border, rgba(255,255,255,0.1));
+                border-radius: 10px;
+                width: 40px;
+                height: 40px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                flex-shrink: 0;
+                font-size: 16px;
+                line-height: 1;
+                transition: filter .15s, transform .15s, background .15s;
+            }
+            .david-mic-btn:hover { filter: brightness(1.12); }
+            .david-mic-btn:active { transform: scale(.94); }
+            .david-mic-btn[aria-pressed="true"] { background: #4a1414; }
 
             /* ── Citations, evidence, charts ── */
             .david-citation-badge {
@@ -927,6 +945,7 @@ class DavidChat {
                             <div class="david-chips-row" id="david-qa">${qaButtons}</div>
                             <div class="david-input-wrapper">
                                 <textarea placeholder="${placeholder}" id="david-query" rows="1"></textarea>
+                                ${(window.dictationSupported && window.dictationSupported()) ? `<button class="david-mic-btn" id="david-mic" aria-label="Dictate by voice" title="Dictate by voice" type="button" onclick="startDictation('david-query', this)"><span class="dictate-ico" aria-hidden="true">🎤</span></button>` : ''}
                                 <button class="david-send-btn" id="david-btn" aria-label="Send message" type="button">
                                     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
                                 </button>
@@ -1570,6 +1589,25 @@ class DavidChat {
             averageStars: (authorizedStaff.reduce((acc, s) => acc + (s.stars || 0), 0) / (authorizedStaff.length || 1)).toFixed(1)
         };
 
+        // 5.5 OIP personality mix (#84): staff records carry oip.primaryType/secondaryType
+        // as KEYS (S/St/Su/A). Without the official name list David invented full names
+        // from the keys (client-reported). Aggregate with the CANONICAL names here and
+        // hand the legend + a hard naming rule to the model below.
+        const OIP_NAMES = { S:'Sentinel', St:'Steward', Su:'Surgeon', A:'Architect' };
+        const OIP_LABELS = { S:'Precision Operator', St:'Culture Builder', Su:'High-Output Performer', A:'Systems Thinker' };
+        let oipMixLine = "";
+        try {
+            const mix = {}; let noProfile = 0;
+            authorizedStaff.forEach(s => {
+                const k = s.oip && s.oip.primaryType;
+                if (k && OIP_NAMES[k]) mix[k] = (mix[k] || 0) + 1; else noProfile++;
+            });
+            const parts = Object.entries(mix).map(([k, n]) => `${OIP_NAMES[k]} (${k}): ${n}`);
+            oipMixLine = parts.length
+                ? `- OIP Personality Mix (primary types): ${parts.join(', ')}; no OIP profile on file: ${noProfile}`
+                : `- OIP Personality Mix: no completed OIP profiles in scope (${noProfile} staff without a profile)`;
+        } catch (e) { oipMixLine = ""; }
+
         // 6. Filter & Summarize Facility Trends
         const authorizedTrends = {};
         let trendSummary = "No trend data available for current scope.";
@@ -1661,6 +1699,7 @@ class DavidChat {
                 * Ready for Promotion: ${talentPipeline.readyForPromotion}
                 * Elite (Black/Brown Belts): ${talentPipeline.elitePractitioners}
                 * Average Star Rating: ${talentPipeline.averageStars}
+            ${oipMixLine}
             
             ${precognitionData}
 
@@ -1681,6 +1720,8 @@ class DavidChat {
             ${placementRecsBlock}
             [ASSESSMENT_QUEUE]: ${JSON.stringify(authorizedQueue)}
             [INSTITUTIONAL_SYSTEMS]: ${JSON.stringify(authorizedSystems)}
+
+            [OIP TYPES - BINDING NAME RULE]: Staff records may carry oip.primaryType and oip.secondaryType with the KEYS S, St, Su, A. These keys mean EXACTLY: S = Sentinel (Precision Operator), St = Steward (Culture Builder), Su = Surgeon (High-Output Performer), A = Architect (Systems Thinker). ALWAYS use these exact type names in every answer. NEVER invent, rename, abbreviate into different words, or substitute other personality labels. If a staff member has no oip data, state "no OIP profile on file" for them - never guess or fabricate a type for anyone.
 
             [TRAINING GUIDANCE]: When placement level scores, assessment history, or practice weak areas show a gap, you MAY recommend specific Foundations/Instrument modules for retraining — use the exact module ids and titles from [TRAINING_CATALOG], matching the weak area to the module's domain — and Position School tracks where leadership development fits. ALWAYS state that assignment is manual: a leader must assign modules through the Training Modules UI. You cannot assign modules, change records, or write anything. When [PLACEMENT_RETRAINING] is present for a person, use THAT deterministic list (its exact modules and scores) as the authoritative retraining recommendation for them rather than inferring from domain-matching — the domain-matching heuristic above is only a fallback for staff with no placement-derived recommendation.
         `.trim();
@@ -1712,6 +1753,7 @@ class DavidChat {
             - Current-belt gates: Competency=${g(me.cur?.c)}, Simulation=${g(me.cur?.s)}, Observation=${g(me.cur?.o)}
             - Next-belt gates: Competency=${g(me.nxt?.c)}, Simulation=${g(me.nxt?.s)}, Observation=${g(me.nxt?.o)}
             - Position School: enrolled=${ps.enrolled ? 'yes' : 'no'}, completed=${ps.done ? 'yes' : 'no'}${ps.track ? `, track=${ps.track}` : ''}
+            - OIP profile: ${(me.oip && me.oip.primaryType) ? `${({S:'Sentinel',St:'Steward',Su:'Surgeon',A:'Architect'})[me.oip.primaryType] || me.oip.primaryType} (primary)${me.oip.secondaryType ? `, ${({S:'Sentinel',St:'Steward',Su:'Surgeon',A:'Architect'})[me.oip.secondaryType] || me.oip.secondaryType} (secondary)` : ''} - always use these exact type names` : 'no OIP profile on file - never guess one'}
             - Practice scores (best % per belt/mode): ${JSON.stringify(me.practiceScores || {})}
             ${myPlacement || '- Placement assessment: none on file.'}
             ${myTraining || '- Foundations/Instruments training: none recorded yet.'}

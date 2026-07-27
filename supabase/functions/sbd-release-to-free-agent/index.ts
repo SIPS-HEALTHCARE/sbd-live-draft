@@ -71,9 +71,10 @@ serve(async (req) => {
             }
         }
 
-        // 3) Check Supabase auth user metadata (set by sbd-sync-user-claims)
+        // 3) Check Supabase auth app_metadata only — user_metadata is self-writable
+        // via auth.updateUser(), so trusting it lets any user self-promote to admin.
         if (!callerRole) {
-            const metaRole = user.app_metadata?.role || user.user_metadata?.role;
+            const metaRole = user.app_metadata?.role;
             if (metaRole && allowedRoles.includes(metaRole)) {
                 callerRole = metaRole;
             }

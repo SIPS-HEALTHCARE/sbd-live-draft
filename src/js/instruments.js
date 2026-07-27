@@ -511,6 +511,18 @@ function submitInstGate(mid,gk){
  else{rEl.innerHTML='<div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:var(--r);padding:14px 16px;text-align:center;margin-top:12px"><div style="font-size:24px;font-weight:700;color:#f87171">'+score+'%</div><div style="font-size:13px;color:#f87171;font-weight:600;margin:4px 0">Not Yet Passing</div><div style="font-size:12px;color:#94a3b8">'+correct+' of '+order.length+' correct. 80% required.</div><button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="openInstModule(\''+mid+'\')">Try Again</button></div>';toast('Score: '+score+'%. 80% required.','err');}}
 }
  
+// ── F&I Reporting Helper (Ph.2a) ─────────────────────────────────────────────
+// Instruments-only summary for one staffer. Reuses the shared per-domain core in
+// foundations.js (fiDomainSummaryForStaff, loaded first). READ-ONLY, no writes.
+// See docs/decisions/2026-07-17-ph2-development-plan.md §2.
+function instSummaryForStaff(sid){
+ return fiDomainSummaryForStaff(
+  sid, INSTRUMENT_MODULES,
+  getInstrumentAssignments(sid),
+  (DB.instrumentProgress||[]).filter(p=>p.staffId===sid)
+ );
+}
+
 // ── Hospital Portal: Render Instruments ──
 function renderHInstruments(){
  // Renders in the Hospital Portal (h-instruments) or, for master/staff admins, the

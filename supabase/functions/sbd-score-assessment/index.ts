@@ -1,4 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+// URL import (esm.sh, not a relative ../_shared path) so it still resolves under the
+// dashboard copy-paste deploy — same import david-chat/david-anomaly-detector use.
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.6';
 
 // ─── Inlined from supabase/functions/_shared/models.ts (#47) ─────────────────
 // This function is deployed via the Supabase dashboard (copy-paste), which cannot
@@ -193,7 +196,44 @@ serve(async (req) => {
             });
         }
 
-        const { question, answer, answer_key, fail_indicator } = await req.json();
+        // ── Anti-abuse rate limit (per client IP) ─────────────────────────────────────
+        // This endpoint stays anon-callable ON PURPOSE (the auth note above): a hard JWT check
+        // 401s candidates whose session went stale mid-assessment and drops the whole batch to
+        // the keyword fallback. The remaining risk is LLM-cost abuse — the privileged call is
+        // OpenRouter on a server-side key. Throttle by source IP: a real candidate (a few dozen
+        // sims/session) never hits the ceiling; a scripted abuser does. DB-backed (fixed window)
+        // so it holds across Fluid Compute instances. FAIL-OPEN: a limiter error must never deny
+        // a legitimate candidate a grade (mirrors the #14 metering philosophy).
+        const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+        const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+        const admin = (supabaseUrl && serviceKey) ? createClient(supabaseUrl, serviceKey) : null;
+
+        const clientIp = (req.headers.get('x-forwarded-for') || '').split(',')[0].trim()
+            || (req.headers.get('cf-connecting-ip') || '')
+            || 'unknown';
+        if (admin && clientIp !== 'unknown') {
+            try {
+                const [perMin, perHour] = await Promise.all([
+                    admin.rpc('sbd_rate_limit_check', { p_key: `score:min:${clientIp}`, p_limit: 60, p_window_seconds: 60 }),
+                    admin.rpc('sbd_rate_limit_check', { p_key: `score:hr:${clientIp}`,  p_limit: 600, p_window_seconds: 3600 }),
+                ]);
+                // Blocked only on a definitive `false` from either window; any error fails open.
+                const blocked = perMin.data === false || perHour.data === false;
+                if (blocked) {
+                    return new Response(JSON.stringify({ error: 'Rate limit exceeded. Please wait a moment and try again.' }), {
+                        status: 429,
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    });
+                }
+            } catch (rlErr: any) {
+                console.warn('[SBD_SCORE] rate-limit check errored (failing open):', rlErr?.message || rlErr);
+            }
+        }
+
+        // facility_id + user_id are for #14 cost attribution only (not a security boundary):
+        // the assessment usage row is written server-side below. Both are optional so any
+        // existing {question, answer} caller keeps working (the row just logs 'unknown').
+        const { question, answer, answer_key, fail_indicator, facility_id, user_id } = await req.json();
         if (!question || !answer) {
             return new Response(JSON.stringify({ error: 'Missing question or answer' }), {
                 status: 400,
@@ -237,13 +277,23 @@ No markdown, no preamble.`;
             const call = await callOpenRouter({
                 apiKey: openRouterKey,
                 models: MODEL_CHAINS.assessmentScorer,
+                // #16 prompt caching: mark the stable evaluator rubric as an ephemeral cache
+                // breakpoint so grading many candidates against the same rubric reads it from cache
+                // (only the per-candidate `userTask` differs). NOTE: EVALUATOR_SYSTEM_PROMPT_V2 is
+                // ~950 tokens, below Haiku 4.5's 4,096-token minimum cacheable length, so today this
+                // is a no-op the provider silently ignores — it becomes effective if the rubric grows
+                // past the threshold (or the scorer moves to a model with a lower minimum). Harmless
+                // and correct to send now so the plumbing is uniform with david-chat.
                 messages: [
-                    { role: 'system', content: EVALUATOR_SYSTEM_PROMPT_V2 },
+                    { role: 'system', content: [{ type: 'text', text: EVALUATOR_SYSTEM_PROMPT_V2, cache_control: { type: 'ephemeral' } }] },
                     { role: 'user', content: userTask }
                 ],
                 maxTokens: keyAware ? 240 : 180,
                 temperature: 0.3,
                 title: 'SBD Assessment Scorer',
+                // #14: ask OpenRouter to return generation accounting so we store the
+                // provider's ground-truth cost (not a token×rate estimate). Same as david-chat.
+                extraBody: { usage: { include: true } },
             });
             orRes = call.res;
             servedModel = call.servedModel;
@@ -257,6 +307,37 @@ No markdown, no preamble.`;
 
         const data = await orRes.json();
         const text = data.choices?.[0]?.message?.content || '';
+
+        // ── #14 Assessment grading cost tracking (tagged-rows model) ──────────────────
+        // Log ONE usage row per grade into david_usage_logs with source='assessment', so
+        // grading spend is metered per-facility SEPARATELY from David chat. `cost` is the
+        // provider's ground-truth generation cost (usage.include above). This never calls
+        // david_consume_question, so the facility's chat question allowance is untouched.
+        // Fire-and-forget with a service-role client: a logging failure never affects the
+        // candidate's grade. Chat readers filter source='chat' so they are unchanged.
+        try {
+            const usage = data.usage || {};
+            // Reuse the service-role client created for the rate-limit check above.
+            if (admin && (facility_id || user_id)) {
+                admin.from('david_usage_logs').insert({
+                    facility_id: facility_id || 'assessment-unknown',
+                    user_id: user_id || '00000000-0000-0000-0000-000000000000',
+                    prompt_tokens: usage.prompt_tokens || 0,
+                    completion_tokens: usage.completion_tokens || 0,
+                    cost: typeof usage.cost === 'number' ? usage.cost : 0,
+                    source: 'assessment',
+                    // #16: cache split (subset of prompt_tokens). 0 today — the rubric is below the
+                    // model's minimum cacheable length; see the messages[] note above.
+                    cached_tokens: usage.prompt_tokens_details?.cached_tokens ?? usage.cache_read_input_tokens ?? 0,
+                    cache_creation_tokens: usage.prompt_tokens_details?.cache_write_tokens ?? usage.cache_creation_input_tokens ?? 0,
+                }).then(({ error }: { error: any }) => {
+                    if (error) console.warn('[SBD_SCORE] assessment usage log skipped:', error.message);
+                });
+            }
+        } catch (logErr: any) {
+            console.warn('[SBD_SCORE] assessment usage log error (ignored):', logErr?.message || logErr);
+        }
+        // ──────────────────────────────────────────────────────────────────────────────
 
         // The model sometimes wraps its JSON in a ```json code fence despite the
         // no-markdown instruction. Strip any fences, then prefer the first {...}

@@ -118,6 +118,19 @@ serve(async (req) => {
                 .eq('used', false)
                 .gt('expires_at', new Date().toISOString());
 
+            // 4b. Clear the failed-attempt ledger for this staff member. The 429
+            // lockout message tells candidates to "ask your assessor for a new PIN" —
+            // a deliberate assessor-issued PIN must actually clear the lock. Only
+            // assessors reach this path, so an attacker can't reset their own count.
+            // ponytail: deletes 'failed' audit rows ('locked_out' rows are kept); switch
+            // to an 'assessor_reset' marker row if full forensic history ever matters.
+            const { error: clearErr } = await supabaseAdmin
+                .from('sbd_assessment_pin_attempts')
+                .delete()
+                .eq('staff_id', staff_id)
+                .eq('outcome', 'failed');
+            if (clearErr) console.error('PIN attempt ledger clear failed:', clearErr);
+
             // 5. Generate and store new PIN
             const pin = generateSecurePin();
             // hashSync (not hash) — Supabase Edge runtime has no Worker global,
@@ -208,7 +221,10 @@ serve(async (req) => {
             //    so they can't push a legitimate candidate toward a lock. Once
             //    MAX_FAILED_ATTEMPTS failures land within LOCKOUT_WINDOW_MINUTES, the
             //    account is locked for LOCKOUT_DURATION_MINUTES from the last failure.
-            const lookbackMs = Math.max(LOCKOUT_WINDOW_MINUTES, LOCKOUT_DURATION_MINUTES) * 60 * 1000;
+            // Lookback must cover window + duration: a lock triggered by failures
+            // spread across the full window holds until oldest_fail + window + duration.
+            // max() alone let the oldest failure age out mid-lock, releasing it early.
+            const lookbackMs = (LOCKOUT_WINDOW_MINUTES + LOCKOUT_DURATION_MINUTES) * 60 * 1000;
             const lookbackIso = new Date(Date.now() - lookbackMs).toISOString();
             const { data: recentFails } = await supabaseAdmin
                 .from('sbd_assessment_pin_attempts')

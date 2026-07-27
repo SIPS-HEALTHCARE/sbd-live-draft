@@ -20,8 +20,8 @@
   <meta http-equiv="Expires" content="0">
 
   <!-- MODULAR CSS -->
-  <link rel="stylesheet" href="src/css/index.css?v=27">
-  <link rel="stylesheet" href="src/css/foundations.css?v=1">
+  <link rel="stylesheet" href="src/css/index.css?v=28">
+  <link rel="stylesheet" href="src/css/foundations.css?v=2">
 </head>
 <body>
   <!-- MAIN APP CONTAINER -->
@@ -268,6 +268,9 @@
       <div class="nav-item" data-view="h-posschool" onclick="hNav(this,'h-posschool','Position School')">
         <span class="ico"><svg viewBox="0 0 18 18" fill="none"><path d="M9 2L3 5.5v3C3 12 5.7 14.5 9 16c3.3-1.5 6-4 6-7.5v-3L9 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M6 9l2.5 2.5L13 7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Position School
       </div>
+      <div class="nav-item" data-view="h-preceptor" onclick="hNav(this,'h-preceptor','Preceptor Certification')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><circle cx="6.5" cy="6" r="2.4" stroke="currentColor" stroke-width="1.4"/><path d="M2.5 15c0-2.2 1.8-3.6 4-3.6s4 1.4 4 3.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M12 5.5l3 1.5-3 1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Preceptor Certification
+      </div>
       <div class="nav-item" data-view="h-training" onclick="hNav(this,'h-training','SBD Foundations')">
         <span class="ico"><svg viewBox="0 0 18 18" fill="none"><path d="M9 2l6 3v4c0 3.5-2.5 6-6 7-3.5-1-6-3.5-6-7V5l6-3z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M6.5 9l1.7 1.7L12 7.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>SBD Foundations
       </div>
@@ -308,7 +311,7 @@
     <div class="sb-ft">
       <div class="user-row">
         <div class="uav" id="h-uav-initials">--</div>
-        <div style="min-width:0;flex:1"><div class="uname" id="h-uav-name">--</div><div class="urole" id="h-uav-role">Dept. Manager</div></div>
+        <div style="min-width:0;flex:1;cursor:pointer" onclick="hNav(document.querySelector('#h-portal .nav-item[data-view=h-settings]'),'h-settings','Account &amp; Settings')" title="Open your profile &amp; settings"><div class="uname" id="h-uav-name">--</div><div class="urole" id="h-uav-role">Dept. Manager</div></div>
         <div class="logout-ico" onclick="logout()" title="Log out"><svg viewBox="0 0 18 18" fill="none" width="16" height="16"><path d="M12 14H15a1 1 0 001-1V5a1 1 0 00-1-1H12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M9 12l3-3-3-3M12 9H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
       </div>
     </div>
@@ -331,6 +334,7 @@
       <div id="h-posschool" class="hidden"></div>
       <div id="h-training" class="hidden"></div>
       <div id="h-instruments" class="hidden"></div>
+      <div id="h-preceptor" class="hidden"></div>
       <div id="h-scoreboard" class="hidden"></div>
       <div id="h-schedule" class="hidden"></div>
       <div id="h-attendance" class="hidden"></div>
@@ -404,6 +408,9 @@
       <div class="nav-item" data-view="a-instruments" onclick="aNav(this,'a-instruments','SBD Instruments')">
         <span class="ico"><svg viewBox="0 0 18 18" fill="none"><path d="M3 13l8-8 3 3-8 8H3v-3z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M11 5l2-2 3 3-2 2" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span>SBD Instruments
       </div>
+      <div class="nav-item" data-view="a-preceptor" onclick="aNav(this,'a-preceptor','Preceptor Certification')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><circle cx="6.5" cy="6" r="2.4" stroke="currentColor" stroke-width="1.4"/><path d="M2.5 15c0-2.2 1.8-3.6 4-3.6s4 1.4 4 3.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M12 5.5l3 1.5-3 1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Preceptor Certification
+      </div>
       <div class="nav-item" data-view="a-upload" onclick="aNav(this,'a-upload','Bulk Upload')">
         <span class="ico"><svg viewBox="0 0 18 18" fill="none"><path d="M9 11V4m0 0L6 7m3-3l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 12v2a1 1 0 001 1h10a1 1 0 001-1v-2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>Bulk Upload
       </div>
@@ -420,6 +427,9 @@
       </div>
       <div class="nav-item" data-view="a-adminusers" onclick="aNav(this,'a-adminusers','Admin Users')" id="nav-adminusers" style="display:none">
         <span class="ico"><svg viewBox="0 0 18 18" fill="none"><circle cx="7" cy="6.5" r="3" stroke="currentColor" stroke-width="1.4"/><path d="M2 16c0-3 2.2-5 5-5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M13 11v4M11 13h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>Admin Users
+      </div>
+      <div class="nav-item" data-view="a-rolemgmt" onclick="aNav(this,'a-rolemgmt','Role Management')" id="nav-rolemgmt" style="display:none">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 2l6 3v4c0 4-2.7 6-6 7-3.3-1-6-3-6-7V5l6-3z" stroke-linejoin="round"/><path d="M6.5 9l1.5 1.5L12 7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Role Management
       </div>
       <div class="nav-item" data-view="a-promoqueue" onclick="aNav(this,'a-promoqueue','Promotion Approvals')" id="nav-promoqueue" style="display:none">
         <span class="ico"><svg viewBox="0 0 18 18" fill="none"><path d="M9 2l2.1 4.3 4.7.7-3.4 3.3.8 4.7L9 12.8l-4.2 2.2.8-4.7L2.2 7l4.7-.7z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></span>Promotion Approvals
@@ -440,7 +450,7 @@
     <div class="sb-ft">
       <div class="user-row">
         <div class="uav" id="a-uav-initials">JJ</div>
-        <div style="min-width:0;flex:1"><div class="uname" id="a-uav-name">Dr. Jake T. Jacobs</div><div class="urole" id="a-uav-role">SIPS Healthcare &bull; COO</div></div>
+        <div style="min-width:0;flex:1;cursor:pointer" onclick="aNav(document.querySelector('#a-portal .nav-item[data-view=a-settings]'),'a-settings','Account &amp; Settings')" title="Open your profile &amp; settings"><div class="uname" id="a-uav-name">Dr. Jake T. Jacobs</div><div class="urole" id="a-uav-role">SIPS Healthcare &bull; COO</div></div>
         <div class="logout-ico" onclick="logout()" title="Log out"><svg viewBox="0 0 18 18" fill="none" width="16" height="16"><path d="M12 14H15a1 1 0 001-1V5a1 1 0 00-1-1H12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M9 12l3-3-3-3M12 9H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
       </div>
     </div>
@@ -478,11 +488,13 @@
       <div id="a-progression" class="hidden"></div>
       <div id="a-foundations" class="hidden"></div>
       <div id="a-instruments" class="hidden"></div>
+      <div id="a-preceptor" class="hidden"></div>
       <div id="a-upload" class="hidden"></div>
       <div id="a-reports" class="hidden"></div>
       <div id="a-david" class="hidden"></div>
       <div id="a-daviddashboard" class="hidden"></div>
       <div id="a-adminusers" class="hidden"></div>
+      <div id="a-rolemgmt" class="hidden"></div>
       <div id="a-promoqueue" class="hidden"></div>
       <div id="a-freeagents" class="hidden"></div>
       <div id="a-placementreviews" class="hidden"></div>
@@ -524,9 +536,6 @@
       <div class="nav-item" data-view="s-report" onclick="sNav(this,'s-report','My Report')">
         <span class="ico"><svg viewBox="0 0 18 18" fill="none"><path d="M5 2h8l2 2v12H3V2h2" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M6 7h6M6 10h6M6 13h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>My Report
       </div>
-      <div class="nav-item" data-view="s-oip" onclick="sNav(this,'s-oip','My Profile')">
-        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><circle cx="9" cy="7" r="3.5" stroke="currentColor" stroke-width="1.4"/><path d="M9 12c-4 0-5.5 2-5.5 3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M13 14l1.5 1.5L17 13" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>My Profile
-      </div>
       <div class="nav-item" data-view="s-schedule" onclick="sNav(this,'s-schedule','My Schedule')">
         <span class="ico"><svg viewBox="0 0 18 18" fill="none"><rect x="2" y="3" width="14" height="13" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M2 7h14M6 1v3M12 1v3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>My Schedule
       </div>
@@ -542,7 +551,13 @@
       <div class="nav-item" data-view="s-instruments" onclick="sNav(this,'s-instruments','SBD Instruments')">
         <span class="ico"><svg viewBox="0 0 18 18" fill="none"><path d="M3 13l8-8 3 3-8 8H3v-3z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M11 5l2-2 3 3-2 2" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span>SBD Instruments
       </div>
+      <div class="nav-item" data-view="s-preceptor" onclick="sNav(this,'s-preceptor','Preceptor Certification')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><circle cx="6.5" cy="6" r="2.4" stroke="currentColor" stroke-width="1.4"/><path d="M2.5 15c0-2.2 1.8-3.6 4-3.6s4 1.4 4 3.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M12 5.5l3 1.5-3 1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Preceptor Certification
+      </div>
       <div class="nav-lbl" style="margin-top:6px">Support</div>
+      <div class="nav-item" data-view="s-oip" onclick="sNav(this,'s-oip','My Profile')">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><circle cx="9" cy="7" r="3.5" stroke="currentColor" stroke-width="1.4"/><path d="M9 12c-4 0-5.5 2-5.5 3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M13 14l1.5 1.5L17 13" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>My Profile
+      </div>
       <div class="nav-item" data-view="s-settings" onclick="sNav(this,'s-settings','Account &amp; Settings')">
         <span class="ico"><svg viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="2.5" stroke="currentColor" stroke-width="1.3"/><path d="M9 2v2M9 14v2M2 9h2M14 9h2M4.1 4.1l1.4 1.4M12.5 12.5l1.4 1.4M12.5 5.5l1.4-1.4M4.1 13.9l1.4-1.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>Account &amp; Settings
       </div>
@@ -556,7 +571,7 @@
     <div class="sb-ft">
       <div class="user-row">
         <div class="uav" id="s-uav-initials">--</div>
-        <div style="min-width:0;flex:1"><div class="uname" id="s-uav-name">--</div><div class="urole" id="s-uav-role">--</div></div>
+        <div style="min-width:0;flex:1;cursor:pointer" onclick="sNav(document.querySelector('#s-portal .nav-item[data-view=s-oip]'),'s-oip','My Profile')" title="Open your profile"><div class="uname" id="s-uav-name">--</div><div class="urole" id="s-uav-role">--</div></div>
         <div class="logout-ico" onclick="logout()" title="Log out"><svg viewBox="0 0 18 18" fill="none" width="16" height="16"><path d="M12 14H15a1 1 0 001-1V5a1 1 0 00-1-1H12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M9 12l3-3-3-3M12 9H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
       </div>
     </div>
@@ -584,6 +599,7 @@
       <div id="s-study" class="hidden"></div>
       <div id="s-foundations" class="hidden"></div>
       <div id="s-instruments" class="hidden"></div>
+      <div id="s-preceptor" class="hidden"></div>
       <div id="s-guide" class="hidden"></div>
       <div id="s-settings" class="hidden"></div>
       <div id="s-david" class="hidden"></div>
@@ -630,7 +646,7 @@
     <div class="sb-ft">
       <div class="user-row">
         <div class="uav" id="x-uav-initials">--</div>
-        <div style="min-width:0;flex:1"><div class="uname" id="x-uav-name">--</div><div class="urole" id="x-uav-role">System Admin</div></div>
+        <div style="min-width:0;flex:1;cursor:pointer" onclick="xNav(document.querySelector('#x-portal .nav-item[data-view=x-settings]'),'x-settings','Account &amp; Settings')" title="Open your profile &amp; settings"><div class="uname" id="x-uav-name">--</div><div class="urole" id="x-uav-role">System Admin</div></div>
         <div class="logout-ico" onclick="logout()" title="Log out"><svg viewBox="0 0 18 18" fill="none" width="16" height="16"><path d="M12 14H15a1 1 0 001-1V5a1 1 0 00-1-1H12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M9 12l3-3-3-3M12 9H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
       </div>
     </div>
@@ -713,23 +729,25 @@
 <div id="toast"></div>
 
 
-  <script src="src/js/logic.js?v=26"></script>
-  <script src="src/js/utils.js?v=27"></script>
-  <script src="src/js/api-supabase.js?v=45"></script>
+  <script src="src/js/logic.js?v=27"></script>
+  <script src="src/js/utils.js?v=28"></script>
+  <script src="src/js/api-supabase.js?v=56"></script>
   <script src="src/js/auth-password.js?v=20"></script>
   <script src="src/js/activity.js?v=1"></script>
   <script src="src/js/ovs-guidance.js?v=1"></script>
-  <script src="src/js/foundations.js?v=13"></script>
-  <script src="src/js/instruments.js?v=13"></script>
-  <script src="src/js/ui-views.js?v=155"></script>
+  <script src="src/js/dictation.js?v=1"></script>
+  <script src="src/js/foundations.js?v=14"></script>
+  <script src="src/js/instruments.js?v=14"></script>
+  <script src="src/js/preceptor.js?v=9"></script>
+  <script src="src/js/ui-views.js?v=187"></script>
   <script src="src/js/belt-test-engine.js?v=1"></script>
-  <script src="src/js/belt-test-flow.js?v=4"></script>
-  <script src="src/js/settings.js?v=19"></script>
-  <script src="src/js/onboarding.js?v=22"></script>
-  <script src="src/js/auth-init.js?v=33"></script>
+  <script src="src/js/belt-test-flow.js?v=5"></script>
+  <script src="src/js/settings.js?v=20"></script>
+  <script src="src/js/onboarding.js?v=25"></script>
+  <script src="src/js/auth-init.js?v=38"></script>
   <script src="src/js/david-serializers.js?v=7"></script>
   <script src="src/js/david-alerts.js?v=1"></script>
-  <script src="src/components/DavidChat.js?v=24"></script>
+  <script src="src/components/DavidChat.js?v=26"></script>
 
 
   <!-- EARLY SESSION CHECK REMOVED FOR PRODUCTION AUTH -->

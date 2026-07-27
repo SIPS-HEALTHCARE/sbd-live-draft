@@ -280,6 +280,15 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
     </div>
   </div>
 
+  <!-- #16 Prompt Cache split (David chat, month-to-date). Real data from GET_METRICS.cacheSavings. -->
+  <div class="telemetry-panel" id="cache-panel" style="background:var(--bg2); border:1px solid var(--glass-border); border-radius:var(--radius); padding:24px; margin-bottom:36px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h3 style="font-size:16px;font-weight:700;">Prompt Cache <span style="font-size:11px;font-weight:500;color:var(--txt3);">· David chat · month-to-date</span></h3>
+      <span id="cache-hitrate" style="font-size:12px;color:var(--txt3);"></span>
+    </div>
+    <div id="cache-body" style="color:var(--txt3);font-size:13px;">Loading…</div>
+  </div>
+
   <!-- Telemetry Chart -->
   <div class="telemetry-panel" style="background:var(--bg2); border:1px solid var(--glass-border); border-radius:var(--radius); padding:24px; margin-bottom:36px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
@@ -387,8 +396,8 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
 <div class="user-panel" id="audit-panel" style="width:520px; right:-540px;">
   <div class="up-header">
     <button class="up-close" onclick="closeAuditPanel()">&times;</button>
-    <h3>Master Audit Trail</h3>
-    <div class="up-sub">Immutable log of intelligence access & tier changes</div>
+    <h3 id="audit-title">Master Audit Trail</h3>
+    <div class="up-sub" id="audit-sub">Immutable log of intelligence access & tier changes</div>
     <div class="up-tools">
       <input type="text" class="up-search" id="audit-search" placeholder="Search logs..." onkeyup="filterAuditLogs()">
     </div>
@@ -489,6 +498,37 @@ function setActiveModelBadge(models){
   el.textContent = (chat === grader) ? `Model: ${chat}` : `Chat: ${chat} · Grader: ${grader}`;
 }
 
+// ── #16 Prompt Cache split ──
+// Renders the month-to-date cached / cache-write / uncached INPUT token split for David chat,
+// from GET_METRICS.cacheSavings. Cached input is billed at a large discount, so a rising hit
+// rate is the visible payoff of the cache breakpoints added in david-chat. `cost` is the
+// provider's ground-truth generation cost (already reflecting the discount).
+function renderCachePanel(cs){
+  const body = document.getElementById('cache-body');
+  const hit  = document.getElementById('cache-hitrate');
+  if(!body) return;
+  if(!cs){ body.textContent = 'Cache metrics unavailable.'; if(hit) hit.textContent = ''; return; }
+  const cached = +cs.cached||0, creation = +cs.creation||0, uncached = +cs.uncached||0;
+  const input = cached + creation + uncached;
+  const cost  = +cs.cost||0;
+  const rate  = input > 0 ? Math.round(cached / input * 100) : 0;
+  const fmt = n => (+n||0).toLocaleString();
+  if(hit) hit.textContent = input > 0 ? `${rate}% of input served from cache` : 'no cache activity yet';
+  const cell = (lbl, val, color) =>
+    `<div style="flex:1;min-width:120px;"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--txt3);margin-bottom:6px;">${lbl}</div>`
+    + `<div style="font-size:22px;font-weight:700;${color?`color:${color};`:''}">${val}</div></div>`;
+  body.innerHTML =
+    `<div style="display:flex;flex-wrap:wrap;gap:24px;">`
+    + cell('Cached (read)', fmt(cached), 'var(--green)')
+    + cell('Cache writes', fmt(creation))
+    + cell('Uncached', fmt(uncached))
+    + cell('Chat cost (MTD)', '$'+cost.toFixed(2))
+    + `</div>`
+    + (input === 0
+        ? `<div style="margin-top:14px;font-size:12px;color:var(--txt3);">No cached input recorded yet this month. The cache warms once David chat sees repeat traffic against the same instrument context; the first request writes the cache, later ones read it.</div>`
+        : '');
+}
+
 // ── Load live data ──
 async function loadFacilities(){
   const token = getToken();
@@ -507,7 +547,8 @@ async function loadFacilities(){
     (metrics.access||[]).forEach(a => accessMap[a.facility_id] = a);
     (metrics.analytics||[]).forEach(a => analyticsMap[a.facility_id] = a);
     setActiveModelBadge(metrics.models);
-  } catch(e){ console.warn('Metrics load:', e.message); setActiveModelBadge(null); }
+    renderCachePanel(metrics.cacheSavings);  // #16 prompt-cache split (chat, MTD)
+  } catch(e){ console.warn('Metrics load:', e.message); setActiveModelBadge(null); renderCachePanel(null); }
 
   // Month-to-date usage split by platform (sbd = belt app, psop = SOP tool), per
   // facility. Ignacio 2026-07-02: usage must be visible per platform while still
@@ -611,7 +652,11 @@ function renderCards(list){
           <div class="status-dot">${f.archived?'<div class="dot" style="background:#555"></div><span style="color:#888">Archived</span>':(f.active?'<div class="dot dot-green"></div><span style="color:var(--green)">Active</span>':'<div class="dot dot-red"></div><span style="color:var(--red)">Locked</span>')}</div>
         </div>
       </div>
-      ${f.archived ? '' : `<div style="margin-top: 16px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px; display: flex; justify-content: flex-end;">
+      ${f.archived ? '' : `<div style="margin-top: 16px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px; display: flex; justify-content: flex-end; gap: 8px;">
+        <button class="manage-staff-btn" onclick="openAuditPanel('${f.id}','${f.name.replace(/'/g,"")}')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+          View Audit
+        </button>
         <button class="manage-staff-btn" onclick="openUserPanel('${f.id}','${f.name.replace(/'/g,"")}')">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
           Manage Staff
@@ -986,14 +1031,25 @@ async function toggleGlobalKillswitch() {
 
 // ── Audit Panel ──
 let auditLogsCache = [];
-async function openAuditPanel() {
+async function openAuditPanel(facilityId, facilityName) {
+  // #15 drill-down: with a facilityId the panel scopes to one facility; without, the
+  // network-wide trail (the header "View Audit Trail" button calls it with no args).
+  const title = document.getElementById('audit-title');
+  const sub = document.getElementById('audit-sub');
+  if (facilityId) {
+    title.textContent = `Audit Trail — ${facilityName || 'Facility'}`;
+    sub.textContent = 'Intelligence access & tier changes for this facility';
+  } else {
+    title.textContent = 'Master Audit Trail';
+    sub.textContent = 'Immutable log of intelligence access & tier changes';
+  }
   document.getElementById('audit-list').innerHTML = '<div class="up-empty">Loading audit logs...</div>';
   document.getElementById('audit-search').value = '';
   document.getElementById('audit-panel-overlay').classList.add('show');
   document.getElementById('audit-panel').classList.add('show');
-  
+
   try {
-    const logs = await adminAPI('GET_AUDIT_LOGS');
+    const logs = await adminAPI('GET_AUDIT_LOGS', facilityId ? { facilityId } : {});
     auditLogsCache = logs || [];
     renderAuditLogs(auditLogsCache);
   } catch(e) {

@@ -67,6 +67,28 @@ function renderTemplate(template: string, data: Record<string, unknown>): { subj
       subject: `Placement Assessment Completed — ${esc((data.staff_name || 'Staff Member') as string)}`,
       body: `<div style="font-size:16px;font-weight:700;color:#22c55e;margin-bottom:16px">Placement Assessment Submitted</div><p style="color:#94a3b8;line-height:1.7;margin:0 0 16px">A placement assessment has been completed and is ready for your review.</p><div style="background:#131829;border:1px solid #1a1e30;border-radius:8px;padding:16px;margin:20px 0"><table style="width:100%;border-collapse:collapse"><tr><td style="padding:6px 0;color:#64748b;font-size:12px;width:130px">Candidate</td><td style="padding:6px 0;color:#dde3f0;font-size:13px;font-weight:600">${esc((data.staff_name || '—') as string)}</td></tr><tr><td style="padding:6px 0;color:#64748b;font-size:12px">Role</td><td style="padding:6px 0;color:#dde3f0;font-size:13px">${esc((data.staff_role || '—') as string)}</td></tr><tr><td style="padding:6px 0;color:#64748b;font-size:12px">Facility</td><td style="padding:6px 0;color:#dde3f0;font-size:13px">${esc((data.facility || '—') as string)}</td></tr><tr><td style="padding:6px 0;color:#64748b;font-size:12px">System Recommendation</td><td style="padding:6px 0;color:#22c55e;font-size:13px;font-weight:600">${esc((data.belt || '—') as string)} Belt</td></tr>${result ? '<tr><td style="padding:6px 0;color:#64748b;font-size:12px">Result</td><td style="padding:6px 0;color:#dde3f0;font-size:13px">' + result + '</td></tr>' : ''}${eventTimestamp ? '<tr><td style="padding:6px 0;color:#64748b;font-size:12px">Completed</td><td style="padding:6px 0;color:#dde3f0;font-size:13px">' + eventTimestamp + '</td></tr>' : ''}</table></div><a href="https://belt.sterilebydesign.ai" style="display:inline-block;background:linear-gradient(135deg,#c49a20,#7a5c0d);color:#000;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:0.05em;margin-top:8px">Review in Portal</a><p style="color:#94a3b8;line-height:1.7;margin:16px 0 0">Navigate to Placement Reviews in the admin sidebar to confirm the belt placement.</p>`,
     },
+    pending_review_reminder: {
+      subject: `${data.total || 0} review${Number(data.total) === 1 ? '' : 's'} waiting for approval`,
+      body: (() => {
+        const n = (v: unknown) => Number(v || 0);
+        const row = (label: string, count: number) => count
+          ? `<tr><td style="padding:8px 0;color:#94a3b8;font-size:13px">${label}</td><td style="padding:8px 0;color:#c49a20;font-size:15px;font-weight:700;text-align:right">${count}</td></tr>`
+          : '';
+        const total = n(data.total);
+        const oldest = n(data.oldest_days);
+        return `<div style="font-size:16px;font-weight:700;color:#c49a20;margin-bottom:16px">Reviews Waiting for a Decision</div>`
+          + `<p style="color:#94a3b8;line-height:1.7;margin:0 0 16px">Hello ${name},</p>`
+          + `<p style="color:#94a3b8;line-height:1.7;margin:0 0 16px">There ${total === 1 ? 'is' : 'are'} <strong style="color:#dde3f0">${total}</strong> item${total === 1 ? '' : 's'} waiting on an approval decision.</p>`
+          + `<div style="background:#131829;border:1px solid #1a1e30;border-radius:8px;padding:16px 20px;margin:20px 0"><table style="width:100%;border-collapse:collapse">`
+          + row('Placement reviews', n(data.placement_reviews))
+          + row('Belt gate requests', n(data.belt_gate_requests))
+          + row('Preceptor applications', n(data.preceptor_applications))
+          + `</table></div>`
+          + (oldest >= 2 ? `<div style="background:#2b1d10;border:1px solid #7c4a12;border-radius:8px;padding:12px 16px;margin:0 0 20px;font-size:13px;color:#f59e0b">The oldest has been waiting ${oldest} days.</div>` : '')
+          + `<a href="https://belt.sterilebydesign.ai" style="display:inline-block;background:linear-gradient(135deg,#c49a20,#7a5c0d);color:#000;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:0.05em">Review in Portal</a>`
+          + `<p style="color:#94a3b8;line-height:1.7;margin:16px 0 0">This reminder repeats twice a day, and each item stops appearing as soon as it is approved or denied.</p>`;
+      })(),
+    },
   };
 
   const tpl = templates[template] || { subject: 'SIPS Notification', body: `<p style="color:#94a3b8">${JSON.stringify(data)}</p>` };

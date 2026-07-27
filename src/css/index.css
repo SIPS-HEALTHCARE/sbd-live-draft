@@ -98,10 +98,10 @@ body{background:var(--bg);color:var(--txt);-webkit-text-size-adjust:100%}
 
 /* ── STATS GRID ── */
 .stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
-.stat-card{background:var(--s1);border:1px solid var(--bdr);border-radius:var(--r);padding:18px 16px;position:relative;overflow:hidden}
+.stat-card{background:var(--s1);border:1px solid var(--bdr);border-radius:var(--r);padding:18px 16px;position:relative;overflow:hidden;min-width:0}
 .stat-accent{position:absolute;bottom:0;left:0;right:0;height:3px}
 .stat-lbl{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--txt3);font-weight:600;margin-bottom:8px}
-.stat-val{font-size:28px;font-weight:800;line-height:1;margin-bottom:5px}
+.stat-val{font-size:28px;font-weight:800;line-height:1.05;margin-bottom:5px;overflow-wrap:break-word;word-break:break-word}
 .stat-sub{font-size:11px;color:var(--txt3);line-height:1.4;word-break:break-word;overflow-wrap:break-word}
 .stat-ico-bg{position:absolute;top:14px;right:14px;opacity:.07;width:32px;height:32px}
 

@@ -959,7 +959,7 @@ function renderGuideView(prefix){
   // List every section walkthrough available for this role
   const seenList = (ob && ob.seenSections) ? ob.seenSections : [];
   steps.forEach(step=>{
-    const viewId = step.target.match(/data-view="([^"]+)"/)?.[1] || '';
+    const viewId = step.view || step.target.match(/data-view="([^"]+)"/)?.[1] || '';
     if(!viewId || viewId === prefix+'-guide') return;
     const wt = SECTION_WALKTHROUGHS[viewId];
     if(!wt) return;
@@ -1046,7 +1046,7 @@ function renderGuideView(prefix){
     html += '<div class="guide-section-label">'+group+'</div>';
     html += '<div class="guide-card-grid">';
     groups[group].forEach(step=>{
-      const viewId = step.target.match(/data-view="([^"]+)"/)?.[1] || '';
+      const viewId = step.view || step.target.match(/data-view="([^"]+)"/)?.[1] || '';
       const icoClr = icoColors[group] || '#c49a20';
       html += '<div class="guide-card" data-guide-title="'+step.title.toLowerCase()+'" data-guide-desc="'+step.desc.toLowerCase()+'">';
       html += '<div class="guide-card-icon" style="background:'+icoClr+'15;border:1px solid '+icoClr+'30"><svg viewBox="0 0 18 18" fill="none" width="18" height="18"><circle cx="9" cy="9" r="6" stroke="'+icoClr+'" stroke-width="1.3" opacity=".8"/><circle cx="9" cy="9" r="2" fill="'+icoClr+'" opacity=".5"/></svg></div>';
@@ -1842,8 +1842,8 @@ function replaySingleSWT(viewId, prefix){
   const titleMap = {};
   const steps = TOUR_STEPS[getTourRole()] || [];
   steps.forEach(s=>{
-    const m = s.target.match(/data-view="([^"]+)"/);
-    if(m) titleMap[m[1]] = s.title;
+    const v = s.view || (s.target.match(/data-view="([^"]+)"/) || [])[1];
+    if(v) titleMap[v] = s.title;
   });
   const navEl = portalEl.querySelector('.nav-item[data-view="'+viewId+'"]');
   if(navEl) navFn(navEl, viewId, titleMap[viewId] || viewId);
@@ -1867,6 +1867,9 @@ enterPortal = function(type){
 
     // Attention check (runs every portal entry)
     checkAttentionItems(prefix);
+
+    // #8b staleness guard — dev-only; warns if a sidebar view lacks tour metadata.
+    if (typeof auditTourCoverage === 'function') auditTourCoverage();
   }, 200);
 };
 
@@ -2034,7 +2037,7 @@ async function initAppData(){
   window.SBD_INITIALIZING = true;
   console.log('SBD Platform: Multi-table data hydration started...');
   try {
-    const [facs, staff, systems, users, reviews, queue, registrations, freeAgents, promotions, onboarding, beltTestResults, transfers, observations, obsChecklists, fndAssignments, fndProgress, instAssignments, instProgress] = await Promise.race([
+    const [facs, staff, systems, users, reviews, queue, registrations, freeAgents, promotions, onboarding, beltTestResults, transfers, observations, obsChecklists, fndAssignments, fndProgress, instAssignments, instProgress, prcAssignments, prcProgress, prcModules, prcAccess] = await Promise.race([
       Promise.all([
         SB.getFacilities().catch(e=>{ console.error('facs load err', e); return []; }),
         SB.getAllStaff().catch(e=>{ console.error('staff load err', e); return []; }),
@@ -2053,7 +2056,11 @@ async function initAppData(){
         (SB.getFoundationsAssignments ? SB.getFoundationsAssignments() : Promise.resolve([])).catch(e=>{ console.error('fnd assignments load err', e); return []; }),
         (SB.getFoundationsProgress ? SB.getFoundationsProgress() : Promise.resolve([])).catch(e=>{ console.error('fnd progress load err', e); return []; }),
         (SB.getInstrumentAssignments ? SB.getInstrumentAssignments() : Promise.resolve([])).catch(e=>{ console.error('inst assignments load err', e); return []; }),
-        (SB.getInstrumentProgress ? SB.getInstrumentProgress() : Promise.resolve([])).catch(e=>{ console.error('inst progress load err', e); return []; })
+        (SB.getInstrumentProgress ? SB.getInstrumentProgress() : Promise.resolve([])).catch(e=>{ console.error('inst progress load err', e); return []; }),
+        (SB.getPreceptorAssignments ? SB.getPreceptorAssignments() : Promise.resolve([])).catch(e=>{ console.error('prc assignments load err', e); return []; }),
+        (SB.getPreceptorProgress ? SB.getPreceptorProgress() : Promise.resolve([])).catch(e=>{ console.error('prc progress load err', e); return []; }),
+        (SB.getPreceptorModules ? SB.getPreceptorModules() : Promise.resolve([])).catch(e=>{ console.error('prc modules load err', e); return []; }),
+        (SB.getPreceptorAccess ? SB.getPreceptorAccess() : Promise.resolve([])).catch(e=>{ console.error('prc access load err', e); return []; })
       ]),
       new Promise((_,rej)=>setTimeout(()=>rej(new Error('Initial data load timeout')), 20000))
     ]);
@@ -2069,6 +2076,13 @@ async function initAppData(){
     window.DB.foundationsProgress = (fndProgress||[]).map(p=>({ staffId:p.staff_id, moduleId:p.module_id, g1:p.g1, g2:p.g2, g3:p.g3, complete:p.complete, facilityId:p.facility_id||null }));
     window.DB.instrumentAssignments = (instAssignments||[]).map(a=>({ id:a.id, staffId:a.staff_id, moduleId:a.module_id, assignedBy:a.assigned_by, type:a.assignment_type||a.type, trigger:(a.trigger_event!=null?a.trigger_event:a.trigger), facilityId:a.facility_id||null, assignedDate:a.assigned_date, status:a.status }));
     window.DB.instrumentProgress = (instProgress||[]).map(p=>({ staffId:p.staff_id, moduleId:p.module_id, g1:p.g1, g2:p.g2, g3:p.g3, complete:p.complete, facilityId:p.facility_id||null }));
+    // SBD Preceptor Certification (#78 Ph1): same 3-gate shape as F&I, own tables.
+    window.DB.preceptorAssignments = (prcAssignments||[]).map(a=>({ id:a.id, staffId:a.staff_id, moduleId:a.module_id, assignedBy:a.assigned_by, type:a.assignment_type||a.type, trigger:(a.trigger_event!=null?a.trigger_event:a.trigger), facilityId:a.facility_id||null, assignedDate:a.assigned_date, status:a.status }));
+    window.DB.preceptorProgress = (prcProgress||[]).map(p=>({ staffId:p.staff_id, moduleId:p.module_id, g1:p.g1, g2:p.g2, g3:p.g3, complete:p.complete, facilityId:p.facility_id||null }));
+    window.DB.preceptorModules = prcModules||[];
+    // SBD Preceptor Certification (#78 Ph3): master-admin access control. Absence of a
+    // row = default (belt-based). RLS filters to own-or-leader scope at read time.
+    window.DB.preceptorAccess = (prcAccess||[]).map(r=>({ staffId:r.staff_id, state:r.state, grantedBy:r.granted_by, grantedAt:r.granted_at, requestedAt:r.requested_at, reason:r.reason, updatedAt:r.updated_at }));
     const currentSystems = window.DB.hospitalSystems || [];
     const memoryOptimistic = currentSystems.filter(s => s.id && String(s.id).startsWith('sys-'));
     const storageOptimistic = JSON.parse(localStorage.getItem('sbd_optimistic_systems') || '[]');
@@ -2137,6 +2151,19 @@ async function initAppData(){
     if(typeof mapPlacementReviewFromBackend === 'function') window.DB.placementReviews = (reviews||[]).map(mapPlacementReviewFromBackend); else window.DB.placementReviews = reviews||[];
     if(typeof mapQueueFromBackend === 'function') window.DB.queue = (queue||[]).map(mapQueueFromBackend); else window.DB.queue = queue||[];
     window.DB.pendingRegs = registrations||[];
+    // Position School sign-off requests. These only ever lived in memory before, so a
+    // candidate's request vanished on refresh and never reached a leader. Loaded
+    // separately and non-blocking: a failure here must not stop the rest of sign-in.
+    if(typeof SB!=='undefined' && SB.getPSCompletionRequests){
+      SB.getPSCompletionRequests()
+        .then(rows=>{
+          window.DB.psCompletionRequests = (rows||[]).map(
+            typeof mapPSCompletionRequestFromBackend==='function' ? mapPSCompletionRequestFromBackend : (r=>r)
+          );
+          if(window.ST && ST.hView==='h-posschool' && typeof renderHPosSchool==='function') renderHPosSchool();
+        })
+        .catch(e=>console.warn('[ps] completion requests load failed', e && e.message));
+    }
     if(typeof mapFreeAgentFromBackend === 'function') window.DB.freeAgents = (freeAgents||[]).map(mapFreeAgentFromBackend); else window.DB.freeAgents = freeAgents||[];
     if(typeof mapPromotionApprovalFromBackend === 'function') window.DB.promotionApprovals = (promotions||[]).map(mapPromotionApprovalFromBackend); else window.DB.promotionApprovals = promotions||[];
     if(typeof mapOnboardingFromBackend === 'function') window.DB.onboarding = (onboarding||[]).map(mapOnboardingFromBackend); else window.DB.onboarding = onboarding||[];
