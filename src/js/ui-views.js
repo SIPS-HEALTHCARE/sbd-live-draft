@@ -4947,11 +4947,22 @@ function buildAssessmentReportHTML(pr, staff, fac) {
     else strengthText = 'The candidate completed the full assessment, establishing a baseline from which the remediation pathway can be structured.';
   }
 
-  // Level score table
+  // Level score table. pr.levelScores is a single blended knowledge-plus-simulation figure per
+  // level. The spec does not gate that number anywhere: it gates knowledge and simulation
+  // separately, per belt, and the cards earlier in this report already show both against their
+  // real floors. This table used to print Pass or Below Threshold against a hardcoded 65, which
+  // put "Level 1 81% Pass" on the same page as a card reading "L1 knowledge 87.5% FAIL against
+  // the 90% floor" and "L1 simulation 66.5% FAIL against 78%". One report, two answers.
+  //
+  // The figures are real and worth showing, so they stay. The verdict does not, because there
+  // is no threshold behind it. Where a level is genuinely gated, the cards say so.
   const levelTable = levelEntries.map(([lvl, pct]) => {
     const p = Math.round(Number(pct));
-    const pass = p >= 65;
-    return `<tr><td style="padding:5px 10px;font-size:9.5pt;border-bottom:1px solid #e2e8f0">Level ${safe(lvl)}</td><td style="padding:5px 10px;font-size:9.5pt;border-bottom:1px solid #e2e8f0">${p}%</td><td style="padding:5px 10px;font-size:9.5pt;border-bottom:1px solid #e2e8f0;color:${pass ? '#16a34a' : '#dc2626'};font-weight:600">${pass ? 'Pass' : 'Below Threshold'}</td></tr>`;
+    const kf = sbdKnowledgeFloor(targetBelt, lvl), sf = sbdSimFloor(targetBelt, lvl);
+    const gated = (kf != null || sf != null)
+      ? `gated at ${targetBelt}${kf != null ? ` &middot; knowledge ${kf}%` : ''}${sf != null ? ` &middot; simulation ${sf}%` : ''}`
+      : `not gated at ${targetBelt} Belt`;
+    return `<tr><td style="padding:5px 10px;font-size:9.5pt;border-bottom:1px solid #e2e8f0">Level ${safe(lvl)}</td><td style="padding:5px 10px;font-size:9.5pt;border-bottom:1px solid #e2e8f0">${p}%</td><td style="padding:5px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;color:#64748b">${gated}</td></tr>`;
   }).join('');
 
   // Next Belt Target table per §8.3 — 3 rows with gap column
@@ -5062,7 +5073,7 @@ function buildAssessmentReportHTML(pr, staff, fac) {
     </div>
     ${kFailed.length ? `<div style="font-size:9.5pt;font-weight:700;color:#0f172a;margin-bottom:7px">Incorrect and Blank Responses</div>
     <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden">
-      <thead><tr style="background:#0f2340"><th style="padding:7px 10px;font-size:8pt;color:#fff;text-align:center;width:36px">Lvl</th><th style="padding:7px 10px;font-size:8pt;color:#fff;text-align:center;width:110px">Status</th><th style="padding:7px 10px;font-size:8pt;color:#fff;text-align:left">Incorrect or Blank Response</th><th style="padding:7px 10px;font-size:8pt;color:#fff;text-align:left">Their Answer</th><th style="padding:7px 10px;font-size:8pt;color:#fff;text-align:left">Correct Answer</th></tr></thead>
+      <thead><tr style="background:#0f2340"><th style="padding:7px 10px;font-size:8pt;background:#0f2340;color:#fff;text-align:center;width:36px">Lvl</th><th style="padding:7px 10px;font-size:8pt;background:#0f2340;color:#fff;text-align:center;width:110px">Status</th><th style="padding:7px 10px;font-size:8pt;background:#0f2340;color:#fff;text-align:left">Incorrect or Blank Response</th><th style="padding:7px 10px;font-size:8pt;background:#0f2340;color:#fff;text-align:left">Their Answer</th><th style="padding:7px 10px;font-size:8pt;background:#0f2340;color:#fff;text-align:left">Correct Answer</th></tr></thead>
       <tbody>${kIncorrectRows}</tbody>
     </table>${kDangerousFootnote}` : `<div style="padding:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;font-size:9pt;color:#16a34a;font-weight:600">All knowledge responses are correct.</div>`}
     ${pageFooter()}
@@ -5086,7 +5097,7 @@ function buildAssessmentReportHTML(pr, staff, fac) {
       </div>
     </div>
     <div style="font-size:9.5pt;font-weight:700;color:#0f172a;margin-bottom:7px">Simulation Response Detail</div>
-    ${simulation.length ? `<table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden"><thead><tr style="background:#0f2340"><th style="padding:7px 10px;font-size:8pt;color:#fff;text-align:center;width:35px">Lvl</th><th style="padding:7px 10px;font-size:8pt;color:#fff;text-align:center;width:50px">Score</th><th style="padding:7px 10px;font-size:8pt;color:#fff;text-align:left">Scenario</th><th style="padding:7px 10px;font-size:8pt;color:#fff;text-align:left">AI Evaluator Notes</th></tr></thead><tbody>${simDetailRows}</tbody></table>` : '<div style="font-size:9pt;color:#94a3b8;font-style:italic">No simulation responses recorded.</div>'}
+    ${simulation.length ? `<table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden"><thead><tr style="background:#0f2340"><th style="padding:7px 10px;font-size:8pt;background:#0f2340;color:#fff;text-align:center;width:35px">Lvl</th><th style="padding:7px 10px;font-size:8pt;background:#0f2340;color:#fff;text-align:center;width:50px">Score</th><th style="padding:7px 10px;font-size:8pt;background:#0f2340;color:#fff;text-align:left">Scenario</th><th style="padding:7px 10px;font-size:8pt;background:#0f2340;color:#fff;text-align:left">AI Evaluator Notes</th></tr></thead><tbody>${simDetailRows}</tbody></table>` : '<div style="font-size:9pt;color:#94a3b8;font-style:italic">No simulation responses recorded.</div>'}
     ${pageFooter()}
   </div>
 
@@ -5101,9 +5112,10 @@ function buildAssessmentReportHTML(pr, staff, fac) {
           <div style="font-size:8.5pt;color:#374151;line-height:1.65">${safe(roleAmplification)}</div>
           <div style="font-size:8pt;color:#64748b;margin-top:6px">Required sign-off: ${safe(signOffRoles.join(' / '))}</div>
         </div>
-        <div style="font-size:9pt;font-weight:700;color:#0f172a;margin-bottom:7px">Level Score Snapshot</div>
+        <div style="font-size:9pt;font-weight:700;color:#0f172a;margin-bottom:2px">Level Score Snapshot</div>
+        <div style="font-size:7.5pt;color:#64748b;margin-bottom:7px">Combined knowledge and simulation per level. Pass and fail are decided per component against the floors shown on the knowledge and simulation pages, not on this combined figure.</div>
         <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden;margin-bottom:14px">
-          <thead><tr style="background:#0f2340"><th style="padding:7px 10px;font-size:8pt;color:#fff;text-align:left">Level</th><th style="padding:7px 10px;font-size:8pt;color:#fff;text-align:left">Score</th><th style="padding:7px 10px;font-size:8pt;color:#fff;text-align:left">Status</th></tr></thead>
+          <thead><tr style="background:#0f2340"><th style="padding:7px 10px;font-size:8pt;background:#0f2340;color:#fff;text-align:left">Level</th><th style="padding:7px 10px;font-size:8pt;background:#0f2340;color:#fff;text-align:left">Combined</th><th style="padding:7px 10px;font-size:8pt;background:#0f2340;color:#fff;text-align:left">Gating at this belt</th></tr></thead>
           <tbody>${levelTable || '<tr><td colspan="3" style="padding:7px 10px;font-size:8.5pt;color:#64748b">No per-level score data recorded.</td></tr>'}</tbody>
         </table>
       </div>

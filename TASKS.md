@@ -965,6 +965,21 @@ persisted.
   never raise a safety finding, and the report and the provision agree. **Measured: Williams
   condition 1 is now the workflow-direction question; 64 checks pass.**
 
+  **T65b, two report-rendering defects found while producing the PDF.**
+  1. *The Level Score Snapshot contradicted the rest of the report.* It printed Pass or Below
+     Threshold for each level against a hardcoded 65, applied to `level_scores`, which is a
+     single blended knowledge-plus-simulation figure the spec does not gate anywhere. On the
+     affected candidate that put "Level 1 81% Pass" on the same document as a card reading
+     "L1 knowledge 87.5% FAIL against the 90% floor" and "L1 simulation 66.5% FAIL against
+     78%". One report, two answers. The figures stay because they are real; the verdict goes
+     because there was no threshold behind it, and the column now states which components the
+     belt actually gates at that level.
+  2. *Every dark table header was invisible.* The headers set `color:#fff` inline and left the
+     background to the `<tr>`, but `PRINT_CSS` carries a global `th{background:#f8fafc}` that
+     repaints the cell, so white text landed on a near-white background. Thirteen headers
+     across the report, unreadable in every PDF ever downloaded. Fixed by setting the
+     background on the cells, where the inline rule wins.
+
   *Williams' row, corrected 2026-07-27 with authorisation:* `tentative_belt` White to Green (the
   White was the old placeholder), and his p6 provision written to `staff.dangerous_provisions`.
   Report now reads GREEN BELT Conditional, K 97.5, simulation 62.5 failing the 78 floor by 15.5,
