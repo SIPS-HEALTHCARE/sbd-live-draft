@@ -719,6 +719,48 @@ does not, and no signed-in user can read or write another facility's records.
   password in a table for as long as a request is pending, and nothing here can undo what
   may already have been read.
 
+- [ ] **T62** In-app notice asking the affected people to change their password · est 0.5d · **High**
+  Built 2026-07-27. Closes the part of T60 that no migration could: T60 shut the hole and
+  cleared the stored copies, but neither undoes what was read while `registrations` was open
+  to every signed-in account. Those people still hold that password, and many will have
+  reused it elsewhere.
+
+  **A notice, not an enforcement.** It never blocks a sign in, never expires a password and
+  never forces a reset. Somebody who closes it carries on exactly as before. That is
+  deliberate: the point is to give people the information, not to take their access away
+  over something that was not their fault.
+
+  *What they see, once the portal has painted:*
+
+  > 🔒 Security update
+  > As part of a security review we have tightened how account details are stored. Please
+  > change your password.
+  > If you use the same password on another system, change it there too.
+  > [ Later ]  [ Change my password ]
+
+  *Behaviour:* **Change my password** opens Settings and puts the cursor in the password
+  field. **Later** and the close cross both dismiss for that session only, so it returns at
+  the next sign in. Only a successful password change stops it for good, recorded in
+  `password_notice_ack_at`. Dismissing never writes that column. A notice shown once and
+  then silent is a notice most people never act on, which is why it comes back.
+
+  *Who sees it:* 64 of the 75 portal accounts, keyed on the person's email appearing in
+  `registrations`. 96 of those 97 rows held a stored password, so membership is the accurate
+  marker; the passwords themselves were cleared in T60 step 2, which is why the column itself
+  could not be used.
+
+  *Measured as an ordinary staff_member, rolled back:* sees the notice, records their own
+  acknowledgement (1 row), cannot acknowledge for anybody else (0 rows), and an attempt to
+  smuggle `role = 'master_admin'` alongside the acknowledgement is refused, so the T53 guard
+  still holds over the new columns. Counts after: 75 accounts, 64 with a notice due, 0
+  acknowledged.
+
+  *Goal:* Everyone whose password was exposed is told, in the app, and can act on it in two clicks.
+  *Done when:* An affected account signing in sees the notice; Later returns it next sign in;
+  changing the password stops it permanently; an unaffected account never sees it.
+  *Not ticked:* the behaviour is proven at the database level but has not been clicked
+  through in a browser, the same standing as T26, T27 and T28.
+
 ### Blocked, not on the critical path
 
 - [ ] **T49** Strip and rotate the PSOP credentials, gate the public page
