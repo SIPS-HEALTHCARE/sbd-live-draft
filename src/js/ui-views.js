@@ -2319,7 +2319,7 @@ function sbdSpecFloors(belt){
 function sbdBuildProvisions(responses, reviewId){
   const now = new Date().toISOString();
   return (responses || [])
-    .filter(r => r.type === 'knowledge' && r.isDangerous && !r.correct)
+    .filter(sbdIsDangerousResponse)
     .map(r => ({
       qid: r.qId || r.id || null,
       label: String(r.question || '').slice(0, 200),
@@ -4500,40 +4500,53 @@ function sbdSimFloor(belt, level){
   return v == null ? null : v;
 }
 
-const DANGEROUS_PATTERNS = [
-  /re.?use.{0,20}(single.?use|disposable|instrument|pack)/i,
-  /skip.{0,20}decontam|no.{0,10}need.{0,10}(to.{0,5})?clean|just.{0,10}wipe/i,
-  /(still|just).{0,15}(use|usable|ok|fine).{0,20}(wet.?pack|pack|it)|just.{0,10}dry.{0,10}it/i,
-  /ignore.{0,20}(bi|biological.?indicator)|bi.{0,20}fail.{0,30}(still|ok|use)/i,
-  /no.{0,10}(gloves|ppe|protection)|don.{0,5}t.{0,10}(need|wear).{0,10}(gloves|ppe)/i,
-  /(still|is).{0,10}sterile|open.{0,15}pack.{0,15}(is.{0,5})?(fine|ok|sterile)|re.?package/i,
-];
+// A dangerous answer is not a wrong answer. It is a specific wrong OPTION that would cause
+// harm if somebody acted on it in the department, and the flag sits on the option, not on the
+// question: a question can carry three wrong options with only one of them flagged. Five
+// questions carry flagged options today, eight options in total, and the flag travels with
+// the stored response as `isDangerous`.
+//
+// This used to be decided by matching regular expressions against the text of the answer,
+// which is a different thing entirely and got it wrong in both directions. Measured across all
+// 49 stored reviews before this change: the patterns fired 19 times across 15 reports, 17 of
+// those on free-text simulation answers, and they agreed with the authored flag exactly zero
+// times. On one real candidate the pattern `skip.{0,20}decontam` matched the sentence "under no
+// circumstances should a visibly soiled instrument skip the full decontamination process",
+// which is the correct answer, so the report raised the most severe finding it has against a
+// candidate for getting it right, while the option he actually did pick went unmentioned.
+//
+// The authored flag matches the client's own account of the data exactly: he said three of the
+// five flagged questions have ever been picked, and the stored flags give exactly three, p6,
+// p32 and p37. Checked back to April, every knowledge response carries the field, so nothing
+// historical is lost by relying on it.
+//
+// One predicate, used by both the report and the account provision, so the two can never name
+// different items for the same assessment again.
+function sbdIsDangerousResponse(r){
+  // Knowledge only: the flag lives on a multiple-choice option, and simulation answers are
+  // free text with no options to flag. If SIPS ever flags one, widen this in one place.
+  return !!(r && r.type === 'knowledge' && r.isDangerous && r.correct !== true);
+}
 
-const _DANGEROUS_RISKS = [
-  'Reusing a single-use item bypasses sterilization barriers, creating a direct cross-contamination pathway to patients.',
-  'Skipping decontamination leaves organic material that shields pathogens during sterilization, producing a non-sterile instrument.',
-  'Using a wet pack releases the sterility event-related barrier; moisture is a direct contamination pathway.',
-  'Disregarding a biological indicator failure means releasing a load that may not be sterile into the OR.',
-  'Proceeding without appropriate PPE exposes the technician to blood-borne pathogens and risks contaminating clean areas.',
-  'An open or compromised package cannot be considered sterile regardless of contents or perceived integrity.',
-];
-
-function _dangerousRiskDesc(answer) {
-  const ans = (answer || '').toLowerCase();
-  for (let i = 0; i < DANGEROUS_PATTERNS.length; i++) {
-    if (DANGEROUS_PATTERNS[i].test(ans)) return _DANGEROUS_RISKS[i];
+// Describes the risk from what the response itself stores. A per-option risk statement really
+// belongs in the question bank next to the flag; until it is there, saying what was picked and
+// what the correct handling is beats a canned sentence guessed from the wording.
+function _dangerousRiskDesc(response) {
+  const r = (response && typeof response === 'object') ? response : null;
+  if (!r) return 'This response, if acted upon, would create a direct patient safety risk in the sterile processing department.';
+  const picked = String(r.answer || '').trim();
+  const right  = String(r.correctAnswer || '').trim();
+  if (picked && right) {
+    return `Answered "${picked}" where the correct handling is "${right}". Acting on this in the department would create a direct patient safety risk.`;
+  }
+  if (picked) {
+    return `Answered "${picked}". Acting on this in the department would create a direct patient safety risk.`;
   }
   return 'This response, if acted upon, would create a direct patient safety risk in the sterile processing department.';
 }
 
-// Checks both knowledge AND simulation responses per §5
 function detectDangerousAnswers(responses) {
-  const flagged = [];
-  (responses || []).forEach(r => {
-    const ans = (r.answer || '').toLowerCase();
-    if (DANGEROUS_PATTERNS.some(p => p.test(ans))) flagged.push(r.qId || r.id);
-  });
-  return flagged;
+  return (responses || []).filter(sbdIsDangerousResponse).map(r => r.qId || r.id);
 }
 
 function deriveOutcome(pr) {
@@ -4637,7 +4650,7 @@ function deriveOutcome(pr) {
       conditions.push({
         severity: 'SUPERVISED PRACTICE REQUIRED',
         title: `Patient Safety Response — "${q.slice(0, 60)}${q.length > 60 ? '…' : ''}"`,
-        finding: _dangerousRiskDesc(r.answer),
+        finding: _dangerousRiskDesc(r),
         requiredAction: 'A supervisor must directly observe correct practice in this specific area before any other conditions are evaluated. Written re-study alone does not satisfy this requirement.',
       });
     });
@@ -4836,7 +4849,7 @@ function buildAssessmentReportHTML(pr, staff, fac) {
     const statusBadge = isDang ? `<span style="background:#7f1d1d;color:#fca5a5;font-size:6.5pt;font-weight:800;padding:3px 6px;border-radius:3px;line-height:1.4;display:inline-block;text-align:center">WRONG<br>DANGEROUS</span>` : `<span style="color:#dc2626;font-weight:700;font-size:8pt">WRONG</span>`;
     return `<tr style="background:${rowBg}"><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid ${sep};color:${txtClr};width:36px;text-align:center;font-weight:700">L${safe(r.level)}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid ${sep};width:110px;vertical-align:top">${statusBadge}</td><td style="padding:6px 10px;font-size:8pt;border-bottom:1px solid ${sep};color:${txtClr}">${safe(r.question)}</td><td style="padding:6px 10px;font-size:8pt;border-bottom:1px solid ${sep};color:${isDang ? '#fca5a5' : '#d97706'}">${safe(r.answer)}</td><td style="padding:6px 10px;font-size:8pt;border-bottom:1px solid ${sep};color:${txtClr}">${safe(r.correctAnswer || '—')}</td></tr>`;
   }).join('');
-  const kDangerousFootnote = kDangerousIds.length ? `<div style="margin-top:8px;padding:10px 14px;background:#450a0a;border-radius:5px;color:#fca5a5;font-size:8pt;line-height:1.6"><div style="font-weight:800;margin-bottom:6px">PATIENT SAFETY FINDINGS — These responses, if acted upon, create direct patient safety risk:</div>${dangerousKnowledge.map(r => `<div style="margin-bottom:6px">"${safe(String(r.question||'').slice(0,80))}${(r.question||'').length>80?'…':''}" — ${safe(_dangerousRiskDesc(r.answer))}</div>`).join('')}</div>` : '';
+  const kDangerousFootnote = kDangerousIds.length ? `<div style="margin-top:8px;padding:10px 14px;background:#450a0a;border-radius:5px;color:#fca5a5;font-size:8pt;line-height:1.6"><div style="font-weight:800;margin-bottom:6px">PATIENT SAFETY FINDINGS — These responses, if acted upon, create direct patient safety risk:</div>${dangerousKnowledge.map(r => `<div style="margin-bottom:6px">"${safe(String(r.question||'').slice(0,80))}${(r.question||'').length>80?'…':''}" — ${safe(_dangerousRiskDesc(r))}</div>`).join('')}</div>` : '';
 
   // Simulation level cards
   const sDangerousIds = dangerousSim.map(r => r.qId || r.id);
@@ -4967,14 +4980,14 @@ function buildAssessmentReportHTML(pr, staff, fac) {
   }).join('');
 
   // Footnote below knowledge table for dangerous knowledge answers per §5.2
-  const knowledgeFootnote = kDangerousIds.length ? `<div style="margin-top:8px;padding:12px 14px;background:#450a0a;border-radius:6px;color:#fca5a5;font-size:8pt;line-height:1.6"><div style="font-weight:800;font-size:8.5pt;margin-bottom:6px">PATIENT SAFETY FINDINGS</div>${dangerousKnowledge.map(r => `<div style="margin-bottom:8px"><span style="font-weight:700">Response to: "${safe(String(r.question || '').slice(0, 70))}${(r.question || '').length > 70 ? '…' : ''}"</span><br>Answer given: "${safe(r.answer)}"<br>Risk: ${safe(_dangerousRiskDesc(r.answer))}</div>`).join('')}</div>` : '';
+  const knowledgeFootnote = kDangerousIds.length ? `<div style="margin-top:8px;padding:12px 14px;background:#450a0a;border-radius:6px;color:#fca5a5;font-size:8pt;line-height:1.6"><div style="font-weight:800;font-size:8.5pt;margin-bottom:6px">PATIENT SAFETY FINDINGS</div>${dangerousKnowledge.map(r => `<div style="margin-bottom:8px"><span style="font-weight:700">Response to: "${safe(String(r.question || '').slice(0, 70))}${(r.question || '').length > 70 ? '…' : ''}"</span><br>Answer given: "${safe(r.answer)}"<br>Risk: ${safe(_dangerousRiskDesc(r))}</div>`).join('')}</div>` : '';
 
   // Simulation rows
   // (sDangerousIds already computed above in this function.)
   const simRows = simulation.map((r, i) => {
     const isDang = sDangerousIds.includes(r.qId || r.id);
     const scoreClr = (r.aiScore || 0) >= 70 ? '#16a34a' : (r.aiScore || 0) >= 50 ? '#d97706' : '#dc2626';
-    return `<tr style="background:${isDang ? '#fef2f2' : i % 2 === 0 ? '#f8fafc' : '#fff'}"><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;vertical-align:top;width:30px">${i + 1}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;vertical-align:top">${safe(r.question)}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;vertical-align:top;white-space:pre-wrap">${safe(r.answer)}${isDang ? `<div style="margin-top:4px;padding:4px 6px;background:#fef2f2;border-left:3px solid #dc2626;font-size:7.5pt;font-weight:700;color:#dc2626">⚠ PATIENT SAFETY CONCERN — ${safe(_dangerousRiskDesc(r.answer))}</div>` : ''}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;vertical-align:top;font-style:italic;color:#475569">${safe(r.aiFeedback || '—')}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;text-align:center;font-weight:700;color:${scoreClr}">${r.aiScore != null ? r.aiScore + '%' : '—'}</td></tr>`;
+    return `<tr style="background:${isDang ? '#fef2f2' : i % 2 === 0 ? '#f8fafc' : '#fff'}"><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;vertical-align:top;width:30px">${i + 1}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;vertical-align:top">${safe(r.question)}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;vertical-align:top;white-space:pre-wrap">${safe(r.answer)}${isDang ? `<div style="margin-top:4px;padding:4px 6px;background:#fef2f2;border-left:3px solid #dc2626;font-size:7.5pt;font-weight:700;color:#dc2626">⚠ PATIENT SAFETY CONCERN — ${safe(_dangerousRiskDesc(r))}</div>` : ''}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;vertical-align:top;font-style:italic;color:#475569">${safe(r.aiFeedback || '—')}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;text-align:center;font-weight:700;color:${scoreClr}">${r.aiScore != null ? r.aiScore + '%' : '—'}</td></tr>`;
   }).join('');
 
   const conditionRows = conditions.length

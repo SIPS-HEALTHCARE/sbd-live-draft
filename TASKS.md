@@ -938,8 +938,37 @@ persisted.
   Williams that produces 12, not 3. His simulation overall is 62.5 against a 78 floor, so a
   dozen responses under 72 is what actually happened. Flagged rather than quietly changed.
 
-  *Not in this change, and deliberately:* Williams' own row is untouched. Regenerating it is
-  a production write and waits for an explicit go-ahead after this deploys.
+  **T65a, found while regenerating the report on 2026-07-27.** The report decided what counted
+  as a dangerous answer by matching regular expressions against the text of the answer, not by
+  the flag the question author set. The client's own description is unambiguous: "It is not a
+  wrong answer. It is a specific wrong option that would cause harm if somebody actually did it
+  on the floor. The flag sits on the individual option, not on the question." That is the stored
+  `isDangerous` field, and nothing else.
+
+  Measured across all 49 stored reviews before the change: the patterns fired **19 times across
+  15 reports**, 17 of those on free-text simulation answers, and they agreed with the authored
+  flag **exactly zero times**. The two detectors have never once named the same item.
+
+  On Williams it flagged his answer *"under no circumstances should a visibly soiled instrument
+  skip the full decontamination process"*, which is correct, because `skip.{0,20}decontam`
+  matched it. So the most severe finding the report can make, SUPERVISED PRACTICE REQUIRED, was
+  raised against a candidate for getting it right, while the option he did pick, "Clean to
+  dirty" on workflow direction, went unmentioned.
+
+  The authored flag matches the client's own account of the data to the letter: he said three of
+  the five flagged questions have ever been picked, and the stored flags give exactly three, p6,
+  p32 and p37. Every knowledge response back to April carries the field, so relying on it loses
+  no history. The report and the account provision now share one predicate,
+  `sbdIsDangerousResponse`, so they can never name different items again.
+
+  *Done when:* the report names the option the candidate actually picked, a correct answer can
+  never raise a safety finding, and the report and the provision agree. **Measured: Williams
+  condition 1 is now the workflow-direction question; 64 checks pass.**
+
+  *Williams' row, corrected 2026-07-27 with authorisation:* `tentative_belt` White to Green (the
+  White was the old placeholder), and his p6 provision written to `staff.dangerous_provisions`.
+  Report now reads GREEN BELT Conditional, K 97.5, simulation 62.5 failing the 78 floor by 15.5,
+  L4 and L5 not gated. Nobody else's row was touched.
 
 ### Blocked, not on the critical path
 
