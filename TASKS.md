@@ -923,6 +923,13 @@ persisted.
   nowhere for a provision to live. `staff.dangerous_provisions` gives it one, and the T24
   guard was extended to it so a candidate cannot clear their own.
 
+  *What the client asked for, and where each part stands, checked against his own words on
+  2026-07-27:* belt issued on the scores, **done**; the item becomes a provision on the
+  account, **done**; visible there and kept after clearing with who and when, **done**;
+  cleared by a master admin or a SIPS admin, **done**; holds the next belt while open, current
+  belt untouched, **done**; displayed in the report, **done**, as condition 1 plus the patient
+  safety findings block. Nothing on his list is outstanding.
+
   *Goal:* One threshold table, read not copied; a report that never prints a belt nobody
   earned; and a safety finding that lives on the person rather than inside a PDF.
   *Done when:* Williams comes out Green Belt Conditional with K 97.5 and blended 83.5, his
@@ -991,6 +998,11 @@ persisted.
   Report now reads GREEN BELT Conditional, K 97.5, simulation 62.5 failing the 78 floor by 15.5,
   L4 and L5 not gated. Nobody else's row was touched.
 
+  *Backlog, not a blocker:* a per-option clinical rationale stored in the question bank next to
+  the flag, so the report can say why that specific option is dangerous rather than quoting the
+  option picked and the correct handling. Our idea, not a client request, and the wording that
+  is there now is accurate without it.
+
 ### Blocked, not on the critical path
 
 - [ ] **T49** Strip and rotate the PSOP credentials, gate the public page
@@ -1031,11 +1043,15 @@ persisted.
 written, merged and running on production with measurements recorded here. What they need is
 somebody working through them in a browser and saying whether it behaved.
 
-**Waiting on the client, not on us:** the wording of the patient-safety finding in the report.
-He said on 2026-07-27 that he wants to check with Dr. Jake how it should be displayed, so the
-per-option risk statement in the question bank is deliberately not built yet. Building it
-before that answer lands means building it twice, which is the same trap the per-level floors
-nearly walked into.
+**Nothing on T65 is waiting on the client.** Corrected 2026-07-27: an earlier note here said
+the report wording was blocked on him. It is not. Everything he actually asked for is built
+and live: the belt is issued on the scores, the item becomes a provision on the account, the
+provision is visible there, it is cleared only by a master admin or a SIPS admin with the name
+and date kept, it holds the next belt while it is open, and it is displayed in the report as
+condition 1 with a patient safety findings block. The only outstanding piece was a per-option
+clinical rationale in the question bank, which is our own idea and which he never asked for.
+It is a refinement of wording that already works, so it goes to the backlog rather than being
+called a blocker.
 
 The five Phase 1 items are not really 2.25 days of building. The code for T26, T27, T28 and
 T28a is written, merged and live; what is left is somebody pressing the buttons in a browser
