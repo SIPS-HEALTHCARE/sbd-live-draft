@@ -881,6 +881,63 @@ persisted.
   *Done when:* The reminder counts approved requests with no assessment recorded, and one
   that has sat past the threshold appears in the reminder and on the admin notice.
 
+- [ ] **T65** Placement scoring: one threshold table, no placeholder belts, and the Dangerous provision · est 1d · **High**
+  Raised 2026-07-27 from the client's own reading of David Williams' report, and confirmed
+  against the Scoring Logic Specification v2.0 (Dr. Jake, 12 May 2026).
+
+  **Four defects, all in the same place.** The placement report was carrying its own copies of
+  the spec's numbers instead of reading the one table the platform already has.
+
+  1. **A placeholder printed as a determination.** `deriveOutcome` fell back to `'White'`
+     whenever the review carried no stored belt. Williams had none, so his report came out
+     headed WHITE BELT with White's thresholds, White's floors and a certification basis
+     written against White. The engine had actually placed him at Green.
+  2. **Three copies of the section 9 table.** `SBD_BELT_THRESHOLDS`, `RPT_STANDARDS.belts`
+     and `BELT_THRESHOLDS`, one of them annotated "these MUST match" -- the note you write
+     when nothing enforces it. Section 9 says in as many words not to hardcode these inline.
+     The real table lives in `belt-test-engine.js` as `BELT_TEST_CONFIG` and the belt test
+     already reads it.
+  3. **Flat per-level floors.** Knowledge 80 at every level, simulation 75/70/65/65/65, the
+     same for every belt. The spec gates by belt and gates fewer levels lower down: at Green
+     simulation L4 and L5 are not gated at all. Williams scored 67.5 on both and the report
+     marked them FAIL against floors that do not apply to him.
+  4. **Knowledge overall computed as correct-over-total.** Section 5.2 says the average of
+     the five level scores. The two agreed until L5 dropped to 7 questions when TIR34 was
+     pulled at the client's request. Williams came out 97.4 where the spec gives 97.5. **The
+     client was right and we were wrong**, and his corrected report had the right figure.
+
+  **The Dangerous provision.** The client ruled on 2026-07-28: the belt is issued on the
+  scores, and the dangerous answer becomes a patient-safety provision on the person's
+  account. It does not touch the belt already held; it holds advancement to the next belt
+  until a SIPS admin clears it, and the record keeps who cleared it and when. Until now the
+  flag existed only inside the report, recomputed every time it was opened, so there was
+  nowhere for a provision to live. `staff.dangerous_provisions` gives it one, and the T24
+  guard was extended to it so a candidate cannot clear their own.
+
+  *Goal:* One threshold table, read not copied; a report that never prints a belt nobody
+  earned; and a safety finding that lives on the person rather than inside a PDF.
+  *Done when:* Williams comes out Green Belt Conditional with K 97.5 and blended 83.5, his
+  L4/L5 read "not gated" rather than FAIL, the two scoring engines return the same belt for
+  the same responses, an open provision blocks the next-belt request while leaving the
+  current belt alone, and a master admin clearing one is recorded by name and date.
+
+  **Measured 2026-07-27, 51 checks, all passing** (`scratchpad/t65/harness.js`, run against
+  Williams' stored responses with no DB and no DOM):
+  K overall 97.50 · simulation 62.50 · blended 83.50 · belt Green, derived from the scores
+  with nothing stored · outcome Conditional · simulation floors 78/75/70/none/none · L4 and
+  L5 not failures · knowledge floors 90/85/80/none/none · both engines agree on belt,
+  blended and knowledge overall · a candidate below every threshold is awarded nothing rather
+  than being handed White.
+
+  **One deliberate difference from the fix note.** The note expected three blocking
+  conditions from the individual responses, reading against the old flat 50. That 50 appears
+  nowhere in the spec; section 9 sets the individual minimum per belt and Green's is 72. On
+  Williams that produces 12, not 3. His simulation overall is 62.5 against a 78 floor, so a
+  dozen responses under 72 is what actually happened. Flagged rather than quietly changed.
+
+  *Not in this change, and deliberately:* Williams' own row is untouched. Regenerating it is
+  a production write and waits for an explicit go-ahead after this deploys.
+
 ### Blocked, not on the critical path
 
 - [ ] **T49** Strip and rotate the PSOP credentials, gate the public page
@@ -904,7 +961,7 @@ persisted.
 
 ## Totals
 
-**Updated 2026-07-27, after a working night.** 35 items done, 35 open.
+**Updated 2026-07-27, after a working night.** 35 items done, 36 open.
 
 | Group | Open | Items | Est. days |
 |---|---|---|---|
@@ -912,8 +969,9 @@ persisted.
 | Phase 2 | 9 | T30, T32, T33, T34, T35, T35a, T35b, T36, T37 | 7.50 |
 | Phase 3 | 11 | T39 to T48 | 9.35 |
 | Found during Phase 1 | 6 | T54, T56, T58, T59, T60, T62 | 2.10 |
+| Raised by the client | 3 | T63, T64, T65 | 1.75 |
 | Blocked on somebody else | 4 | T49 to T52 | not counted |
-| **Total, excluding blocked** | **31** | | **21.2** |
+| **Total, excluding blocked** | **34** | | **22.95** |
 
 The five Phase 1 items are not really 2.25 days of building. The code for T26, T27, T28 and
 T28a is written, merged and live; what is left is somebody pressing the buttons in a browser

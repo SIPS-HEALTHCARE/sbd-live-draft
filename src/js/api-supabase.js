@@ -593,6 +593,9 @@ function mapStaffFromBackend(row){
     placementAcknowledged: row.placement_acknowledged || false,
     windowOverride: row.window_override || null,
     assessmentGateOverride: row.assessment_gate_override || null,
+    // T65: patient-safety provisions raised by a dangerous assessment answer. Array of
+    // entries; an entry with clearedAt null is still open and gates advancement.
+    dangerousProvisions: row.dangerous_provisions || [],
   };
 }
 
@@ -619,7 +622,8 @@ function mapStaffToBackend(staff){
     history: staff.history || null,
     practice_scores: staff.practiceScores || null,
     window_override: staff.windowOverride || null,
-    assessment_gate_override: staff.assessmentGateOverride || null
+    assessment_gate_override: staff.assessmentGateOverride || null,
+    dangerous_provisions: staff.dangerousProvisions || null
   };
   if(staff.cur){
     obj.cur_comp = staff.cur.c || null;
@@ -650,6 +654,13 @@ function mapStaffPSToBackend(staff){
     ps_tracks:   full.ps_tracks,
     stars:       full.stars
   };
+}
+
+// T65: the provision column on its own. Clearing a provision is an administrator action on
+// one field, and it must not ride along with a whole-record write -- a full staff PATCH from a
+// stale in-memory copy is how progress gates and history have been erased before.
+function mapStaffProvisionsToBackend(staff){
+  return { dangerous_provisions: (staff && staff.dangerousProvisions) || null };
 }
 
 function mapFacilityFromBackend(row){

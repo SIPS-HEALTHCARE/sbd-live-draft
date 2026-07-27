@@ -2265,14 +2265,94 @@ if(typeof window !== 'undefined'){ window.addEventListener('online', function(){
 // dangerous-answer block and the K-based White Belt rule. Replaces the prior logic that
 // suggested a belt from level/knowledge scores alone, which could label a candidate above
 // what they actually earned (or ignore a dangerous answer).
-const SBD_BELT_THRESHOLDS = [
-  { belt: 'Black',  blended: 90, k: 92, sim: 87 },
-  { belt: 'Brown',  blended: 87, k: 91, sim: 84 },
-  { belt: 'Blue',   blended: 85, k: 89, sim: 82 },
-  { belt: 'Green',  blended: 81, k: 86, sim: 78 },
-  { belt: 'Yellow', blended: 78, k: 83, sim: 75 },
-  { belt: 'White',  blended: 75, k: 80, sim: 72 },
-];
+//
+// Spec section 9 keeps ONE consolidated threshold table and says in as many words not to
+// hardcode these values inline. That table already exists, verbatim, in belt-test-engine.js
+// as BELT_TEST_CONFIG, and the dynamic belt test reads it. This file used to carry three
+// separate copies of it (here, RPT_STANDARDS.belts, and BELT_THRESHOLDS in the report
+// generator), which is how a Green candidate's report came to print White floors and mark
+// levels the belt does not gate at all as failures.
+//
+// Read it lazily inside a function, never at file scope: index.html loads belt-test-engine.js
+// AFTER ui-views.js, so at parse time the global does not exist yet. By call time it does.
+const SBD_BELT_ORDER = ['Black', 'Brown', 'Blue', 'Green', 'Yellow', 'White']; // highest first
+
+function sbdSpecConfig(){
+  return (typeof BELT_TEST_CONFIG !== 'undefined' && BELT_TEST_CONFIG)
+      || (typeof window !== 'undefined' && window.BELT_TEST_CONFIG)
+      || null;
+}
+
+// The overall gates per belt, highest belt first, in the shape the suggestion engine walks.
+// Returns [] if the config has not loaded, and callers must treat that as "cannot determine"
+// rather than falling through to a lower belt.
+function sbdBeltThresholds(){
+  const cfg = sbdSpecConfig();
+  if(!cfg || !cfg.belts) return [];
+  return SBD_BELT_ORDER.filter(b => cfg.belts[b]).map(b => ({
+    belt: b, blended: cfg.belts[b].blendedMin, k: cfg.belts[b].kOverallMin, sim: cfg.belts[b].simOverallMin
+  }));
+}
+
+// A null floor means the belt does not gate that level. That is not the same as a floor of
+// zero, so callers must treat null as "no row", not as "passes automatically".
+function sbdSpecFloors(belt){
+  const cfg = sbdSpecConfig();
+  const b = cfg && cfg.belts && cfg.belts[belt];
+  if(!b) return null;
+  return {
+    kOverallMin: b.kOverallMin, kLevelFloors: b.kLevelFloors,
+    simOverallMin: b.simOverallMin, simLevelFloors: b.simLevelFloors,
+    simIndividualMin: b.simIndividualMin, blendedMin: b.blendedMin
+  };
+}
+
+// ---------------------------------------------------------------- Dangerous provisions (T65)
+// The client's ruling, 2026-07-28: a dangerous answer does not reduce the belt. It raises a
+// patient-safety provision that sits on the person's account, visible there, until a SIPS
+// admin clears it. Cleared entries are kept rather than removed, because the record of who
+// cleared it and when is the point of the feature. While an entry is open the person keeps
+// the belt they hold but cannot be put forward for the next one.
+
+// Build provision entries from a set of assessment responses. One entry per knowledge answer
+// that is flagged dangerous and was answered wrongly.
+function sbdBuildProvisions(responses, reviewId){
+  const now = new Date().toISOString();
+  return (responses || [])
+    .filter(r => r.type === 'knowledge' && r.isDangerous && !r.correct)
+    .map(r => ({
+      qid: r.qId || r.id || null,
+      label: String(r.question || '').slice(0, 200),
+      answer: String(r.answer || ''),
+      flagged_at: now,
+      source_review_id: reviewId || null,
+      cleared_by: null,
+      cleared_by_name: null,
+      cleared_at: null,
+    }));
+}
+
+function sbdOpenProvisions(staff){
+  return ((staff && staff.dangerousProvisions) || []).filter(p => !p.cleared_at);
+}
+
+function sbdHasOpenProvision(staff){
+  return sbdOpenProvisions(staff).length > 0;
+}
+
+// Who may clear. SIPS admins only for this build, per the ruling. A role-management toggle
+// for this capability is queued separately and deliberately not wired here.
+function sbdCanClearProvision(){
+  return !!(ST.user && ST.user.role === 'master_admin');
+}
+
+// The three overall gates for a belt, named the way the report templates read them.
+function sbdSpecOveralls(belt){
+  const f = sbdSpecFloors(belt);
+  if(!f) return null;
+  return { blended: f.blendedMin, k: f.kOverallMin, knowledge: f.kOverallMin,
+           sim: f.simOverallMin, individual: f.simIndividualMin };
+}
 // Spec 5.2: knowledge overall is the AVERAGE OF THE FIVE LEVEL SCORES, and the spec says
 // in as many words not to use correct-over-total. The two agree only while every level has
 // the same number of questions. L5 has 7 since the TIR34 question was pulled at the client's
@@ -2304,7 +2384,12 @@ function sbdSuggestBelt(kOverall, kL1, simOverall, blended, hasDangerousKAnswer)
   // describes in section 8: the blended score sets the belt, floor failures set the
   // conditions. The parameter stays because callers use it to raise the provision.
   // Step 2 -- highest belt where blended AND K both pass; sim decides Clean vs Conditional
-  for(const t of SBD_BELT_THRESHOLDS){
+  const _rows = sbdBeltThresholds();
+  // No threshold table means we cannot say what was earned. Returning 'No Belt' here would
+  // print a determination we did not actually make, which is the same class of bug as the
+  // White placeholder. Say nothing instead and let the caller show nothing.
+  if(!_rows.length) return null;
+  for(const t of _rows){
     if(blended >= t.blended && kOverall >= t.k){
       return simOverall >= t.sim ? t.belt + ' Belt' : t.belt + ' Belt Conditional';
     }
@@ -2472,7 +2557,7 @@ async function paPersistSubmission({ staffId, answers, questions, sessionId, ses
   // engine had actually said no belt. A placeholder must never be printed as a decision, so
   // there is no fallback now: if the engine names no belt, nothing is stored.
   const _suggestion = sbdSuggestBelt(kOverall, kL1, simOverall, blended, hasDangerousKAnswer);
-  const _beltWord = (_suggestion.match(/White|Yellow|Green|Blue|Brown|Black/) || [])[0] || null;
+  const _beltWord = ((_suggestion || '').match(/White|Yellow|Green|Blue|Brown|Black/) || [])[0] || null;
   const suggestedBelt = _beltWord;
 
   // Create placement review record
@@ -2505,6 +2590,16 @@ async function paPersistSubmission({ staffId, answers, questions, sessionId, ses
   DB.placementReviews.push(pr);
   // Mark staff no longer needs placement (assessment done, awaiting review)
   if(s) s.placementNeeded = false;
+
+  // T65: raise a Dangerous provision on the person for every knowledge answer flagged as
+  // dangerous and answered wrongly. The client's ruling on 2026-07-28 is that the belt is
+  // still issued on the scores; the safety item becomes a provision that lives on the account
+  // until a SIPS admin clears it. Until now the flag existed only inside the report, worked
+  // out afresh every time it was opened, so there was nowhere for a provision to live.
+  const _newProvisions = sbdBuildProvisions(responses, pr.id);
+  if(s && _newProvisions.length){
+    s.dangerousProvisions = (s.dangerousProvisions || []).concat(_newProvisions);
+  }
   let pendingSync = false;
   if(IS_LIVE){
     // [GUARDRAIL] These payload keys map directly to the placement_reviews schema.
@@ -2524,7 +2619,19 @@ async function paPersistSubmission({ staffId, answers, questions, sessionId, ses
     try {
       // Durable submit: retry through transient network blips before giving up.
       await sbFetchWithRetry('/rest/v1/placement_reviews', { method:'POST', body: prBody }, 4);
+      // Single-column PATCHes, deliberately. A whole-record write from this in-memory copy is
+      // how oip, history and the progress gates have been wiped before.
       await sbFetchWithRetry(`/rest/v1/staff?id=eq.${pr.staffId}`, { method:'PATCH', body:{placement_needed:false} }, 3).catch(()=>{});
+      if(s && _newProvisions.length){
+        await sbFetchWithRetry(`/rest/v1/staff?id=eq.${pr.staffId}`,
+          { method:'PATCH', body: mapStaffProvisionsToBackend(s) }, 3).catch(e=>{
+            console.warn('Dangerous provision sync failed:', e);
+          });
+        try { if(typeof logActivity==='function') logActivity('dangerous_provision_raised', {
+          staffId: pr.staffId, reviewId: pr.id, count: _newProvisions.length,
+          questions: _newProvisions.map(p => p.label)
+        }); } catch(_){}
+      }
       // Mark the assessment session as completed
       if(sessionToken){
         SB.completeAssessmentSession(sessionToken).catch(()=>{});
@@ -3725,25 +3832,16 @@ function togglePRCard(prId){
 // "CANDIDATE NAME Assessment Report" template (both from SIPS).
 // ============================================================
 
-// Thresholds per the governing standards + template.
-// DOCUMENTED: White (blended 75 / K 80 / Sim 72), Yellow (K 83 / Sim 75),
-// Green (blended 81 / K 86 / Sim 78). Blue/Brown/Black follow the same +3
-// progression PENDING the "SBD OS Assessment Scoring Logic Specification"
-// -- confirm those three rows against that document before relying on them.
+// What is left of the report's own constants. Every threshold that the spec's section 9
+// table defines has been removed from here and is now read from that table through
+// sbdSpecFloors() / sbdSpecOveralls(); the belt list, the per-level floors and the
+// individual-response minimum all used to be duplicated in this object, which is how the
+// report drifted from the engine. Only the two values section 9 does NOT carry remain:
+// the blend weights (belt-invariant, and also in the config) and the advisory band, which
+// is a presentation choice about how close to a floor counts as borderline.
 const RPT_STANDARDS = {
-  weights: { k: 0.6, sim: 0.4 },                  // blended = 60% knowledge + 40% simulation (template math)
-  kLevelFloor: 80,                                 // knowledge floor, every level
-  simLevelFloors: { 1: 75, 2: 70, 3: 65, 4: 65, 5: 65 },
-  simResponseMin: 50,                              // individual response minimum
-  advisoryBand: 3,                                 // passing within this of a floor -> advisory
-  belts: {
-    White:  { blended: 75, k: 80, sim: 72 },
-    Yellow: { blended: 78, k: 83, sim: 75 },
-    Green:  { blended: 81, k: 86, sim: 78 },
-    Blue:   { blended: 85, k: 89, sim: 82 },
-    Brown:  { blended: 87, k: 91, sim: 84 },
-    Black:  { blended: 90, k: 92, sim: 87 }
-  }
+  weights: { k: 0.6, sim: 0.4 },  // blended = 60% knowledge + 40% simulation (spec section 9)
+  advisoryBand: 3,                // passing within this of a floor -> advisory
 };
 
 // Derive the full report model from a placement review's stored responses.
@@ -3766,9 +3864,10 @@ function rptComputeModel(pr){
     const scores = ss.map(q=>Number(q.aiScore)||0);
     scores.forEach(s=>{ simSum+=s; simN++; });
     const simPct = scores.length ? r1(scores.reduce((a,b)=>a+b,0)/scores.length) : null;
-    const sFloor = RPT_STANDARDS.simLevelFloors[l];
-    kLevels.push({ level:l, pct:kPct, correct, of:ks.length, floor:RPT_STANDARDS.kLevelFloor, pass: kPct!==null && kPct>=RPT_STANDARDS.kLevelFloor });
-    simLevels.push({ level:l, pct:simPct, scores, floor:sFloor, pass: simPct!==null && simPct>=sFloor });
+    // Floors are attached below, once the belt this report is about is known. They depend on
+    // the belt, so they cannot be decided inside this loop.
+    kLevels.push({ level:l, pct:kPct, correct, of:ks.length, floor:null, pass:true });
+    simLevels.push({ level:l, pct:simPct, scores, floor:null, pass:true });
   }
   // Spec 5.2: the average of the five LEVEL scores, not correct over total. kLevels already
   // holds each level's percentage, so average those and skip levels with no questions.
@@ -3776,8 +3875,43 @@ function rptComputeModel(pr){
   const kOverall = _kLevelPcts.length ? r1(_kLevelPcts.reduce((a,b)=>a+b,0)/_kLevelPcts.length) : 0;
   const simOverall = simN ? r1(simSum/simN) : 0;
   const blended = r1(RPT_STANDARDS.weights.k*kOverall + RPT_STANDARDS.weights.sim*simOverall);
-  const belt = pr.confirmedBelt || pr.tentativeBelt || 'White';
-  const th = RPT_STANDARDS.belts[belt] || RPT_STANDARDS.belts.White;
+  // The belt this report is about. A confirmed belt wins; otherwise take what the engine
+  // actually determines from the scores. It used to fall back to 'White' whenever nothing was
+  // stored, which is the placeholder that printed White thresholds on a Green candidate.
+  const _engineBelt = (() => {
+    for(const t of sbdBeltThresholds()){ if(blended >= t.blended && kOverall >= t.k) return t.belt; }
+    return null;
+  })();
+  const belt = pr.confirmedBelt || pr.tentativeBelt || _engineBelt || 'White';
+  const beltIsDetermined = !!(pr.confirmedBelt || pr.tentativeBelt || _engineBelt);
+  const th = sbdSpecOveralls(belt) || sbdSpecOveralls('White') || { blended: 0, k: 0, sim: 0, individual: 0 };
+  // Section 9 sets the individual simulation response minimum per belt (Green 72, White 65).
+  // The report used to test every response against a flat 50 that appears nowhere in the spec.
+  const simResponseMin = th.individual;
+
+  // Attach the section 9 floors for that belt. Where the spec gives null the belt does not
+  // gate the level, so the level carries no floor and cannot fail: at Green, L4 and L5
+  // simulation are ungated, and marking a candidate's 67.5 there as a failure (which the
+  // old flat table did) is simply wrong.
+  const _sf = sbdSpecFloors(belt);
+  if(_sf){
+    kLevels.forEach(k => {
+      const f = _sf.kLevelFloors[k.level];
+      k.floor = (f == null) ? null : f;
+      k.gated = f != null;
+      k.pass  = (f == null) || (k.pct !== null && k.pct >= f);
+    });
+    simLevels.forEach(sl => {
+      const f = _sf.simLevelFloors[sl.level];
+      sl.floor = (f == null) ? null : f;
+      sl.gated = f != null;
+      sl.pass  = (f == null) || (sl.pct !== null && sl.pct >= f);
+    });
+  } else {
+    // No spec entry for this belt. Rather than invent floors, say so.
+    kLevels.forEach(k => { k.floor = null; k.gated = false; k.pass = true; });
+    simLevels.forEach(sl => { sl.floor = null; sl.gated = false; sl.pass = true; });
+  }
 
   // Dangerous answers (Governing Standards): WRONG -- DANGEROUS knowledge responses.
   // Wired to q.isDangerous; stays inert until SIPS supplies the dangerous-answer list.
@@ -3798,8 +3932,8 @@ function rptComputeModel(pr){
       finding:`Simulation level ${s.level} scored ${s.pct}% against the ${s.floor}% floor.`,
       action:`Scenario practice in the level ${s.level} topic areas with supervisor review, then re-assessment of this simulation level.` });
   });
-  (pr.responses||[]).filter(r=>r.type!=='knowledge' && (r.aiScore||0) < RPT_STANDARDS.simResponseMin).forEach(r=>{
-    conditions.push({ sev:'BLOCKING', title:`Individual response below the ${RPT_STANDARDS.simResponseMin}-point minimum`,
+  (pr.responses||[]).filter(r=>r.type!=='knowledge' && (r.aiScore||0) < simResponseMin).forEach(r=>{
+    conditions.push({ sev:'BLOCKING', title:`Individual response below the ${simResponseMin}-point minimum for ${belt} Belt`,
       finding:`"${(r.question||'').slice(0,90)}" scored ${r.aiScore}.`,
       action:`Tabletop walk-through of this scenario with a supervisor; correct handling must be demonstrated and signed off.` });
   });
@@ -3808,8 +3942,10 @@ function rptComputeModel(pr){
       finding:`Level ${k.level} knowledge scored ${k.pct}% (${k.correct}/${k.of} correct).`,
       action:`Re-study the level ${k.level} material and re-test; ${k.floor}% or above required.` });
   });
-  [...kLevels.filter(k=>k.pass && k.pct!==null && k.pct < k.floor+RPT_STANDARDS.advisoryBand),
-   ...simLevels.filter(s=>s.pass && s.pct!==null && s.pct < s.floor+RPT_STANDARDS.advisoryBand)].forEach(b=>{
+  // Ungated levels (floor null) are skipped: a level the belt does not gate cannot be
+  // "close to its floor", and null+3 would have quietly compared against 3.
+  [...kLevels.filter(k=>k.pass && k.pct!==null && k.floor!=null && k.pct < k.floor+RPT_STANDARDS.advisoryBand),
+   ...simLevels.filter(s=>s.pass && s.pct!==null && s.floor!=null && s.pct < s.floor+RPT_STANDARDS.advisoryBand)].forEach(b=>{
     conditions.push({ sev:'ADVISORY', title:`Level ${b.level} ${b.scores?'simulation':'knowledge'} is borderline`,
       finding:`Passed at ${b.pct}%, within ${RPT_STANDARDS.advisoryBand} points of the ${b.floor}% floor.`,
       action:`Acknowledge and fold into the development plan. Does not block advancement.` });
@@ -3821,10 +3957,10 @@ function rptComputeModel(pr){
 
   // Outcome -- the four Governing-Standards outcomes (Clean / Conditional / Knowledge
   // Foundation / No Belt), not just clean-vs-conditional.
-  const WHITE = RPT_STANDARDS.belts.White;
+  const WHITE = sbdSpecOveralls('White') || { blended: 75, k: 80, sim: 72 };
   const allKPass = kLevels.filter(k=>k.pct!==null).every(k=>k.pass);
   const allSimPass = simLevels.filter(s=>s.pct!==null).every(s=>s.pass);
-  const belowMin = (pr.responses||[]).some(r=>r.type!=='knowledge' && (r.aiScore||0) < RPT_STANDARDS.simResponseMin);
+  const belowMin = (pr.responses||[]).some(r=>r.type!=='knowledge' && (r.aiScore||0) < simResponseMin);
   let outcome;
   if(blended>=th.blended && allKPass && allSimPass && !belowMin && !anyDangerous) outcome='CLEAN';
   else if(blended>=th.blended) outcome='CONDITIONAL';
@@ -3861,9 +3997,9 @@ function rptComputeModel(pr){
   // issued, the path is White Belt (re-assess at White first per the standard).
   const order = ['White','Yellow','Green','Blue','Brown','Black'];
   const nb = beltAwarded ? (order[order.indexOf(beltAwarded)+1] || null) : 'White';
-  const nextTh = nb ? RPT_STANDARDS.belts[nb] : null;
+  const nextTh = nb ? sbdSpecOveralls(nb) : null;
   const gap = (cur, need)=> cur>=need ? 'Already meets' : `+${r1(need-cur)} pts needed`;
-  return { belt, beltAwarded, outcome, classification, topStrength, th, blended, kOverall, simOverall, kLevels, simLevels, conditions, dangerous, anyDangerous, roleAmp, nSup, nBlock, nReq, nAdv, clean, determination,
+  return { belt, beltAwarded, beltIsDetermined, outcome, classification, topStrength, th, simResponseMin, blended, kOverall, simOverall, kLevels, simLevels, conditions, dangerous, anyDangerous, roleAmp, nSup, nBlock, nReq, nAdv, clean, determination,
     nextBelt: nb, nextRows: nextTh ? [
       ['Blended Score', blended, nextTh.blended, gap(blended,nextTh.blended)],
       ['Knowledge Overall', kOverall, nextTh.k, gap(kOverall,nextTh.k)],
@@ -3938,7 +4074,7 @@ function downloadAssessmentReport(prId){
     <div>${hdr(2)}
       ${sect('KNOWLEDGE COMPONENT')}
       <table style="${tbl}"><tr style="background:#f7f4ef"><th style="padding:5px;border:1px solid #e2e8f0">Level</th><th style="padding:5px;border:1px solid #e2e8f0">Score</th><th style="padding:5px;border:1px solid #e2e8f0">Floor</th><th style="padding:5px;border:1px solid #e2e8f0">Result</th><th style="padding:5px;border:1px solid #e2e8f0">Correct</th></tr>
-        ${m.kLevels.map(k=>`<tr><td style="padding:5px;border:1px solid #e2e8f0;font-weight:700">L${k.level}</td><td style="padding:5px;border:1px solid #e2e8f0">${k.pct??'--'}%</td><td style="padding:5px;border:1px solid #e2e8f0">${k.floor}%</td><td style="padding:5px;border:1px solid #e2e8f0">${pf(k.pass)}</td><td style="padding:5px;border:1px solid #e2e8f0">${k.correct}/${k.of}</td></tr>`).join('')}
+        ${m.kLevels.map(k=>`<tr><td style="padding:5px;border:1px solid #e2e8f0;font-weight:700">L${k.level}</td><td style="padding:5px;border:1px solid #e2e8f0">${k.pct??'--'}%</td><td style="padding:5px;border:1px solid #e2e8f0">${k.floor==null?'not gated':k.floor+'%'}</td><td style="padding:5px;border:1px solid #e2e8f0">${k.floor==null?'--':pf(k.pass)}</td><td style="padding:5px;border:1px solid #e2e8f0">${k.correct}/${k.of}</td></tr>`).join('')}
       </table>
       <div style="margin:8px 0;font-size:9pt"><b>KNOWLEDGE OVERALL: ${m.kOverall}%</b> &nbsp; ${m.belt} Belt floor: ${m.th.k}% | ${m.kOverall>=m.th.k?'PASS':'FAIL by '+(Math.round((m.th.k-m.kOverall)*10)/10)+' pts'}</div>
       ${sect('INCORRECT AND BLANK RESPONSES')}
@@ -3948,7 +4084,7 @@ function downloadAssessmentReport(prId){
     <div>${hdr(3)}
       ${sect('SIMULATION COMPONENT')}
       <table style="${tbl}"><tr style="background:#f7f4ef"><th style="padding:5px;border:1px solid #e2e8f0">Level</th><th style="padding:5px;border:1px solid #e2e8f0">Score</th><th style="padding:5px;border:1px solid #e2e8f0">Floor</th><th style="padding:5px;border:1px solid #e2e8f0">Result</th><th style="padding:5px;border:1px solid #e2e8f0">Responses</th></tr>
-        ${m.simLevels.map(sv=>`<tr><td style="padding:5px;border:1px solid #e2e8f0;font-weight:700">L${sv.level}</td><td style="padding:5px;border:1px solid #e2e8f0">${sv.pct??'--'}%</td><td style="padding:5px;border:1px solid #e2e8f0">${sv.floor}%</td><td style="padding:5px;border:1px solid #e2e8f0">${pf(sv.pass)}</td><td style="padding:5px;border:1px solid #e2e8f0">${sv.scores.join(' ')}</td></tr>`).join('')}
+        ${m.simLevels.map(sv=>`<tr><td style="padding:5px;border:1px solid #e2e8f0;font-weight:700">L${sv.level}</td><td style="padding:5px;border:1px solid #e2e8f0">${sv.pct??'--'}%</td><td style="padding:5px;border:1px solid #e2e8f0">${sv.floor==null?'not gated':sv.floor+'%'}</td><td style="padding:5px;border:1px solid #e2e8f0">${sv.floor==null?'--':pf(sv.pass)}</td><td style="padding:5px;border:1px solid #e2e8f0">${sv.scores.join(' ')}</td></tr>`).join('')}
       </table>
       <div style="margin:8px 0;font-size:9pt"><b>SIMULATION OVERALL: ${m.simOverall}%</b> &nbsp; ${m.belt} Belt floor: ${m.th.sim}% | ${m.simOverall>=m.th.sim?'PASS':'FAIL by '+(Math.round((m.th.sim-m.simOverall)*10)/10)+' pts'}</div>
       ${sect('SIMULATION RESPONSE DETAIL')}
@@ -4331,21 +4467,31 @@ function rptHandoffStatus(staffArr){
 
 // ============================================================ ASSESSMENT REPORT GENERATOR
 
-// Belt scoring thresholds — White Belt values from SBD OS Governing Standards §2
-// Single source of truth: these MUST match SBD_BELT_THRESHOLDS / RPT_STANDARDS so the
-// confirmed-report engine (deriveOutcome) agrees with the card + the draft report.
-const BELT_THRESHOLDS = {
-  White:  { blended: 75, sim: 72, knowledge: 80 },
-  Yellow: { blended: 78, sim: 75, knowledge: 83 },
-  Green:  { blended: 81, sim: 78, knowledge: 86 },
-  Blue:   { blended: 85, sim: 82, knowledge: 89 },
-  Brown:  { blended: 87, sim: 84, knowledge: 91 },
-  Black:  { blended: 90, sim: 87, knowledge: 92 },
-};
-
+// The belt thresholds and the per-level floors used to be a third hardcoded copy here. They
+// were annotated "these MUST match SBD_BELT_THRESHOLDS / RPT_STANDARDS", which is the note
+// you write when the same table lives in three places and nothing enforces it. Section 9 of
+// the scoring spec says not to hardcode them inline at all, so this engine now reads the
+// one table in belt-test-engine.js through sbdSpecOveralls() / sbdSpecFloors().
+//
+// The old per-level constants were flat across belts (knowledge 80 everywhere, simulation
+// 75/70/65/65/65). The spec gates by belt, and gates fewer levels at the lower belts: a
+// Green candidate is not measured on simulation L4 or L5 at all. The flat table marked those
+// ungated levels FAIL on a real candidate's report.
 const LEVEL_LABELS = { '1':'Foundational','2':'Operational','3':'Applied','4':'Advanced','5':'Systems' };
-const SIM_LEVEL_FLOORS = { '1':75,'2':70,'3':65,'4':65,'5':65 };
-const KNOWLEDGE_LEVEL_FLOOR = 80;
+
+// Per-level floors for a belt, keyed by level as a string to match this file's level maps.
+// A null value means the belt does not gate that level, and callers must render that as
+// "not gated" rather than as a pass or a zero floor.
+function sbdKnowledgeFloor(belt, level){
+  const f = sbdSpecFloors(belt);
+  const v = f && f.kLevelFloors ? f.kLevelFloors[Number(level)] : undefined;
+  return v == null ? null : v;
+}
+function sbdSimFloor(belt, level){
+  const f = sbdSpecFloors(belt);
+  const v = f && f.simLevelFloors ? f.simLevelFloors[Number(level)] : undefined;
+  return v == null ? null : v;
+}
 
 const DANGEROUS_PATTERNS = [
   /re.?use.{0,20}(single.?use|disposable|instrument|pack)/i,
@@ -4409,11 +4555,68 @@ function deriveOutcome(pr) {
   const hasDangerousKnowledge = dangerousKnowledge.length > 0;
   const hasDangerous = dangerousIds.length > 0;
 
-  const targetBelt = pr.confirmedBelt || pr.tentativeBelt || 'White';
-  const thresh = BELT_THRESHOLDS[targetBelt] || BELT_THRESHOLDS.White;
-  const levelEntries = Object.entries(pr.levelScores || {});
-  const floorFails = levelEntries.filter(([, v]) => Number(v) < 65).map(([k]) => k);
-  const nearMisses = levelEntries.filter(([, v]) => { const p = Number(v); return p >= 60 && p < 65; }).map(([k]) => k);
+  // The belt this report is measured against. It used to fall back to 'White' whenever the
+  // review carried no belt, and that placeholder is what put WHITE BELT on the header of a
+  // candidate the engine had actually placed at Green: the thresholds, the floors, the gap
+  // table and the certification basis were all then computed against the wrong belt. Derive
+  // the determination from the scores when none is stored, and if the threshold table is not
+  // loaded, name no belt at all rather than invent one.
+  const _derivedBelt = (() => {
+    for (const t of sbdBeltThresholds()) { if (blended >= t.blended && knowledgeOverall >= t.k) return t.belt; }
+    return null;
+  })();
+  const targetBelt = pr.confirmedBelt || pr.tentativeBelt || _derivedBelt;
+  const beltIsDetermined = !!targetBelt;
+  const beltForFloors = targetBelt || 'White';
+  const thresh = sbdSpecOveralls(beltForFloors) || { blended: 0, sim: 0, knowledge: 0, k: 0, individual: 0 };
+  const sevCfg = (sbdSpecConfig() || {}).severity || { knowledgeRequiredMargin: 8, simRequiredMargin: 5, watchMargin: 5 };
+
+  // Per-level pass/fail against the section 9 floors for that belt, computed from the stored
+  // responses. This used to read pr.levelScores -- a single blended knowledge-plus-simulation
+  // figure per level -- test it against a hardcoded 65, and then word the failure as though it
+  // had been measured against the 80% knowledge floor: three different numbers in one
+  // condition. Knowledge and simulation are gated separately, and each belt gates a different
+  // set of levels. Where the spec gives no floor the level is not gated and cannot fail.
+  const _kPct = {}, _sPct = {};
+  for (let i = 1; i <= 5; i++) {
+    const lk = knowledge.filter(r => Number(r.level) === i);
+    const ls = simulation.filter(r => Number(r.level) === i && r.aiScore != null);
+    _kPct[i] = lk.length ? lk.filter(r => r.correct).length / lk.length * 100 : null;
+    _sPct[i] = ls.length ? ls.reduce((a, r) => a + (Number(r.aiScore) || 0), 0) / ls.length : null;
+  }
+  const floorFails = [], nearMisses = [];
+  for (let i = 1; i <= 5; i++) {
+    const kf = sbdKnowledgeFloor(beltForFloors, i);
+    if (kf != null && _kPct[i] != null) {
+      if (_kPct[i] < kf) floorFails.push({ level: i, kind: 'knowledge', pct: _kPct[i], floor: kf, margin: sevCfg.knowledgeRequiredMargin });
+      else if (_kPct[i] < kf + sevCfg.watchMargin) nearMisses.push({ level: i, kind: 'knowledge', pct: _kPct[i], floor: kf });
+    }
+    const sf = sbdSimFloor(beltForFloors, i);
+    if (sf != null && _sPct[i] != null) {
+      if (_sPct[i] < sf) floorFails.push({ level: i, kind: 'simulation', pct: _sPct[i], floor: sf, margin: sevCfg.simRequiredMargin });
+      else if (_sPct[i] < sf + sevCfg.watchMargin) nearMisses.push({ level: i, kind: 'simulation', pct: _sPct[i], floor: sf });
+    }
+  }
+  const _failCond = (f) => {
+    const short = f.floor - f.pct;
+    const sev = short > f.margin ? 'REQUIRED' : 'ADVISORY';
+    return {
+      severity: sev,
+      title: `${sev === 'REQUIRED' ? 'Competency Gap' : 'Near-Threshold'} &middot; Level ${f.level} ${f.kind} (${LEVEL_LABELS[String(f.level)] || ''})`,
+      finding: `Level ${f.level} ${f.kind} scored ${Math.round(f.pct)}%, below the ${f.floor}% floor required at ${beltForFloors} Belt${sev === 'REQUIRED' ? ` by more than ${f.margin} points` : ''}.`,
+      requiredAction: sev === 'REQUIRED'
+        ? (f.kind === 'knowledge'
+            ? 'Complete targeted re-study and a re-test at or above the floor. Document completion and have a supervisor sign off.'
+            : 'Complete scenario practice in this level with supervisor review, then re-assessment of this simulation level.')
+        : 'Acknowledge finding and incorporate into the development plan. Does not block advancement.',
+    };
+  };
+  const _nearCond = (n) => ({
+    severity: 'ADVISORY',
+    title: `Near-Threshold &middot; Level ${n.level} ${n.kind} (${LEVEL_LABELS[String(n.level)] || ''})`,
+    finding: `Level ${n.level} ${n.kind} passed at ${Math.round(n.pct)}%, within ${sevCfg.watchMargin} points of the ${n.floor}% floor for ${beltForFloors} Belt.`,
+    requiredAction: 'Acknowledge finding and incorporate into the development plan. Does not block advancement.',
+  });
 
   let outcome, classification, tone;
   const conditions = [];
@@ -4433,73 +4636,62 @@ function deriveOutcome(pr) {
     });
   }
 
-  if (blended >= thresh.blended && floorFails.length === 0 && !hasDangerous) {
+  // Section 8.2: the blended score sets the belt, floor failures set the conditions. Clean
+  // means every gate cleared, so the overall simulation floor and the individual-response
+  // minimum count here too; they used not to, which let a report read Clean while a level
+  // sat below its floor.
+  const _anyBelowIndividual = simulation.some(r => r.aiScore != null && Number(r.aiScore) < thresh.individual);
+  if (blended >= thresh.blended && floorFails.length === 0 && !hasDangerous && simOverall >= thresh.sim && !_anyBelowIndividual) {
     outcome = 'CLEAN'; tone = '#16a34a';
     classification = (blended - thresh.blended) >= 10 ? 'A+' : 'A';
   } else if (blended >= thresh.blended) {
     outcome = 'CONDITIONAL'; classification = 'B'; tone = '#60a5fa';
     if (simOverall < thresh.sim) conditions.push({
-      severity: 'BLOCKING', title: `Simulation Overall Floor — ${targetBelt} Belt`,
-      finding: `Simulation overall of ${Math.round(simOverall)}% falls below the ${thresh.sim}% floor required for ${targetBelt} Belt.`,
+      severity: 'BLOCKING', title: `Simulation Overall Floor &middot; ${beltForFloors} Belt`,
+      finding: `Simulation overall of ${Math.round(simOverall)}% falls below the ${thresh.sim}% floor required for ${beltForFloors} Belt.`,
       requiredAction: 'Demonstrate correct competency in a supervisor-observed tabletop exercise before advancement to the next assessment level.',
     });
-    floorFails.forEach(k => {
-      const pct = Number(pr.levelScores[k]);
-      const sev = (65 - pct) > 8 ? 'REQUIRED' : 'ADVISORY';
-      conditions.push({ severity: sev, title: `${sev === 'REQUIRED' ? 'Knowledge Gap' : 'Near-Threshold'} — Level ${k} (${LEVEL_LABELS[k] || ''})`,
-        finding: `Level ${k} score of ${Math.round(pct)}% is below the ${KNOWLEDGE_LEVEL_FLOOR}% competency floor${sev === 'REQUIRED' ? ' by more than 8 points' : ''}.`,
-        requiredAction: sev === 'REQUIRED' ? 'Complete targeted re-study and a re-test with a minimum passing score. Document completion and have supervisor sign off.' : 'Acknowledge finding and incorporate into development plan. Does not block advancement.',
+    // Individual simulation responses below the belt's minimum (section 9, per belt).
+    simulation.filter(r => r.aiScore != null && Number(r.aiScore) < thresh.individual).forEach(r => {
+      const q = String(r.question || '');
+      conditions.push({ severity: 'BLOCKING',
+        title: `Individual Response Below Minimum &middot; Level ${r.level}`,
+        finding: `"${q.slice(0, 80)}${q.length > 80 ? '…' : ''}" scored ${Math.round(Number(r.aiScore))} against the ${thresh.individual}-point individual minimum for ${beltForFloors} Belt.`,
+        requiredAction: 'Tabletop walk-through of this scenario with a supervisor; correct handling must be demonstrated and signed off.',
       });
     });
-    nearMisses.forEach(k => { if (!floorFails.includes(k)) conditions.push({
-      severity: 'ADVISORY', title: `Near-Threshold — Level ${k} (${LEVEL_LABELS[k] || ''})`,
-      finding: `Level ${k} is within 5 points of the ${KNOWLEDGE_LEVEL_FLOOR}% competency floor — a borderline development area.`,
-      requiredAction: 'Acknowledge finding and incorporate into development plan. Does not block advancement.',
-    }); });
+    floorFails.forEach(f => conditions.push(_failCond(f)));
+    nearMisses.forEach(n => conditions.push(_nearCond(n)));
   } else if (knowledgeOverall >= thresh.knowledge && !hasDangerousKnowledge && simOverall < thresh.sim) {
     outcome = 'KNOWLEDGE FOUNDATION'; tone = '#f59e0b';
     const gap = thresh.blended - blended;
     classification = gap <= 3 ? 'A' : gap <= 7 ? 'B' : 'C';
     conditions.push({
-      severity: 'REQUIRED', title: `Simulation Floor — ${targetBelt} Belt`,
-      finding: `Simulation overall of ${Math.round(simOverall)}% does not yet meet the ${thresh.sim}% floor required for ${targetBelt} Belt.`,
+      severity: 'REQUIRED', title: `Simulation Floor &middot; ${beltForFloors} Belt`,
+      finding: `Simulation overall of ${Math.round(simOverall)}% does not yet meet the ${thresh.sim}% floor required for ${beltForFloors} Belt.`,
       requiredAction: 'Complete scenario practice targeting the specific levels identified in this report. Re-sit the full assessment when simulation competency is developed.',
     });
-    nearMisses.forEach(k => conditions.push({
-      severity: 'ADVISORY', title: `Near-Threshold — Level ${k} (${LEVEL_LABELS[k] || ''})`,
-      finding: `Level ${k} is within 5 points of the competency floor. Review alongside simulation practice.`,
-      requiredAction: 'Incorporate into development plan alongside simulation remediation.',
-    }));
+    floorFails.forEach(f => conditions.push(_failCond(f)));
+    nearMisses.forEach(n => conditions.push(_nearCond(n)));
   } else {
     outcome = 'NO BELT'; tone = '#ef4444';
     const gap = thresh.blended - blended;
     classification = (hasDangerous && gap > 7) ? 'D' : (hasDangerous || gap > 7) ? 'C' : 'A';
     if (simOverall < thresh.sim) conditions.push({
-      severity: 'BLOCKING', title: `Simulation Floor — ${targetBelt} Belt`,
-      finding: `Simulation overall of ${Math.round(simOverall)}% does not meet the ${thresh.sim}% floor required for ${targetBelt} Belt.`,
+      severity: 'BLOCKING', title: `Simulation Floor &middot; ${beltForFloors} Belt`,
+      finding: `Simulation overall of ${Math.round(simOverall)}% does not meet the ${thresh.sim}% floor required for ${beltForFloors} Belt.`,
       requiredAction: 'Direct remediation of simulation competency gaps is required. Targeted scenario practice with supervisor review must be completed before re-assessment.',
     });
     if (knowledgeOverall < thresh.knowledge) {
       const kg = thresh.knowledge - knowledgeOverall;
       conditions.push({ severity: kg > 8 ? 'REQUIRED' : 'ADVISORY',
-        title: `Knowledge Overall — ${targetBelt} Belt Floor`,
+        title: `Knowledge Overall &middot; ${beltForFloors} Belt Floor`,
         finding: `Knowledge overall of ${Math.round(knowledgeOverall)}% is below the ${thresh.knowledge}% floor.`,
         requiredAction: kg > 8 ? 'Targeted re-study with a re-test achieving a minimum passing score is required.' : 'A documented development plan addressing knowledge gaps is recommended.',
       });
     }
-    floorFails.forEach(k => {
-      const pct = Number(pr.levelScores[k]);
-      conditions.push({ severity: (65 - pct) > 8 ? 'REQUIRED' : 'ADVISORY',
-        title: `${(65 - pct) > 8 ? 'Knowledge Gap' : 'Near-Threshold'} — Level ${k} (${LEVEL_LABELS[k] || ''})`,
-        finding: `Level ${k} of ${Math.round(pct)}% is below the competency floor.`,
-        requiredAction: (65 - pct) > 8 ? 'Structured study with documented supervisor sign-off is required.' : 'A development plan is recommended.',
-      });
-    });
-    nearMisses.forEach(k => { if (!floorFails.includes(k)) conditions.push({
-      severity: 'ADVISORY', title: `Near-Threshold — Level ${k} (${LEVEL_LABELS[k] || ''})`,
-      finding: `Level ${k} is within 5 points of the competency floor.`,
-      requiredAction: 'Incorporate into development plan.',
-    }); });
+    floorFails.forEach(f => conditions.push(_failCond(f)));
+    nearMisses.forEach(n => conditions.push(_nearCond(n)));
   }
 
   const hasSPR = conditions.some(c => c.severity === 'SUPERVISED PRACTICE REQUIRED');
@@ -4522,7 +4714,13 @@ function deriveOutcome(pr) {
     blended: Math.round(blended * 10) / 10,
     knowledgeOverall: Math.round(knowledgeOverall * 10) / 10,
     simOverall: Math.round(simOverall * 10) / 10,
-    thresh, targetBelt, dangerousIds, dangerousKnowledge, dangerousSim,
+    // targetBelt is the belt this assessment was actually measured against. When a candidate
+    // clears nothing it is White, because White is the gate they did not clear, and that is a
+    // real statement rather than the old placeholder. beltIsDetermined says whether a belt was
+    // determined at all, so the header can print an outcome instead of naming a belt nobody
+    // earned; derivedBelt records that the belt came from the scores, not from a stored value.
+    thresh, targetBelt: beltForFloors, beltIsDetermined, derivedBelt: _derivedBelt,
+    dangerousIds, dangerousKnowledge, dangerousSim,
   };
 }
 
@@ -4556,7 +4754,7 @@ function _certBasis(outcome, classification, candidateName, blended, thresh, tar
 }
 
 function buildAssessmentReportHTML(pr, staff, fac) {
-  const { outcome, classification, tone, conditions, timeframe, blended, knowledgeOverall, simOverall, thresh, targetBelt, dangerousIds, dangerousKnowledge, dangerousSim } = deriveOutcome(pr);
+  const { outcome, classification, tone, conditions, timeframe, blended, knowledgeOverall, simOverall, thresh, targetBelt, beltIsDetermined, dangerousIds, dangerousKnowledge, dangerousSim } = deriveOutcome(pr);
   const responses = pr.responses || [];
   const knowledge = responses.filter(r => r.type === 'knowledge');
   const simulation = responses.filter(r => r.type === 'simulation');
@@ -4564,7 +4762,11 @@ function buildAssessmentReportHTML(pr, staff, fac) {
   const fmt1 = n => (Math.round(n * 10) / 10).toFixed(1);
   const submittedDate = pr.submittedAt ? new Date(pr.submittedAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'Month DD, YYYY';
   const genDate = new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
-  const displayBelt = pr.confirmedBelt || null;
+  // A belt is named on the report only when one was actually awarded. It used to be named
+  // only when an assessor had confirmed it, so a correct pending determination printed as a
+  // bare outcome; and separately the thresholds beneath it were White's regardless. Both come
+  // from the same determination now.
+  const displayBelt = pr.confirmedBelt || ((outcome === 'CLEAN' || outcome === 'CONDITIONAL') && beltIsDetermined ? targetBelt : null);
   const nextB = nextBelt(targetBelt) || null;
   const candidateName = pr.staffName || fullName(staff) || 'Candidate';
   const beltColors = { White:'#94a3b8', Yellow:'#c49a20', Green:'#16a34a', Blue:'#2563eb', Brown:'#92400e', Black:'#374151' };
@@ -4605,8 +4807,12 @@ function buildAssessmentReportHTML(pr, staff, fac) {
     const k = String(i), d = kByLevel[k];
     if (!d.total) return `<div class="ar-level-card" style="border-color:#e2e8f0;background:#f8fafc;opacity:.5"><div style="font-weight:700;font-size:9pt">L${i}</div><div style="font-size:7.5pt;color:#94a3b8">${LEVEL_LABELS[k]}</div><div style="font-size:13pt;font-weight:900;color:#94a3b8;margin:6px 0">—</div><div style="font-size:7pt;color:#94a3b8">No data</div></div>`;
     const pct = Math.round(d.pct * 10) / 10;
-    const pass = d.pct >= KNOWLEDGE_LEVEL_FLOOR;
-    return `<div class="ar-level-card ${pass ? 'ar-level-pass' : 'ar-level-fail'}"><div style="font-weight:700;font-size:9pt">L${i}</div><div style="font-size:7.5pt;color:#64748b">${LEVEL_LABELS[k]}</div><div style="font-size:15pt;font-weight:900;color:${pass ? '#16a34a' : '#dc2626'};margin:5px 0">${pct.toFixed(1)}%</div><div style="font-size:7pt;color:#64748b">floor ${KNOWLEDGE_LEVEL_FLOOR}.0%</div><div style="font-weight:700;color:${pass ? '#16a34a' : '#dc2626'};font-size:8pt;margin-top:4px">${pass ? 'PASS' : 'FAIL'}</div><div style="font-size:7.5pt;color:#475569;margin-top:4px">${d.correct}/${d.total} correct</div></div>`;
+    // Null floor = this belt does not gate this level (section 9). Print that, do not print a
+    // pass or a fail: a level nobody was measured on is neither.
+    const floor = sbdKnowledgeFloor(targetBelt, i);
+    if (floor == null) return `<div class="ar-level-card" style="border-color:#e2e8f0;background:#f8fafc"><div style="font-weight:700;font-size:9pt">L${i}</div><div style="font-size:7.5pt;color:#64748b">${LEVEL_LABELS[k]}</div><div style="font-size:15pt;font-weight:900;color:#475569;margin:5px 0">${pct.toFixed(1)}%</div><div style="font-size:7pt;color:#64748b">not gated at ${safe(targetBelt)}</div><div style="font-weight:700;color:#94a3b8;font-size:8pt;margin-top:4px">&mdash;</div><div style="font-size:7.5pt;color:#475569;margin-top:4px">${d.correct}/${d.total} correct</div></div>`;
+    const pass = d.pct >= floor;
+    return `<div class="ar-level-card ${pass ? 'ar-level-pass' : 'ar-level-fail'}"><div style="font-weight:700;font-size:9pt">L${i}</div><div style="font-size:7.5pt;color:#64748b">${LEVEL_LABELS[k]}</div><div style="font-size:15pt;font-weight:900;color:${pass ? '#16a34a' : '#dc2626'};margin:5px 0">${pct.toFixed(1)}%</div><div style="font-size:7pt;color:#64748b">floor ${floor.toFixed(1)}%</div><div style="font-weight:700;color:${pass ? '#16a34a' : '#dc2626'};font-size:8pt;margin-top:4px">${pass ? 'PASS' : 'FAIL'}</div><div style="font-size:7.5pt;color:#475569;margin-top:4px">${d.correct}/${d.total} correct</div></div>`;
   }).join('');
 
   // Knowledge incorrects table (page 2)
@@ -4628,19 +4834,25 @@ function buildAssessmentReportHTML(pr, staff, fac) {
   // Simulation level cards
   const sDangerousIds = dangerousSim.map(r => r.qId || r.id);
   const sLevelCards = [1,2,3,4,5].map(i => {
-    const k = String(i), d = sByLevel[k], floor = SIM_LEVEL_FLOORS[k];
+    const k = String(i), d = sByLevel[k], floor = sbdSimFloor(targetBelt, i);
     if (!d.total) return `<div class="ar-level-card" style="border-color:#e2e8f0;background:#f8fafc;opacity:.5"><div style="font-weight:700;font-size:9pt">L${i}</div><div style="font-size:7.5pt;color:#94a3b8">${LEVEL_LABELS[k]}</div><div style="font-size:13pt;font-weight:900;color:#94a3b8;margin:6px 0">—</div><div style="font-size:7pt;color:#94a3b8">No data</div></div>`;
     const pct = d.pct != null ? Math.round(d.pct * 10) / 10 : null;
+    // Same rule as the knowledge cards: at Green, simulation L4 and L5 carry no floor, and
+    // marking a candidate's score there as a failure is the bug this replaces.
+    if (floor == null) return `<div class="ar-level-card" style="border-color:#e2e8f0;background:#f8fafc"><div style="font-weight:700;font-size:9pt">L${i}</div><div style="font-size:7.5pt;color:#64748b">${LEVEL_LABELS[k]}</div><div style="font-size:15pt;font-weight:900;color:#475569;margin:5px 0">${pct != null ? pct.toFixed(1)+'%' : '—'}</div><div style="font-size:7pt;color:#64748b">not gated at ${safe(targetBelt)}</div><div style="font-weight:700;color:#94a3b8;font-size:8pt;margin-top:4px">&mdash;</div><div style="font-size:7pt;color:#64748b;margin-top:4px">${safe(d.scores.join(' '))}</div></div>`;
     const pass = pct != null && pct >= floor;
-    return `<div class="ar-level-card ${pass ? 'ar-level-pass' : 'ar-level-fail'}"><div style="font-weight:700;font-size:9pt">L${i}</div><div style="font-size:7.5pt;color:#64748b">${LEVEL_LABELS[k]}</div><div style="font-size:15pt;font-weight:900;color:${pass ? '#16a34a' : '#dc2626'};margin:5px 0">${pct != null ? pct.toFixed(1)+'%' : '—'}</div><div style="font-size:7pt;color:#64748b">floor ${floor}.0%</div><div style="font-weight:700;color:${pass ? '#16a34a' : '#dc2626'};font-size:8pt;margin-top:4px">${pass ? 'PASS' : 'FAIL'}</div><div style="font-size:7pt;color:#64748b;margin-top:4px">${safe(d.scores.join(' '))}</div></div>`;
+    return `<div class="ar-level-card ${pass ? 'ar-level-pass' : 'ar-level-fail'}"><div style="font-weight:700;font-size:9pt">L${i}</div><div style="font-size:7.5pt;color:#64748b">${LEVEL_LABELS[k]}</div><div style="font-size:15pt;font-weight:900;color:${pass ? '#16a34a' : '#dc2626'};margin:5px 0">${pct != null ? pct.toFixed(1)+'%' : '—'}</div><div style="font-size:7pt;color:#64748b">floor ${floor.toFixed(1)}%</div><div style="font-weight:700;color:${pass ? '#16a34a' : '#dc2626'};font-size:8pt;margin-top:4px">${pass ? 'PASS' : 'FAIL'}</div><div style="font-size:7pt;color:#64748b;margin-top:4px">${safe(d.scores.join(' '))}</div></div>`;
   }).join('');
 
-  const sBelow = simulation.filter(r => r.aiScore != null && r.aiScore < (SIM_LEVEL_FLOORS[String(r.level)] || 65));
+  // Individual responses below the belt's own minimum (section 9), not a flat 65.
+  const sBelow = simulation.filter(r => r.aiScore != null && r.aiScore < thresh.individual);
   const sBelowScores = sBelow.map(r => r.aiScore).sort((a,b) => a-b);
 
   // Simulation response detail rows
   const simDetailRows = simulation.map(r => {
-    const floor = SIM_LEVEL_FLOORS[String(r.level)] || 65;
+    // An individual response is judged against the belt's individual minimum, not against the
+    // level average floor it used to borrow.
+    const floor = thresh.individual;
     const isDang = sDangerousIds.includes(r.qId || r.id);
     const score = r.aiScore != null ? Math.round(r.aiScore) : null;
     const scoreClr = score == null ? '#94a3b8' : score >= floor ? '#16a34a' : score >= floor - 10 ? '#d97706' : '#dc2626';
@@ -4724,7 +4936,7 @@ function buildAssessmentReportHTML(pr, staff, fac) {
 
   // Next Belt Target table per §8.3 — 3 rows with gap column
   const nextTargetBelt = (outcome === 'CLEAN' || outcome === 'CONDITIONAL') ? (nextB || targetBelt) : targetBelt;
-  const nextThresh = BELT_THRESHOLDS[nextTargetBelt] || thresh;
+  const nextThresh = sbdSpecOveralls(nextTargetBelt) || thresh;
   const gapStr = (current, required) => { const g = required - current; return g > 0 ? `+${Math.round(g * 10) / 10} pts needed` : 'Already meets'; };
   const gapClr = (current, required) => current >= required ? '#16a34a' : '#d97706';
   const nextBeltTable = `<table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden">
@@ -5429,6 +5641,84 @@ function sbdYearsCardsHTML(s){
     ${card('Years in SPD', s.sbdYears)}
     ${card('Years Certified', s.certYears)}
   </div>`;
+}
+
+// T65: the Dangerous provision as it appears on the profile. The client asked for it to be
+// visible on the account rather than only inside a downloaded PDF, and to stay visible after
+// it is cleared, showing who cleared it and when.
+//
+// Everyone who can see the profile sees this, the person themselves included. A patient-safety
+// provision that the candidate cannot see is not much use to them: the whole point is that a
+// supervisor observes the correct practice and signs it off, and they need to know that is
+// what is outstanding. Only a SIPS admin gets the Clear control.
+function sbdProvisionsHTML(s, context){
+  const all = (s && s.dangerousProvisions) || [];
+  if(!all.length) return '';
+  const open = all.filter(p => !p.cleared_at);
+  const cleared = all.filter(p => p.cleared_at);
+  const canClear = sbdCanClearProvision();
+  const esc = t => Security.sanitize(String(t == null ? '' : t));
+  const when = t => { try { return new Date(t).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); } catch(_){ return ''; } };
+
+  const openRows = open.map((p, i) => `
+    <div style="padding:10px 12px;border-left:3px solid #dc2626;background:#dc26260f;border-radius:0 8px 8px 0;margin-bottom:8px">
+      <div style="font-size:12.5px;font-weight:600;color:var(--txt1);margin-bottom:3px">${esc(p.label) || 'Flagged assessment answer'}</div>
+      <div style="font-size:11.5px;color:var(--txt2);margin-bottom:4px">Answer given: &ldquo;${esc(p.answer) || '(blank)'}&rdquo;</div>
+      <div style="font-size:11px;color:var(--txt3)">Raised ${when(p.flagged_at)}. A supervisor must observe correct practice in this area and sign it off. Written re-study alone does not clear it.</div>
+      ${canClear ? `<button class="btn btn-ok btn-sm" style="margin-top:8px" onclick="clearDangerousProvision('${s.id}', ${all.indexOf(p)}, '${context||''}')">Mark supervised practice complete</button>` : ''}
+    </div>`).join('');
+
+  const clearedRows = cleared.map(p => `
+    <div style="padding:8px 12px;border-left:3px solid var(--ok);background:var(--s1);border-radius:0 8px 8px 0;margin-bottom:6px">
+      <div style="font-size:12px;color:var(--txt2)">${esc(p.label) || 'Flagged assessment answer'}</div>
+      <div style="font-size:11px;color:var(--txt3)">Cleared by ${esc(p.cleared_by_name) || 'an administrator'} on ${when(p.cleared_at)}.</div>
+    </div>`).join('');
+
+  return `<div style="margin-top:12px;max-width:640px">
+    ${open.length ? `<div style="font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#dc2626;margin-bottom:6px">Patient safety provision${open.length>1?'s':''} &middot; open</div>${openRows}
+    <div style="font-size:11px;color:var(--txt3);margin:-2px 0 10px">The belt already held is unaffected. Advancement to the next belt is on hold until this is cleared.</div>` : ''}
+    ${cleared.length ? `<div style="font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--txt3);margin-bottom:6px">Cleared</div>${clearedRows}` : ''}
+  </div>`;
+}
+
+// Clearing is recorded, never deleted: the entry stays on the record with the name and the
+// date of whoever signed it off.
+async function clearDangerousProvision(staffId, index, context){
+  const s = getStaff(staffId);
+  if(!s) { toast('Staff member not found','err'); return; }
+  if(!sbdCanClearProvision()){ toast('Only a SIPS administrator can clear a patient safety provision.','err'); return; }
+  const list = (s.dangerousProvisions || []).slice();
+  const p = list[index];
+  if(!p){ toast('Provision not found','err'); return; }
+  if(p.cleared_at){ toast('That provision is already cleared.','info'); return; }
+  const who = ST.user || {};
+  if(!confirm(`Confirm that a supervisor has directly observed ${fullName(s)} performing this task correctly and has signed it off.\n\nThis is recorded against your name and cannot be undone.`)) return;
+
+  list[index] = Object.assign({}, p, {
+    cleared_by: who.id || null,
+    cleared_by_name: (who.name || fullName(who) || who.email || 'Administrator'),
+    cleared_at: new Date().toISOString(),
+  });
+  s.dangerousProvisions = list;
+
+  if(IS_LIVE){
+    try {
+      // Single-column PATCH, same pattern as mapStaffPSToBackend: a provision clear must never
+      // carry the rest of a possibly-stale staff record with it.
+      await SB.updateStaff(s.id, mapStaffProvisionsToBackend(s));
+    } catch(e){
+      console.warn('Provision clear sync failed:', e);
+      s.dangerousProvisions = (s.dangerousProvisions || []).slice();
+      s.dangerousProvisions[index] = p;   // put it back; nothing was saved
+      toast('Could not save the clearance. Nothing was changed. Please try again.','err');
+      return;
+    }
+  }
+  try { if(typeof logActivity==='function') logActivity('dangerous_provision_cleared', {
+    staffId: s.id, label: p.label, clearedBy: who.id || null, clearedByName: list[index].cleared_by_name
+  }); } catch(_){}
+  toast(`Provision cleared for ${fullName(s)}. Recorded against ${list[index].cleared_by_name}.`,'ok');
+  if(typeof renderHProfile === 'function') renderHProfile(s.id, context || 'admin');
 }
 
 function beltBadge(belt, staff){
@@ -7482,6 +7772,11 @@ function renderSDashboard(){
           <div class="prog mt8 mb12" style="height:10px"><div class="prog-fill" style="width:${win.pct||0}%;background:${win.status==='open'?'var(--ok)':'var(--warn)'}"></div></div>
           ${win.status==='open'&&nb?(canRequestAssessment(s.id,s.belt)
             ? `<button class="btn btn-gold" style="width:100%;justify-content:center;margin-top:8px" onclick="openApplyModal('${s.id}')">${ICO.record} Apply for ${nb} Belt Assessment</button>`
+            // T65: when the hold is a patient-safety provision, say so. Sending someone back to
+            // the practice tests for something only a supervisor sign-off can clear wastes their
+            // time and hides what is actually outstanding.
+            : sbdAdvancementBlock(s)
+            ? `<div style="padding:11px 14px;background:rgba(220,38,38,.08);border:1px solid rgba(220,38,38,.3);border-radius:var(--rs);font-size:12px;color:var(--txt2);text-align:left;margin-top:8px;line-height:1.5">${sbdAdvancementBlock(s)}</div>`
             : `<div style="padding:11px 14px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:var(--rs);font-size:12px;color:var(--txt2);text-align:center;margin-top:8px;line-height:1.5">Complete your ${s.belt} Belt Knowledge and Simulation practice tests at 80% or higher to unlock your assessment request.<div style="margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="sNav(document.querySelector('#s-portal .nav-item[data-view=s-study]'),'s-study','Study &amp; Practice')">Go to Study &amp; Practice</button></div></div>`
           ):''}
           ${win.status==='closed'?`<div style="padding:10px;background:var(--err-bg);border:1px solid var(--err-bd);border-radius:var(--rs);font-size:12px;color:var(--err);text-align:center;margin-top:8px">Window closed. Keep training – it reopens automatically.</div>`:''}
@@ -7525,6 +7820,10 @@ function openApplyModal(sid){
   if(!nb){toast('Already at maximum belt level.','info');return;}
   const win=getWindowStatus(s);
   if(win.status!=='open'){toast('Assessment window is not currently open.','err');return;}
+  // T65: an open patient-safety provision holds advancement, and the candidate is told what the
+  // hold actually is rather than being sent back to the practice tests.
+  const hold=sbdAdvancementBlock(s);
+  if(hold){toast(hold,'err');return;}
   // #120 (Ignacio, 2026-07-22): the Study & Practice request path already gates on the current-belt
   // practice tests (canRequestAssessment); this Apply path did not, so a request could be filed with
   // no practice done. Close that same gate here. (Master-admin override is a separate additive flag.)
@@ -7562,6 +7861,8 @@ function submitApply(sid,gate,targetBelt){
   const s=getStaff(sid);
   if(!s)return;
   // #120: defense in depth — never queue a request when the current-belt practice gate isn't met.
+  const hold=sbdAdvancementBlock(s);
+  if(hold){ toast(hold,'err'); return; }
   if(!canRequestAssessment(s.id, s.belt)){ toast('Complete both practice tests at 80% or above before requesting.','err'); return; }
   const gateLabel={c:'Competency',s:'Simulation',o:'Observation'}[gate];
   // T29: this path had no duplicate check, which is how one person ended up with eleven
@@ -8753,9 +9054,24 @@ function savePracticeScore(belt, mode, score, total) {
   if (typeof logActivity === 'function') logActivity('practice_complete', { belt, mode, pct });
 }
 
+// T65: the reason advancement is on hold, or null if it is not. Separate from the practice
+// gate because the two are cleared in completely different ways and a candidate told to go
+// and re-sit a practice test when the actual hold is a supervisor sign-off has been sent to
+// the wrong place.
+function sbdAdvancementBlock(s){
+  if (sbdHasOpenProvision(s)) {
+    return 'An open patient safety provision is on this account. A supervisor must observe correct practice in that area and sign it off before the next belt can be requested. The current belt is unaffected.';
+  }
+  return null;
+}
+
 function canRequestAssessment(staffId, belt) {
   const s = getStaff(staffId || ST.staffId);
   if (!s) return false;
+  // An open patient-safety provision is checked BEFORE the waiver. The #120 override waives
+  // the practice-score gate, which is a scoring judgement; it is not a waiver of a supervisor
+  // sign-off on a safety finding, and must not become one by accident.
+  if (sbdAdvancementBlock(s)) return false;
   // #120 master-admin override: an explicit waiver lets this candidate request regardless of practice.
   if (s.assessmentGateOverride && s.assessmentGateOverride.waived) return true;
   if (!s.practiceScores || !s.practiceScores[belt]) return false;
@@ -8775,6 +9091,8 @@ function requestGateAssessment(belt, type) {
   // Qualification is earned on the CURRENT belt's practice tests; `belt` is the
   // target (next) belt being requested. Validating against `belt` here is what
   // made every request bounce (ASS-F1) — the unlock banner reads current-belt scores.
+  const _hold = sbdAdvancementBlock(s);
+  if (_hold) { toast(_hold, 'err'); return; }
   if (!canRequestAssessment(s.id, s.belt)) {
     toast('Complete both practice tests at 80% or above before requesting.', 'err');
     return;
@@ -10058,6 +10376,7 @@ function renderHProfile(sid,context){
         <div style="margin-bottom:8px">${beltBadge(s.belt)} <span style="font-size:12px;color:var(--txt3);margin-left:6px">${BELT_CERT[s.belt]}</span></div>
         <div class="prof-meta"><span class="pmeta"><svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="2" y="3" width="10" height="10" rx="1" stroke="currentColor" stroke-width="1.3"/><path d="M5 1v3M9 1v3M2 7h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>Since ${s.since || '—'}</span><span class="pmeta">${daysAtPhrase(s.since)} at current belt</span>${s.stars>0?`<span class="pmeta tc-gold">${'* '.repeat(s.stars).trim()}</span>`:''}</div>
         ${sbdYearsCardsHTML(s)}
+        ${sbdProvisionsHTML(s, context)}
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         ${context==='admin'?`<button class="btn btn-gold btn-sm" onclick="openRecordModal('${s.id}')">${ICO.record} Record Assessment</button>`:''}
