@@ -46,8 +46,7 @@ const slices = [
   'const LEVEL_LABELS',
   'function sbdKnowledgeFloor(',
   'function sbdSimFloor(',
-  'const DANGEROUS_PATTERNS',
-  'const _DANGEROUS_RISKS',
+  'function sbdIsDangerousResponse(',
   'function _dangerousRiskDesc(',
   'function detectDangerousAnswers(',
   'function deriveOutcome(',
@@ -57,7 +56,8 @@ const slices = [
 const mod = new Function('BELT_TEST_CONFIG', 'window', slices + `
   return { sbdKnowledgeOverall, sbdSuggestBelt, sbdBeltThresholds, sbdSpecFloors,
            sbdSpecOveralls, sbdKnowledgeFloor, sbdSimFloor, rptComputeModel, deriveOutcome,
-           sbdBuildProvisions, sbdOpenProvisions, sbdHasOpenProvision, sbdAdvancementBlock };
+           sbdBuildProvisions, sbdOpenProvisions, sbdHasOpenProvision, sbdAdvancementBlock,
+           sbdIsDangerousResponse, detectDangerousAnswers, _dangerousRiskDesc };
 `)(BELT_TEST_CONFIG, undefined);
 
 // ---------------------------------------------------------------- Williams' stored responses
@@ -218,6 +218,32 @@ check('a correct answer to a dangerous question raises nothing',
 check('a wrong answer to an unflagged question raises nothing',
   mod.sbdBuildProvisions([{ type:'knowledge', level:1, qId:'k', isDangerous:false, correct:false }], 'r').length, 0);
 check('no provisions means no hold', mod.sbdAdvancementBlock({ id:'y' }), null);
+
+console.log('\n=== the dangerous flag is the authored one, not prose matching ===');
+// The regex detector used to fire on this sentence because of "skip ... decontamination".
+// It is the CORRECT answer, and no report should ever raise a safety finding against it.
+const correctButPatternish = { type: 'simulation', level: 2, qId: 'p10',
+  answer: 'I would respond that under no circumstances should a visibly soiled instrument skip the full decontamination process.' };
+check('a correct simulation answer containing "skip the full decontamination" is not flagged',
+  mod.detectDangerousAnswers([correctButPatternish]), [],
+  mod.detectDangerousAnswers([correctButPatternish]).length === 0);
+const authoredWrong = { type: 'knowledge', level: 1, qId: 'p6', isDangerous: true, correct: false,
+  answer: 'Clean to dirty', correctAnswer: 'Dirty to clean, one direction only',
+  question: 'Which of the following is the correct workflow direction in SPD?' };
+check('the authored flag on a picked option IS flagged',
+  mod.detectDangerousAnswers([authoredWrong]), ['p6'],
+  JSON.stringify(mod.detectDangerousAnswers([authoredWrong])) === JSON.stringify(['p6']));
+check('a flagged option the candidate got right is not flagged',
+  mod.detectDangerousAnswers([Object.assign({}, authoredWrong, { correct: true })]).length, 0);
+check('the report and the account provision name the same item',
+  mod.detectDangerousAnswers([authoredWrong, correctButPatternish]).join(),
+  mod.sbdBuildProvisions([authoredWrong, correctButPatternish], 'r').map(p => p.qid).join());
+const riskLine = mod._dangerousRiskDesc(authoredWrong);
+check('the risk line quotes what was picked and what was correct', riskLine,
+  'Answered "Clean to dirty" where the correct handling is "Dirty to clean, one direction only". Acting on this in the department would create a direct patient safety risk.');
+check('the risk line falls back cleanly when the correct answer was not stored',
+  mod._dangerousRiskDesc({ answer: 'Clean to dirty' }),
+  'Answered "Clean to dirty". Acting on this in the department would create a direct patient safety risk.');
 
 console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : failures + ' CHECK(S) FAILED'}`);
 process.exit(failures === 0 ? 0 : 1);
