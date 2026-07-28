@@ -1003,6 +1003,86 @@ persisted.
   option picked and the correct handling. Our idea, not a client request, and the wording that
   is there now is accurate without it.
 
+- [ ] **T66** The AI notes revert, and the report disagrees with the interface · est unknown until reproduced · **High**
+  Raised by the client in the recorded meeting of 2026-07-28, three separate times in one call,
+  which is how much it is bothering him: *"I'm not sure why the AI notes keep reverting back,
+  keep reverting back, keep reverting back"* and *"now with the UI, the report says one thing,
+  the UI says something else"*.
+
+  **Part of the second half is already fixed and he has not seen it yet.** T65b closed two cases
+  of the report disagreeing with itself: the Level Score Snapshot printed a pass against a
+  threshold that does not exist while the cards beside it printed a fail against the real floor,
+  and the placeholder belt made the whole document report against the wrong belt. Both shipped on
+  2026-07-27 in v191.
+
+  What is **not** explained is the reverting. Nothing in this ledger writes AI notes, and no
+  item here has ever been observed to revert. It is not ours as far as anything measured shows,
+  but it is unowned, and unowned is how it has survived three meetings.
+
+  *Goal:* Either the reverting is reproduced and attributed, or it is shown to be one of the
+  cases already closed and the client is told which.
+  *Done when:* Somebody has reproduced it on the live site with the steps written down, or has
+  confirmed against the stored data that the note never changed and the display was stale. Until
+  one of those exists, no estimate on this is worth anything.
+
+- [ ] **T67** The access control must survive the database migration · est 0.5d to prepare · **Critical**
+  Raised 2026-07-28 from the recorded meeting. A schema migration onto a new database was
+  described as *"at least two weeks from now"*, with the current database being backed up and a
+  new one built to a new schema, then the application pointed at it.
+
+  **Why this outranks almost everything else open.** Access control on this platform is not in
+  the table definitions. It is in 61 row level security policies across 15 tables, 5 guard
+  triggers, and 13 helper functions those policies call. A migration that copies tables and data
+  perfectly can still arrive with every one of those missing, and **nothing will look broken**,
+  because losing a policy opens a table rather than closing it. The screens keep working. That is
+  precisely how the original defects went unnoticed for months.
+
+  What would silently come back: a staff member reading and editing all 49 placement decisions;
+  any signed-in account approving its own gate request; a user setting their own belt, stars,
+  gates, facility or role; 96 people's passwords readable in the clear; a candidate clearing
+  their own patient safety provision.
+
+  *Prepared 2026-07-28:* `supabase/verify/post_migration_check.sql`. It is read-only, creates
+  nothing and takes no locks. It returns PASS or FAIL for each of 50 checks covering RLS state,
+  the helper functions with their security-definer and search_path settings, the four guard
+  triggers, the absence of always-true policies on the nine protected tables, thirteen columns
+  the application depends on, four column types that were silently wrong before, and the
+  plaintext password purge. **Run against production on 2026-07-28: 50 of 50 PASS**, so it is a
+  working test rather than a wish list.
+
+  *Goal:* Whoever performs the migration has the check in hand before it runs, not after.
+  *Done when:* The script has been handed over and acknowledged, and it returns 50 PASS against
+  the new database before the application is pointed at it. Also verify by behaviour afterwards,
+  because a policy can exist and still be wrong: sign in as a staff member and confirm they see
+  only their own record and cannot approve their own gate request.
+
+- [ ] **T68** Every fix ships with proof that it is live · est 0.25d per item, ongoing · **High**
+  The client's standing instruction from the recorded meeting of 2026-07-28, and he was blunt
+  about the cause: *"I want to make sure that you have actually tested them yourself... vs just
+  the LLM or the AI telling you what's been updated... many times you've shared things have been
+  updated... but the issue won't be live in the actual application, or one is live, it is broken
+  something else."* What he asked for specifically is *"a screen recording... showing that you've
+  tested to make sure that it's live vs the code telling you it's live"*.
+
+  The substance is already covered here: nothing is ticked on one pass, and every merge this week
+  was followed by fetching the production bundle and comparing the version. What is **not**
+  covered is the artefact. He wants to watch it work, not read that it works.
+
+  *Goal:* No item is reported as live without something he can watch.
+  *Done when:* A short screen recording accompanies each item reported complete, showing the
+  change working on the live site, and the EOD links them.
+
+- [ ] **T69** Show which AI model is currently serving · est 0.5d · Medium
+  Requested in the recorded meeting of 2026-07-28. He asked for *"an arrow that says which model
+  is currently active and being used"*, visible to master admin only, not to every user, and
+  explicitly not full token accounting: *"we don't necessarily have to categorize all of the
+  tokens... but just say if I log in and Anthropic is down, I can see what model is active"*.
+  Context is a fallback discussion: reports came back blank over the weekend, attributed in part
+  to an upstream outage, and he wants to be able to see that state himself rather than ask.
+  *Goal:* A master admin can tell at a glance which model is answering right now.
+  *Done when:* The current model is shown somewhere a master admin already looks, it reflects a
+  fallback having taken over, and no other role sees it.
+
 ### Blocked, not on the critical path
 
 - [ ] **T49** Strip and rotate the PSOP credentials, gate the public page
@@ -1026,7 +1106,10 @@ persisted.
 
 ## Totals
 
-**Updated 2026-07-27, after a working night.** 35 items done, 36 open.
+**Updated 2026-07-28.** 35 items done, 40 open. Four were added on 28 July from the recorded
+client meeting of that date, which had not reached this ledger at all: T66 the reverting AI
+notes, T67 surviving the database migration, T68 proof-by-recording, T69 the model indicator.
+T67 is the one that outranks the rest of the open list.
 
 | Group | Open | Items | Est. days |
 |---|---|---|---|
@@ -1035,9 +1118,10 @@ persisted.
 | Phase 3 | 11 | T39 to T48 | 9.35 |
 | Found during Phase 1 | 6 | T54, T56, T58, T59, T60, T62 | 2.10 |
 | Raised by the client | 3 | T63, T64, T65 | 1.75 |
+| From the 2026-07-28 meeting | 4 | T66, T67, T68, T69 | 1.25 + unknown |
 | &nbsp;&nbsp;of which awaiting QA sign-off only | 1 | T65 (built, live, measured) | 0 |
 | Blocked on somebody else | 4 | T49 to T52 | not counted |
-| **Total, excluding blocked** | **34** | | **22.95** |
+| **Total, excluding blocked** | **38** | | **24.2 + unknown** |
 
 **Waiting on a live QA pass, not on building:** T26, T27, T28, T28a and now T65. All five are
 written, merged and running on production with measurements recorded here. What they need is
