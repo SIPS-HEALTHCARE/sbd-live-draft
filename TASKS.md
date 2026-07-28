@@ -1024,21 +1024,42 @@ persisted.
   over the same weekend were attributed separately to a background data-migration tool failing
   and an upstream model outage.
 
-  So this is not an unowned mystery. It is owned, the cause is stated, and a fix is claimed to be
-  known. What is missing is a date and any confirmation that the fix actually shipped, which
-  matters because it is the same class of problem the client is complaining about: being told
-  something is fixed without being shown it live.
+  So this is not an unowned mystery. It is owned and the cause is stated.
+
+  **The date was in the transcript all along. Added 2026-07-28 on a full read.** This entry said
+  what was missing was a date and any confirmation the fix had shipped. The date is there: later
+  in the same call, asked about the wider pipeline, the same developer said *"currently for like
+  today and tomorrow we are working on the AI fix because like we have to have like one AI
+  analysis for all of the side. So we are deploying on that."* The call was 2026-07-28, so that
+  is **28 and 29 July**. A claim of deployment, not evidence of one, which is exactly the
+  distinction the client is complaining about, so it is recorded as a claim.
+
+  *One operational consequence, and it lands on our QA rather than on this item.* Somebody else
+  is deploying into the AI notes and suggestions area on 28 and 29 July, which are the same days
+  the live QA pass runs. Anything odd seen in that area during the pass is not a regression from
+  v191 and should be time-stamped and set aside rather than chased. Written into the 29 July
+  brief so the QA pass does not lose an hour to it.
 
   *Goal:* The client stops seeing notes revert, and knows which of his two complaints was ours
   and which was not.
-  *Done when:* The other developer confirms the two-paths fix is live with something showing it,
-  and the client is told plainly that the report-versus-interface half was ours and went out on
-  27 July in v191. Nothing here needs building unless that fix does not hold.
+  *Done when:* The two-paths fix is confirmed live with something showing it, the claimed 28 to
+  29 July window having passed, and the client is told plainly that the report-versus-interface
+  half was ours and went out on 27 July in v191. Nothing here needs building unless that fix does
+  not hold.
 
 - [ ] **T67** The access control must survive the database migration · est 0.5d to prepare · **Critical**
   Raised 2026-07-28 from the recorded meeting. A schema migration onto a new database was
   described as *"at least two weeks from now"*, with the current database being backed up and a
   new one built to a new schema, then the application pointed at it.
+
+  *Three details from the transcript, added 2026-07-28, because they change who this goes to and
+  where it lands.* It stays on the **same Supabase account**: *"we just shift the new database to
+  our app and it's still on the same account, nothing else"*. Asked directly whether a new project
+  had been created for it, the answer was **"nope, not yet"**, so as of the call it had not
+  started. And it is **not** going into the PSOP project. That project is the client's own,
+  created for the SOP tool, and he raised it separately as an open question rather than as the
+  migration's destination. Anyone reading "a second project exists" as "the migration has a home"
+  is reading two different conversations as one.
 
   **Why this outranks almost everything else open.** Access control on this platform is not in
   the table definitions. It is in 61 row level security policies across 15 tables, 5 guard
@@ -1092,6 +1113,14 @@ persisted.
   *Goal:* A master admin can tell at a glance which model is answering right now.
   *Done when:* The current model is shown somewhere a master admin already looks, it reflects a
   fallback having taken over, and no other role sees it.
+  **Corrected 2026-07-28 after reading the transcript: this is not ours to build.** It was
+  logged here as our work off the meeting summary. In the recording it was given to the other
+  developer, bundled with an instruction to investigate the routing layer and report back what
+  is actually possible, and that developer had already said "I have to dig more into that".
+  Two details worth keeping either way, because they narrow the design if it ever does come to
+  us: he named the placement himself, *"in the dashboard or maybe in the command center"*, and
+  the other developer's own answer was *"we can show model, but just for the master admin and
+  not for all the users"*. Tracked, not built.
 
 ### Blocked, not on the critical path
 
@@ -1103,6 +1132,25 @@ persisted.
   *Blocked on:* T49.
   *Goal:* The SOP tool runs the same David as the belt platform, with usage attributed separately.
   *Done when:* David answers inside PSOP and its usage appears under the SOP tool column, not mixed into the belt platform's.
+  **No longer blocked, and no longer parked. Corrected 2026-07-28 from the transcript.** The
+  client opened this himself in the meeting: *"I want to go ahead and start working on PSOP"*,
+  and he expects Tuesday and Wednesday spent understanding it. He is sending the original HTML
+  and a live demo link by email and by chat. Two constraints he stated, both of which shape the
+  reading rather than the build: David does **not** get wired up yet, but the code should be read
+  knowing it has to be, and facilities have to line up across both platforms so an SOP written at
+  a given facility can reference that same facility. T49 still gates the credentials work, but it
+  does not gate reading the code.
+  - [ ] **T50a** Answer the client's own question: one Supabase project or two · est 0.1d
+    He asked it in the meeting and **nobody answered him**: *"I created a separate project in
+    supabase for PSOP, but I don't know if that will be better or coming out of the same project
+    since we'll be leveraging the memory and understanding of the facilities and the user. But
+    I've already created that. If we don't need it, that's fine."*
+    It is not a preference question. Sharing facilities and users across both tools means one
+    project; separate projects means the SOP tool cannot see the facility a person belongs to
+    without a second copy of that data, which is a synchronisation problem nobody has budgeted
+    for. It also interacts with T67: a second live database doubles what a migration has to carry.
+    *Goal:* He has a recommendation with the reason, rather than an unanswered question he raised.
+    *Done when:* The answer is sent, with what each option costs, and the decision is recorded here.
 - [ ] **T51** Black Belt observation checklist content
   *Blocked on:* Dr. Jake.
   *Goal:* The Black Belt observation instrument has real items in it instead of being an empty shell.
@@ -1116,10 +1164,33 @@ persisted.
 
 ## Totals
 
-**Updated 2026-07-28.** 35 items done, 40 open. Four were added on 28 July from the recorded
+**Updated 2026-07-28.** 35 items done, 41 open. Four were added on 28 July from the recorded
 client meeting of that date, which had not reached this ledger at all: T66 the reverting AI
 notes, T67 surviving the database migration, T68 proof-by-recording, T69 the model indicator.
 T67 is the one that outranks the rest of the open list.
+
+**Amended later the same day, after reading the meeting transcript in full rather than working
+from the summary.** Four entries were wrong or incomplete and are corrected in place with the
+quote each correction rests on:
+
+- **T69 is not ours.** It was given to the other developer in the call. Tracked, not built.
+- **T66 has its date.** The two-paths fix was claimed as deploying 28 and 29 July. That is a
+  claim of deployment rather than evidence of one, and it is recorded as a claim.
+- **T67 stays on the same Supabase account**, no project for it existed as of the call, and it
+  is **not** going into the PSOP project. Two separate conversations had been read as one.
+- **T50 is not parked.** The client opened PSOP himself and expects Tuesday and Wednesday on it.
+  T50a is new: he asked whether PSOP should be one project or two and nobody answered him.
+
+*Recorded, not numbered, because nothing was asked of us:* a third technology acquired from
+another set of developers will be presented alongside the belt platform and the SOP tool. It has
+an older interface and the client expects the other two to look modern beside it. No work was
+requested, so it is not a task, but it is here so it is not a surprise later.
+
+*Also stated in the call and worth holding to:* the client's first priority in his own words is
+reports generating properly with all the notes, the interface suggestions matching what is on the
+report, and both matching the scoring logic. That is T65, now built and live, plus T40. And he
+said he will set deadlines for everything at the Friday 1 PM meeting on 31 July, which is worth
+walking into with this list rather than receiving one.
 
 | Group | Open | Items | Est. days |
 |---|---|---|---|
@@ -1128,10 +1199,18 @@ T67 is the one that outranks the rest of the open list.
 | Phase 3 | 11 | T39 to T48 | 9.35 |
 | Found during Phase 1 | 6 | T54, T56, T58, T59, T60, T62 | 2.10 |
 | Raised by the client | 3 | T63, T64, T65 | 1.75 |
-| From the 2026-07-28 meeting | 4 | T66, T67, T68, T69 | 1.25 + unknown |
+| From the 2026-07-28 meeting | 4 | T66, T67, T68, T69 | 0.75 + unknown |
+| &nbsp;&nbsp;of which tracked only, not ours to build | 2 | T66, T69 | 0 |
 | &nbsp;&nbsp;of which awaiting QA sign-off only | 1 | T65 (built, live, measured) | 0 |
-| Blocked on somebody else | 4 | T49 to T52 | not counted |
-| **Total, excluding blocked** | **38** | | **24.2 + unknown** |
+| Active on the SOP tool | 2 | T50, T50a | 0.10 + unknown |
+| Blocked on somebody else | 3 | T49, T51, T52 | not counted |
+| **Total, excluding blocked** | **40** | | **23.8 + unknown** |
+
+*Note on these totals, since they do not reconcile and did not before this edit either.* 41 open
+minus 3 blocked is 38, not 40, because the group rows double-count a few items that sit in more
+than one grouping. The existing convention was kept rather than silently re-deriving it, so the
+movement is readable against the previous version. Worth rebuilding properly in one pass rather
+than nudging it each time, but that is a separate job and not this one.
 
 **Waiting on a live QA pass, not on building:** T26, T27, T28, T28a and now T65. All five are
 written, merged and running on production with measurements recorded here. What they need is
