@@ -1056,26 +1056,27 @@ persisted.
   half was ours and went out on 27 July in v191. Nothing here needs building unless that fix does
   not hold.
 
-- [ ] **T67** The access control must survive the database migration · est 0.5d to prepare · **Critical**
+- [ ] **T67** The access control must survive the database migration · est 0.5d to prepare · **Parked**
   Logged 2026-07-28 from the recorded meeting of **2026-06-29**. A schema migration onto a new database was
   described as *"at least two weeks from now"*, with the current database being backed up and a
   new one built to a new schema, then the application pointed at it.
 
-  **The window he named has already expired. Corrected 2026-07-28.** This was logged as though the
-  call had just happened, so "at least two weeks from now" read as a fortnight of runway. The call
-  was 29 June. Two weeks from there was **13 July, which was 15 days ago.**
+  **PARKED 2026-07-28 by Shawn. The premise was never confirmed.**
 
-  | | |
-  |---|---|
-  | Meeting | 2026-06-29 |
-  | "At least two weeks from now" lands | 2026-07-13 |
-  | Today | 2026-07-28, **15 days past it** |
-  | New project created? | **No.** Checked 2026-07-28: one organisation, two projects, both known, no third. |
+  This was logged as Critical off a single description in a recorded call, and then written up as
+  though the clock were running. Two things undo that. The call was **2026-06-29**, not 28 July, so
+  "at least two weeks from now" pointed at **13 July**, which is already past. And checked on
+  2026-07-28: **no new project exists**, one organisation and two known projects, so nothing has
+  started in the month since.
 
-  So the migration has slipped well past its own estimate and has still not begun. That is not a
-  reason to relax. It means **there is no schedule left to plan against**, and it can start on any
-  day without notice, which is precisely the case the check has to be in somebody's hands before.
-  Read as urgent rather than upcoming.
+  Nobody has confirmed that this migration is still planned, or that it is ours to prepare for.
+  It was an estimate given once, by another developer, in a call a month old. **An estimate that
+  has quietly lapsed is not a deadline, and treating it as one manufactured an urgency nobody
+  asked for.** Parked until somebody says it is real.
+
+  *Nothing is lost by parking it.* `supabase/verify/post_migration_check.sql` is written, merged
+  and verified at 74 of 74 PASS against production. If the migration does surface, the check is
+  ready that day rather than needing to be built. Parking the task does not park the protection.
 
   *Three details from the transcript, added 2026-07-28, because they change who this goes to and
   where it lands.* It stays on the **same Supabase account**: *"we just shift the new database to
