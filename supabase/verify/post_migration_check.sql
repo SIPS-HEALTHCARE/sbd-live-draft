@@ -240,6 +240,11 @@ order by result desc, check_name;
 -- ============================================================================
 -- Expected on a correct migration: every row PASS.
 --
+-- Run in full against production on 2026-07-28: 74 checks, 74 PASS, 0 FAIL.
+-- That matters twice over. It says the current database is intact, and it says
+-- these checks are calibrated against a known-good database rather than written
+-- from hope, so a FAIL on the new one is a real signal and not a false alarm.
+--
 -- Counted on the current production database on 2026-07-28, for comparison:
 --   61 policies across 15 tables
 --   6 guard triggers, including the two Foundations and Instruments progress guards
