@@ -1005,7 +1005,9 @@ persisted.
 
 - [ ] **T66** The AI notes revert, and the report disagrees with the interface · est unknown until reproduced · **High**
   Raised by the client in the recorded meeting of 2026-07-28, three separate times in one call,
-  which is how much it is bothering him: *"I'm not sure why the AI notes keep reverting back,
+  which is how much it is bothering him. **Tracked here so it is not lost, not because it is our
+  build.** Half of it was ours and is already closed; the other half belongs to another developer
+  who named the cause in the same call.: *"I'm not sure why the AI notes keep reverting back,
   keep reverting back, keep reverting back"* and *"now with the UI, the report says one thing,
   the UI says something else"*.
 
@@ -1015,15 +1017,23 @@ persisted.
   and the placeholder belt made the whole document report against the wrong belt. Both shipped on
   2026-07-27 in v191.
 
-  What is **not** explained is the reverting. Nothing in this ledger writes AI notes, and no
-  item here has ever been observed to revert. It is not ours as far as anything measured shows,
-  but it is unowned, and unowned is how it has survived three meetings.
+  **The reverting is not ours and it is not unexplained.** *Corrected 2026-07-28 after reading
+  the transcript properly the second time.* In the same call another developer gave the cause and
+  claimed it: *"we declared like a universal AI recommendation or AI suggestions that we had, but
+  it got like two paths. So that's on me... we already know that fix."* The blank report pages
+  over the same weekend were attributed separately to a background data-migration tool failing
+  and an upstream model outage.
 
-  *Goal:* Either the reverting is reproduced and attributed, or it is shown to be one of the
-  cases already closed and the client is told which.
-  *Done when:* Somebody has reproduced it on the live site with the steps written down, or has
-  confirmed against the stored data that the note never changed and the display was stale. Until
-  one of those exists, no estimate on this is worth anything.
+  So this is not an unowned mystery. It is owned, the cause is stated, and a fix is claimed to be
+  known. What is missing is a date and any confirmation that the fix actually shipped, which
+  matters because it is the same class of problem the client is complaining about: being told
+  something is fixed without being shown it live.
+
+  *Goal:* The client stops seeing notes revert, and knows which of his two complaints was ours
+  and which was not.
+  *Done when:* The other developer confirms the two-paths fix is live with something showing it,
+  and the client is told plainly that the report-versus-interface half was ours and went out on
+  27 July in v191. Nothing here needs building unless that fix does not hold.
 
 - [ ] **T67** The access control must survive the database migration · est 0.5d to prepare · **Critical**
   Raised 2026-07-28 from the recorded meeting. A schema migration onto a new database was
