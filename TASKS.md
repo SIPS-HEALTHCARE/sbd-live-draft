@@ -1200,8 +1200,13 @@ persisted.
   toggle is not offered at all. Anything else recreates the client-side role flip that has been
   removed everywhere else on the platform.
 
-  *Open before building:* which roles get the toggle, and whether the choice persists across sign
-  ins or resets to the primary portal each time.
+  *Answered 2026-07-29 by Shawn:* the toggle is for **master admin and SIPS admin only**. Nobody
+  below that sees it, which keeps the surface small and means the first version cannot widen access
+  for anyone who is not already a SIPS-side account.
+
+  *Still open:* whether the choice persists across sign ins or resets to the primary portal each
+  time. Worth deciding before building rather than after, because persisting it means storing a
+  preference per user and resetting it means storing nothing.
 
   *Goal:* A person holding more than one role reaches all of their own portals without signing out.
   *Done when:* Somebody with two roles sees the toggle and moves between portals; somebody with one
