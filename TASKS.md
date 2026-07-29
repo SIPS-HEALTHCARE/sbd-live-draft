@@ -1283,6 +1283,29 @@ persisted.
   `effIsAssessor` on the client. Server side goes live the moment it lands with no build in between,
   so the migration and the frontend have to agree before either ships. Depends on T75.
 
+  **Blast radius, measured against the live database 2026-07-29.** `sbd_is_assessor()` is zero-arg,
+  `STABLE SECURITY DEFINER`, and reads `role = 'assessor' OR capabilities->>'assessor'`. It is called
+  by **14 policies across 6 tables**:
+
+  | Table | Policies | Facility column | Scoping route |
+  |---|---|---|---|
+  | `observations` | 2 | `fid` | direct |
+  | `observation_remediations` | 3 | `fid` | direct |
+  | `ps_completion_requests` | 2 | `facility_id` | direct |
+  | `sbd_assessment_queue` | 2 | `facility_id` | direct |
+  | `observation_overrides` | 2 | none, `staff_id` only | **needs a join** |
+  | `observation_audits` | 3 | none, `observation_id` only | **needs a join** |
+
+  Two of the six carry no facility of their own, so those five policies can only scope by joining out
+  to reach one, and a join inside a policy runs per row. Those are the expensive ones and the reason
+  this is 3d and not 1d.
+
+  *Approach that avoids a flag day:* add an **overload** `sbd_is_assessor(p_fid)` rather than change
+  the meaning of the zero-arg function underneath all 14 policies at once. The zero-arg version keeps
+  its job of answering "is this person an assessor at all", which is what nav visibility needs and what
+  `effIsAssessor` mirrors on the client. Policies then migrate table by table, each one revertible on
+  its own, instead of one migration that moves every gate simultaneously.
+
   *Still open, asked 2026-07-30 and not yet answered:* whether Observer and the practice-gate waiver
   follow the same rule. He did not name either in the voice notes, so they are out of scope until he
   says otherwise.
