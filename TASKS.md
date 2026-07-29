@@ -1212,6 +1212,93 @@ persisted.
   *Done when:* Somebody with two roles sees the toggle and moves between portals; somebody with one
   role never sees it; and a toggled view is proven to grant nothing the account did not already have.
 
+- [x] **T73** A granted assessor whose base role is staff member has no assessor tab · est 0.5d · High
+  Reported by the client on 2026-07-30 at 1:38 AM: *"when role is change to grant assessor access no
+  assessment tab is visible in the update account"*, with *"Kirti Chaudhary was given assessor role
+  but no assessor tab is viewable"* and a screenshot of her staff portal sidebar.
+
+  **The grant was never the problem.** All three granted accounts carry the capability correctly in
+  `sbd_portal_users.capabilities`. What fails is which portal the account lands in. `ui-views.js`
+  `roleMap` maps on `ST.user.role` alone and never reads capabilities, so a granted assessor whose
+  base role is `staff_member` is routed to `s-portal`, and the assessor consoles only ever existed in
+  `a-portal`. Permission held, no door to walk through.
+
+  Measured blast radius on 2026-07-29. Three accounts hold an assessor grant. Avery Henderson is
+  `staff_admin`, routes to the admin portal, and has always worked, which is why nothing looked
+  broken until a staff member was granted it. Kirti Chaudhary and Amy Cooper are both `staff_member`
+  and both blank from the same cause. Their `educator_facilities` grants, four between them, were
+  dead for the same reason.
+
+  **Why the staff portal gets the consoles rather than routing these accounts to the admin portal.**
+  T72 already settled that the portal switcher is master admin and SIPS admin only. Routing a granted
+  staff member into the admin portal would contradict that decision and hand them a surface far wider
+  than the grant. So the two consoles mount inside the portal the person is already in.
+
+  Fixed 2026-07-29. `renderAObservations` and `renderAObservationReviews` turned out to be portal
+  neutral already, with no `ST.curFid`, no facility switcher and no admin role gate, and both already
+  gate writes through the capability-aware `_canWriteObs`. Their only coupling was a hardcoded
+  container id each. Replaced with a shared `ovsMount` container, the same approach the file already
+  uses for the DAVID mount, so the fifteen argument-less re-renders in that section needed no change.
+  `effIsAssessor()` at `ui-views.js:10190` was written for exactly this job and had zero callers since
+  it was added; it now gates the nav and is re-checked inside `renderSView` so a saved view in
+  `sessionStorage` cannot route a plain staff member to a console.
+
+  Frontend only. No schema change, no RLS change, no migration, so it needs the Vercel build to go
+  live and is not live at merge.
+
+  *Goal:* Being granted assessor access produces the assessor screens, whatever the base role is.
+  *Done when:* Kirti and Cooper each see Observations and Observation Reviews and can record and
+  confirm; Henderson is unchanged; a staff member without the grant sees no assessor nav and cannot
+  reach either view by restoring a saved one. Verified against the three live records: the gate
+  returns true for all three granted accounts and false for a plain staff member and a plain manager.
+
+- [ ] **T74** Assessor rights are system wide and need to be per facility · est 2.5d · High
+  Asked for by the client on 2026-07-30 at 1:33 AM: *"No longer system wide... just by facility like
+  this"*, then widened at 1:35 AM to *"this should be for all role management by facility"*, and
+  prioritised at 1:45 AM: *"We are expanding our team of assessors to handle new hires that we will
+  test... so updating these functions for the assessor should move toward the front of the Que"*.
+
+  Assessor is a bare boolean in `capabilities` with no facility attached, which was the original
+  spec, not an oversight. `educator_facilities` already stores an array of facility ids and
+  `effLeadsFacility` already scopes against it, so the shape to copy exists in the codebase.
+
+  **This one is not a UI change.** It moves the assessor gate from "is this person an assessor" to
+  "is this person an assessor *here*", which touches `sbd_is_assessor` and every policy that calls
+  it, plus `_canWriteObs` and `effIsAssessor` on the client. Server side goes live the moment it
+  lands, with no build in between, so the migration and the frontend have to agree before either
+  ships. Depends on T75, because per-facility scoping is chosen from that picker.
+
+  *Still open, asked of the client and not yet answered:* whether Observer, Preceptor access and the
+  practice-gate waiver also go per facility, or whether assessor is the only one that matters for the
+  new-hire testing being ramped up. That answer is the difference between one change and four.
+
+  *Goal:* An assessor confirms only at the facilities they were granted, and the server enforces it.
+  *Done when:* A per-facility assessor can record and confirm at a granted facility, is refused at a
+  non-granted one by RLS and not only by the UI, and no existing system-wide assessor silently loses
+  or gains reach during the migration.
+
+- [ ] **T75** The facility picker used for granting access lists entries nobody can choose safely · est 0.5d · Medium
+  Found on 2026-07-29 while verifying T73, not reported by the client.
+
+  `ui-views.js` builds the Role Management grant dropdown from `(DB.facilities||[])` with no filter.
+  That list is eleven rows and contains two pairs sharing a name, three inactive facilities, three
+  test facilities and one `Free Agent` holding entry. The admin facility switcher in `enterPortal`
+  filters on `f.active!==false`. This dropdown does not.
+
+  It has already produced a wrong grant. Kirti Chaudhary sits under the `Free Agent` facility and one
+  of her two `educator_facilities` entries points at that same `Free Agent` id, which is a holding
+  bucket and not a site anyone is educated at. Picking it off an unfiltered list is the obvious cause.
+
+  This blocks T74 rather than merely preceding it. Once assessor is scoped per facility, this picker
+  is how real permissions get assigned, and today two entries in it are indistinguishable by name.
+
+  *Waiting on the client* to say which entries are live sites and which are leftovers, asked on
+  2026-07-30.
+
+  *Goal:* Granting access at a facility means choosing from real, active, distinguishable sites.
+  *Done when:* The picker excludes inactive and non-site entries, no two selectable entries share a
+  display name, and Kirti's stray `Free Agent` educator grant is cleared.
+
 ### Blocked, not on the critical path
 
 - [ ] **T49** Strip and rotate the PSOP credentials, gate the public page
@@ -1255,6 +1342,11 @@ persisted.
 ---
 
 ## Totals
+
+**Updated 2026-07-29 later.** 36 items done, 45 open. Three entries were added from the client's
+2026-07-30 messages on assessor access: T73 the missing assessor tab, now fixed, T74 assessor scoped
+per facility, and T75 the facility picker that T74 depends on. The client asked at 1:45 AM for the
+assessor work to move to the front of the queue.
 
 **Updated 2026-07-29.** 35 items done, 43 open. Four were logged on 28 July from a recorded
 client meeting of **2026-06-29**, which had not reached this ledger at all in the month since: T66 the reverting AI
