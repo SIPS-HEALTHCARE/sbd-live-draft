@@ -1148,6 +1148,42 @@ persisted.
   the other developer's own answer was *"we can show model, but just for the master admin and
   not for all the users"*. Tracked, not built.
 
+- [ ] **T71** Nobody has a list of who can reach the three consoles · est 0.5d, then quarterly · **High**
+  Raised 2026-07-28. A teammate turned up holding a Vercel invite nobody sent on purpose. It was
+  removed the same day and nothing was reached, so the incident itself is closed. **The finding is
+  not the invite, it is that we only learned about it because somebody happened to notice.** There
+  is no list of who holds access to GitHub, Supabase or Vercel, so there was nothing to check it
+  against, and there still is not.
+
+  *Checked the same day, so this starts from measured ground rather than zero:*
+
+  | Where | State on 2026-07-28 |
+  |---|---|
+  | Supabase | One organisation, `SIPS`. Two projects, both ours: `mhijaqahbceuahfzezbh` the belt platform, `afwhyrkoxpbpherflzef` PSOP created 4 May. No third project, no unexpected surface. |
+  | GitHub, repo collaborators | Exactly two, `sipshealthcare` as admin and `nayandharshawn` with write. Nothing else. |
+  | Vercel | The stray invite found and removed. No member listing tool available from here, so this line rests on Shawn's check, not on a probe. |
+
+  *One gap worth naming, because a pending invite is invisible.* The GitHub check reads accepted
+  collaborators only. An org-level invite that has been sent and not accepted does not appear
+  anywhere in it. That has to be read off the organisation's own people page.
+
+  **Why this is worth a task rather than a note.** Three reasons, and the third is the one that
+  makes it urgent rather than tidy.
+  1. Console access is not application access. A Supabase project member holds the service role,
+     and the service role bypasses row level security completely. Nothing in
+     `supabase/verify/post_migration_check.sql` can see it, by design, because no SQL can.
+  2. T33 is the security tail with an external review behind it. Who holds access, reviewed on a
+     schedule, is close to the first thing any such review asks for and we cannot answer it today.
+  3. **T67 rebuilds the database.** A migration is exactly the moment access lists get recreated,
+     and a wrong entry made then is invisible afterwards and permanent in practice.
+
+  *Goal:* There is a written list of who holds access to each of the three consoles, it is checked
+  on a schedule rather than by accident, and the new database gets one before the application is
+  pointed at it.
+  *Done when:* The list exists for GitHub including pending invitations, Supabase and Vercel; every
+  entry has a named reason; anything unexplained is removed; and the check is repeated against the
+  new database as part of T67 rather than after it.
+
 ### Blocked, not on the critical path
 
 - [ ] **T49** Strip and rotate the PSOP credentials, gate the public page
@@ -1192,7 +1228,7 @@ persisted.
 
 ## Totals
 
-**Updated 2026-07-28.** 35 items done, 41 open. Four were logged on 28 July from a recorded
+**Updated 2026-07-29.** 35 items done, 42 open. Four were logged on 28 July from a recorded
 client meeting of **2026-06-29**, which had not reached this ledger at all in the month since: T66 the reverting AI
 notes, T67 surviving the database migration, T68 proof-by-recording, T69 the model indicator.
 T67 is the one that outranks the rest of the open list.
@@ -1231,8 +1267,9 @@ said he would set deadlines for everything at the following Friday 1 PM meeting,
 | &nbsp;&nbsp;of which tracked only, not ours to build | 2 | T66, T69 | 0 |
 | &nbsp;&nbsp;of which awaiting QA sign-off only | 1 | T65 (built, live, measured) | 0 |
 | Active on the SOP tool | 2 | T50, T50a | 0.10 + unknown |
+| Access review, raised 2026-07-28 | 1 | T71 | 0.50 |
 | Blocked on somebody else | 3 | T49, T51, T52 | not counted |
-| **Total, excluding blocked** | **40** | | **23.8 + unknown** |
+| **Total, excluding blocked** | **41** | | **24.3 + unknown** |
 
 *Note on these totals, since they do not reconcile and did not before this edit either.* 41 open
 minus 3 blocked is 38, not 40, because the group rows double-count a few items that sit in more
