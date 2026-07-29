@@ -34,3 +34,7 @@ plans/
 scripts/curriculum-ingest-preview.json
 # Kept local-only per user request
 docs/decisions/2026-07-22-app-packaging-options.md
+
+# Local agent tooling. Kept on the machine, never in the repository.
+.agent/
+.claude/
