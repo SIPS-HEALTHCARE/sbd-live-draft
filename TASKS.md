@@ -1212,6 +1212,165 @@ persisted.
   *Done when:* Somebody with two roles sees the toggle and moves between portals; somebody with one
   role never sees it; and a toggled view is proven to grant nothing the account did not already have.
 
+- [x] **T73** A granted assessor whose base role is staff member has no assessor tab · est 0.5d · High
+  Reported by the client on 2026-07-30 at 1:38 AM: *"when role is change to grant assessor access no
+  assessment tab is visible in the update account"*, with *"Kirti Chaudhary was given assessor role
+  but no assessor tab is viewable"* and a screenshot of her staff portal sidebar.
+
+  **The grant was never the problem.** All three granted accounts carry the capability correctly in
+  `sbd_portal_users.capabilities`. What fails is which portal the account lands in. `ui-views.js`
+  `roleMap` maps on `ST.user.role` alone and never reads capabilities, so a granted assessor whose
+  base role is `staff_member` is routed to `s-portal`, and the assessor consoles only ever existed in
+  `a-portal`. Permission held, no door to walk through.
+
+  Measured blast radius on 2026-07-29. Three accounts hold an assessor grant. Avery Henderson is
+  `staff_admin`, routes to the admin portal, and has always worked, which is why nothing looked
+  broken until a staff member was granted it. Kirti Chaudhary and Amy Cooper are both `staff_member`
+  and both blank from the same cause. Their `educator_facilities` grants, four between them, were
+  dead for the same reason.
+
+  **Why the staff portal gets the consoles rather than routing these accounts to the admin portal.**
+  T72 already settled that the portal switcher is master admin and SIPS admin only. Routing a granted
+  staff member into the admin portal would contradict that decision and hand them a surface far wider
+  than the grant. So the two consoles mount inside the portal the person is already in.
+
+  Fixed 2026-07-29. `renderAObservations` and `renderAObservationReviews` turned out to be portal
+  neutral already, with no `ST.curFid`, no facility switcher and no admin role gate, and both already
+  gate writes through the capability-aware `_canWriteObs`. Their only coupling was a hardcoded
+  container id each. Replaced with a shared `ovsMount` container, the same approach the file already
+  uses for the DAVID mount, so the fifteen argument-less re-renders in that section needed no change.
+  `effIsAssessor()` at `ui-views.js:10190` was written for exactly this job and had zero callers since
+  it was added; it now gates the nav and is re-checked inside `renderSView` so a saved view in
+  `sessionStorage` cannot route a plain staff member to a console.
+
+  Frontend only. No schema change, no RLS change, no migration, so it needs the Vercel build to go
+  live and is not live at merge.
+
+  *Goal:* Being granted assessor access produces the assessor screens, whatever the base role is.
+  *Done when:* Kirti and Cooper each see Observations and Observation Reviews and can record and
+  confirm; Henderson is unchanged; a staff member without the grant sees no assessor nav and cannot
+  reach either view by restoring a saved one. Verified against the three live records: the gate
+  returns true for all three granted accounts and false for a plain staff member and a plain manager.
+
+- [ ] **T74** Grantable roles are system wide and need to be per facility · est 3d · High
+  Asked for by the client on 2026-07-30 at 1:33 AM: *"No longer system wide... just by facility like
+  this"*, then widened at 1:35 AM to *"this should be for all role management by facility"*, and
+  prioritised at 1:45 AM: *"We are expanding our team of assessors to handle new hires that we will
+  test... so updating these functions for the assessor should move toward the front of the Que"*.
+
+  **Scope settled by his voice notes of 03:37 the same night**, which named the roles and the flow
+  directly: *"for the assessor, for the facilitator, all of those, we want to be able to give access
+  or grant access by facility... We grant that role and then we [select] the facilities that they are
+  able to apply that role towards."* His worked example: *"for Kirti, we're making her an assessor and
+  then we want to be able to select like Mount Sinai."*
+
+  So the flow he wants is **grant the role first, then choose the facilities it applies to.** That is
+  the order the UI has to follow, not a facility filter bolted onto an existing switch.
+
+  Measured against the code on 2026-07-29, the three roles he named are in three different states:
+
+  | He said | Actual state | Work needed |
+  |---|---|---|
+  | assessor | bare boolean in `capabilities` | full facility scoping |
+  | "facilitator", ie facility educator | `educator_facilities` array, already per facility | none, the pattern to copy |
+  | preceptor | tri-state granted/revoked/default **per person** | full facility scoping |
+
+  Facility educator already does exactly what he is asking for, which means the shape is proven in the
+  codebase and there is a working reference to follow rather than a design to invent.
+
+  **This is not a UI change.** It moves the gate from "is this person an assessor" to "is this person
+  an assessor *here*", touching `sbd_is_assessor` and every policy calling it, plus `_canWriteObs` and
+  `effIsAssessor` on the client. Server side goes live the moment it lands with no build in between,
+  so the migration and the frontend have to agree before either ships. Depends on T75.
+
+  **Blast radius, measured against the live database 2026-07-29.** `sbd_is_assessor()` is zero-arg,
+  `STABLE SECURITY DEFINER`, and reads `role = 'assessor' OR capabilities->>'assessor'`. It is called
+  by **14 policies across 6 tables**:
+
+  | Table | Policies | Facility column | Scoping route |
+  |---|---|---|---|
+  | `observations` | 2 | `fid` | direct |
+  | `observation_remediations` | 3 | `fid` | direct |
+  | `ps_completion_requests` | 2 | `facility_id` | direct |
+  | `sbd_assessment_queue` | 2 | `facility_id` | direct |
+  | `observation_overrides` | 2 | none, `staff_id` only | **needs a join** |
+  | `observation_audits` | 3 | none, `observation_id` only | **needs a join** |
+
+  Two of the six carry no facility of their own, so those five policies can only scope by joining out
+  to reach one, and a join inside a policy runs per row. Those are the expensive ones and the reason
+  this is 3d and not 1d.
+
+  *Approach that avoids a flag day:* add an **overload** `sbd_is_assessor(p_fid)` rather than change
+  the meaning of the zero-arg function underneath all 14 policies at once. The zero-arg version keeps
+  its job of answering "is this person an assessor at all", which is what nav visibility needs and what
+  `effIsAssessor` mirrors on the client. Policies then migrate table by table, each one revertible on
+  its own, instead of one migration that moves every gate simultaneously.
+
+  *Still open, asked 2026-07-30 and not yet answered:* whether Observer and the practice-gate waiver
+  follow the same rule. He did not name either in the voice notes, so they are out of scope until he
+  says otherwise.
+
+  *Goal:* A granted role applies only at the facilities chosen for it, and the server enforces it.
+  *Done when:* A per-facility assessor can record and confirm at a granted facility, is refused at a
+  non-granted one by RLS and not only by the UI, preceptor access is scoped the same way, and no
+  existing system-wide holder silently loses or gains reach during the migration.
+
+- [ ] **T75** The facility picker used for granting access lists entries nobody can choose safely · est 0.5d · Medium
+  Found on 2026-07-29 while verifying T73, not reported by the client.
+
+  `ui-views.js` builds the Role Management grant dropdown from `(DB.facilities||[])` with no filter.
+  That list is eleven rows and contains two pairs sharing a name, three inactive facilities, three
+  test facilities and one `Free Agent` holding entry. The admin facility switcher in `enterPortal`
+  filters on `f.active!==false`. This dropdown does not.
+
+  **Correction, 2026-07-29.** This entry first recorded Kirti Chaudhary's `educator_facilities` entry
+  pointing at the `Free Agent` id as a misclick off the unfiltered list. That reading was wrong, and it
+  went out to the client before it was checked. His voice note of 03:39 says parking SIPS hires in free
+  agency is deliberate: *"they're coming in through our hiring process and we're putting them in a free
+  agency portal to be able to assess them."* So the grant was him working around a missing concept, not
+  a slip. The missing concept is now T76. The picker problem below stands on its own.
+
+  This blocks T74 rather than merely preceding it. Once roles are scoped per facility, this picker is
+  how real permissions get assigned, and today two entries in it are indistinguishable by name. The
+  duplicate names are the part that cannot be worked around by being careful.
+
+  *Waiting on the client* to say which entries are live sites and which are leftovers, asked on
+  2026-07-30.
+
+  *Goal:* Granting access at a facility means choosing from real, active, distinguishable sites.
+  *Done when:* The picker excludes inactive and non-site entries, no two selectable entries share a
+  display name, and Kirti's `Free Agent` educator grant is either re-pointed at a real site or
+  superseded by T76.
+
+- [ ] **T76** SIPS staff have no home facility, so `Free Agent` is being used as one · est 1.5d · Medium
+  Raised by the client in a voice note on 2026-07-30 at 03:39, explicitly as a request for our
+  recommendation rather than an instruction: *"I guess you got to think through it."*
+
+  His words: *"they're coming in through our hiring process and we're putting them in a free agency
+  portal to be able to assess them. What I think that we need is a home facility, which will be Sips,
+  but we need it so that we can have a place that when we bring on Sips team members, that they are
+  able to function some sort of way."* He names Kirti and Amy as the two currently in that position.
+
+  **The collision.** `Free Agent` is a real facility row and already carries a specific meaning in the
+  platform: `releaseToFreeAgent()` moves somebody there, the Free Agent Registry renders a
+  *"Free Agent since"* date, and the whole surface reads as somebody who left a facility. SIPS's own
+  employees being parked in the same row means one facility id carries two unrelated meanings, and
+  every report that groups by facility silently merges them. Kirti's `facility_id` is the `Free Agent`
+  id today, which is why her account looked wrong while being exactly what he intended.
+
+  *Recommendation given to the client 2026-07-30, not yet accepted:* a real SIPS home facility, kept
+  separate from `Free Agent`. SIPS-employed staff live there permanently, free agency goes back to
+  meaning the assessment holding area only, and the two stop contaminating each other in reporting.
+  Cheaper than a new role type, and it reuses the facility scoping T74 is already building.
+
+  *Open:* whether he also wants a distinct role for SIPS staff, which he floated as *"we will be
+  creating like a new role"*. Worth resisting until the home facility alone is shown to be
+  insufficient, because a new role multiplies every policy in T74.
+
+  *Goal:* SIPS's own staff have a home that is not the free agency holding area.
+  *Done when:* A SIPS home facility exists, Kirti and Amy sit in it rather than `Free Agent`, the Free
+  Agent Registry no longer lists them, and facility-grouped reporting separates the two.
+
 ### Blocked, not on the critical path
 
 - [ ] **T49** Strip and rotate the PSOP credentials, gate the public page
@@ -1255,6 +1414,18 @@ persisted.
 ---
 
 ## Totals
+
+**Updated 2026-07-29 later still.** 36 items done, 46 open. T76 added and two entries corrected after
+transcribing the client's three voice notes of 2026-07-30 03:37 to 03:39, which settled scope that the
+text messages had left open. T74 now covers preceptor access as well as assessor, and records that
+facility educator already works the way he is asking for. T75's claim that Kirti's `Free Agent` grant
+was a misclick is withdrawn: parking SIPS hires in free agency is deliberate, and the real gap is the
+missing SIPS home facility, now T76. That withdrawn claim had already gone to the client.
+
+**Updated 2026-07-29 later.** 36 items done, 45 open. Three entries were added from the client's
+2026-07-30 messages on assessor access: T73 the missing assessor tab, now fixed, T74 assessor scoped
+per facility, and T75 the facility picker that T74 depends on. The client asked at 1:45 AM for the
+assessor work to move to the front of the queue.
 
 **Updated 2026-07-29.** 35 items done, 43 open. Four were logged on 28 July from a recorded
 client meeting of **2026-06-29**, which had not reached this ledger at all in the month since: T66 the reverting AI

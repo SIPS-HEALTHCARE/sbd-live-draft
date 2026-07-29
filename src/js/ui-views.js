@@ -372,6 +372,14 @@ function enterPortal(type){
     document.getElementById('s-topbar-title').textContent=_st;
     document.getElementById('s-portal').classList.remove('hidden');
     applyDavidNavGate('nav-david-s', u);
+    // #73: a granted assessor whose base role is staff_member lands here, and the assessor
+    // consoles only ever lived in the admin portal. Reveal them in this portal instead, since
+    // the portal switcher is master/SIPS admin only (T72), so this is the only door they get.
+    const _sAssessor = effIsAssessor(u);
+    ['s-nav-assessor-lbl','s-nav-observations','s-nav-observationreviews'].forEach(id=>{
+      const n=document.getElementById(id);
+      if(n) n.style.display = _sAssessor ? (id==='s-nav-assessor-lbl'?'block':'flex') : 'none';
+    });
     renderSView(_sv);
     return;
   }
@@ -569,11 +577,12 @@ function renderSView(view){
     toast('RBAC Guard: Unauthorized access to Staff Portal', 'err');
     return;
   }
-  ['s-dashboard','s-belt','s-window','s-scoreboard','s-posschool','s-report','s-oip','s-schedule','s-history','s-study','s-foundations','s-instruments','s-preceptor','s-guide','s-settings','s-david'].forEach(v=>{
+  ['s-dashboard','s-belt','s-window','s-scoreboard','s-posschool','s-report','s-oip','s-schedule','s-history','s-study','s-foundations','s-instruments','s-preceptor','s-observations','s-observationreviews','s-guide','s-settings','s-david'].forEach(v=>{
     const el=document.getElementById(v);
     if(el){el.classList.add('hidden');el.classList.remove('fade-in');}
   });
   ST.sView=view;
+  ovsMount='s';   // #73: Observations render into the staff portal from here
   if(typeof logActivity==='function') logActivity('view',{view});
   const el=document.getElementById(view);
   if(el){el.classList.remove('hidden');void el.offsetWidth;el.classList.add('fade-in');}
@@ -591,6 +600,10 @@ function renderSView(view){
     's-foundations':()=>{ if(typeof renderSFoundations==='function') renderSFoundations(); },
     's-instruments':()=>{ if(typeof renderSInstruments==='function') renderSInstruments(); },
     's-preceptor':()=>{ if(typeof renderSPreceptor==='function') renderSPreceptor(); },
+    // #73: assessor consoles inside the staff portal. Re-checked here, not just at nav
+    // visibility, because a saved view in sessionStorage can route straight to a view id.
+    's-observations':()=>{ if(effIsAssessor()) renderAObservations(); else toast('Assessor access required.','err'); },
+    's-observationreviews':()=>{ if(effIsAssessor()) renderAObservationReviews(); else toast('Assessor access required.','err'); },
     's-guide':()=>renderGuideView('s'),
     's-settings':renderSettingsView,
     's-david':()=>renderDavidView('s-david'),
@@ -699,6 +712,7 @@ function renderAView(view){
     if(el){ el.classList.add('hidden'); el.classList.remove('fade-in'); }
   });
   ST.aView=view;
+  ovsMount='a';   // #73: Observations render into the admin portal from here
   if(typeof logActivity==='function') logActivity('view',{view});
   const el=document.getElementById(view);
   if(el){ el.classList.remove('hidden'); void el.offsetWidth; el.classList.add('fade-in'); }
@@ -3039,6 +3053,14 @@ let ovsCapture = null;      // { obsId, unlocked, observerStaffId, observerName 
 let obsConsoleTab = 'queue';// Observations page tab: 'queue' | 'observers'
 let ovsArmed = null;        // { action, id } two-tap confirmation (sandbox-safe; no native confirm())
 
+// #73: shared Observations mount. Both consoles render into whichever portal the viewer is
+// actually in, the admin portal, or the staff portal when a granted assessor's base role is
+// staff_member. Same approach as the shared DAVID mount below: a user is only ever in one
+// portal at a time, so re-pointing the container is safe. Held as module state rather than
+// threaded as an argument because every re-render in this section is argument-less.
+let ovsMount = 'a';         // 'a' = admin portal, 's' = staff portal
+function ovsEl(view){ return document.getElementById(ovsMount + '-' + view); }
+
 // The active belt instrument for a given belt label (system of record; read-only).
 function ovsInstrument(belt){
   const list = (window.DB && DB.observationChecklists) || [];
@@ -3190,7 +3212,7 @@ function requestObservation(sid, targetBelt){
 
 // ── Step 4: observer-side list + capture ─────────────────────────────────────
 function renderAObservations(){
-  const el = document.getElementById('a-observations');
+  const el = ovsEl('observations');
   if(!el) return;
   if(ovsCapture){ el.innerHTML = ovsRenderCapture(); return; }
 
@@ -3573,7 +3595,7 @@ function ovsReviewSearch(v){
   if(inp){ inp.focus(); try{ inp.setSelectionRange(v.length, v.length); }catch(_){} }
 }
 function renderAObservationReviews(){
-  const el = document.getElementById('a-observationreviews');
+  const el = ovsEl('observationreviews');
   if(!el) return;
   const u = ST.user;
   const canWrite = _canWriteObs(u);
