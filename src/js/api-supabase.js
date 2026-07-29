@@ -333,6 +333,9 @@ const SB = {
   getObservations(){ return sbFetch('/rest/v1/observations?select=*&order=created_at.desc'); },
   insertObservation(data){ return sbFetch('/rest/v1/observations', { method:'POST', body:data }); },
   updateObservation(id, data){ return sbFetch(`/rest/v1/observations?id=eq.${id}`, { method:'PATCH', body:data }); },
+  // T37: two-PIN check moved server-side (observation_pin is no longer shipped to the client).
+  unlockObservation(observationId, observerPin, candidatePin){ return sbFetch('/functions/v1/sbd-observation-unlock', { method:'POST', body:{ observation_id:observationId, observer_pin:observerPin, candidate_pin:candidatePin } }); },
+  getObserverPin(staffId){ return sbFetch('/rest/v1/rpc/sbd_get_observer_pin', { method:'POST', body:{ p_staff_id:staffId } }); },
   // ── Hospital Systems ──
   getHospitalSystems(){ return sbFetch('/rest/v1/hospital_systems?select=id,name,active,created_at&order=name.asc'); },
   createHospitalSystem(data){ return sbFetch('/rest/v1/hospital_systems?select=id,name,active,created_at', { method:'POST', body:data }); },

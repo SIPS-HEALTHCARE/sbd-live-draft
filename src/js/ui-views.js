@@ -3328,21 +3328,25 @@ function ovsToggleGuide(){ ST.ovsGuideHidden = (ST.ovsGuideHidden !== true); ren
 
 // Two-PIN handshake: the observer proves identity with their reusable PIN, the
 // candidate consents with the PIN they were issued. Both must match to unlock.
-function ovsUnlock(){
+// T37 (S12): verified server-side (sbd-observation-unlock) — observer PINs are no
+// longer shipped to the browser, so there is nothing left to compare locally.
+async function ovsUnlock(){
   const o = (DB.observations||[]).find(x => x.id === ovsCapture.obsId); if(!o) return;
-  const obsPin  = (document.getElementById('ovs-observer-pin')||{}).value || '';
-  const candPin = (document.getElementById('ovs-candidate-pin')||{}).value || '';
-  const observer = (DB.staff||[]).find(s => s.observer && s.observationPin && String(s.observationPin) === obsPin.trim());
-  if(!observer){ toast('Observer PIN not recognized. Only an authorized observer with a PIN can begin.','err'); return; }
-  if(String(observer.id) === String(o.staffId)){ toast('A candidate cannot observe their own assessment. A different authorized observer must score it.','err'); return; }
-  if(!o.handshake || String(o.handshake.candidate_pin) !== candPin.trim()){ toast('Candidate PIN does not match this observation.','err'); return; }
-  ovsCapture.unlocked = true;
-  ovsCapture.observerStaffId = observer.id;
-  ovsCapture.observerName = fullName(observer);
-  if(!ovsCapture.scores) ovsCapture.scores = { ...(o.itemScores||{}) };
-  if(!ovsCapture.stopWork) ovsCapture.stopWork = o.stopWork || { active:false };
-  toast(`Verified — observer ${ovsCapture.observerName}. Begin scoring.`,'ok');
-  renderAObservations();
+  const obsPin  = ((document.getElementById('ovs-observer-pin')||{}).value || '').trim();
+  const candPin = ((document.getElementById('ovs-candidate-pin')||{}).value || '').trim();
+  if(!obsPin || !candPin){ toast('Enter both PINs to unlock.','err'); return; }
+  try {
+    const res = await SB.unlockObservation(o.id, obsPin, candPin);
+    ovsCapture.unlocked = true;
+    ovsCapture.observerStaffId = res.observer_id;
+    ovsCapture.observerName = res.observer_name;
+    if(!ovsCapture.scores) ovsCapture.scores = { ...(o.itemScores||{}) };
+    if(!ovsCapture.stopWork) ovsCapture.stopWork = o.stopWork || { active:false };
+    toast(`Verified — observer ${ovsCapture.observerName}. Begin scoring.`,'ok');
+    renderAObservations();
+  } catch(e){
+    toast(e.message || 'PIN verification failed.','err');
+  }
 }
 
 function ovsScore(itemId, value){
@@ -13860,11 +13864,21 @@ function toggleObserver(sid, context){
 // Generate a reusable observation PIN for an authorized observer (master-admin only).
 // One-time generation; the same PIN is reused for every observation thereafter.
 // Stored via a targeted single-column write to staff.observation_pin.
-function generateObserverPin(sid, context){
+// T37 (S12): observation_pin is no longer shipped in the general staff payload,
+// so s.observationPin is never pre-populated — the "already has one" check reads
+// it back through the master-admin-only sbd_get_observer_pin RPC first.
+async function generateObserverPin(sid, context){
   const s=getStaff(sid); if(!s) return;
   if(!(ST.user&&ST.user.role==='master_admin')){toast('Only master admins can manage observer PINs.','err');return;}
   if(!s.observer){toast('Grant observer access first, then generate a PIN.','err');return;}
-  if(s.observationPin){toast(`Observer PIN is ${s.observationPin} (PINs are reused, not regenerated).`,'ok');return;}
+  if(IS_LIVE && typeof SB!=='undefined' && SB.getObserverPin){
+    try {
+      const existing = await SB.getObserverPin(sid);
+      if(existing){ s.observationPin=existing; toast(`Observer PIN is ${existing} (PINs are reused, not regenerated).`,'ok'); if(typeof renderHProfile==='function') renderHProfile(sid,context); return; }
+    } catch(e){ handleSyncError(e,'Observer PIN lookup'); return; }
+  } else if(s.observationPin){
+    toast(`Observer PIN is ${s.observationPin} (PINs are reused, not regenerated).`,'ok');return;
+  }
   const pin=String(Math.floor(1000+Math.random()*9000)); // 4-digit, reused thereafter
   s.observationPin=pin;
   if(IS_LIVE && typeof SB!=='undefined' && SB.updateStaff){
