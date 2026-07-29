@@ -1004,7 +1004,7 @@ persisted.
   is there now is accurate without it.
 
 - [ ] **T66** The AI notes revert, and the report disagrees with the interface · est unknown until reproduced · **High**
-  Raised by the client in the recorded meeting of 2026-07-28, three separate times in one call,
+  Raised by the client in the recorded meeting of **2026-06-29**, three separate times in one call,
   which is how much it is bothering him. **Tracked here so it is not lost, not because it is our
   build.** Half of it was ours and is already closed; the other half belongs to another developer
   who named the cause in the same call.: *"I'm not sure why the AI notes keep reverting back,
@@ -1026,31 +1026,57 @@ persisted.
 
   So this is not an unowned mystery. It is owned and the cause is stated.
 
-  **The date was in the transcript all along. Added 2026-07-28 on a full read.** This entry said
+  **The date was in the transcript all along, and the date it is measured against was wrong.**
+  *Added 2026-07-28, corrected the same day once Shawn confirmed the recording is from 29 June and
+  not 28 July.* This entry said
   what was missing was a date and any confirmation the fix had shipped. The date is there: later
   in the same call, asked about the wider pipeline, the same developer said *"currently for like
   today and tomorrow we are working on the AI fix because like we have to have like one AI
-  analysis for all of the side. So we are deploying on that."* The call was 2026-07-28, so that
-  is **28 and 29 July**. A claim of deployment, not evidence of one, which is exactly the
-  distinction the client is complaining about, so it is recorded as a claim.
+  analysis for all of the side. So we are deploying on that."* The call was **2026-06-29**, so that
+  is **29 and 30 June**, a month before this was written down. A claim of deployment, not evidence
+  of one, which is exactly the distinction the client is complaining about, so it stays a claim.
 
-  *One operational consequence, and it lands on our QA rather than on this item.* Somebody else
-  is deploying into the AI notes and suggestions area on 28 and 29 July, which are the same days
-  the live QA pass runs. Anything odd seen in that area during the pass is not a regression from
-  v191 and should be time-stamped and set aside rather than chased. Written into the 29 July
-  brief so the QA pass does not lose an hour to it.
+  *The operational note that followed from the wrong date is withdrawn.* It said another team was
+  deploying into the AI notes area on the same days as our live QA pass, so anything odd there
+  could be set aside. That was only true if the call had been 28 July. The claimed deploy window
+  was **29 and 30 June**, a month before the QA pass, so nothing about it overlaps and there is
+  nothing to set aside. The Sriman brief of 29 July carries the withdrawn version and needs the
+  same correction.
+
+  *What the real date changes, and it is not cosmetic.* The client raised this three times in one
+  call **a month ago**, and the fix was claimed for the very next day. Nobody has confirmed since
+  whether it shipped. So this is not a fresh complaint waiting on a fix that is about to land, it
+  is a month-old complaint with an unverified claim attached, which is the same shape as the thing
+  he is complaining about.
 
   *Goal:* The client stops seeing notes revert, and knows which of his two complaints was ours
   and which was not.
-  *Done when:* The two-paths fix is confirmed live with something showing it, the claimed 28 to
-  29 July window having passed, and the client is told plainly that the report-versus-interface
+  *Done when:* The two-paths fix is confirmed live with something showing it, the claimed 29 to
+  30 June window having passed a month ago, and the client is told plainly that the report-versus-interface
   half was ours and went out on 27 July in v191. Nothing here needs building unless that fix does
   not hold.
 
-- [ ] **T67** The access control must survive the database migration · est 0.5d to prepare · **Critical**
-  Raised 2026-07-28 from the recorded meeting. A schema migration onto a new database was
+- [ ] **T67** The access control must survive the database migration · est 0.5d to prepare · **Parked**
+  Logged 2026-07-28 from the recorded meeting of **2026-06-29**. A schema migration onto a new database was
   described as *"at least two weeks from now"*, with the current database being backed up and a
   new one built to a new schema, then the application pointed at it.
+
+  **PARKED 2026-07-28 by Shawn. The premise was never confirmed.**
+
+  This was logged as Critical off a single description in a recorded call, and then written up as
+  though the clock were running. Two things undo that. The call was **2026-06-29**, not 28 July, so
+  "at least two weeks from now" pointed at **13 July**, which is already past. And checked on
+  2026-07-28: **no new project exists**, one organisation and two known projects, so nothing has
+  started in the month since.
+
+  Nobody has confirmed that this migration is still planned, or that it is ours to prepare for.
+  It was an estimate given once, by another developer, in a call a month old. **An estimate that
+  has quietly lapsed is not a deadline, and treating it as one manufactured an urgency nobody
+  asked for.** Parked until somebody says it is real.
+
+  *Nothing is lost by parking it.* `supabase/verify/post_migration_check.sql` is written, merged
+  and verified at 74 of 74 PASS against production. If the migration does surface, the check is
+  ready that day rather than needing to be built. Parking the task does not park the protection.
 
   *Three details from the transcript, added 2026-07-28, because they change who this goes to and
   where it lands.* It stays on the **same Supabase account**: *"we just shift the new database to
@@ -1088,7 +1114,7 @@ persisted.
   only their own record and cannot approve their own gate request.
 
 - [ ] **T68** Every fix ships with proof that it is live · est 0.25d per item, ongoing · **High**
-  The client's standing instruction from the recorded meeting of 2026-07-28, and he was blunt
+  The client's standing instruction from the recorded meeting of **2026-06-29**, and he was blunt
   about the cause: *"I want to make sure that you have actually tested them yourself... vs just
   the LLM or the AI telling you what's been updated... many times you've shared things have been
   updated... but the issue won't be live in the actual application, or one is live, it is broken
@@ -1104,7 +1130,7 @@ persisted.
   change working on the live site, and the EOD links them.
 
 - [ ] **T69** Show which AI model is currently serving · est 0.5d · Medium
-  Requested in the recorded meeting of 2026-07-28. He asked for *"an arrow that says which model
+  Requested in the recorded meeting of **2026-06-29**. He asked for *"an arrow that says which model
   is currently active and being used"*, visible to master admin only, not to every user, and
   explicitly not full token accounting: *"we don't necessarily have to categorize all of the
   tokens... but just say if I log in and Anthropic is down, I can see what model is active"*.
@@ -1134,7 +1160,9 @@ persisted.
   *Done when:* David answers inside PSOP and its usage appears under the SOP tool column, not mixed into the belt platform's.
   **No longer blocked, and no longer parked. Corrected 2026-07-28 from the transcript.** The
   client opened this himself in the meeting: *"I want to go ahead and start working on PSOP"*,
-  and he expects Tuesday and Wednesday spent understanding it. He is sending the original HTML
+  and he expected the Tuesday and Wednesday straight after the call, which were **2026-06-30 and
+  2026-07-01**, spent understanding it. That was a month ago and it has not started, which makes
+  this a month-old unactioned client request rather than a new one. He is sending the original HTML
   and a live demo link by email and by chat. Two constraints he stated, both of which shape the
   reading rather than the build: David does **not** get wired up yet, but the code should be read
   knowing it has to be, and facilities have to line up across both platforms so an SOP written at
@@ -1164,8 +1192,8 @@ persisted.
 
 ## Totals
 
-**Updated 2026-07-28.** 35 items done, 41 open. Four were added on 28 July from the recorded
-client meeting of that date, which had not reached this ledger at all: T66 the reverting AI
+**Updated 2026-07-28.** 35 items done, 41 open. Four were logged on 28 July from a recorded
+client meeting of **2026-06-29**, which had not reached this ledger at all in the month since: T66 the reverting AI
 notes, T67 surviving the database migration, T68 proof-by-recording, T69 the model indicator.
 T67 is the one that outranks the rest of the open list.
 
@@ -1174,11 +1202,11 @@ from the summary.** Four entries were wrong or incomplete and are corrected in p
 quote each correction rests on:
 
 - **T69 is not ours.** It was given to the other developer in the call. Tracked, not built.
-- **T66 has its date.** The two-paths fix was claimed as deploying 28 and 29 July. That is a
+- **T66 has its date.** The two-paths fix was claimed as deploying 29 and 30 June. That is a
   claim of deployment rather than evidence of one, and it is recorded as a claim.
 - **T67 stays on the same Supabase account**, no project for it existed as of the call, and it
   is **not** going into the PSOP project. Two separate conversations had been read as one.
-- **T50 is not parked.** The client opened PSOP himself and expects Tuesday and Wednesday on it.
+- **T50 is not parked.** The client asked for it a month ago, on 29 June, and it has not started.
   T50a is new: he asked whether PSOP should be one project or two and nobody answered him.
 
 *Recorded, not numbered, because nothing was asked of us:* a third technology acquired from
@@ -1189,8 +1217,8 @@ requested, so it is not a task, but it is here so it is not a surprise later.
 *Also stated in the call and worth holding to:* the client's first priority in his own words is
 reports generating properly with all the notes, the interface suggestions matching what is on the
 report, and both matching the scoring logic. That is T65, now built and live, plus T40. And he
-said he will set deadlines for everything at the Friday 1 PM meeting on 31 July, which is worth
-walking into with this list rather than receiving one.
+said he would set deadlines for everything at the following Friday 1 PM meeting, which was
+**2026-07-03** and is long past.
 
 | Group | Open | Items | Est. days |
 |---|---|---|---|
@@ -1199,7 +1227,7 @@ walking into with this list rather than receiving one.
 | Phase 3 | 11 | T39 to T48 | 9.35 |
 | Found during Phase 1 | 6 | T54, T56, T58, T59, T60, T62 | 2.10 |
 | Raised by the client | 3 | T63, T64, T65 | 1.75 |
-| From the 2026-07-28 meeting | 4 | T66, T67, T68, T69 | 0.75 + unknown |
+| From the 2026-06-29 meeting | 4 | T66, T67, T68, T69 | 0.75 + unknown |
 | &nbsp;&nbsp;of which tracked only, not ours to build | 2 | T66, T69 | 0 |
 | &nbsp;&nbsp;of which awaiting QA sign-off only | 1 | T65 (built, live, measured) | 0 |
 | Active on the SOP tool | 2 | T50, T50a | 0.10 + unknown |
