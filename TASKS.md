@@ -1184,6 +1184,29 @@ persisted.
   entry has a named reason; anything unexplained is removed; and the check is repeated against the
   new database as part of T67 rather than after it.
 
+- [ ] **T72** Managers and above cannot switch between their own portals · est 0.5d · Medium
+  Asked for by the client on 2026-07-29: *"Managers and above still need a development... so can we
+  create a toggle button at the top of their dashboard to go from staff portal to manager, dir, etc
+  portal"*.
+
+  **This is not T39 and should not be built like it.** T39 is one person looking at somebody else's
+  account, which needs an audit trail and a hard read-only guarantee. This is one person who holds
+  more than one role switching between their own views. Nothing is being impersonated, so none of
+  T39's machinery applies and none of its risk does either.
+
+  *The one thing to get right.* The switch decides which portal renders, and it must not decide what
+  the server will allow. Every role check stays where it is. A person who toggles into the manager
+  view sees exactly what their real grants already permit, and if they hold no manager grant the
+  toggle is not offered at all. Anything else recreates the client-side role flip that has been
+  removed everywhere else on the platform.
+
+  *Open before building:* which roles get the toggle, and whether the choice persists across sign
+  ins or resets to the primary portal each time.
+
+  *Goal:* A person holding more than one role reaches all of their own portals without signing out.
+  *Done when:* Somebody with two roles sees the toggle and moves between portals; somebody with one
+  role never sees it; and a toggled view is proven to grant nothing the account did not already have.
+
 ### Blocked, not on the critical path
 
 - [ ] **T49** Strip and rotate the PSOP credentials, gate the public page
@@ -1228,7 +1251,7 @@ persisted.
 
 ## Totals
 
-**Updated 2026-07-29.** 35 items done, 42 open. Four were logged on 28 July from a recorded
+**Updated 2026-07-29.** 35 items done, 43 open. Four were logged on 28 July from a recorded
 client meeting of **2026-06-29**, which had not reached this ledger at all in the month since: T66 the reverting AI
 notes, T67 surviving the database migration, T68 proof-by-recording, T69 the model indicator.
 T67 is the one that outranks the rest of the open list.
