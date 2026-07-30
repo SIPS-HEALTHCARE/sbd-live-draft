@@ -1930,6 +1930,24 @@ class DavidChat {
                     return;
                 }
 
+                if (res.status === 403 && errorJson.action === 'ACTION_TOKEN_QUOTA_EXHAUSTED') {
+                    const isStaff = errorJson.role === 'staff';
+                    contentTarget.innerHTML = `
+                        <div class="david-upsell-card" style="padding: 16px; border-radius: 8px; background: rgba(239,68,68,0.08); border: 1px solid #ef4444; text-align: center; margin-top: 8px;">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" style="margin-bottom: 8px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                            <h3 style="color: #ef4444; margin-top: 0; font-size: 15px;">Monthly Usage Limit Reached</h3>
+                            <p style="font-size: 13px; color: var(--txt); opacity: 0.85; line-height: 1.4;">${isStaff
+                                ? "Your facility has used all of this month's David usage. A manager or administrator can still ask from the reserve, or upgrade the facility's SIPS plan."
+                                : "This facility's monthly David usage — including the manager reserve — is used up. Usage resets on the 1st, or upgrade the SIPS plan to add capacity now."}</p>
+                        </div>
+                    `;
+                    const cursor = msgDiv.querySelector('.david-cursor');
+                    if (cursor) cursor.style.display = 'none';
+                    this.isThinking = false;
+                    this.btn.disabled = false;
+                    return;
+                }
+
                 if (res.status === 403 && errorJson.action === 'ACTION_UPSELL') {
                     contentTarget.innerHTML = `
                         <div class="david-upsell-card" style="padding: 16px; border-radius: 8px; background: rgba(196,154,32,0.1); border: 1px solid var(--gold); text-align: center; margin-top: 8px;">
