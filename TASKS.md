@@ -1455,6 +1455,34 @@ persisted.
   a holder with no list is still allowed everywhere and a null facility denies. `node --check`
   clean. The DDL has not been executed anywhere.
 
+  *Applied to production 2026-07-30, on Shawn's explicit go.* Both migrations ran and were verified
+  against the live database afterwards, in this order:
+
+  1. `sbd_is_assessor(p_fid uuid)` created. ACL matches the zero-arg gate exactly
+     (postgres, authenticated, service_role), with `anon` and `public` revoked.
+  2. `aq_select` and `aq_update` rewritten inside a single transaction, so there was no window in
+     which either policy was absent. Both now read `sbd_is_assessor(facility_id)`. Every other
+     branch survived verbatim, and `aq_insert` and `aq_delete` were not touched.
+
+  Verified no reach moved: all three holders still see 57 of 57 queue rows, because none carries a
+  facility list. Verified the narrowing works, by simulating a one-facility list read-only rather
+  than writing to anyone's record: scoped to facilities holding 15, 12 and 11 rows, the predicate
+  returns exactly 15, 12 and 11 of 57. Pre-change policy expressions were captured before running
+  anything, so reverting is a re-create of the two policies with the zero-arg call; the overload
+  can stay, since nothing else calls it.
+
+  State after: production serves `ui-views.js?v=194`, `sbd_is_assessor` has two forms, 2 policies
+  pass a facility and the other 12 still call the zero-arg form deliberately. Frontend and server
+  now agree, so choosing facilities in Role Management is safe and enforced on both sides.
+
+  *Ruled out while chasing the #73 report that Kirti still sees no Assessor section:*
+  `applyDavidNavGate` runs on the line immediately before the reveal, so a throw there would hide
+  both it and the assessor nav. It cannot throw: every branch is guarded and the async path ends in
+  `.catch(() => {})`. David is absent from her menu because she has no David access, which is
+  unrelated. With deploy, DOM nesting, column grants, RLS, the capability row and the reveal path
+  all verified correct, the reading that fits every piece of evidence is that her 6:54 AM message
+  was accurate and the 6:55 AM screenshot predated the hard refresh.
+
   *Remaining, and it is a decision not code:* nobody has an `assessor_facilities` list yet, so on
   the day this lands every current holder still reaches everywhere, by design. Kirti and Amy get
   scoped only once someone picks their facilities in Role Management, which is master-admin only.
