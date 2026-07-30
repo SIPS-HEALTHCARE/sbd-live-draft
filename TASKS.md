@@ -1426,6 +1426,41 @@ persisted.
   reverse. Only one carries the assessor grant. Logged here so it is not rediscovered; it is a data
   hygiene item, not part of this task.
 
+  *Built 2026-07-30, not yet applied or deployed.* Both halves are written together, because the
+  screen must not land before the policy that limits it.
+
+  - `20260730070000_t77_assessment_queue_facility_scope.sql` rewrites `aq_select` and `aq_update`
+    to call `sbd_is_assessor(facility_id)`. Every other branch is copied verbatim, so the four
+    admin roles, the hospital own-facility branch and the requester's own row do not move.
+  - `capabilities.assessor_facilities`, granted in Role Management next to the Assessor toggle,
+    mirroring `educator_facilities`. Revoking Assessor drops the list with it, and an empty list
+    is never persisted, since both the client helper and the SQL read empty as system wide.
+  - `effAssessorFacilities`, `effAssessorScoped` and `effIsAssessorAt` mirror the SQL client side.
+    `effIsAssessor` is deliberately unchanged: it still answers "an assessor at all" and drives
+    nav visibility, so a scoped assessor still sees the section.
+  - `s-assessments` nav item and container in the staff portal, revealed by the same
+    `effIsAssessor` gate as #73 and re-checked inside `renderSView`.
+  - `renderAAssessments` now resolves its container through `asmMount`, and scopes by
+    `assessor_facilities` for a capability assessor. This was the leak: the function filters on
+    `assignedFids`, an admin-role field, and both holders carry `[]`, so the filter collapsed to
+    no filter. Admin-role scoping is untouched.
+  - The eight `ST.aView === 'a-assessments'` re-render guards became `asmRerender()`, which
+    covers both mounts. Without it the queue went stale in the staff portal after every action.
+  - `openRecordModal` and `submitAssessment` respect the same scope, so recording cannot reach a
+    facility the policy would refuse, including via a console call.
+  - `_rmFacilityOptions` now feeds both capability pickers: active rows only, and a repeated
+    display name is disambiguated by location. Partial T75 mitigation, see that entry.
+
+  *Verified:* seven client-side gate cases against the two live capability shapes, including that
+  a holder with no list is still allowed everywhere and a null facility denies. `node --check`
+  clean. The DDL has not been executed anywhere.
+
+  *Remaining, and it is a decision not code:* nobody has an `assessor_facilities` list yet, so on
+  the day this lands every current holder still reaches everywhere, by design. Kirti and Amy get
+  scoped only once someone picks their facilities in Role Management, which is master-admin only.
+  The client's own example was Kirti at Mount Sinai. Also note Kirti's `facility_id` is the
+  `Free Agent` row today, per T76, so "her own facility" is not yet a meaningful scope.
+
   *Goal:* A granted assessor can work the assessment queue, and only where the grant applies.
   *Done when:* The staff portal shows Assessment Queue to a granted assessor and to nobody else, the
   rows and the facility filter are limited to the assessor's granted facilities, `aq_select` and
