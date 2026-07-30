@@ -4455,7 +4455,7 @@ function rptBeltBars(staffArr){
 // Assessment pass rate from history
 function rptPassRate(staffArr){
   let pass=0, total=0;
-  staffArr.forEach(s=>{ (s.history||[]).forEach(h=>{ total++; if(h.res==='pass') pass++; }); });
+  staffArr.forEach(s=>{ (s.history||[]).forEach(h=>{ total++; if(isSuccessOutcome(h.res)) pass++; }); });
   return total>0?Math.round(pass/total*100):null;
 }
 
@@ -6107,7 +6107,7 @@ function downloadStaffReport(staffId){
   // Gate performance per belt
   const gatesByBelt = beltHistory.map(b=>{
     const hist=(s.history||[]).filter(h=>h.belt===b);
-    const pass=hist.filter(h=>h.res==='pass').length;
+    const pass=hist.filter(h=>isSuccessOutcome(h.res)).length;
     const fail=hist.filter(h=>h.res==='fail').length;
     return {b,pass,fail,total:pass+fail};
   }).filter(x=>x.total>0);
@@ -6200,7 +6200,7 @@ function downloadStaffReport(staffId){
       <td style="color:#64748b">${h.dt}</td>
       <td>${pBelt(h.belt)}</td>
       <td>${h.type}</td>
-      <td><span class="badge ${h.res==='pass'?'badge-green':'badge-err'}">${h.res==='pass'?'Pass':'Fail'}</span></td>
+      <td><span class="badge ${isSuccessOutcome(h.res)?'badge-green':'badge-err'}">${isSuccessOutcome(h.res)?'Pass':'Fail'}</span></td>
     </tr>`).join('')}</tbody></table>`}
   `;
 
@@ -6635,7 +6635,7 @@ async function renderSReport(){
   // Gate performance per belt
   const gatesByBelt = beltHistory.map(b=>{
     const hist = (s.history||[]).filter(h=>h.belt===b);
-    const pass = hist.filter(h=>h.res==='pass').length;
+    const pass = hist.filter(h=>isSuccessOutcome(h.res)).length;
     const fail = hist.filter(h=>h.res==='fail').length;
     return {b, pass, fail, total: pass+fail};
   }).filter(x=>x.total>0);
@@ -6766,7 +6766,7 @@ async function renderSReport(){
           <td style="font-size:11.5px;color:var(--txt3)">${h.dt}</td>
           <td>${beltBadge(h.belt)}</td>
           <td style="font-size:12px">${h.type}</td>
-          <td><span style="font-weight:700;color:${h.res==='pass'?'var(--ok)':'var(--err)'}">${h.res==='pass'?'Pass':'Fail'}</span></td>
+          <td><span style="font-weight:700;color:${isSuccessOutcome(h.res)?'var(--ok)':'var(--err)'}">${isSuccessOutcome(h.res)?'Pass':'Fail'}</span></td>
         </tr>`).join('')}</tbody>
       </table></div>`}
     </div>`;
@@ -9630,7 +9630,7 @@ function renderSHistory(){
     <div class="card">
       <div class="card-hd"><div class="card-ttl">Assessment History</div><span class="pill p-muted">${(s.history||[]).length} records</span></div>
       <div class="card-body">
-        ${s.history&&s.history.length?`<div class="tl">${s.history.slice().reverse().map(h=>`<div class="tl-item"><div class="tl-dot" style="background:${h.res==='pass'?'rgba(34,197,94,.15)':'rgba(239,68,68,.15)'};color:${h.res==='pass'?'var(--ok)':'var(--err)'}">${h.res==='pass'?ICO.check:ICO.x}</div><div><div class="tl-date">${h.dt} &bull; ${beltBadge(h.belt)}</div><div class="tl-txt">${h.type}: <strong style="color:${h.res==='pass'?'var(--ok)':'var(--err)'}">${h.res.charAt(0).toUpperCase()+h.res.slice(1)}</strong></div></div></div>`).join('')}</div>`:'<div style="color:var(--txt3);font-size:12px;text-align:center;padding:20px">No assessment history yet.</div>'}
+        ${s.history&&s.history.length?`<div class="tl">${s.history.slice().reverse().map(h=>`<div class="tl-item"><div class="tl-dot" style="background:${isSuccessOutcome(h.res)?'rgba(34,197,94,.15)':'rgba(239,68,68,.15)'};color:${isSuccessOutcome(h.res)?'var(--ok)':'var(--err)'}">${isSuccessOutcome(h.res)?ICO.check:ICO.x}</div><div><div class="tl-date">${h.dt} &bull; ${beltBadge(h.belt)}</div><div class="tl-txt">${h.type}: <strong style="color:${isSuccessOutcome(h.res)?'var(--ok)':'var(--err)'}">${h.res.charAt(0).toUpperCase()+h.res.slice(1)}</strong></div></div></div>`).join('')}</div>`:'<div style="color:var(--txt3);font-size:12px;text-align:center;padding:20px">No assessment history yet.</div>'}
       </div>
     </div>`;
 }
@@ -9781,7 +9781,7 @@ function renderXFacilityDetail(fid){
   const staffWithVelocity=[...st].map(s=>{
     const proj=generateProjection(s);
     const win=getWindowStatus(s);
-    const passedGates=(s.history||[]).filter(h=>h.res==='pass').length;
+    const passedGates=(s.history||[]).filter(h=>isSuccessOutcome(h.res)).length;
     const totalMonths=Math.max(1,Math.round(daysAt(s.since)/30));
     const velocity=(passedGates/totalMonths).toFixed(1); // gates/month
     return {s,proj,win,velocity:parseFloat(velocity)};
@@ -10520,7 +10520,7 @@ function renderHProfile(sid,context){
     return `<div class="irow" style="${st2==='locked'?(isOverrideAdmin?'':'opacity:.5'):'cursor:pointer'}" ${canClick?`onclick="openPSTrackDetail('${tid}','${s.id}')"`:''}><div class="ilbl" style="font-size:11.5px;flex:1">${t.name}${psOverrideMark(td)}</div><div class="ival" style="display:flex;align-items:center;gap:6px">${statusBadge}${action}</div></div>`;
   }).join('')+'<div class="irow" style="border:none"><div class="ilbl">Promotion Eligible</div><div class="ival">'+( s.promo?'<span class="pill p-gold">Yes</span>':'<span style="color:var(--txt3);font-size:12px">Not yet</span>' )+'</div></div>';
 })()}</div></div>
-        <div class="card"><div class="card-hd"><div class="card-ttl">Assessment History</div></div><div class="card-body"><div class="tl">${s.history.length?s.history.slice().reverse().map(h=>`<div class="tl-item"><div class="tl-dot" style="background:${h.res==='pass'?'rgba(34,197,94,.15)':'rgba(239,68,68,.15)'};color:${h.res==='pass'?'var(--ok)':'var(--err)'}">${h.res==='pass'?ICO.check:ICO.x}</div><div><div class="tl-date">${h.dt} &bull; ${beltBadge(h.belt)}</div><div class="tl-txt">${h.type}: <strong style="color:${h.res==='pass'?'var(--ok)':'var(--err)'}">${h.res.charAt(0).toUpperCase()+h.res.slice(1)}</strong></div></div></div>`).join(''):'<div style="font-size:12px;color:var(--txt3)">No assessment history recorded yet.</div>'}</div></div></div>
+        <div class="card"><div class="card-hd"><div class="card-ttl">Assessment History</div></div><div class="card-body"><div class="tl">${s.history.length?s.history.slice().reverse().map(h=>`<div class="tl-item"><div class="tl-dot" style="background:${isSuccessOutcome(h.res)?'rgba(34,197,94,.15)':'rgba(239,68,68,.15)'};color:${isSuccessOutcome(h.res)?'var(--ok)':'var(--err)'}">${isSuccessOutcome(h.res)?ICO.check:ICO.x}</div><div><div class="tl-date">${h.dt} &bull; ${beltBadge(h.belt)}</div><div class="tl-txt">${h.type}: <strong style="color:${isSuccessOutcome(h.res)?'var(--ok)':'var(--err)'}">${h.res.charAt(0).toUpperCase()+h.res.slice(1)}</strong></div></div></div>`).join(''):'<div style="font-size:12px;color:var(--txt3)">No assessment history recorded yet.</div>'}</div></div></div>
       </div>
     </div>
     <div>${buildOIPLeaderPanel(s, context==='admin')}</div>`;
@@ -13474,7 +13474,7 @@ function renderFacIntel(el){
   const priorityOrder={urgent:0,high:1,medium:2,low:3};
   focuses.sort((a,b)=>priorityOrder[a.priority]-priorityOrder[b.priority]);
 
-  const staffWithVelocity=[...st].map(s=>{const proj=generateProjection(s);const win=getWindowStatus(s);const passedGates=(s.history||[]).filter(h=>h.res==='pass').length;const totalMonths=Math.max(1,Math.round(daysAt(s.since)/30));const velocity=(passedGates/totalMonths).toFixed(1);return{s,proj,win,velocity:parseFloat(velocity)};}).sort((a,b)=>b.s.belt===a.s.belt?b.velocity-a.velocity:beltIdx(b.s.belt)-beltIdx(a.s.belt));
+  const staffWithVelocity=[...st].map(s=>{const proj=generateProjection(s);const win=getWindowStatus(s);const passedGates=(s.history||[]).filter(h=>isSuccessOutcome(h.res)).length;const totalMonths=Math.max(1,Math.round(daysAt(s.since)/30));const velocity=(passedGates/totalMonths).toFixed(1);return{s,proj,win,velocity:parseFloat(velocity)};}).sort((a,b)=>b.s.belt===a.s.belt?b.velocity-a.velocity:beltIdx(b.s.belt)-beltIdx(a.s.belt));
 
   const gradeColor=stats.greenPct>=75?'var(--ok)':stats.greenPct>=50?'var(--warn)':'var(--err)';
   const grade=stats.greenPct>=90?'A':stats.greenPct>=75?'B':stats.greenPct>=60?'C+':stats.greenPct>=40?'C':'D';
@@ -16216,7 +16216,7 @@ function openFreeAgentFullReport(faId) {
       <td style="font-size:11px">${h.dt || '--'}</td>
       <td>${beltBadge(h.belt)}</td>
       <td style="font-size:11.5px">${h.type}</td>
-      <td><span class="pill ${h.res==='pass'?'p-ok':'p-err'}" style="font-size:10px">${h.res==='pass'?'Pass':'Fail'}</span></td>
+      <td><span class="pill ${isSuccessOutcome(h.res)?'p-ok':'p-err'}" style="font-size:10px">${isSuccessOutcome(h.res)?'Pass':'Fail'}</span></td>
       <td style="font-size:11px;color:var(--txt3)">${h.note?Security.sanitize(h.note):'--'}</td>
     </tr>`).join('');
 
@@ -16295,7 +16295,7 @@ function openFreeAgentFullReport(faId) {
       <div class="card-hd"><div class="card-ttl">Assessment History</div><span class="pill p-muted">${allHistory.length} events</span></div>
       ${allHistory.length ? `<div style="overflow-x:auto"><table class="tbl tbl-static" style="min-width:460px">
         <thead><tr><th>Date</th><th>Belt</th><th>Type</th><th>Result</th><th>Notes</th></tr></thead>
-        <tbody>${gateRows||allHistory.map(h=>`<tr><td style="font-size:11px">${h.dt||'--'}</td><td>${beltBadge(h.belt)}</td><td style="font-size:11.5px">${h.type}</td><td><span class="pill ${h.res==='pass'?'p-ok':'p-err'}" style="font-size:10px">${h.res==='pass'?'Pass':'Fail'}</span></td><td style="font-size:11px;color:var(--txt3)">${h.note?Security.sanitize(h.note):'--'}</td></tr>`).join('')}</tbody>
+        <tbody>${gateRows||allHistory.map(h=>`<tr><td style="font-size:11px">${h.dt||'--'}</td><td>${beltBadge(h.belt)}</td><td style="font-size:11.5px">${h.type}</td><td><span class="pill ${isSuccessOutcome(h.res)?'p-ok':'p-err'}" style="font-size:10px">${isSuccessOutcome(h.res)?'Pass':'Fail'}</span></td><td style="font-size:11px;color:var(--txt3)">${h.note?Security.sanitize(h.note):'--'}</td></tr>`).join('')}</tbody>
       </table></div>` : '<div style="font-size:12px;color:var(--txt3);padding:12px 14px">No assessment history on record.</div>'}
     </div>
 
@@ -16327,7 +16327,7 @@ function downloadFreeAgentReport(faId) {
   const beltHistory = BELT_ORDER.filter(b => beltIdx(b) <= bIdx_val);
   const gatesByBelt = beltHistory.map(b => {
     const bh = (fa.history||[]).filter(h => h.belt === b);
-    const pass = bh.filter(h => h.res==='pass').length;
+    const pass = bh.filter(h => isSuccessOutcome(h.res)).length;
     const fail = bh.filter(h => h.res==='fail').length;
     return {b, pass, fail, total: pass+fail};
   }).filter(x => x.total > 0);
@@ -16403,7 +16403,7 @@ function downloadFreeAgentReport(faId) {
       ['Current Belt', fa.belt, 'Since ' + (fa.since||'–'), bColor],
       ['Points', pts.toLocaleString(), 'SBD Score', '#d97706'],
       ['PS Stars', psStars, psStars===0 ? 'No tracks yet' : psStars===1 ? '1 track complete' : psStars+' tracks complete', '#d97706'],
-      ['Assessments', (fa.history||[]).length, (fa.history||[]).filter(h=>h.res==='pass').length+' passed', '#16a34a'],
+      ['Assessments', (fa.history||[]).length, (fa.history||[]).filter(h=>isSuccessOutcome(h.res)).length+' passed', '#16a34a'],
       ['Facilities', hist.length, hist.length===1 ? '1 placement' : hist.length+' placements', '#2563eb'],
     ])}
 
@@ -16444,7 +16444,7 @@ function downloadFreeAgentReport(faId) {
       <td style="color:#64748b">${h.dt||'–'}</td>
       <td>${pBelt(h.belt)}</td>
       <td>${h.type}</td>
-      <td><span class="badge ${h.res==='pass'?'badge-green':'badge-err'}">${h.res==='pass'?'Pass':'Fail'}</span></td>
+      <td><span class="badge ${isSuccessOutcome(h.res)?'badge-green':'badge-err'}">${isSuccessOutcome(h.res)?'Pass':'Fail'}</span></td>
       <td style="color:#64748b;font-size:7.5pt">${h.note?Security.sanitize(h.note):'–'}</td>
     </tr>`).join('')}</tbody></table>`}
   `;
@@ -16874,7 +16874,7 @@ function openFreeAgentProfile(faId){
       ${hist.length?`<div class="tl">${hist.map(h=>`<div class="tl-item"><div class="tl-dot" style="background:rgba(96,165,250,.15);color:#60a5fa;font-size:9px">&#9679;</div><div><div class="tl-date">${h.from} \u2013 ${h.to}</div><div class="tl-txt">${h.facName}<span style="font-size:11px;color:#64748b;margin-left:6px">${h.loc||''}</span></div></div></div>`).join('')}</div>`:
       '<div style="font-size:12px;color:#64748b">No facility history recorded.</div>'}
       <div class="section-lbl" style="margin-bottom:6px;margin-top:12px">Full Assessment History</div>
-      <div class="tl">${(fa.history||[]).length?(fa.history||[]).slice().reverse().map(h=>`<div class="tl-item"><div class="tl-dot" style="background:${h.res==='pass'?'rgba(34,197,94,.15)':'rgba(239,68,68,.15)'};color:${h.res==='pass'?'#22c55e':'#ef4444'}">${h.res==='pass'?ICO.check:ICO.x}</div><div><div class="tl-date">${h.dt} &bull; ${beltBadge(h.belt)}</div><div class="tl-txt">${h.type} \u2014 <strong style="color:${h.res==='pass'?'#22c55e':'#ef4444'}">${h.res==='pass'?'Pass':'Fail'}</strong>${h.note?' \u2014 '+Security.sanitize(h.note):''}</div></div></div>`).join(''):'<div style="font-size:12px;color:#64748b">No assessment history.</div>'}</div>
+      <div class="tl">${(fa.history||[]).length?(fa.history||[]).slice().reverse().map(h=>`<div class="tl-item"><div class="tl-dot" style="background:${isSuccessOutcome(h.res)?'rgba(34,197,94,.15)':'rgba(239,68,68,.15)'};color:${isSuccessOutcome(h.res)?'#22c55e':'#ef4444'}">${isSuccessOutcome(h.res)?ICO.check:ICO.x}</div><div><div class="tl-date">${h.dt} &bull; ${beltBadge(h.belt)}</div><div class="tl-txt">${h.type} \u2014 <strong style="color:${isSuccessOutcome(h.res)?'#22c55e':'#ef4444'}">${isSuccessOutcome(h.res)?'Pass':'Fail'}</strong>${h.note?' \u2014 '+Security.sanitize(h.note):''}</div></div></div>`).join(''):'<div style="font-size:12px;color:#64748b">No assessment history.</div>'}</div>
       <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--bdr)">
         <div style="font-size:11px;color:var(--txt3);margin-bottom:10px">View this free agent's complete staff report as it would appear on an active site assignment.</div>
         <button class="btn btn-gold" style="width:100%;justify-content:center" onclick="openFreeAgentFullReport('${fa.id}')">View Full Staff Report</button>
