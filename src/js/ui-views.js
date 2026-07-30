@@ -14401,6 +14401,8 @@ function renderBeltPinAuthBlock(assignedFids){
     if (st.releasedAt) return false;
     if (assignedFids && !assignedFids.includes(st.fid)) return false;
     if (asmFilter !== 'all' && st.fid !== asmFilter) return false;
+    const acct = _rmUserFor(st.id);
+    if (acct && acct.active === false) return false;
     const nb = nextBelt(st.belt);
     return nb && btEligible(st.id, nb);
   });
@@ -14511,6 +14513,10 @@ function renderBeltTestReviewSection(assignedFids){
 // admin (renderHAssessments). Caller scopes the staff list.
 // ============================================================
 function renderAssessmentAuthBlock(staffList){
+  staffList = staffList.filter(st => {
+    const acct = _rmUserFor(st.id);
+    return !(acct && acct.active === false);
+  });
   if(!staffList.length) return '';
   return `
     <div style="margin-bottom:20px">
