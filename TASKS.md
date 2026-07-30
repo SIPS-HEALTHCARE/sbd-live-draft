@@ -1308,7 +1308,28 @@ persisted.
 
   *Still open, asked 2026-07-30 and not yet answered:* whether Observer and the practice-gate waiver
   follow the same rule. He did not name either in the voice notes, so they are out of scope until he
-  says otherwise.
+  says otherwise. He replied at 6:43 AM only to the T73 test request, "Will do... I will let you
+  know", and did not address this question, so it stays open.
+
+  *Step 1 written 2026-07-30, not yet applied:*
+  `supabase/migrations/20260730060000_t74_assessor_facility_scope_overload.sql` adds the
+  `sbd_is_assessor(p_fid uuid)` overload and touches nothing else. No policy, column or row
+  changes, so applying it alters no behaviour; reach moves only when a later migration rewrites a
+  policy to pass a facility. An absent or empty `capabilities.assessor_facilities` means system
+  wide, which is what all three current holders have, so the first policy to adopt the overload
+  changes the answer for nobody.
+
+  Correction to the table above: facility educator is not merely a UI convention, it is enforced
+  server side. `sbd_leads_facility_of(uuid)` reads `capabilities->'educator_facilities'` and is
+  reached by 16 policies across 8 tables, including `preceptor_access` and
+  `ps_completion_requests`. Measured 2026-07-30. That makes it a genuine reference implementation
+  for this task rather than only a shape to copy, and it is where the argument type and the
+  SECURITY DEFINER posture of the new overload come from.
+
+  The predicate was verified read-only against production over seven cases: a holder with no list
+  is allowed at any facility, a scoped holder is allowed only inside the list, an empty list reads
+  as system wide, a null facility denies rather than leaks, and a non-holder is denied. The DDL
+  itself has not been executed anywhere, since applying it to production needs an explicit go.
 
   *Goal:* A granted role applies only at the facilities chosen for it, and the server enforces it.
   *Done when:* A per-facility assessor can record and confirm at a granted facility, is refused at a
@@ -1371,6 +1392,81 @@ persisted.
   *Done when:* A SIPS home facility exists, Kirti and Amy sit in it rather than `Free Agent`, the Free
   Agent Registry no longer lists them, and facility-grouped reporting separates the two.
 
+- [ ] **T77** A granted assessor has no Assessment Queue screen, and it cannot be switched on yet · est 0.5d after T74 · High
+  Reported by the client on 2026-07-30 at 6:54 AM while confirming T73, from Kirti's own account:
+  *"There's observation and observation review but no assessment queue."* He is right, and it is the
+  same shape of bug as T73: the permission exists and the door does not.
+
+  `Assessment Queue` is a nav item in the admin portal (`a-assessments`, `index.html:397`) and in the
+  hospital portal (`h-assessments:294`, hidden). There is no `s-assessments` in the staff portal at
+  all. Server side, `sbd_assessment_queue` grants a granted assessor both read and write:
+  `aq_select` is `... OR sbd_is_assessor() OR ...` and `aq_update` is
+  `sbd_get_user_role() = ANY(admin roles) OR sbd_is_assessor()`. So the grant reaches the data and
+  T73 moved only the two observation consoles.
+
+  **Why the one-line fix is refused.** `renderAAssessments()` scopes facilities the admin way:
+
+      const isMaster = ST.user?.role === 'master_admin';
+      const assignedFids = (!isMaster && ST.user?.assignedFids?.length) ? ST.user.assignedFids : null;
+
+  and every filter below it reads `(!assignedFids || assignedFids.includes(...))`. Measured
+  2026-07-30: Kirti Chaudhary and Amy Cooper are both `staff_member` with
+  `assigned_facility_ids = []`, so `assignedFids` resolves to `null` and `null` means **no filter**.
+  The queue holds 57 rows across 8 distinct facilities. Adding the nav item would therefore show
+  either of them the whole organisation's queue plus an org-wide `Record Assessment` button, and
+  hiding it in the UI would fix nothing, because `aq_select` carries no facility restriction for an
+  assessor and the server would return all 57 rows anyway.
+
+  **Depends on T74**, and is the concrete reason T74 goes first. Route chosen by Shawn on
+  2026-07-30: wait for the per-facility gate rather than ship an interim own-facility rule, so this
+  screen arrives already scoped instead of being widened and then narrowed.
+
+  Also found while measuring, unrelated to the client's report: `sbd_portal_users` holds **two**
+  `Avery Henderson` rows, one with a `facility_id` and no `assigned_facility_ids`, the other the
+  reverse. Only one carries the assessor grant. Logged here so it is not rediscovered; it is a data
+  hygiene item, not part of this task.
+
+  *Built 2026-07-30, not yet applied or deployed.* Both halves are written together, because the
+  screen must not land before the policy that limits it.
+
+  - `20260730070000_t77_assessment_queue_facility_scope.sql` rewrites `aq_select` and `aq_update`
+    to call `sbd_is_assessor(facility_id)`. Every other branch is copied verbatim, so the four
+    admin roles, the hospital own-facility branch and the requester's own row do not move.
+  - `capabilities.assessor_facilities`, granted in Role Management next to the Assessor toggle,
+    mirroring `educator_facilities`. Revoking Assessor drops the list with it, and an empty list
+    is never persisted, since both the client helper and the SQL read empty as system wide.
+  - `effAssessorFacilities`, `effAssessorScoped` and `effIsAssessorAt` mirror the SQL client side.
+    `effIsAssessor` is deliberately unchanged: it still answers "an assessor at all" and drives
+    nav visibility, so a scoped assessor still sees the section.
+  - `s-assessments` nav item and container in the staff portal, revealed by the same
+    `effIsAssessor` gate as #73 and re-checked inside `renderSView`.
+  - `renderAAssessments` now resolves its container through `asmMount`, and scopes by
+    `assessor_facilities` for a capability assessor. This was the leak: the function filters on
+    `assignedFids`, an admin-role field, and both holders carry `[]`, so the filter collapsed to
+    no filter. Admin-role scoping is untouched.
+  - The eight `ST.aView === 'a-assessments'` re-render guards became `asmRerender()`, which
+    covers both mounts. Without it the queue went stale in the staff portal after every action.
+  - `openRecordModal` and `submitAssessment` respect the same scope, so recording cannot reach a
+    facility the policy would refuse, including via a console call.
+  - `_rmFacilityOptions` now feeds both capability pickers: active rows only, and a repeated
+    display name is disambiguated by location. Partial T75 mitigation, see that entry.
+
+  *Verified:* seven client-side gate cases against the two live capability shapes, including that
+  a holder with no list is still allowed everywhere and a null facility denies. `node --check`
+  clean. The DDL has not been executed anywhere.
+
+  *Remaining, and it is a decision not code:* nobody has an `assessor_facilities` list yet, so on
+  the day this lands every current holder still reaches everywhere, by design. Kirti and Amy get
+  scoped only once someone picks their facilities in Role Management, which is master-admin only.
+  The client's own example was Kirti at Mount Sinai. Also note Kirti's `facility_id` is the
+  `Free Agent` row today, per T76, so "her own facility" is not yet a meaningful scope.
+
+  *Goal:* A granted assessor can work the assessment queue, and only where the grant applies.
+  *Done when:* The staff portal shows Assessment Queue to a granted assessor and to nobody else, the
+  rows and the facility filter are limited to the assessor's granted facilities, `aq_select` and
+  `aq_update` enforce that limit server side rather than the UI alone, and a plain staff member sees
+  no such screen.
+
 ### Blocked, not on the critical path
 
 - [ ] **T49** Strip and rotate the PSOP credentials, gate the public page
@@ -1414,6 +1510,13 @@ persisted.
 ---
 
 ## Totals
+
+**Updated 2026-07-30.** 36 items done, 47 open. T77 added: the client confirmed T73 from Kirti's
+account at 6:54 AM and found the Assessment Queue missing from the staff portal. It is a real gap
+with the same shape as T73, but it is refused as a quick fix, because a granted assessor has no
+facility limit today and both the screen and `aq_select` would expose all 57 queue rows across all 8
+facilities. It waits on T74 by Shawn's decision rather than shipping an interim own-facility rule.
+T74 step 1, the `sbd_is_assessor(p_fid)` overload, is written and applies no behaviour change.
 
 **Updated 2026-07-29 later still.** 36 items done, 46 open. T76 added and two entries corrected after
 transcribing the client's three voice notes of 2026-07-30 03:37 to 03:39, which settled scope that the

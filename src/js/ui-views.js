@@ -376,7 +376,7 @@ function enterPortal(type){
     // consoles only ever lived in the admin portal. Reveal them in this portal instead, since
     // the portal switcher is master/SIPS admin only (T72), so this is the only door they get.
     const _sAssessor = effIsAssessor(u);
-    ['s-nav-assessor-lbl','s-nav-observations','s-nav-observationreviews'].forEach(id=>{
+    ['s-nav-assessor-lbl','s-nav-assessments','s-nav-observations','s-nav-observationreviews'].forEach(id=>{
       const n=document.getElementById(id);
       if(n) n.style.display = _sAssessor ? (id==='s-nav-assessor-lbl'?'block':'flex') : 'none';
     });
@@ -577,12 +577,13 @@ function renderSView(view){
     toast('RBAC Guard: Unauthorized access to Staff Portal', 'err');
     return;
   }
-  ['s-dashboard','s-belt','s-window','s-scoreboard','s-posschool','s-report','s-oip','s-schedule','s-history','s-study','s-foundations','s-instruments','s-preceptor','s-observations','s-observationreviews','s-guide','s-settings','s-david'].forEach(v=>{
+  ['s-dashboard','s-belt','s-window','s-scoreboard','s-posschool','s-report','s-oip','s-schedule','s-history','s-study','s-foundations','s-instruments','s-preceptor','s-observations','s-observationreviews','s-assessments','s-guide','s-settings','s-david'].forEach(v=>{
     const el=document.getElementById(v);
     if(el){el.classList.add('hidden');el.classList.remove('fade-in');}
   });
   ST.sView=view;
   ovsMount='s';   // #73: Observations render into the staff portal from here
+  asmMount='s';   // #77: and the assessment queue, same indirection
   if(typeof logActivity==='function') logActivity('view',{view});
   const el=document.getElementById(view);
   if(el){el.classList.remove('hidden');void el.offsetWidth;el.classList.add('fade-in');}
@@ -604,6 +605,8 @@ function renderSView(view){
     // visibility, because a saved view in sessionStorage can route straight to a view id.
     's-observations':()=>{ if(effIsAssessor()) renderAObservations(); else toast('Assessor access required.','err'); },
     's-observationreviews':()=>{ if(effIsAssessor()) renderAObservationReviews(); else toast('Assessor access required.','err'); },
+    // #77: same re-check. The queue itself is facility-scoped inside renderAAssessments.
+    's-assessments':()=>{ if(effIsAssessor()) renderAAssessments(); else toast('Assessor access required.','err'); },
     's-guide':()=>renderGuideView('s'),
     's-settings':renderSettingsView,
     's-david':()=>renderDavidView('s-david'),
@@ -713,6 +716,7 @@ function renderAView(view){
   });
   ST.aView=view;
   ovsMount='a';   // #73: Observations render into the admin portal from here
+  asmMount='a';   // #77: and the assessment queue
   if(typeof logActivity==='function') logActivity('view',{view});
   const el=document.getElementById(view);
   if(el){ el.classList.remove('hidden'); void el.offsetWidth; el.classList.add('fade-in'); }
@@ -3060,6 +3064,15 @@ let ovsArmed = null;        // { action, id } two-tap confirmation (sandbox-safe
 // threaded as an argument because every re-render in this section is argument-less.
 let ovsMount = 'a';         // 'a' = admin portal, 's' = staff portal
 function ovsEl(view){ return document.getElementById(ovsMount + '-' + view); }
+// #77: the assessment queue needs the same indirection for the same reason. Kept as its own
+// variable rather than reusing ovsMount so the two sections stay independently movable.
+let asmMount = 'a';         // 'a' = admin portal, 's' = staff portal
+// #77: every action in that section re-rendered on `ST.aView === 'a-assessments'` alone, which
+// is false in the staff portal, so a granted assessor's queue would go stale after approving or
+// recording. One predicate for both mounts, so a new call site cannot miss one.
+function asmRerender(){
+  if(ST.aView==='a-assessments' || ST.sView==='s-assessments') renderAAssessments();
+}
 
 // The active belt instrument for a given belt label (system of record; read-only).
 function ovsInstrument(belt){
@@ -10234,6 +10247,28 @@ function effIsFacilityLeader(u){ u=u||ST.user; if(!u) return false;
   if(u.role==='educator'||u.role==='hospital'||u.role==='facility_admin') return true;
   var ef=_capsOf(u).educator_facilities; return Array.isArray(ef) && ef.length>0;
 }
+// #77: the facilities an Assessor grant applies to, mirroring educator_facilities. Returns null
+// when no list is set, which the server-side sbd_is_assessor(p_fid) also reads as system wide,
+// so a pre-#74 holder keeps the reach they have today rather than silently losing it.
+function effAssessorFacilities(u){ u=u||ST.user;
+  var af=_capsOf(u).assessor_facilities;
+  return (Array.isArray(af) && af.length) ? af.map(String) : null;
+}
+// #77: whether the assessor reach is scoped by a facility list rather than by an admin role.
+// The four admin roles keep whole-organisation reach through their own RLS branch, so only a
+// capability-granted assessor gets narrowed. Kept separate from effIsAssessor, which answers
+// "an assessor at all" and still drives nav visibility.
+function effAssessorScoped(u){ u=u||ST.user; if(!u) return false;
+  if(u.role==='master_admin'||u.role==='admin'||u.role==='staff_admin'||u.role==='system_admin') return false;
+  return !!_capsOf(u).assessor && !!effAssessorFacilities(u);
+}
+// #77: is the caller an assessor AT this facility. Mirrors sbd_is_assessor(p_fid) so the screen
+// and the policy agree; a null fid denies rather than leaks, matching the SQL.
+function effIsAssessorAt(fid, u){ u=u||ST.user; if(!effIsAssessor(u)) return false;
+  if(!effAssessorScoped(u)) return true;
+  if(fid==null) return false;
+  return effAssessorFacilities(u).indexOf(String(fid))>=0;
+}
 // Resolve context string for profile rendering  --  facility admins get admin-level capabilities
 function hProfileContext(){ return isFacilityAdmin() ? 'admin' : 'h'; }
 
@@ -14074,7 +14109,7 @@ async function approveGateRequest(qid) {
       item.status = prev.status; item.approvedBy = prev.approvedBy; item.approvedAt = prev.approvedAt;
       toast('Could not save approval — please retry.', 'err');
       if (ST.aView === 'a-progression') renderAProgression();
-      if (ST.aView === 'a-assessments') renderAAssessments();
+      asmRerender();
       return;
     }
   }
@@ -14083,7 +14118,7 @@ async function approveGateRequest(qid) {
   toast(`${fullName(s)}: ${item.type} assessment for ${item.targetBelt} Belt approved.`, 'ok');
   updateProgBadge();
   if (ST.aView === 'a-progression') renderAProgression();
-  if (ST.aView === 'a-assessments') renderAAssessments();
+  asmRerender();
 }
 
 async function denyGateRequest(qid) {
@@ -14115,7 +14150,7 @@ async function denyGateRequest(qid) {
   toast(`${fullName(s)}: ${item.type} request denied. They have been notified.`, 'err');
   updateProgBadge();
   if (ST.aView === 'a-progression') renderAProgression();
-  if (ST.aView === 'a-assessments') renderAAssessments();
+  asmRerender();
 }
 
 function updateProgBadge() {
@@ -14300,7 +14335,7 @@ async function acceptBeltTestGate(r, s, component){
     const combo = btComponentRows(s.id, targetBelt).combined;
     toast(`${fullName(s)}: ${gateType} recorded (${pass ? 'PASS' : 'FAIL'}) for ${targetBelt} Belt.` +
       (combo ? ` Both gates in — recommendation: ${combo.system_suggestion}.` : ''), 'ok');
-    if (ST.aView === 'a-assessments') renderAAssessments();
+    asmRerender();
   } catch (e) {
     if (typeof handleSyncError === 'function') handleSyncError(e, 'Belt gate accept'); else toast('Accept failed: ' + (e.message || e), 'err');
   }
@@ -14334,7 +14369,7 @@ async function acceptBeltTestCombined(r, s){
     r.status = 'ACCEPTED'; r.finalBelt = targetBelt;
     DB.queue = DB.queue.filter(q => !(q.sid === s.id && q.targetBelt === targetBelt && (q.type === 'Competency' || q.type === 'Simulation') && (q.status === 'pass' || q.status === 'fail')));
     toast(`${fullName(s)}: belt test accepted. Competency + Simulation recorded for ${targetBelt} Belt.`, 'ok');
-    if (ST.aView === 'a-assessments') renderAAssessments();
+    asmRerender();
   } catch (e) {
     if (typeof handleSyncError === 'function') handleSyncError(e, 'Belt test accept'); else toast('Accept failed: ' + (e.message || e), 'err');
   }
@@ -14350,7 +14385,7 @@ async function remediateBeltTestResult(id){
     if (IS_LIVE) await SB.updateBeltTestResult(r.id, notes ? { status: 'REMEDIATION_REQUIRED', notes } : { status: 'REMEDIATION_REQUIRED' });
     r.status = 'REMEDIATION_REQUIRED'; if (notes) r.notes = notes;
     toast(`${s ? fullName(s) : 'Candidate'}: marked for remediation.`, 'warn');
-    if (ST.aView === 'a-assessments') renderAAssessments();
+    asmRerender();
   } catch (e) { if (typeof handleSyncError === 'function') handleSyncError(e, 'Belt remediation'); }
 }
 
@@ -14517,12 +14552,25 @@ function asmSearchInput(el){
   if(fresh){ fresh.focus(); try{ fresh.setSelectionRange(caret,caret); }catch(e){} }
 }
 function renderAAssessments() {
-  const el = document.getElementById('a-assessments');
+  const el = document.getElementById(asmMount + '-assessments');
+  if (!el) return;
   // Scope facilities to assignedFids for staff_admin -- master_admin sees all
   const isMaster = ST.user?.role === 'master_admin';
-  const assignedFids = (!isMaster && ST.user?.assignedFids?.length) ? ST.user.assignedFids : null;
+  let assignedFids = (!isMaster && ST.user?.assignedFids?.length) ? ST.user.assignedFids : null;
+  // #77: a capability-granted assessor is scoped by assessor_facilities, not by assignedFids,
+  // which is an admin-role field they do not carry. Without this the admin filter collapses to
+  // "no filter" for them (assigned_facility_ids is [] on both current holders) and the screen
+  // would show every facility's queue. Mirrors sbd_is_assessor(p_fid) so the screen cannot show
+  // a row the policy would refuse. Admin roles keep their existing scoping untouched.
+  const asrFids = effAssessorScoped() ? effAssessorFacilities() : null;
+  if (asrFids) {
+    assignedFids = assignedFids
+      ? assignedFids.map(String).filter(f => asrFids.indexOf(f) >= 0)
+      : asrFids;
+  }
+  const inScope = (fid) => !assignedFids || assignedFids.map(String).indexOf(String(fid)) >= 0;
   const allFacs = DB.facilities.filter(f =>
-    f.active !== false && (!assignedFids || assignedFids.includes(f.id))
+    f.active !== false && inScope(f.id)
   ).slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''));
 
   // Search by staff name across every block on this page
@@ -14532,12 +14580,12 @@ function renderAAssessments() {
   // Separate staff-requested (pending approval) from admin-managed queue
   const staffRequests = DB.queue.filter(item =>
     item.status === 'pending' && item.requestedAt &&
-    (!assignedFids || assignedFids.includes(item.fid)) &&
+    inScope(item.fid) &&
     (asmFilter === 'all' || item.fid === asmFilter) && nameMatch(item.sid)
   );
   const adminQueue = DB.queue.filter(item =>
     (!item.requestedAt || item.status === 'approved') &&
-    (!assignedFids || assignedFids.includes(item.fid)) &&
+    inScope(item.fid) &&
     (asmFilter === 'all' || item.fid === asmFilter) && nameMatch(item.sid)
   );
 
@@ -15040,7 +15088,7 @@ function markQueue(qid,result){
   }
   toast(`${name} -- ${item.type}: <strong>${result.toUpperCase()}</strong>. Profile updated.`,result==='pass'?'ok':'err');
   // Re-render current view
-  if(ST.aView==='a-assessments') renderAAssessments();
+  asmRerender();
   if(ST.aView==='a-facility') renderFacTab();
 }
 
@@ -15478,14 +15526,20 @@ async function addStaff(lockedFid){
 
 // ============================================================ MODALS: RECORD ASSESSMENT
 function openRecordModal(sid){
-  // Use hFid as the active facility when called from the hospital portal (facility admin)
-  const activeFid = (ST.portal==='hospital' && ST.hFid) ? ST.hFid : ST.curFid;
+  // #77: a granted assessor recording from the staff portal has neither ST.curFid (admin) nor
+  // the hospital branch, so the facility would resolve to undefined and the staff dropdown would
+  // come back empty. Their scope is assessor_facilities, so drive both from that. A scoped
+  // assessor with exactly one facility gets it locked, matching the facility-admin treatment.
+  const _asrFids = effAssessorScoped() ? effAssessorFacilities() : null;
+  let activeFid = (ST.portal==='hospital' && ST.hFid) ? ST.hFid : ST.curFid;
+  if(_asrFids && (activeFid==null || _asrFids.indexOf(String(activeFid))<0)) activeFid=_asrFids[0];
   // Facility admins record only within their own facility (ASS-F2): the dropdown is
   // replaced by a locked field. The dropdown remains for admin-portal contexts, deduped
   // by name+location label (QA saw the same facility listed twice).
-  const facLocked = ST.portal==='hospital' && !!ST.hFid;
+  const facLocked = (ST.portal==='hospital' && !!ST.hFid) || (!!_asrFids && _asrFids.length===1);
   const _facSeen=new Set();
   const facOpts=DB.facilities.filter(f=>{
+    if(_asrFids && _asrFids.indexOf(String(f.id))<0) return false;
     if(f.active===false&&f.id!==activeFid) return false;
     const k=f.name+'|'+(f.loc||'');
     if(f.id!==activeFid&&_facSeen.has(k)) return false;
@@ -15539,6 +15593,10 @@ function submitAssessment(sid){
   // Facility-portal callers (facility admins) may only record within their own facility.
   // The modal already locks the facility, but guard here against console/DOM bypass too.
   if(ST.portal==='hospital'&&ST.hFid&&s.fid!==ST.hFid){toast('You can only record assessments for staff in your own facility.','err');return;}
+  // #77: same guard for a facility-scoped assessor. The modal already limits the picker, and
+  // sbd_is_assessor(p_fid) is the real lock, but this keeps a console call from reaching an RLS
+  // error mid-write and leaving the optimistic local edit applied.
+  if(effAssessorScoped()&&!effIsAssessorAt(s.fid)){toast('You can only record assessments at the facilities your assessor role covers.','err');return;}
   const type=document.getElementById('ra-type').value;
   const targetBelt=document.getElementById('ra-belt').value;
   const note=document.getElementById('ra-notes')?.value.trim()||'';
@@ -15566,7 +15624,7 @@ function submitAssessment(sid){
   raResult=null;
   toast(`${fullName(s)} | ${type}: <strong>${result==='pass'?'PASS':'FAIL'}</strong>. ${progressMsg}`,result==='pass'?'ok':'err');
   if(ST.aView==='a-facility') renderFacTab();
-  if(ST.aView==='a-assessments') renderAAssessments();
+  asmRerender();
   if(ST.hView==='h-assessments') renderHAssessments();
   if(ST.hView==='h-staff') renderHStaff();
 }
@@ -17089,7 +17147,8 @@ function _rmCapBadges(s){
   const out=[ chip(!!s.observer,'Observer','#0ea5e9'),
            chip(prc==='granted',prc==='revoked'?'Preceptor (revoked)':'Preceptor', prc==='revoked'?'#f87171':'#22c55e'),
            chip(!!wv,'Gate waiver','#c49a20') ];
-  if(cap.assessor) out.push(chip(true,'Assessor','#a78bfa'));
+  const asrN=Array.isArray(cap.assessor_facilities)?cap.assessor_facilities.length:0;
+  if(cap.assessor) out.push(chip(true, asrN?'Assessor ×'+asrN:'Assessor (all)','#a78bfa'));
   if(eduN) out.push(chip(true,'Educator ×'+eduN,'#a78bfa'));
   return out.join(' ');
 }
@@ -17107,6 +17166,12 @@ async function rmSetCapability(staffId, mutate){
   mutate(caps);
   if(caps.assessor!==true) delete caps.assessor;
   if(Array.isArray(caps.educator_facilities) && caps.educator_facilities.length===0) delete caps.educator_facilities;
+  // #77: an empty list must not persist. Both the client helper and sbd_is_assessor(p_fid) read
+  // an empty array as system wide, so leaving [] behind would look like a scope that is not one.
+  if(Array.isArray(caps.assessor_facilities) && caps.assessor_facilities.length===0) delete caps.assessor_facilities;
+  // Revoking the grant drops its facility list with it, otherwise a later re-grant would
+  // silently inherit a scope nobody chose in that session.
+  if(caps.assessor!==true) delete caps.assessor_facilities;
   const prev=u.capabilities;
   u.capabilities=caps;
   try{
@@ -17130,6 +17195,31 @@ function rmAddEducatorFac(staffId){
 function rmRemoveEducatorFac(staffId, fid){
   rmSetCapability(staffId, c=>{ if(Array.isArray(c.educator_facilities)) c.educator_facilities=c.educator_facilities.filter(x=>String(x)!==String(fid)); });
 }
+// #77: the Assessor grant's facility list. This is the "grant the role, then choose the
+// facilities it applies to" flow the client described in his 03:37 voice note, and it is the
+// only thing that narrows sbd_is_assessor(p_fid) away from system wide.
+function rmAddAssessorFac(staffId){
+  const sel=document.getElementById('rm-asr-fac-'+staffId); if(!sel||!sel.value) return; const fid=sel.value;
+  rmSetCapability(staffId, c=>{ c.assessor_facilities=Array.isArray(c.assessor_facilities)?c.assessor_facilities:[]; if(c.assessor_facilities.map(String).indexOf(String(fid))<0) c.assessor_facilities.push(fid); });
+}
+function rmRemoveAssessorFac(staffId, fid){
+  rmSetCapability(staffId, c=>{ if(Array.isArray(c.assessor_facilities)) c.assessor_facilities=c.assessor_facilities.filter(x=>String(x)!==String(fid)); });
+}
+// #75 mitigation, shared by both capability pickers. The unfiltered (DB.facilities||[]) list
+// carries inactive rows, test rows and two pairs sharing a display name, so a grant could land
+// on an entry the admin could not tell apart. Mirrors the admin facility switcher's active
+// filter and disambiguates a repeated name with its location, the same way openRecordModal
+// already does. Which of the remaining active rows are real sites is still a client question,
+// so this narrows the hazard without pretending to close it.
+function _rmFacilityOptions(selectedIds){
+  const sel=(selectedIds||[]).map(String);
+  const rows=(DB.facilities||[]).filter(f=>f.active!==false||sel.indexOf(String(f.id))>=0);
+  const byName={}; rows.forEach(f=>{ const k=(f.name||'').toLowerCase(); byName[k]=(byName[k]||0)+1; });
+  return rows.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''))
+    .map(f=>{ const dup=byName[(f.name||'').toLowerCase()]>1;
+      const label=(f.name||'Unnamed')+(dup?(f.loc?', '+f.loc:', '+String(f.id).slice(0,8)):'');
+      return `<option value="${f.id}">${label}</option>`; }).join('');
+}
 
 function _rmPanel(s){
   const u=(DB.users||[]).find(x=>x.sid===s.id);
@@ -17139,6 +17229,7 @@ function _rmPanel(s){
   const wv=s.assessmentGateOverride&&s.assessmentGateOverride.waived;
   const cap=(u&&u.capabilities)||{};
   const eduFacs=Array.isArray(cap.educator_facilities)?cap.educator_facilities:[];
+  const asrFacs=Array.isArray(cap.assessor_facilities)?cap.assessor_facilities:[];
   return `<div class="card">
     <div class="card-hd"><div class="card-ttl">${fullName(s)}</div>
       <button class="btn btn-ghost btn-xs" onclick="ROLEMGMT_SEL=null;renderARoleMgmt()">Close</button></div>
@@ -17166,15 +17257,23 @@ function _rmPanel(s){
             <div><div style="font-size:12.5px;font-weight:600">Assessment practice-gate waiver</div><div style="font-size:11px;color:var(--txt3)">Request an assessment without the practice tests</div></div>
             ${wv?`<button class="btn btn-ghost btn-sm" onclick="clearAssessmentOverride('${s.id}','rolemgmt')">Clear</button>`:`<button class="btn btn-ghost btn-sm" onclick="grantAssessmentOverride('${s.id}','rolemgmt')" style="border-color:var(--gold-bd);color:var(--gold)">Waive</button>`}
           </div>
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--bdr);border-radius:8px;padding:8px 11px">
-            <div><div style="font-size:12.5px;font-weight:600">Assessor rights</div><div style="font-size:11px;color:var(--txt3)">System-wide assessor access (observe + confirm), on top of their role</div></div>
-            <button class="btn btn-ghost btn-sm" onclick="rmToggleAssessor('${s.id}')" style="border-color:${cap.assessor?'#22c55e':'var(--bdr)'};color:${cap.assessor?'#22c55e':'var(--txt2)'}"${u?'':' disabled title="No login account"'}>${cap.assessor?'On':'Grant'}</button>
+          <div style="border:1px solid var(--bdr);border-radius:8px;padding:8px 11px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+              <div><div style="font-size:12.5px;font-weight:600">Assessor rights</div><div style="font-size:11px;color:var(--txt3)">Assessor access (observe + confirm), on top of their role</div></div>
+              <button class="btn btn-ghost btn-sm" onclick="rmToggleAssessor('${s.id}')" style="border-color:${cap.assessor?'#22c55e':'var(--bdr)'};color:${cap.assessor?'#22c55e':'var(--txt2)'}"${u?'':' disabled title="No login account"'}>${cap.assessor?'On':'Grant'}</button>
+            </div>
+            ${cap.assessor?`
+            <div style="border-top:1px solid var(--bdr);margin-top:8px;padding-top:8px">
+              <div style="font-size:11px;color:var(--txt3);margin-bottom:6px">Facilities this assessor role applies to. ${asrFacs.length?'':'<strong style="color:var(--gold)">None chosen, so it currently applies everywhere.</strong>'}</div>
+              <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:7px">${asrFacs.length?asrFacs.map(fid=>{const f=getFac(fid);return `<span class="pill" style="font-size:10px;padding:2px 6px;border:1px solid #a78bfa55;background:#a78bfa1a;color:#a78bfa">${f?f.name:fid} <span style="cursor:pointer;font-weight:800" onclick="rmRemoveAssessorFac('${s.id}','${fid}')">&times;</span></span>`;}).join(''):'<span style="font-size:11px;color:var(--txt3)">Everywhere</span>'}</div>
+              ${u?`<div style="display:flex;gap:6px"><select id="rm-asr-fac-${s.id}" class="form-select" style="flex:1;font-size:12px;padding:5px 8px">${_rmFacilityOptions(asrFacs)}</select><button class="btn btn-ghost btn-sm" onclick="rmAddAssessorFac('${s.id}')">Add</button></div>`:''}
+            </div>`:''}
           </div>
           <div style="border:1px solid var(--bdr);border-radius:8px;padding:8px 11px">
             <div style="font-size:12.5px;font-weight:600">Facility educator</div>
             <div style="font-size:11px;color:var(--txt3);margin:2px 0 7px">Educator/leader access at specific facilities, on top of their role</div>
             <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:7px">${eduFacs.length?eduFacs.map(fid=>{const f=getFac(fid);return `<span class="pill" style="font-size:10px;padding:2px 6px;border:1px solid #22c55e55;background:#22c55e1a;color:#22c55e">${f?f.name:fid} <span style="cursor:pointer;font-weight:800" onclick="rmRemoveEducatorFac('${s.id}','${fid}')">&times;</span></span>`;}).join(''):'<span style="font-size:11px;color:var(--txt3)">None</span>'}</div>
-            ${u?`<div style="display:flex;gap:6px"><select id="rm-edu-fac-${s.id}" class="form-select" style="flex:1;font-size:12px;padding:5px 8px">${(DB.facilities||[]).map(f=>`<option value="${f.id}">${f.name}</option>`).join('')}</select><button class="btn btn-ghost btn-sm" onclick="rmAddEducatorFac('${s.id}')">Add</button></div>`:'<span style="font-size:11px;color:var(--txt3)">No login account to grant to.</span>'}
+            ${u?`<div style="display:flex;gap:6px"><select id="rm-edu-fac-${s.id}" class="form-select" style="flex:1;font-size:12px;padding:5px 8px">${_rmFacilityOptions(eduFacs)}</select><button class="btn btn-ghost btn-sm" onclick="rmAddEducatorFac('${s.id}')">Add</button></div>`:'<span style="font-size:11px;color:var(--txt3)">No login account to grant to.</span>'}
           </div>
         </div>
       </div>
