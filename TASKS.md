@@ -1392,6 +1392,46 @@ persisted.
   *Done when:* A SIPS home facility exists, Kirti and Amy sit in it rather than `Free Agent`, the Free
   Agent Registry no longer lists them, and facility-grouped reporting separates the two.
 
+- [ ] **T77** A granted assessor has no Assessment Queue screen, and it cannot be switched on yet · est 0.5d after T74 · High
+  Reported by the client on 2026-07-30 at 6:54 AM while confirming T73, from Kirti's own account:
+  *"There's observation and observation review but no assessment queue."* He is right, and it is the
+  same shape of bug as T73: the permission exists and the door does not.
+
+  `Assessment Queue` is a nav item in the admin portal (`a-assessments`, `index.html:397`) and in the
+  hospital portal (`h-assessments:294`, hidden). There is no `s-assessments` in the staff portal at
+  all. Server side, `sbd_assessment_queue` grants a granted assessor both read and write:
+  `aq_select` is `... OR sbd_is_assessor() OR ...` and `aq_update` is
+  `sbd_get_user_role() = ANY(admin roles) OR sbd_is_assessor()`. So the grant reaches the data and
+  T73 moved only the two observation consoles.
+
+  **Why the one-line fix is refused.** `renderAAssessments()` scopes facilities the admin way:
+
+      const isMaster = ST.user?.role === 'master_admin';
+      const assignedFids = (!isMaster && ST.user?.assignedFids?.length) ? ST.user.assignedFids : null;
+
+  and every filter below it reads `(!assignedFids || assignedFids.includes(...))`. Measured
+  2026-07-30: Kirti Chaudhary and Amy Cooper are both `staff_member` with
+  `assigned_facility_ids = []`, so `assignedFids` resolves to `null` and `null` means **no filter**.
+  The queue holds 57 rows across 8 distinct facilities. Adding the nav item would therefore show
+  either of them the whole organisation's queue plus an org-wide `Record Assessment` button, and
+  hiding it in the UI would fix nothing, because `aq_select` carries no facility restriction for an
+  assessor and the server would return all 57 rows anyway.
+
+  **Depends on T74**, and is the concrete reason T74 goes first. Route chosen by Shawn on
+  2026-07-30: wait for the per-facility gate rather than ship an interim own-facility rule, so this
+  screen arrives already scoped instead of being widened and then narrowed.
+
+  Also found while measuring, unrelated to the client's report: `sbd_portal_users` holds **two**
+  `Avery Henderson` rows, one with a `facility_id` and no `assigned_facility_ids`, the other the
+  reverse. Only one carries the assessor grant. Logged here so it is not rediscovered; it is a data
+  hygiene item, not part of this task.
+
+  *Goal:* A granted assessor can work the assessment queue, and only where the grant applies.
+  *Done when:* The staff portal shows Assessment Queue to a granted assessor and to nobody else, the
+  rows and the facility filter are limited to the assessor's granted facilities, `aq_select` and
+  `aq_update` enforce that limit server side rather than the UI alone, and a plain staff member sees
+  no such screen.
+
 ### Blocked, not on the critical path
 
 - [ ] **T49** Strip and rotate the PSOP credentials, gate the public page
@@ -1435,6 +1475,13 @@ persisted.
 ---
 
 ## Totals
+
+**Updated 2026-07-30.** 36 items done, 47 open. T77 added: the client confirmed T73 from Kirti's
+account at 6:54 AM and found the Assessment Queue missing from the staff portal. It is a real gap
+with the same shape as T73, but it is refused as a quick fix, because a granted assessor has no
+facility limit today and both the screen and `aq_select` would expose all 57 queue rows across all 8
+facilities. It waits on T74 by Shawn's decision rather than shipping an interim own-facility rule.
+T74 step 1, the `sbd_is_assessor(p_fid)` overload, is written and applies no behaviour change.
 
 **Updated 2026-07-29 later still.** 36 items done, 46 open. T76 added and two entries corrected after
 transcribing the client's three voice notes of 2026-07-30 03:37 to 03:39, which settled scope that the
