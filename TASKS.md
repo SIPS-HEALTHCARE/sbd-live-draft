@@ -1308,7 +1308,28 @@ persisted.
 
   *Still open, asked 2026-07-30 and not yet answered:* whether Observer and the practice-gate waiver
   follow the same rule. He did not name either in the voice notes, so they are out of scope until he
-  says otherwise.
+  says otherwise. He replied at 6:43 AM only to the T73 test request, "Will do... I will let you
+  know", and did not address this question, so it stays open.
+
+  *Step 1 written 2026-07-30, not yet applied:*
+  `supabase/migrations/20260730060000_t74_assessor_facility_scope_overload.sql` adds the
+  `sbd_is_assessor(p_fid uuid)` overload and touches nothing else. No policy, column or row
+  changes, so applying it alters no behaviour; reach moves only when a later migration rewrites a
+  policy to pass a facility. An absent or empty `capabilities.assessor_facilities` means system
+  wide, which is what all three current holders have, so the first policy to adopt the overload
+  changes the answer for nobody.
+
+  Correction to the table above: facility educator is not merely a UI convention, it is enforced
+  server side. `sbd_leads_facility_of(uuid)` reads `capabilities->'educator_facilities'` and is
+  reached by 16 policies across 8 tables, including `preceptor_access` and
+  `ps_completion_requests`. Measured 2026-07-30. That makes it a genuine reference implementation
+  for this task rather than only a shape to copy, and it is where the argument type and the
+  SECURITY DEFINER posture of the new overload come from.
+
+  The predicate was verified read-only against production over seven cases: a holder with no list
+  is allowed at any facility, a scoped holder is allowed only inside the list, an empty list reads
+  as system wide, a null facility denies rather than leaks, and a non-holder is denied. The DDL
+  itself has not been executed anywhere, since applying it to production needs an explicit go.
 
   *Goal:* A granted role applies only at the facilities chosen for it, and the server enforces it.
   *Done when:* A per-facility assessor can record and confirm at a granted facility, is refused at a
