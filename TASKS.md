@@ -1483,6 +1483,25 @@ persisted.
   all verified correct, the reading that fits every piece of evidence is that her 6:54 AM message
   was accurate and the 6:55 AM screenshot predated the hard refresh.
 
+  *CONFLICT WITH THE AUTHORITATIVE ROLE SPEC, found 2026-07-30 after this shipped.*
+  `references_SBD_RLS_Addendum_v1.1_extract.md`, sourced from Dr. Jake Tayler Jacobs and marked
+  authoritative over both dev specs, defines Assessor scope as "System-wide (all facilities)" and
+  states at 8.6: "Assessors travel between facilities; G3 confirmation must NOT be restricted by
+  the assessor's home facility." Table 2 likewise grants an assessor "Confirm Gate 3 items
+  (system-wide)" and denies the facility-scoped variant.
+
+  The client's 2026-07-30 request is the opposite of that, and T74/T77 implement the client's
+  request. Nothing is broken today, because an absent facility list means system wide and no
+  holder has a list, so current behaviour matches the spec exactly. The conflict becomes real the
+  moment facilities are chosen for anyone.
+
+  This needs deciding before any facility list is set. Either the spec is superseded by the
+  client's newer instruction, in which case 8.6 should be amended so the next reader does not
+  treat it as binding, or the per-facility scope applies only to the queue and observation
+  surfaces while G3 confirmation stays system-wide, which is a narrower change than what is now
+  in place. Not something to settle from here: 8.6 gives a reason, that assessors travel, and the
+  reason may still hold even though the client asked for the opposite.
+
   *Remaining, and it is a decision not code:* nobody has an `assessor_facilities` list yet, so on
   the day this lands every current holder still reaches everywhere, by design. Kirti and Amy get
   scoped only once someone picks their facilities in Role Management, which is master-admin only.
