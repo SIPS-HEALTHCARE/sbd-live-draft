@@ -266,46 +266,74 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
         if (canSql) tools.push(SQL_TOOL);
         if (canWiki) tools.push(WIKI_TOOL);
 
-        // ── Gap 2 throttle (§7.2) — question-count metering pre-flight ──────────────
+        // ── Gap 2 throttle (§7.2) — question-count + token metering pre-flight ──────
         // Guarded to real facility traffic: master/global sessions and facilities with no
         // access row are never metered (david_get_quota returns null → skip). FAIL-OPEN:
         // any quota-read error allows the request — a metering bug must never deny a paying
         // facility. The role class comes from the portal profile: line staff vs everyone else.
+        // Team-Tasks-2026-07-29 enforce-monthly-token-cap: extends this same pre-flight to
+        // also enforce max_monthly_tokens, so a facility is capped by whichever limit it
+        // reaches first. evaluateQuota() is the shared math (10% reserve, staff paused at
+        // 100%, manager/admin may draw the reserve, 75/90% soft notice); each cap still makes
+        // its own allow/deny call so a token-cap failure can never change the question path's
+        // response, and vice versa.
         const facilityId = profile?.facility_id;
         const throttleRole = (profile?.role === 'staff_member') ? 'staff' : 'manager';
         let drawingReserve = false;
         let softNotice: { state: string; percent: number } | null = null;
+
+        function evaluateQuota(consumed: number, allowance: number, role: string) {
+            const reserve = Math.round(allowance * 0.10);
+            const pct = allowance > 0 ? (consumed / allowance) * 100 : 0;
+            let allow = true;
+            let usingReserve = false;
+            if (pct >= 100) {                                  // AT_LIMIT
+                if (role === 'staff') {
+                    allow = false;                             // staff paused at 100%
+                } else if (consumed < allowance + reserve) {
+                    allow = true; usingReserve = true;         // manager/admin draws reserve
+                } else {
+                    allow = false;                             // reserve exhausted → all paused
+                }
+            }
+            return { allow, usingReserve, pct };
+        }
+
         if (!isMaster && facilityId) {
             try {
                 const { data: q } = await supabase.rpc('david_get_quota', { p_facility_id: facilityId });
                 if (q) {
-                    const allowance = q.questions_allowance || 0;
-                    const reserve = Math.round(allowance * 0.10);
-                    const consumed = q.questions_consumed || 0;
-                    const pct = allowance > 0 ? (consumed / allowance) * 100 : 0;
-
-                    let allow = true;
-                    if (pct >= 100) {                                  // AT_LIMIT
-                        if (throttleRole === 'staff') {
-                            allow = false;                             // staff paused at 100%
-                        } else if (consumed < allowance + reserve) {
-                            allow = true; drawingReserve = true;       // manager/admin draws reserve
-                        } else {
-                            allow = false;                             // reserve exhausted → all paused
-                        }
-                    }
-
-                    if (!allow) {
+                    // Question-count cap — behaviour byte-for-byte unchanged from before this task.
+                    const questionCheck = evaluateQuota(q.questions_consumed || 0, q.questions_allowance || 0, throttleRole);
+                    if (!questionCheck.allow) {
                         return new Response(JSON.stringify({
                             error: 'Monthly question limit reached for this facility.',
                             action: 'ACTION_QUOTA_EXHAUSTED',
                             state: 'AT_LIMIT',
                             role: throttleRole,
-                            percent: Math.round(pct),
+                            percent: Math.round(questionCheck.pct),
                         }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
                     }
-                    if (pct >= 90) softNotice = { state: 'UPGRADE', percent: Math.round(pct) };
-                    else if (pct >= 75) softNotice = { state: 'NOTICE', percent: Math.round(pct) };
+                    drawingReserve = questionCheck.usingReserve;
+                    if (questionCheck.pct >= 90) softNotice = { state: 'UPGRADE', percent: Math.round(questionCheck.pct) };
+                    else if (questionCheck.pct >= 75) softNotice = { state: 'NOTICE', percent: Math.round(questionCheck.pct) };
+
+                    // Token cap — same shape, distinct `action` so the UI can tell the two cases apart.
+                    const tokenCheck = evaluateQuota(q.tokens_consumed || 0, q.max_monthly_tokens || 0, throttleRole);
+                    if (!tokenCheck.allow) {
+                        return new Response(JSON.stringify({
+                            error: 'Monthly token limit reached for this facility.',
+                            action: 'ACTION_TOKEN_QUOTA_EXHAUSTED',
+                            state: 'AT_LIMIT',
+                            role: throttleRole,
+                            percent: Math.round(tokenCheck.pct),
+                        }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+                    }
+                    if (tokenCheck.pct >= 90) {
+                        if (!softNotice || tokenCheck.pct > softNotice.percent) softNotice = { state: 'UPGRADE', percent: Math.round(tokenCheck.pct) };
+                    } else if (tokenCheck.pct >= 75) {
+                        if (!softNotice || tokenCheck.pct > softNotice.percent) softNotice = { state: 'NOTICE', percent: Math.round(tokenCheck.pct) };
+                    }
                 }
             } catch (e: any) {
                 console.warn('[DAVID] Quota pre-flight failed (fail-open):', e?.message);
@@ -561,7 +589,11 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
                 // completion retry) — never once per internal model call. Skipped for master/
                 // global sessions and facilities with no access row. Fire-and-forget.
                 if (!isMaster && facilityId) {
-                    supabase.rpc('david_consume_question', { p_facility_id: facilityId, p_is_reserve: drawingReserve })
+                    supabase.rpc('david_consume_question', {
+                        p_facility_id: facilityId,
+                        p_is_reserve: drawingReserve,
+                        p_tokens: usagePromptTokens + usageCompletionTokens,
+                    })
                         .then(({ error }: { error: any }) => {
                             if (error) console.warn('[DAVID] Question count skipped:', error.message);
                         });
