@@ -597,6 +597,7 @@ async function loadFacilities(){
 
   renderCards(FACILITIES);
   updateDeployCount();
+  updateUsageHero(byAppMap);
   renderTelemetryChart();
 }
 
@@ -788,14 +789,36 @@ function updateDeployCount(){
   const pct=active/total;
   document.getElementById('gauge-arc').style.strokeDashoffset=188.5*(1-pct);
   document.querySelector('.gauge-text').textContent=Math.round(pct*100)+'%';
-  // Update token total
-  const totalTokens=FACILITIES.reduce((s,f)=>s+f.tokens,0);
-  const tokenVal=document.querySelectorAll('.hero-val')[1];
-  if(tokenVal) tokenVal.textContent=totalTokens>=1000?(totalTokens/1000).toFixed(1)+'K':totalTokens;
-  // Update cost
-  const cost=((totalTokens/1000)*0.015).toFixed(2);
+}
+
+// QA-2026-07-29 (Iggie): the old cost/token hero math summed only FACILITIES.tokens
+// (real facilities, excludes master-admin-global) and multiplied by a flat $0.015/1K
+// guess — off by ~53x against real spend ($1.09 shown vs $58+ actual), because ~99.5%
+// of usage runs under master-admin-global, and cost is provider-billed, not linear per
+// token. byAppMap comes straight from david_usage_by_app_mtd(), the same
+// david_usage_logs/source=chat/MTD scope the Prompt Cache panel's cacheSavings.cost
+// reads, so SIPS + Platform here sums to that panel's number.
+function updateUsageHero(byAppMap){
+  let sipsTok=0, sipsCost=0, platTok=0, platCost=0;
+  Object.entries(byAppMap||{}).forEach(([fid, apps])=>{
+    const isSips = fid === 'master-admin-global';
+    Object.values(apps).forEach(a=>{
+      if(isSips){ sipsTok+=a.tok_mtd; sipsCost+=a.cost_mtd; }
+      else      { platTok+=a.tok_mtd; platCost+=a.cost_mtd; }
+    });
+  });
+  const totTok=sipsTok+platTok, totCost=sipsCost+platCost;
+  const fmtTok = n => n>=1000?(n/1000).toFixed(1)+'K':String(n);
+
+  const tokVal=document.querySelectorAll('.hero-val')[1];
+  if(tokVal) tokVal.textContent=fmtTok(totTok);
+  const tokTrend=document.querySelectorAll('.hero-trend')[1];
+  if(tokTrend){ tokTrend.className='hero-trend trend-neutral'; tokTrend.textContent=`SIPS ${fmtTok(sipsTok)} · Platform ${fmtTok(platTok)}`; }
+
   const costVal=document.querySelectorAll('.hero-val')[2];
-  if(costVal) costVal.textContent='$'+cost;
+  if(costVal) costVal.textContent='$'+totCost.toFixed(2);
+  const costTrend=document.querySelectorAll('.hero-trend')[2];
+  if(costTrend){ costTrend.className='hero-trend trend-neutral'; costTrend.textContent=`SIPS $${sipsCost.toFixed(2)} · Platform $${platCost.toFixed(2)}`; }
 }
 
 // ── Sparkline ──
