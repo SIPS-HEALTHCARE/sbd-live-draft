@@ -57,6 +57,14 @@ const BELT_POINTS = {White:100,Yellow:250,Green:500,Blue:1000,Brown:2000,Black:5
 const GATE_POINTS  = {pass:50,  fail:-10};
 const STAR_POINTS  = 25;
 
+// staff.history[].res mixes real gate results ('pass'/'fail') with lifecycle events this
+// app writes into the same log ('confirmed','promotion','placement','released'). 18 call
+// sites used to test the literal 'pass' and painted every lifecycle event red as Fail,
+// including successful placements/promotions (QA finding 8, 2026-07-29). Fail-closed:
+// only these known non-failure values count as a success; anything else renders as Fail.
+const HISTORY_SUCCESS_VALUES = ['pass','confirmed','promotion','placement','released'];
+function isSuccessOutcome(res){ return HISTORY_SUCCESS_VALUES.includes(res); }
+
 // ── WINDOW ENGINE ─────────────────────────────────────────────────────────────
 function getWindowStatus(staff){
   // Returns: {status:'open'|'closed'|'max', opensIn, closesIn, weeksOpen, weeksClosed, pct}
@@ -160,7 +168,7 @@ function generateProjection(staff){
   const nxtPassed = [nxt.c,nxt.s,nxt.o].filter(x=>x==='pass').length;
   const gatesLeft  = 3 - nxtPassed;
   // Estimate based on historical assessment cadence (avg 2-4 weeks per gate from history)
-  const historyGates = (staff.history||[]).filter(h=>h.res==='pass').length;
+  const historyGates = (staff.history||[]).filter(h=>isSuccessOutcome(h.res)).length;
   const daysActive   = daysAt(staff.since);
   const avgWeeksPerGate = historyGates > 0 ? Math.max(2, Math.round(daysActive/7/Math.max(historyGates,1))) : 4;
   const weeksForGates   = gatesLeft * avgWeeksPerGate;
@@ -200,7 +208,7 @@ function generateProjection(staff){
 // calcVelocity: passed gates per active month (mirrors the scoreboard velocity metric).
 function calcVelocity(staff){
   if(!staff) return {passedGates:0, months:1, gatesPerMonth:0};
-  const passedGates = (staff.history||[]).filter(h=>h && h.res==='pass').length;
+  const passedGates = (staff.history||[]).filter(h=>h && isSuccessOutcome(h.res)).length;
   const months = Math.max(1, Math.round((typeof daysAt==='function'?daysAt(staff.since):0)/30));
   return { passedGates, months, gatesPerMonth: +(passedGates/months).toFixed(2) };
 }
