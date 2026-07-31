@@ -3,8 +3,11 @@
 **Living document.** This is the single record of what has been built and what is left.
 It is not regenerated. It is edited in place.
 
-**Last updated:** 2026-07-27
+**Last updated:** 2026-07-31
 **Audit basis:** 2026-07-25, verified against the live project and the live code.
+**History basis:** 2026-07-31, the complete client conversation from 22 May to 31 July read end
+to end including every attachment. See `docs/DOMAIN_GLOSSARY.md` for the vocabulary this ledger
+uses, and T78 to T87 for what that pass found.
 
 ---
 
@@ -1467,6 +1470,214 @@ persisted.
   `aq_update` enforce that limit server side rather than the UI alone, and a plain staff member sees
   no such screen.
 
+### Found by reading the full client history, 2026-07-31
+
+All ten below come from one pass over the complete client conversation from 22 May to 31 July,
+including every attachment rather than the message text alone. **T78 to T83 are client requests
+that were made, acknowledged in the conversation, and never reached this ledger.** That is the
+finding that matters: six real asks were lost, and most of them were lost because they were said
+one line away from something louder. T84 to T87 were found by us in the same pass.
+
+A companion reference was written at the same time, `docs/DOMAIN_GLOSSARY.md`. It fixes the
+vocabulary these tasks are written in, including the SBD and SPD distinction that T84 turns on.
+
+- [ ] **T78** SIPS admin can attach files and images to a record · est 1d · Medium
+  Asked 2026-07-29 at 11:42 PM: *"For SIPS admin.. can we add a button so we can add files and
+  images… only for sipds admin…"*
+
+  **Corrected 2026-07-31 after re-reading the exchange rather than the summary of it. This task is
+  far more specified than it first looked, because the client answered most of it himself.**
+
+  - **He named the storage.** At 11:43 PM, unprompted: *"Can we use pinecone or supabase?"*
+  - **He designed the retrieval.** At 11:45 PM, after being told stored files would have to be
+    downloaded to open: *"It doesn't need to produce documents to download… we can use the same
+    print feature and we can download from there… is that a possible workflow?"*
+  - **He restated the whole workflow for the record** at 12:18 AM: *"on our end.. it will be us
+    uploading docs and having the print option so we can download.. for clarity"*
+
+  So who uploads, what they upload, and how it comes back are all already decided by him. The only
+  thing left open was ours: *"Let me add this to checklist and see our upload size limit"* and
+  *"And storage"*. That is the entire outstanding commitment.
+
+  **One correction he needs, and it is a real one.** Of the two he named, only Supabase can do
+  this. Pinecone is a vector store; it holds embeddings so David can search meaning, and it cannot
+  hold a PDF or an image as a file. The honest answer is both, in different roles: the file itself
+  in Supabase Storage, and its extracted text indexed in Pinecone so David can answer from the
+  document. That should be said plainly rather than silently building the Supabase half.
+
+  **This is the store as well, not a button on top of one.** Measured 2026-07-31:
+  `rg "storage\.from|\.upload\(|createSignedUrl|getPublicUrl"` over `src/js` returns nothing, and
+  every "storage" reference in `ARCHITECTURE.md` is `localStorage`. The platform has no file
+  storage of any kind today.
+
+  **Narrowed 2026-07-31.** This was written as a pair with T83. The client has since decided he
+  hosts curriculum video himself and sends links, so video is out of scope for this store. What
+  still lands here is documents and images, and possibly the audio, slide decks and infographics
+  if his own library does not cover them. That question is open under T83.
+  *Goal:* A SIPS admin can attach a file or image to the record it belongs to, and get it back out.
+  *Done when:* Upload is present for SIPS admin and absent for every other role, the file is stored
+  outside the record row, retrieval works, and the maximum accepted size is stated in the UI rather
+  than discovered by a failed upload.
+
+- [ ] **T79** A SIPS admin role, and splitting approval from PIN generation · est 1.5d · High
+  Asked 2026-07-30 across two messages, five minutes apart, after being told PIN generation is
+  master admin only. At 7:36 PM: *"We can add pin gen to role management so we can allow approved
+  admin to gen pin… I guess we should create a sips admin role that is a blank role until we
+  update it in role management"*. At 7:41 PM: *"Can we break apart permission to approve
+  assements… Essentially… her (and others like her) we want them to be sips admin and be able to
+  proctor the assessments… so generation (we still need to clean that page up so deactivated
+  accounts aren't still clogging that page up for pin gen)"*.
+  The pattern is the same one behind T74. He is asking for permissions to be composable in Role
+  Management rather than bundled into a base role, and for a new role to start empty rather than
+  inheriting anything.
+  The fourth part of that message, cleaning deactivated accounts off the PIN generation list, has
+  already shipped separately.
+  *Goal:* Approving an assessment and generating a PIN are two grants, not one, and a SIPS admin
+  role exists that starts with nothing until Role Management gives it something.
+  *Done when:* The two permissions can be held independently, a new SIPS admin account can reach
+  nothing until granted, and the grants are enforced server side rather than by hiding controls.
+
+- [ ] **T80** Facility admin cannot reach the facility's observer portal · est 0.5d · High
+  Asked 2026-07-30 at 8:47 PM. A facility admin should be able to see the observer portal for their
+  own facility. This sat one line above the message that carried the word PRIORITY, the blank staff
+  profile, so the priority item took the attention and this was never captured.
+  Same shape as T73 and T77: the role is meant to reach it and the door is not there.
+  *Goal:* A facility admin reaches the observer portal for their own facility and no other.
+  *Done when:* The portal is reachable from the facility admin navigation, scoped to that facility
+  server side, and a facility admin at another site cannot read it.
+
+- [ ] **T81** Preceptor content must match the formatting of the source document · est 1d · Medium
+  Asked 2026-07-23 at 1:07 AM: *"It should look as close to the doc as possible as far as
+  formatting"*, and the reason given was *"Legibility in learning"*. Answered in the conversation
+  with "Adding in our tasks". It was not added.
+  This is a learning-outcome request, not a cosmetic one. The client is saying that reformatted
+  content teaches worse than the document it came from.
+  *Goal:* Preceptor material on screen is as close to its source document as the medium allows.
+  *Done when:* Headings, emphasis, lists and tables survive from the source into the rendered view,
+  checked side by side against the document the client supplied.
+
+- [ ] **T82** DAVID OG slash commands · est 3d, after the DAVID separation · Medium
+  Received 2026-07-31 at 2:26 AM as a 13 page specification. Seventeen commands in three tiers:
+  tier 1 `/profile /atrisk /ready /compare /queue /retrain`, tier 2
+  `/benchmark /oip /dangerous /history /facility /network`, tier 3
+  `/observers /freeagents /curriculum /promote /audit`. The document includes a per-command
+  required-certification field and a four phase rollout.
+  Belongs behind `docs/DAVID_OG_EXTRACTION_PLAN.md`, not in front of it. Building seventeen
+  commands into the current DAVID would make the extraction harder, not easier.
+  *Note for whoever picks this up:* the worked examples in that document use real named staff with
+  their belts, scores and at-risk notes. It is not a document to paste into anything.
+  *Goal:* The command set is specified against the extracted DAVID service, with the permission
+  model settled before any command is built.
+  *Done when:* Each command has a stated required role, the tiers are mapped onto the extraction
+  plan's phases, and tier 1 works end to end.
+
+- [ ] **T83** Curriculum media: carry the client's links and render them, correctly gated · est 1d · Medium
+  Raised by him 2026-07-31 at 2:35 AM. He is producing video, audio, slide decks and infographics
+  for every study curriculum, and asked where the content should go and what formats we need. The
+  reply at the time was that we would let him know.
+
+  **He then answered the hosting half himself the same day**, so this stopped being a question we
+  owed him and became a small build. Nobody is blocked on anybody now. What keeps it moving is
+  that he is producing the material already, so the place to put it should exist before the first
+  batch arrives.
+
+  **DECIDED 2026-07-31 by the client, in a voice note, and it makes this task much smaller.**
+  He hosts the video himself and sends us links:
+
+  > *"whatever I decide to host the videos on, I'll just go ahead and upload them, upload the
+  > videos there, and add them, all of them, organized, and then give you all the link and make
+  > sure that it is organized and titled properly for you."*
+
+  He is choosing between a video platform and a media library on a system they already run, and
+  said he would look into it. Either way the output is **links and embed codes**.
+
+  So we are not building video storage, and the transfer cost is not ours. What we build is the
+  place a curriculum item holds a link or an embed and renders it. Formats for video stop
+  mattering to us as well, since the host handles playback.
+
+  **This decouples the task from T78.** The pairing still holds for documents and images, which
+  have no home yet, but video no longer needs the store. Do not scope them as one piece of work.
+
+  **Two things his voice note did not settle. Both are ours to raise, and both are cheaper to
+  answer before he picks a platform than after.**
+  1. **Whether playback needs its own sign in.** If it does, staff hit two logins for one lesson,
+     which is exactly the friction that suppresses completion. If it does not, playback is smooth
+     but anyone holding the link can watch, inside the organisation or outside. This is a
+     content-sensitivity call, not a technical one, and it changes how we gate the embed.
+  2. **Audio, slide decks and infographics.** He spoke only about video. Those still have no home.
+     If his chosen library gives links for them too, we embed them the same way. If not, they fall
+     back to platform storage, which is T78's foundation.
+
+  *Goal:* Curriculum media reaches staff, correctly gated, without us hosting video.
+  *Done when:* A curriculum item can carry a link or embed and render it, the gating matches his
+  answer on sign in, the answer on audio, slides and infographics is recorded here as a dated
+  decision, and one real lesson plays end to end for a staff account.
+
+- [ ] **T84** One heading says SBD where it means SPD · est 0.1d · Low
+  `ui-views.js:6087` renders the heading `SBD BACKGROUND` on the card a staff member sees on their
+  own profile. The line directly beneath it already prints "yr(s) in SPD", so the heading disagrees
+  with its own body. The modal title at `6055` and the admin button at `10483` both already read
+  `SPD Background`, so this one heading is the last survivor of a defect that has already been
+  fixed twice. See `docs/DOMAIN_GLOSSARY.md` section 1.
+  *Goal:* No shipped string says SBD where it means SPD.
+  *Done when:* The heading is corrected, `rg 'SBD ' src/js index.html` is reviewed for others, and
+  `?v=` is bumped.
+
+- [ ] **T84a** The em dash sweep is much larger than it looked · est 0.5d · Low
+  Measured 2026-07-31 with ripgrep, because `grep -P` silently fails on this codepoint in this
+  environment and reported zero:
+  **377 literal em dash characters across 16 files** in `src/js` and `index.html`, and separately
+  **26 `&mdash;` HTML entities across 5 files**. The generated belt assessment report carries
+  fourteen, and that document is kept in a personnel file, which is where it matters most.
+  The two halves are not the same problem and must not be fixed the same way.
+  - The **377 literals** are the sweep. Only user-visible strings matter; a dash inside a comment
+    or a CSS value does not.
+  - The **26 entities** are not currently broken. Every one of them sits inside an `innerHTML`
+    string, where the browser decodes it correctly. They are a latent hazard: the moment such a
+    string is moved to `textContent`, the raw `&mdash;` prints on screen. That is exactly how the
+    `SBD Background &mdash; David Williams` title reached the client on 2026-07-28.
+  *Goal:* User-visible copy carries no em dash, and no entity is left where a `textContent` path
+  can print it raw.
+  *Done when:* The literal count in user-visible strings is zero, each of the 26 entities is either
+  replaced or confirmed to be on an `innerHTML`-only path, the report generator is included, and
+  `?v=` is bumped.
+  *Method note:* use `rg`, not `grep -P`. The `grep -P` form errors with "character code point value
+  in \x{} or \o{} is too large" and returns nothing, which reads as a clean result.
+
+- [ ] **T85** Patient Safety Provision: prove the audit trail, and move the clear into Role Management · est 0.5d · Medium
+  The provision itself was built on 2026-07-28 and matches what the client asked for. Two parts of
+  his instruction have not been verified in code.
+  He said the clear should be *"on the role management platform as a role, that can be toggled on
+  and off"*, and that *"the record of who cleared it, when they cleared it and all that will be on
+  there"*. What is visible in the interface confirms the provision, the hold on advancement and the
+  clear action. It does not confirm either of those two.
+  *Goal:* Clearing a provision is a Role Management grant rather than a hardcoded role check, and
+  clearing writes an attributable, readable record.
+  *Done when:* The grant appears in Role Management and is enforced server side, and a cleared
+  provision displays who cleared it and when, read back from storage rather than from the session.
+
+- [ ] **T86** One placement review candidate shows three different submitted times · est 0.2d · Low
+  Across three client screenshots of the same candidate on 19, 21 and 21 July, the same placement
+  review is labelled submitted at three different times on 18 July: mid-morning, 11:31 AM and
+  10:31 PM. Either that candidate has three separate submissions, or the submitted time is rendered
+  wrongly.
+  It is small, but it sits directly on an open client question: whether a request raised after an
+  approval is a duplicate or a genuine second attempt. That question cannot be answered while the
+  timestamps are not trusted.
+  *Goal:* The submitted time shown on a placement review is the submitted time stored.
+  *Done when:* The rows for that candidate are read from the database, the count is established as
+  one or three, and either the duplicates are explained or the rendering is fixed.
+
+- [ ] **T87** A live API key was shared outside secret storage and needs rotating · est 0.2d · High
+  A third-party API key used by the platform was pasted into a working conversation in plain text
+  rather than being held only in environment configuration. It is still valid.
+  Nothing about the key is recorded in this file or anywhere else in the repository, deliberately.
+  *Goal:* The exposed key no longer works, and its replacement exists only in environment
+  configuration.
+  *Done when:* The key is rotated at the provider, the new value is set in the environment for every
+  deployment that needs it, the dependent feature is confirmed still working, and the old key is
+  confirmed rejected.
+
 ### Blocked, not on the critical path
 
 - [ ] **T49** Strip and rotate the PSOP credentials, gate the public page
@@ -1510,6 +1721,30 @@ persisted.
 ---
 
 ## Totals
+
+**Updated 2026-07-31.** 36 items done, 58 open. Eleven added, T78 to T87 plus T84a, from one pass over the
+complete client conversation, 22 May to 31 July, attachments included rather than message text
+alone.
+
+**Six of the ten are client requests that were made and never recorded**: T78 file and image
+upload, T79 the SIPS admin role and splitting approval from PIN generation, T80 facility admin
+access to the observer portal, T81 preceptor formatting, T82 the DAVID slash commands, and T83
+the curriculum media question he is still waiting on. T79, T80 and T83 are the ones with a cost
+attached: T79 and T80 are the same permission-composability shape as T74 and T77, and T83 is a
+question he asked us that is blocking work he is doing right now.
+
+The failure mode is worth naming, because it is repeatable. Every one of the six was said in the
+same conversation as something more urgent. T80 sat one line above the word PRIORITY. **An ask
+next to an emergency still needs its own row.**
+
+The other four are ours: T84 copy correctness, T85 proving the Patient Safety Provision audit
+trail and moving its clear into Role Management, T86 an untrusted timestamp on placement reviews,
+T87 a key rotation.
+
+Also written in the same pass: `docs/DOMAIN_GLOSSARY.md`, which records the platform's own
+vocabulary, the belt and gate and window model, the seven Foundations modules, both navigations,
+the metering model and the stated rollout size of 30 leaders then 175 technicians. None of that
+existed anywhere in the repository before; it lived only in screenshots.
 
 **Updated 2026-07-30.** 36 items done, 47 open. T77 added: the client confirmed T73 from Kirti's
 account at 6:54 AM and found the Assessment Queue missing from the staff portal. It is a real gap
