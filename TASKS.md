@@ -694,7 +694,39 @@ persisted.
   *Done when:* The four schedule tasks are verified and the account is deactivated, along
   with any schedule and attendance rows created purely for the test.
 
-- [ ] **T60** Every signed-in account can read 96 people's passwords in the clear · est 0.5d · **Critical**
+- [ ] **T60** The signup form still writes a plaintext password into the registrations table · est 0.3d · Medium
+  **Downgraded 2026-07-31 from Critical, and retitled. The critical half is closed.** The
+  entry below is the finding as it stood on 26 July and it is kept because the history
+  matters, but read this block first, because the old title described an active breach that
+  no longer exists.
+
+  Measured against production on 2026-07-31:
+
+  | Claim in the 26 July finding | State today |
+  |---|---|
+  | `reg_all_all FOR ALL USING (true)` to `authenticated` | **Gone.** The only SELECT policy is `reg_select`, limited to `master_admin`, `admin`, `staff_admin`, `system_admin` |
+  | 96 rows holding an unhashed password | **Zero.** 101 rows total, 91 approved and 10 denied, none carrying a password |
+  | Every signed-in account can read them | **No.** Four admin roles only, and there is nothing left to read |
+
+  What actually remains is narrower and is the whole of this task now. `ui-views.js:153`
+  still sends `password: pass` in the registration payload, commented *"Included for the
+  Edge Function to create the auth user"*, so a **pending** registration holds a plaintext
+  password until it is approved or denied. There are zero pending rows right now, so nothing
+  is exposed at this moment; the window opens the next time somebody registers, and even
+  then only the four admin roles can see it.
+
+  Worth finishing, and no longer the item that outranks everything else.
+
+  *Goal:* A registration never stores a password in readable form, not even between
+  submission and approval.
+  *Done when:* The signup path stops writing `password` into `registrations`, the auth user
+  is still created on approval, the column is dropped or permanently null, and a fresh
+  registration is checked end to end to confirm no readable password ever lands.
+
+  ---
+
+  *The finding as originally written, 2026-07-26, kept for history:*
+
   Found 2026-07-26, by accident, while registering the test leader account for T59. This is
   the worst thing in the audit and it outranks everything else still open.
 
