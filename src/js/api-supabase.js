@@ -372,6 +372,9 @@ const SB = {
   deleteFacilityShiftDef(fid, shiftId){ return sbFetch(`/rest/v1/facility_shifts?fid=eq.${encodeURIComponent(fid)}&shift_id=eq.${encodeURIComponent(shiftId)}`, { method:'DELETE' }); },
   // ── Attendance ──
   getAttendance(fid, date){ return sbFetch(`/rest/v1/sbd_attendance?facility_id=eq.${encodeURIComponent(fid)}&date=eq.${date}&select=*`); },
+  // The leader attendance record is a whole year for every staff member at once, so the
+  // single-date getAttendance above cannot serve it. Mirrors getSchedule's range shape.
+  getFacilityAttendance(fid, startDate, endDate){ return sbFetch(`/rest/v1/sbd_attendance?facility_id=eq.${encodeURIComponent(fid)}&date=gte.${startDate}&date=lte.${endDate}&select=*&order=date.asc`); },
   getStaffAttendance(staffId){ return sbFetch(`/rest/v1/sbd_attendance?staff_id=eq.${staffId}&select=*&order=date.desc`); },
   recordAttendance(data){ return sbFetch('/rest/v1/sbd_attendance', { method:'POST', body:data }); },
   updateAttendance(id, data){ return sbFetch(`/rest/v1/sbd_attendance?id=eq.${id}`, { method:'PATCH', body:data }); },

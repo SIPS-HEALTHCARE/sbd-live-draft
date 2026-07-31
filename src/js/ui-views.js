@@ -10660,9 +10660,56 @@ function _loadFacilityShiftDefs(fid){
     if(ST.hView==='h-schedule' && typeof renderHSchedule==='function') renderHSchedule();
   }).catch(e=>{ _shiftDefsLoaded[fid] = false; console.warn('[shifts] definition load failed', e && e.message); });
 }
+
+// QA 2026-07-29, findings 1 and 2. DB.schedule and DB.attendance were only ever appended to
+// by the two staff-portal views (renderSReport, renderSSchedule) and by the local push that
+// follows a leader's own write. Nothing read the facility's stored rows back, so SB.getSchedule
+// had zero callers and every leader/admin screen showed only what was typed in the current
+// session -- empty after any reload, while the rows sat in the database.
+//
+// That is also finding 2's root cause: saveShift, clearShift, execBulkSchedule and
+// importScheduleCSV all locate the row they mean to overwrite with DB.schedule.find(...), so
+// against an empty array they took the create branch and wrote a duplicate. The unique index
+// in 20260731120000 is the backstop; this loader is what makes the lookup find the row.
+//
+// Loaded once per facility-year (the builder and the annual record both navigate by year),
+// merged by id so a row written earlier in the session is replaced rather than doubled.
+//
+// The in-flight promise is what gets cached against the key, so the bulk write paths can await
+// this before deciding update-vs-create instead of racing the fetch they triggered on render.
+const _schedLoaded = {};
+function _mergeRowsById(arr, rows){
+  rows.forEach(r=>{ const i = arr.findIndex(x=>x.id===r.id); if(i>=0) arr[i]=r; else arr.push(r); });
+}
+function _loadFacilitySchedule(fid, year){
+  if(!fid) return Promise.resolve();
+  if(!(typeof IS_LIVE!=='undefined' && IS_LIVE && typeof SB!=='undefined' && SB.getSchedule && SB.getFacilityAttendance)) return Promise.resolve();
+  const nowYear = new Date().getFullYear();
+  // Every tab shows something dated today, so the current year is always needed alongside
+  // whichever year the builder or the record is parked on.
+  return Promise.all([...new Set([nowYear, year || nowYear])].map(y=>{
+    const key = fid + ':' + y;
+    if(_schedLoaded[key]) return _schedLoaded[key];
+    return _schedLoaded[key] = Promise.all([
+      SB.getSchedule(fid, y+'-01-01', y+'-12-31'),
+      SB.getFacilityAttendance(fid, y+'-01-01', y+'-12-31')
+    ]).then(([sch, att])=>{
+      sch = Array.isArray(sch) ? sch : [];
+      att = Array.isArray(att) ? att : [];
+      if(!DB.schedule) DB.schedule = [];
+      if(!DB.attendance) DB.attendance = [];
+      _mergeRowsById(DB.schedule, sch.map(mapScheduleFromBackend));
+      _mergeRowsById(DB.attendance, att.map(mapAttendanceFromBackend));
+      if(!sch.length && !att.length) return;
+      if(ST.portal==='x'){ if(typeof renderXSchedule==='function') renderXSchedule(); }
+      else if(ST.hView==='h-schedule' || ST.hView==='h-attendance') _refreshHAtt();
+    }).catch(e=>{ _schedLoaded[key] = false; console.warn('[schedule] facility load failed', e && e.message); });
+  }));
+}
 function renderHSchedule(){
   const fid = ST.hFid;
   _loadFacilityShiftDefs(fid);
+  _loadFacilitySchedule(fid, schBuilderYear);
   const el = document.getElementById('h-schedule');
   const today = todayStr();
   const shifts = getFacilityShifts(fid);
@@ -10803,17 +10850,33 @@ function openBulkScheduleModal(fid){
     <div class="modal-ft"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-gold" onclick="execBulkSchedule('${fid}')">Fill Schedule</button></div>`,'modal-md');
 }
 
-function execBulkSchedule(fid){
+// QA 2026-07-29, finding 2: the toast used to fire synchronously while the writes were
+// fire-and-forget, so it reported "N shifts assigned" whether or not anything landed. Both
+// bulk paths now wait on their writes and report what actually succeeded.
+async function _settleWrites(writes, label){
+  if(!writes.length) return 0;
+  const results = await Promise.allSettled(writes);
+  const failed = results.filter(r=>r.status==='rejected');
+  if(failed.length) handleSyncError(failed[0].reason, label);
+  return failed.length;
+}
+
+async function execBulkSchedule(fid){
   const start = document.getElementById('qf-start').value;
   const end   = document.getElementById('qf-end').value;
   const count = parseInt(document.getElementById('qf-count').value)||3;
   const shifts = getFacilityShifts(fid);
   const st = staffOf(fid);
   if(!st.length||!start||!end){toast('Missing data.','err');return;}
+  // The overwrite lookup below is only correct once the facility's stored rows are in hand.
+  // Fired on render, but a fast click could beat it -- and a create against an existing
+  // facility/date/shift now hits the unique index (20260731120000) rather than duplicating.
+  await _loadFacilitySchedule(fid);
   const dates = [];
   const d=new Date(start+'T12:00:00');
   while(d.toISOString().slice(0,10)<=end){ dates.push(d.toISOString().slice(0,10)); d.setDate(d.getDate()+1); }
   let filled=0;
+  const writes=[];
   dates.forEach((date,di)=>{
     Object.keys(shifts).forEach((sk,si)=>{
       const chk=document.getElementById('qf-sh-'+sk);
@@ -10827,18 +10890,20 @@ function execBulkSchedule(fid){
         if(!existing.zoneAssignments) existing.zoneAssignments={};
         // T28: an already-populated day only ever changed in memory, while the toast below
         // counted it as filled. The overwrite is now written like any other.
-        if(IS_LIVE) SB.updateSchedule(existing.id, mapScheduleToBackend(existing)).catch(e => handleSyncError(e,'Schedule sync'));
+        if(IS_LIVE) writes.push(SB.updateSchedule(existing.id, mapScheduleToBackend(existing)));
       }
       else {
         const autoSched={id:newRecordId(),fid,date,shift:sk,assignedStaff:assigned,publishedBy:null,notes:'',zoneAssignments:{}};
-        if(IS_LIVE){ SB.createSchedule(mapScheduleToBackend(autoSched)).catch(e => handleSyncError(e,'Schedule sync')); }
+        if(IS_LIVE){ writes.push(SB.createSchedule(mapScheduleToBackend(autoSched))); }
         DB.schedule.push(autoSched);
       }
       filled++;
     });
   });
   closeModal();
-  toast(`Schedule filled: ${filled} shifts assigned across ${dates.length} days.`,'ok');
+  const failed = await _settleWrites(writes, 'Schedule sync');
+  if(failed) toast(`Schedule partly filled: ${filled-failed} of ${filled} shifts saved, ${failed} failed.`,'err');
+  else toast(`Schedule filled: ${filled} shifts assigned across ${dates.length} days.`,'ok');
   renderHSchedule();
 }
 
@@ -11598,6 +11663,7 @@ function renderHAttendance(){
   const fid = ST.hFid;
   const el = document.getElementById('h-attendance');
   if(!el) return;
+  _loadFacilitySchedule(fid, attRecordYear);
   const shifts = getFacilityShifts(fid);
 
   // Sub-tabs: Take Attendance | Attendance Record
@@ -11631,7 +11697,10 @@ function markAttend(fid, date, shift, staffId, status){
     DB.attendance.push(att1);
   }
   const s=getStaff(staffId);
-  const pts=status==='present'?'+'+ATTEND_POINTS.present:status==='late'?'+'+ATTEND_POINTS.late:status==='coverage'?'+'+(ATTEND_POINTS.present+ATTEND_POINTS.coverage):''+ATTEND_POINTS.absent;
+  // The old chain tested present/late/coverage and fell through to ATTEND_POINTS.absent for
+  // everything else, so PTO and Excused -- both worth 0 -- announced "-15 pts" (QA finding 3).
+  const ptsVal = status==='coverage' ? ATTEND_POINTS.present+ATTEND_POINTS.coverage : (ATTEND_POINTS[status]||0);
+  const pts = (ptsVal>0?'+':'')+ptsVal;
   toast(`${s?fullName(s):'Staff'} marked <strong>${ATTEND_LABELS[status]}</strong> – ${pts} pts`,'ok');
   if(ST.portal==='h'){ if(ST.hView==='h-attendance') renderHAttendance(); else renderHSchedule(); }
   if(ST.portal==='x') renderXSchedule();
@@ -11886,6 +11955,9 @@ function renderXSchedule(){
   if(!xSchFid){el.innerHTML='<div class="empty-state"><div class="empty-ttl">No facilities found</div></div>';return;}
   const fac = getFac(xSchFid);
   const shifts = getFacilityShifts(xSchFid);
+  // Same read-path gap as the leader portal (QA finding 1): these tabs are the leader's
+  // builder/attendance/record against a facility picker, and read the same two arrays.
+  _loadFacilitySchedule(xSchFid, xSchTab2==='record' ? attRecordYear : schBuilderYear);
 
   // Tabs
   const tabs=`<div style="display:flex;gap:2px;background:var(--s2);border:1px solid var(--bdr);border-radius:var(--rs);padding:3px;margin-bottom:12px;flex-wrap:wrap">
@@ -11908,6 +11980,9 @@ function renderXSchedule(){
     const today=todayStr();
     const rows=facs.map(f=>{
       const fst=staffOf(f.id);
+      // This row is per-facility, so every facility in the system needs its rows loaded, not
+      // just the one in the picker. One fetch pair per facility, once per session.
+      _loadFacilitySchedule(f.id);
       const todaySch=['AM','PM','NOC'].reduce((a,sh)=>{const s=getSchedule(f.id,today,sh);return a+(s?s.assignedStaff.length:0);},0);
       const todayAtt=(DB.attendance||[]).filter(a=>a.fid===f.id&&a.date===today);
       const p=todayAtt.filter(a=>a.status==='present').length;
@@ -18286,9 +18361,11 @@ function previewScheduleCSV(fid){
   reader.readAsText(file);
 }
 
-function importScheduleCSV(fid){
+async function importScheduleCSV(fid){
   if(!_schedImportRows.length){ toast('No matched rows to import.','err'); return; }
   const shifts=getFacilityShifts(fid);
+  // Same reason as execBulkSchedule: the update-vs-create lookup needs the stored rows first.
+  await _loadFacilitySchedule(fid);
 
   // Group by date+shift
   const grouped={};
@@ -18299,24 +18376,28 @@ function importScheduleCSV(fid){
   });
 
   let imported=0;
+  const writes=[];
   Object.values(grouped).forEach(g=>{
     const existing=DB.schedule.find(s=>s.fid===fid&&s.date===g.date&&s.shift===g.shift);
     if(existing){
       existing.assignedStaff=g.staffIds;
       // T28a: same hole as quick-fill. An import that overlapped an existing day reported
       // success and wrote nothing.
-      if(IS_LIVE) SB.updateSchedule(existing.id, mapScheduleToBackend(existing)).catch(e => handleSyncError(e,'Schedule sync'));
+      if(IS_LIVE) writes.push(SB.updateSchedule(existing.id, mapScheduleToBackend(existing)));
     }
     else {
       const bulkSched={id:newRecordId(),fid,date:g.date,shift:g.shift,assignedStaff:g.staffIds,publishedBy:null,notes:'CSV import',zoneAssignments:{}};
-      if(IS_LIVE){ SB.createSchedule(mapScheduleToBackend(bulkSched)).catch(e => handleSyncError(e,'Schedule sync')); }
+      if(IS_LIVE){ writes.push(SB.createSchedule(mapScheduleToBackend(bulkSched))); }
       DB.schedule.push(bulkSched);
     }
     imported++;
   });
 
   closeModal();
-  toast(`Schedule imported: ${_schedImportRows.length} assignments across ${imported} shifts.`,'ok');
+  const assignments=_schedImportRows.length;
+  const failed = await _settleWrites(writes, 'Schedule sync');
+  if(failed) toast(`Import partly applied: ${imported-failed} of ${imported} shifts saved, ${failed} failed.`,'err');
+  else toast(`Schedule imported: ${assignments} assignments across ${imported} shifts.`,'ok');
   _schedImportRows=[];
   if(ST.portal==='h'){ if(ST.hView==='h-attendance') renderHAttendance(); else renderHSchedule(); }
   if(ST.portal==='x') renderXSchedule();
