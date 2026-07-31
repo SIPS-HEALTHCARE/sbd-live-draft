@@ -150,9 +150,20 @@ Two different meters, decided 2026-07-23 and visible in the Command Center.
   `THIS MONTH` and `TO DATE`.
 - Facility tiers observed: **BASE** and **PREMIUM**. Facility status is **ACTIVE** or **LOCKED**.
 
-For scale reference, on 2026-07-08 the largest genuine figure on that page was **7,601 tokens**
-against the 500,000 ceiling. Any later reading in the millions or billions is a display defect,
-not growth.
+**Do not read the two meters against each other.** The 500,000 is a ceiling **per facility**.
+The master admin side is a **global** total across every facility and both platforms, and it is
+much larger. Corrected 2026-07-31 after the first version of this file implied that any figure in
+the millions was a display defect. It is not.
+
+Measured live on 2026-07-31: **32,216,307 tokens month to date, $62.09, across 282 calls**, all
+under the `sbd` app. The `sbd` and `psop` split exists in the interface but only `sbd` has data
+so far. For contrast, the largest **per facility** figure on 2026-07-08 was 7,601 tokens against
+that facility's 500,000 ceiling. Both numbers are correct; they are counting different things.
+
+What genuinely is a display defect is a figure that is wrong for its own scale, and the Command
+Center has produced several: a placement average rendering as `3053971376%`, a hero showing
+`$0.00` when the usage call failed, and 21.9M rendering as `21944.0K` because the formatter had
+no megatoken branch. Judge a number against its own meter, not against the other one.
 
 ---
 
