@@ -9,7 +9,7 @@ window.handleSyncError = function(e, context) {
 };
 
 // ============================================================ STATE
-const ST={portal:null,hView:'h-dashboard',aView:'a-overview',sView:'s-dashboard',xView:'x-dashboard',curFid:'test-a',hFid:'test-a',curSystemId:null,aTab:'all',facTab:'staff',charts:{},user:null,staffId:null};
+const ST={portal:null,hView:'h-dashboard',aView:'a-overview',sView:'s-dashboard',xView:'x-dashboard',curFid:null,hFid:null,curSystemId:null,aTab:'all',facTab:'staff',charts:{},user:null,staffId:null};
 
 function killChart(k){ if(ST.charts[k]){ST.charts[k].destroy();delete ST.charts[k];} }
 function mkChart(k,el,cfg){ killChart(k); ST.charts[k]=new Chart(el,cfg); return ST.charts[k]; }
@@ -407,7 +407,7 @@ function enterPortal(type){
   }
 
   if(type==='hospital'){
-    const fid=u?u.fid:'test-a';
+    const fid=u.fid;
     ST.hFid=fid;
     ST.curFid=fid;
     const fac=getFac(fid);
@@ -911,8 +911,8 @@ function adminFilterBar(showFacility, facList, onChangeFn){
 // Keep focus + caret in the admin staff search box across the re-render each keystroke triggers.
 // Typing sets the filter then re-renders the whole view (including this input), which would
 // otherwise destroy the focused box and force the user to click back in after every letter.
-function adminStaffSearchInput(el, fnName){
-  adminStaffFilter.q = el.value;
+function adminStaffSearchInput(el, fnName, filterObj){
+  (filterObj||adminStaffFilter).q = el.value;
   const caret = el.selectionStart;
   if(typeof window[fnName] === 'function') window[fnName]();
   const fresh = document.getElementById('adminStaffSearch_' + fnName);
@@ -4104,7 +4104,7 @@ function downloadAssessmentReport(prId){
       ${sect('CANDIDATE INFORMATION')}
       <table style="${tbl}">
         <tr><td style="padding:6px;border:1px solid #e2e8f0;width:30%;font-weight:700">Candidate Name</td><td style="padding:6px;border:1px solid #e2e8f0">${pr.staffName||(s?fullName(s):'--')}</td></tr>
-        <tr><td style="padding:6px;border:1px solid #e2e8f0;font-weight:700">Current Title</td><td style="padding:6px;border:1px solid #e2e8f0">${pr.staffTitle||s?.role||'--'}</td></tr>
+        <tr><td style="padding:6px;border:1px solid #e2e8f0;font-weight:700">Title at Assessment</td><td style="padding:6px;border:1px solid #e2e8f0">${pr.staffTitle||s?.role||'--'}</td></tr>
         <tr><td style="padding:6px;border:1px solid #e2e8f0;font-weight:700">Facility</td><td style="padding:6px;border:1px solid #e2e8f0">${fac}</td></tr>
         <tr><td style="padding:6px;border:1px solid #e2e8f0;font-weight:700">Report Status</td><td style="padding:6px;border:1px solid #e2e8f0">${draft?'DRAFT -- pending assessor confirmation':'FINAL -- '+m.determination}</td></tr>
       </table>
@@ -5060,7 +5060,7 @@ function buildAssessmentReportHTML(pr, staff, fac) {
     <div class="ar-section"><div class="ar-section-hdr">CANDIDATE INFORMATION</div>
       <div class="ar-section-body"><table style="width:100%;border-collapse:collapse">
         <tr><td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;border-right:1px solid #e2e8f0;width:50%"><div style="font-size:7.5pt;color:#94a3b8;margin-bottom:3px">Candidate Name</div><div style="font-weight:700;font-size:10pt">${safe(candidateName)}</div></td>
-        <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;width:50%"><div style="font-size:7.5pt;color:#94a3b8;margin-bottom:3px">Current Title</div><div style="font-weight:700;font-size:10pt">${safe(pr.staffTitle || staff.role || '—')}</div></td></tr>
+        <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;width:50%"><div style="font-size:7.5pt;color:#94a3b8;margin-bottom:3px">Title at Assessment</div><div style="font-weight:700;font-size:10pt">${safe(pr.staffTitle || staff.role || '—')}</div></td></tr>
         <tr><td style="padding:10px 14px;border-right:1px solid #e2e8f0"><div style="font-size:7.5pt;color:#94a3b8;margin-bottom:3px">Facility</div><div style="font-weight:700;font-size:10pt">${safe(fac.name)}</div></td>
         <td style="padding:10px 14px"><div style="font-size:7.5pt;color:#94a3b8;margin-bottom:3px">Report Status</div><div style="font-weight:700;font-size:10pt">${safe(reportStatus)}</div></td></tr>
       </table></div>
@@ -10096,7 +10096,7 @@ function downloadSystemReport(){
 
 // ============================================================ H DASHBOARD
 function renderHDashboard(){
-  const fid=ST.hFid||'test-a';
+  const fid=ST.hFid;
   const st=staffOf(fid);
   const n=st.length;
   const aboveGreen=st.filter(s=>beltIdx(s.belt)>=2).length;
@@ -10191,7 +10191,7 @@ function renderHDashboard(){
 // ============================================================ H STAFF
 let hBeltFilter='All', hSearch='';
 function renderHStaff(){
-  const fid=ST.hFid||'test-a';
+  const fid=ST.hFid;
   const facAdmin = isFacilityAdmin();
   const st=staffOf(fid).filter(s=>(hBeltFilter==='All'||s.belt===hBeltFilter)&&(fullName(s).toLowerCase().includes(hSearch.toLowerCase())||s.role.toLowerCase().includes(hSearch.toLowerCase())));
   document.getElementById('h-staff').innerHTML=`
@@ -10661,7 +10661,7 @@ function _loadFacilityShiftDefs(fid){
   }).catch(e=>{ _shiftDefsLoaded[fid] = false; console.warn('[shifts] definition load failed', e && e.message); });
 }
 function renderHSchedule(){
-  const fid = ST.hFid||'test-a';
+  const fid = ST.hFid;
   _loadFacilityShiftDefs(fid);
   const el = document.getElementById('h-schedule');
   const today = todayStr();
@@ -11595,7 +11595,7 @@ function downloadAttendanceRecord(fid, staffId, year){
 }
 
 function renderHAttendance(){
-  const fid = ST.hFid||'test-a';
+  const fid = ST.hFid;
   const el = document.getElementById('h-attendance');
   if(!el) return;
   const shifts = getFacilityShifts(fid);
@@ -11946,7 +11946,7 @@ function renderXSchedule(){
 
 // ============================================================ H MILESTONES
 function renderHMilestones(){
-  const fid=ST.hFid||'test-a';
+  const fid=ST.hFid;
   const st=staffOf(fid);
   const n=st.length;
   const ms=BELT_ORDER.slice(0,4).flatMap(b=>[50,100].map(tgt=>({belt:b,tgt,cnt:st.filter(s=>beltIdx(s.belt)>=beltIdx(b)).length,n,pct:Math.round(st.filter(s=>beltIdx(s.belt)>=beltIdx(b)).length/n*100)})));
@@ -12049,7 +12049,7 @@ function denyPSCompletion(reqId){
   if(typeof renderHPosSchool==='function') renderHPosSchool();
 }
 function renderHPosSchool(){
-  const fid=ST.hFid||'test-a';
+  const fid=ST.hFid;
   const st=staffOf(fid);
 
   // Build per-track stats
@@ -12196,7 +12196,7 @@ function renderHPosSchool(){
 
 
 function renderHReports(){
-  const fid = ST.hFid||'test-a';
+  const fid = ST.hFid;
   const fac = getFac(fid);
   const st = staffOf(fid);
   const hs = buildHealthScore(fid);
@@ -15050,7 +15050,7 @@ function renderAProgression() {
       <select class="form-select" style="width:auto;max-width:200px;padding:5px 11px;font-size:12px;height:32px" onchange="progFilter.fid=this.value;renderAProgression()">${facOpts}</select>
       <div class="search-wrap" style="min-width:160px;flex:1;max-width:240px">
         <div class="search-ico"><svg viewBox="0 0 18 18" fill="none" width="14" height="14"><circle cx="7.5" cy="7.5" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M12 12l3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
-        <input class="search-inp" placeholder="Search name or role..." value="${progFilter.q}" oninput="progFilter.q=this.value;renderAProgression()">
+        <input id="adminStaffSearch_renderAProgression" class="search-inp" placeholder="Search name or role..." value="${progFilter.q}" oninput="adminStaffSearchInput(this,'renderAProgression',progFilter)">
       </div>
       <div style="display:flex;gap:4px;overflow-x:auto">${beltChips}</div>
     </div>
@@ -17837,7 +17837,7 @@ function openEditUserModal(uid){
       <div class="form-group"><label class="form-label">Account Role</label>
         <select class="form-select" id="eu-role" onchange="const v=this.value; document.getElementById('eu-wrap-fac-assigned').style.display=(v==='staff_admin'?'block':'none'); document.getElementById('eu-wrap-fac').style.display=(['facility_admin','hospital','staff_member'].includes(v)?'block':'none'); document.getElementById('eu-wrap-sys').style.display=(v==='system_admin'?'block':'none');">
           <option value="staff_member" ${u.role==='staff_member'?'selected':''}>Staff Member (Tech)</option>
-          <option value="hospital" ${u.role==='hospital'?'selected':''}>Hospital Manager (Read Only)</option>
+          <option value="hospital" ${u.role==='hospital'?'selected':''}>Hospital Manager (Full Facility Access)</option>
           <option value="facility_admin" ${u.role==='facility_admin'?'selected':''}>Facility Admin (Full Facility Access)</option>
           <option value="system_admin" ${u.role==='system_admin'?'selected':''}>System Admin</option>
           <option value="staff_admin" ${u.role==='staff_admin'?'selected':''}>Assessor (SIPS Internal)</option>
