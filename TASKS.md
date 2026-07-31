@@ -1505,11 +1505,15 @@ vocabulary these tasks are written in, including the SBD and SPD distinction tha
   in Supabase Storage, and its extracted text indexed in Pinecone so David can answer from the
   document. That should be said plainly rather than silently building the Supabase half.
 
-  **Pairs with T83, and the two must be scoped together.** Measured 2026-07-31: the platform has
-  no file storage of any kind. `rg "storage\.from|\.upload\(|createSignedUrl|getPublicUrl"` over
-  `src/js` returns nothing, and every "storage" reference in `ARCHITECTURE.md` is `localStorage`.
-  So this is not an upload button on top of an existing store, it is the store as well. T83 needs
-  the same foundation for curriculum media. Building them separately builds it twice.
+  **This is the store as well, not a button on top of one.** Measured 2026-07-31:
+  `rg "storage\.from|\.upload\(|createSignedUrl|getPublicUrl"` over `src/js` returns nothing, and
+  every "storage" reference in `ARCHITECTURE.md` is `localStorage`. The platform has no file
+  storage of any kind today.
+
+  **Narrowed 2026-07-31.** This was written as a pair with T83. The client has since decided he
+  hosts curriculum video himself and sends links, so video is out of scope for this store. What
+  still lands here is documents and images, and possibly the audio, slide decks and infographics
+  if his own library does not cover them. That question is open under T83.
   *Goal:* A SIPS admin can attach a file or image to the record it belongs to, and get it back out.
   *Done when:* Upload is present for SIPS admin and absent for every other role, the file is stored
   outside the record row, retrieval works, and the maximum accepted size is stated in the UI rather
@@ -1573,22 +1577,37 @@ vocabulary these tasks are written in, including the SBD and SPD distinction tha
   what formats we need. The reply given was that we would let him know.
   He is blocked on us, not the other way round. He is producing the content now.
 
-  **The answer splits in two, and only half of it is ours to give.**
-  The format half is settled and costs nothing to state: MP4 for video, PDF for slide decks, PNG
-  or WebP for infographics, MP3 for audio.
-  The hosting half is a spending decision, not an engineering one, so it is his to make. Video is
-  the heavy item. At the stated rollout of about 205 accounts, repeat viewing of the same files
-  means whoever hosts them carries the transfer cost. Self-hosting keeps everything inside the
-  platform and puts that cost on this project; an external video host is far cheaper and often
-  free, at the price of the material living outside the platform. He needs both options and the
-  difference between them, not a recommendation dressed as a fact.
+  **DECIDED 2026-07-31 by the client, in a voice note, and it makes this task much smaller.**
+  He hosts the video himself and sends us links:
 
-  **Pairs with T78.** Same missing foundation: there is no file storage in the platform at all.
-  Whatever is chosen here is what T78 uploads into.
-  *Goal:* He knows where to put curriculum media and in what format, before he produces more of it
-  in a format we cannot use.
-  *Done when:* Both options and their cost difference are sent to him in writing along with the
-  formats and the size ceiling, he picks one, and his choice is recorded here as a dated decision.
+  > *"whatever I decide to host the videos on, I'll just go ahead and upload them, upload the
+  > videos there, and add them, all of them, organized, and then give you all the link and make
+  > sure that it is organized and titled properly for you."*
+
+  He is choosing between a video platform and a media library on a system they already run, and
+  said he would look into it. Either way the output is **links and embed codes**.
+
+  So we are not building video storage, and the transfer cost is not ours. What we build is the
+  place a curriculum item holds a link or an embed and renders it. Formats for video stop
+  mattering to us as well, since the host handles playback.
+
+  **This decouples the task from T78.** The pairing still holds for documents and images, which
+  have no home yet, but video no longer needs the store. Do not scope them as one piece of work.
+
+  **Two things his voice note did not settle. Both are ours to raise, and both are cheaper to
+  answer before he picks a platform than after.**
+  1. **Whether playback needs its own sign in.** If it does, staff hit two logins for one lesson,
+     which is exactly the friction that suppresses completion. If it does not, playback is smooth
+     but anyone holding the link can watch, inside the organisation or outside. This is a
+     content-sensitivity call, not a technical one, and it changes how we gate the embed.
+  2. **Audio, slide decks and infographics.** He spoke only about video. Those still have no home.
+     If his chosen library gives links for them too, we embed them the same way. If not, they fall
+     back to platform storage, which is T78's foundation.
+
+  *Goal:* Curriculum media reaches staff, correctly gated, without us hosting video.
+  *Done when:* A curriculum item can carry a link or embed and render it, the gating matches his
+  answer on sign in, the answer on audio, slides and infographics is recorded here as a dated
+  decision, and one real lesson plays end to end for a staff account.
 
 - [ ] **T84** One heading says SBD where it means SPD · est 0.1d · Low
   `ui-views.js:6087` renders the heading `SBD BACKGROUND` on the card a staff member sees on their
