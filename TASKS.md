@@ -1482,10 +1482,29 @@ A companion reference was written at the same time, `docs/DOMAIN_GLOSSARY.md`. I
 vocabulary these tasks are written in, including the SBD and SPD distinction that T84 turns on.
 
 - [ ] **T78** SIPS admin can attach files and images to a record · est 1d · Medium
-  Asked 2026-07-29 at 11:42 PM. The client wants an upload control visible to SIPS admin only, so
-  supporting documents and images can be attached and retrieved later. Answered in the conversation
-  at the time with storage options and the existing print path for retrieval, and an open question
-  on the size limit. It was never written down after that.
+  Asked 2026-07-29 at 11:42 PM: *"For SIPS admin.. can we add a button so we can add files and
+  images… only for sipds admin…"*
+
+  **Corrected 2026-07-31 after re-reading the exchange rather than the summary of it. This task is
+  far more specified than it first looked, because the client answered most of it himself.**
+
+  - **He named the storage.** At 11:43 PM, unprompted: *"Can we use pinecone or supabase?"*
+  - **He designed the retrieval.** At 11:45 PM, after being told stored files would have to be
+    downloaded to open: *"It doesn't need to produce documents to download… we can use the same
+    print feature and we can download from there… is that a possible workflow?"*
+  - **He restated the whole workflow for the record** at 12:18 AM: *"on our end.. it will be us
+    uploading docs and having the print option so we can download.. for clarity"*
+
+  So who uploads, what they upload, and how it comes back are all already decided by him. The only
+  thing left open was ours: *"Let me add this to checklist and see our upload size limit"* and
+  *"And storage"*. That is the entire outstanding commitment.
+
+  **One correction he needs, and it is a real one.** Of the two he named, only Supabase can do
+  this. Pinecone is a vector store; it holds embeddings so David can search meaning, and it cannot
+  hold a PDF or an image as a file. The honest answer is both, in different roles: the file itself
+  in Supabase Storage, and its extracted text indexed in Pinecone so David can answer from the
+  document. That should be said plainly rather than silently building the Supabase half.
+
   **Pairs with T83, and the two must be scoped together.** Measured 2026-07-31: the platform has
   no file storage of any kind. `rg "storage\.from|\.upload\(|createSignedUrl|getPublicUrl"` over
   `src/js` returns nothing, and every "storage" reference in `ARCHITECTURE.md` is `localStorage`.
@@ -1497,9 +1516,13 @@ vocabulary these tasks are written in, including the SBD and SPD distinction tha
   than discovered by a failed upload.
 
 - [ ] **T79** A SIPS admin role, and splitting approval from PIN generation · est 1.5d · High
-  Asked 2026-07-30 at 7:41 PM, three separate things in one message: *"break apart permission to
-  approve assessments"*, make people such as Kirti SIPS admin so they can proctor, and *"create a
-  sips admin role that is a blank role until we update it in role management"*.
+  Asked 2026-07-30 across two messages, five minutes apart, after being told PIN generation is
+  master admin only. At 7:36 PM: *"We can add pin gen to role management so we can allow approved
+  admin to gen pin… I guess we should create a sips admin role that is a blank role until we
+  update it in role management"*. At 7:41 PM: *"Can we break apart permission to approve
+  assements… Essentially… her (and others like her) we want them to be sips admin and be able to
+  proctor the assessments… so generation (we still need to clean that page up so deactivated
+  accounts aren't still clogging that page up for pin gen)"*.
   The pattern is the same one behind T74. He is asking for permissions to be composable in Role
   Management rather than bundled into a base role, and for a new role to start empty rather than
   inheriting anything.

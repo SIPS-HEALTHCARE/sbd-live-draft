@@ -166,6 +166,15 @@ The client's stated rollout, 2026-07-01:
 Roughly **205 accounts at full load**. Capacity, spend caps and seat decisions should be sized
 against this rather than against current test volumes.
 
+**That figure is already out of date, and by the client's own account it is about to grow.** On
+2026-07-31, straight after a client demo, he wrote: *"Demo went good… they are blown away... We
+just locked in a new hospital system… so we are going into more hospitals…"*
+
+A hospital system is a group of facilities, not a single site, so this is a step change rather
+than an increment. The 30 and 175 above describe the footprint as it was on 1 July. Treat 205 as
+the floor for sizing work, never the ceiling, and re-ask him for the numbers before committing to
+anything with a per-seat or per-facility cost.
+
 ---
 
 ## 10. Facilities
