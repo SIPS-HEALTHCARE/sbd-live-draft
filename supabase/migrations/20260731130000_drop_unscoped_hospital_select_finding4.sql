@@ -1,0 +1,39 @@
+-- QA 2026-07-29 finding 4, follow-up: the publish gate added in 20260731090000 is a no-op
+-- while an older unscoped policy grants the same rows.
+--
+-- sbd_schedule_hospital_select and sbd_attendance_hospital_select are permissive SELECT
+-- policies applying to PUBLIC whose only test is facility_id = sbd_get_user_facility().
+-- Permissive policies OR together, so they re-admit every role the newer consolidated
+-- policies deliberately exclude: a staff_member reading unpublished drafts, and any role
+-- at a facility reading a colleague's attendance.
+--
+-- sbd_schedule_select (20260731090000) and sbd_attendance_select (20260731121000) already
+-- cover master_admin, admin, staff_admin, system_admin, hospital, facility_admin and
+-- staff_member. Dropping these two removes only the access that was never intended.
+--
+-- This is the same failure shape as T37: a narrow rule added while the broad grant
+-- underneath was left standing, so the narrow rule contributed nothing. Second occurrence
+-- in eight days, which is why the drop is done rather than another policy layered on top.
+--
+-- Applied 2026-07-31 by Shawn. Pre-flight recorded at the time of application:
+--   supabase/verify/post_migration_check.sql  75/75 PASS, 0 FAIL
+--   14 policies present across both tables, before-picture captured
+--   sbd_schedule: 1 row, 0 unpublished drafts, 1 facility
+--   sbd_attendance: 1 row
+--   role census: staff_member 53, hospital + facility_admin 18, and every live role
+--   appears in the replacement policies
+--
+-- KNOWN LIMIT, recorded deliberately rather than glossed. The real-session test in the
+-- source document (a GET as a staff_member against a facility holding an unpublished
+-- draft) could NOT be run, because production holds zero unpublished drafts and creating
+-- one would mean writing test data into the live database. Applied on Shawn's explicit
+-- instruction with that gap stated. Re-run that test once real schedule data exists.
+--
+-- Rollback, if any read comes back wrong:
+--   create policy sbd_schedule_hospital_select on public.sbd_schedule
+--     for select to public using (facility_id = public.sbd_get_user_facility());
+--   create policy sbd_attendance_hospital_select on public.sbd_attendance
+--     for select to public using (facility_id = public.sbd_get_user_facility());
+
+drop policy if exists sbd_schedule_hospital_select   on public.sbd_schedule;
+drop policy if exists sbd_attendance_hospital_select on public.sbd_attendance;
