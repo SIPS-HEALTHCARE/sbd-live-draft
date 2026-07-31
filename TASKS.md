@@ -1571,11 +1571,15 @@ vocabulary these tasks are written in, including the SBD and SPD distinction tha
   *Done when:* Each command has a stated required role, the tiers are mapped onto the extraction
   plan's phases, and tier 1 works end to end.
 
-- [ ] **T83** Answer the client on curriculum media hosting and formats · est 0.1d · High
-  Asked 2026-07-31 at 2:35 AM and **still unanswered**. He is producing video, audio, slide decks
-  and infographics for each study curriculum, and he asked where that content should be hosted and
-  what formats we need. The reply given was that we would let him know.
-  He is blocked on us, not the other way round. He is producing the content now.
+- [ ] **T83** Curriculum media: carry the client's links and render them, correctly gated · est 1d · Medium
+  Raised by him 2026-07-31 at 2:35 AM. He is producing video, audio, slide decks and infographics
+  for every study curriculum, and asked where the content should go and what formats we need. The
+  reply at the time was that we would let him know.
+
+  **He then answered the hosting half himself the same day**, so this stopped being a question we
+  owed him and became a small build. Nobody is blocked on anybody now. What keeps it moving is
+  that he is producing the material already, so the place to put it should exist before the first
+  batch arrives.
 
   **DECIDED 2026-07-31 by the client, in a voice note, and it makes this task much smaller.**
   He hosts the video himself and sends us links:
