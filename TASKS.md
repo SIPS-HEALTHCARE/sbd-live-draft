@@ -1486,6 +1486,11 @@ vocabulary these tasks are written in, including the SBD and SPD distinction tha
   supporting documents and images can be attached and retrieved later. Answered in the conversation
   at the time with storage options and the existing print path for retrieval, and an open question
   on the size limit. It was never written down after that.
+  **Pairs with T83, and the two must be scoped together.** Measured 2026-07-31: the platform has
+  no file storage of any kind. `rg "storage\.from|\.upload\(|createSignedUrl|getPublicUrl"` over
+  `src/js` returns nothing, and every "storage" reference in `ARCHITECTURE.md` is `localStorage`.
+  So this is not an upload button on top of an existing store, it is the store as well. T83 needs
+  the same foundation for curriculum media. Building them separately builds it twice.
   *Goal:* A SIPS admin can attach a file or image to the record it belongs to, and get it back out.
   *Done when:* Upload is present for SIPS admin and absent for every other role, the file is stored
   outside the record row, retrieval works, and the maximum accepted size is stated in the UI rather
@@ -1544,10 +1549,23 @@ vocabulary these tasks are written in, including the SBD and SPD distinction tha
   and infographics for each study curriculum, and he asked where that content should be hosted and
   what formats we need. The reply given was that we would let him know.
   He is blocked on us, not the other way round. He is producing the content now.
+
+  **The answer splits in two, and only half of it is ours to give.**
+  The format half is settled and costs nothing to state: MP4 for video, PDF for slide decks, PNG
+  or WebP for infographics, MP3 for audio.
+  The hosting half is a spending decision, not an engineering one, so it is his to make. Video is
+  the heavy item. At the stated rollout of about 205 accounts, repeat viewing of the same files
+  means whoever hosts them carries the transfer cost. Self-hosting keeps everything inside the
+  platform and puts that cost on this project; an external video host is far cheaper and often
+  free, at the price of the material living outside the platform. He needs both options and the
+  difference between them, not a recommendation dressed as a fact.
+
+  **Pairs with T78.** Same missing foundation: there is no file storage in the platform at all.
+  Whatever is chosen here is what T78 uploads into.
   *Goal:* He knows where to put curriculum media and in what format, before he produces more of it
   in a format we cannot use.
-  *Done when:* Hosting and accepted formats are sent to him in writing, with the size ceiling, and
-  the answer is recorded here.
+  *Done when:* Both options and their cost difference are sent to him in writing along with the
+  formats and the size ceiling, he picks one, and his choice is recorded here as a dated decision.
 
 - [ ] **T84** One heading says SBD where it means SPD · est 0.1d · Low
   `ui-views.js:6087` renders the heading `SBD BACKGROUND` on the card a staff member sees on their
