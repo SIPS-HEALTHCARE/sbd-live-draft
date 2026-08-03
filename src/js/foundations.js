@@ -938,6 +938,60 @@ function renderSFoundations(){
 }
  
 // ── Module Viewer with 3-Gate Tabs ──
+// ── Section body formatter ──────────────────────────────────────────────────
+// Client request, Ignacio 2026-08-03: "The UI should resemble the doc... colors.
+// Sections, separated text, adjusted format." The source curriculum documents lay
+// each section out as coloured, separated blocks; the app was rendering the whole
+// section as one unbroken paragraph.
+//
+// This reshapes the text we already hold. It does NOT invent content. Every
+// sentence that goes in comes out, only separated and labelled.
+//
+// Three shapes appear across all 70 sections:
+//   "Categories: Cutting/Dissecting, Grasping/Holding, ..."   label + list
+//   "FIFO: oldest used first."                                label + value
+//   "Blood and tissue dry within minutes."                    plain statement
+// Anything that matches none of these falls through as a plain statement, so a
+// section can never lose text by failing to match.
+function fndFmtBody(txt){
+  if(!txt) return '';
+  var esc = function(t){ return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
+  // Split on sentence ends. Lookahead only, no lookbehind: iOS Safari gained
+  // lookbehind in 16.4, and a regex that throws would take the whole module
+  // down on the client's phone rather than degrade. Uses an explicit \u0001
+  // sentinel rather than a literal control character in source.
+  var SEP = '\u0001';
+  var parts = String(txt)
+    .replace(/([.:])\s+(?=[A-Z(])/g, '$1' + SEP)
+    .split(SEP)
+    .map(function(x){ return x.trim(); })
+    .filter(Boolean);
+  if(!parts.length) parts = [String(txt).trim()];
+  var out = '';
+  parts.forEach(function(p){
+    // A label is a short tag like "Categories:" or "FIFO:", not a sentence that
+    // happens to contain a colon. "The SPD exists for one reason: to ensure..."
+    // must stay one line, so cap the word count and reject sentence openers.
+    var m = p.match(/^([A-Z][A-Za-z0-9 \/&()'-]{1,30}):\s+(.+)$/);
+    if(m && m[1].split(/\s+/).length > 4) m = null;
+    if(m && /^(The|A|An|This|That|These|Those|When|If|After|Before|Each|Every|All|Any|Your|Never|Always|Use|It)\b/.test(m[1])) m = null;
+    if(m){
+      var label = m[1], rest = m[2].replace(/\.$/,'');
+      var items = rest.split(/,\s+/).filter(Boolean);
+      if(items.length >= 3){
+        out += '<div class="fnd-blk fnd-blk-list"><div class="fnd-blk-lbl">'+esc(label)+'</div><div class="fnd-chips">';
+        items.forEach(function(it){ out += '<span class="fnd-chip">'+esc(it.replace(/\.$/,''))+'</span>'; });
+        out += '</div></div>';
+      } else {
+        out += '<div class="fnd-blk"><div class="fnd-blk-lbl">'+esc(label)+'</div><div class="fnd-blk-body">'+esc(rest)+'</div></div>';
+      }
+    } else {
+      out += '<div class="fnd-line">'+esc(p)+'</div>';
+    }
+  });
+  return out;
+}
+
 function openFndModule(moduleId){
  const m=FOUNDATIONS_MODULES.find(x=>x.id===moduleId);if(!m) return;
  const s=getStaff(ST.staffId);if(!s) return;
@@ -971,8 +1025,11 @@ function renderFndModuleTab(m,s,gates,tab){
  
  if(tab==='content'){
    m.sections.forEach((sec,i)=>{
-     html+='<div class="fnd-section"><div class="fnd-section-title">'+sec+'</div>';
-     html+='<div class="fnd-section-body">'+m.sectionContent[i]+'</div></div>';
+     var _num = (sec.match(/^\s*([0-9]+\.[0-9]+)/)||[])[1] || '';
+     var _ttl = _num ? sec.replace(/^\s*[0-9]+\.[0-9]+\s*/,'') : sec;
+     html+='<div class="fnd-section">';
+     html+='<div class="fnd-section-head">'+(_num?'<span class="fnd-section-num">'+_num+'</span>':'')+'<span class="fnd-section-title">'+_ttl+'</span></div>';
+     html+='<div class="fnd-section-body">'+fndFmtBody(m.sectionContent[i])+'</div></div>';
    });
  } else if(tab==='gate1'){
    html+=renderFndGateAssessment(m,s,'g1',m.questions,'Knowledge Check','Select the best answer for each question. 80% required to pass.');

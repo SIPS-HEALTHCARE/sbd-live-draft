@@ -89,3 +89,76 @@
 #sbd-root .prc-callout{background:#0e1328 !important}
 #sbd-root .prc-check{background:#0e1328 !important}
 #sbd-root .prc-callout-body, #sbd-root .prc-check-row{color:#cbd5e1 !important}
+
+/* ── Foundations section layout, client request 2026-08-03 ────────────────────
+   "The UI should resemble the doc... colors. Sections, separated text,
+   adjusted format." The source documents use a blue section header, blue
+   labelled blocks and clearly separated lines. These are the dark-theme
+   equivalents of that language, not a copy of the light-theme document. */
+
+.fnd-section{
+  background:var(--s2);
+  border:1px solid var(--bdr);
+  border-radius:var(--r);
+  margin-bottom:14px;
+  overflow:hidden;
+}
+.fnd-section-head{
+  display:flex; align-items:center; gap:9px;
+  padding:11px 14px;
+  background:linear-gradient(90deg, rgba(59,130,246,.16), rgba(59,130,246,.04));
+  border-bottom:1px solid rgba(59,130,246,.22);
+}
+.fnd-section-num{
+  flex-shrink:0;
+  font-size:11px; font-weight:700; letter-spacing:.04em;
+  color:#0b1220; background:#7cc4e8;
+  padding:3px 7px; border-radius:5px;
+}
+.fnd-section-title{
+  font-size:14px; font-weight:700; color:#cfe6f5; letter-spacing:.01em;
+}
+.fnd-section-body{ padding:12px 14px 14px }
+
+/* label + value block */
+.fnd-blk{
+  border-left:3px solid #3b82f6;
+  background:rgba(59,130,246,.07);
+  border-radius:0 6px 6px 0;
+  padding:9px 12px;
+  margin-bottom:9px;
+}
+.fnd-blk-lbl{
+  font-size:11.5px; font-weight:700; letter-spacing:.05em; text-transform:uppercase;
+  color:#7cc4e8; margin-bottom:5px;
+}
+.fnd-blk-body{ font-size:13px; color:#cbd5e1; line-height:1.6 }
+
+/* label + list block */
+.fnd-blk-list{ border-left-color:#22c55e; background:rgba(34,197,94,.07) }
+.fnd-blk-list .fnd-blk-lbl{ color:#7ddba1 }
+.fnd-chips{ display:flex; flex-wrap:wrap; gap:6px }
+.fnd-chip{
+  font-size:12px; color:#d8e6ee;
+  background:rgba(255,255,255,.05);
+  border:1px solid rgba(255,255,255,.09);
+  border-radius:5px; padding:4px 9px; line-height:1.35;
+}
+
+/* plain statement line */
+.fnd-line{
+  position:relative;
+  font-size:13px; color:#a8b6c6; line-height:1.62;
+  padding:5px 0 5px 15px; margin-bottom:2px;
+}
+.fnd-line::before{
+  content:''; position:absolute; left:3px; top:12px;
+  width:5px; height:5px; border-radius:50%; background:#3b82f6; opacity:.75;
+}
+.fnd-line + .fnd-line{ border-top:1px solid rgba(255,255,255,.05) }
+
+@media(max-width:560px){
+  .fnd-section-body{ padding:10px 11px 12px }
+  .fnd-blk{ padding:8px 10px }
+  .fnd-chip{ font-size:11.5px; padding:3px 8px }
+}
