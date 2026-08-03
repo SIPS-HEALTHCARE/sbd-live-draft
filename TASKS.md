@@ -3,7 +3,7 @@
 **Living document.** This is the single record of what has been built and what is left.
 It is not regenerated. It is edited in place.
 
-**Last updated:** 2026-07-31
+**Last updated:** 2026-08-03
 **Audit basis:** 2026-07-25, verified against the live project and the live code.
 **History basis:** 2026-07-31, the complete client conversation from 22 May to 31 July read end
 to end including every attachment. See `docs/DOMAIN_GLOSSARY.md` for the vocabulary this ledger
@@ -1710,6 +1710,55 @@ vocabulary these tasks are written in, including the SBD and SPD distinction tha
   deployment that needs it, the dependent feature is confirmed still working, and the old key is
   confirmed rejected.
 
+- [ ] **T88** Foundations content carries the document's structure, not just its words · est 4d · Medium
+  Asked by the client on 2026-08-03 at 8:30 PM, with a recording of the source curriculum
+  document held beside the app: *"Can we update the UI in foundations."* Clarified at 9:21 PM when
+  asked which of two readings he meant: *"The UI should resemble the doc… colors. Sections,
+  separated text, adjusted format."*
+
+  **The presentation half shipped the same night** and is live on `foundations.js?v=15`. Sections
+  now carry a numbered header, the text is split into separated lines, label-and-list content
+  renders as labelled blocks with the items as chips, and the palette follows the document.
+  `fndFmtBody()` reshapes the strings already held; it invents nothing, and all 70 sections were
+  checked to confirm not one word is lost.
+
+  **This task is the half that did not ship, and it is the larger half.** The document has
+  structure the content does not. Section 2.1 alone, read off the client's recording, contains:
+
+  * a **Required PPE table**, three columns wide (PPE ITEM / PURPOSE / KEY POINTS) and six rows
+  * a **Donning Sequence** of six numbered steps, each a titled block with its own body
+  * a **Doffing Sequence** of six numbered steps, each carrying a bullet list inside it
+  * inline procedure markers between steps, *"PERFORM HAND HYGIENE"* and *"PERFORM HAND HYGIENE
+    AGAIN"*
+  * two callout boxes, a tip (*Gloves Over Gown Cuffs*) and a warning (*The Golden Rule of
+    Doffing*)
+
+  Against that, the app holds one sentence for 2.1: *"Required PPE: fluid-resistant gown, face
+  shield or goggles with mask, heavy-duty gloves, shoe covers, hair cover. Donning maximizes
+  protection. Doffing prevents self-contamination with hand hygiene between steps."*
+
+  **No layout change can produce a six-row table from a sentence that has no table in it.** The
+  content has to carry the structure. That is why this is 4d and not an afternoon.
+
+  **The rendering side is already capable, so none of that cost is code.** `sectionContent[i]` is
+  concatenated into an `innerHTML` string at `foundations.js`, so HTML in a content string renders
+  today with no change, and `cs-table` / `cs-para` styling already exists in `src/css/index.css`
+  and is used by the Yellow Belt core study content. The work is authoring, not plumbing.
+
+  **Blocked on the source documents.** We have seen exactly one, 2.1, and only as frames pulled
+  from a phone recording. The other 69 sections cannot be matched to documents nobody has sent.
+  Requested from the client on 2026-08-03. **2.1 can be built now from the recording as a worked
+  example**, which is also the cheapest way to confirm the target before committing four days.
+
+  Related to T81, which is the same complaint in the preceptor module. Same cause, different
+  content set, so they are tracked separately rather than merged.
+
+  *Goal:* A staff member reading a Foundations section sees what the curriculum author wrote,
+  laid out the way they wrote it.
+  *Done when:* 2.1 renders with its table, its numbered donning and doffing steps, its procedure
+  markers and its callouts; the pattern is applied across the remaining sections as their source
+  documents arrive; and the client confirms a side-by-side against the document.
+
 ### Blocked, not on the critical path
 
 - [ ] **T49** Strip and rotate the PSOP credentials, gate the public page
@@ -1753,6 +1802,19 @@ vocabulary these tasks are written in, including the SBD and SPD distinction tha
 ---
 
 ## Totals
+
+**Updated 2026-08-03.** 36 items done, 59 open. T88 added: the client asked on 3 August for the
+Foundations UI to resemble the source curriculum document, and clarified it as *"colors. Sections,
+separated text, adjusted format."* The presentation half shipped the same night and is live on
+`foundations.js?v=15`; it reshapes the strings already held and was checked across all 70 sections
+to confirm no word is lost. T88 is the half that did not ship, which is the larger one: the
+document carries tables, numbered step blocks and callouts that the content itself does not, and
+no layout change produces a six-row table from a sentence with no table in it. Blocked on the
+source documents, of which exactly one has been seen, and only as frames from a phone recording.
+
+`GOAL.md` added the same day, since the after-hours handover convention expects it and it did not
+exist. It is a one-minute view of the three lines of work in front of us; this ledger stays the
+record.
 
 **Updated 2026-07-31.** 36 items done, 58 open. Eleven added, T78 to T87 plus T84a, from one pass over the
 complete client conversation, 22 May to 31 July, attachments included rather than message text
