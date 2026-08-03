@@ -1,4 +1,4 @@
--- 20260710223000_recover_partial_timeouts.sql
+-- 20260710223724_recover_partial_timeouts.sql
 -- Safety-net hardening: sbd_recover_placements now also finalizes TIMED-OUT PARTIAL
 -- placements, not just fully-answered ones. This closes the gap where a candidate whose
 -- browser is closed at the exact expiry second (so the client-side timeout auto-submit
