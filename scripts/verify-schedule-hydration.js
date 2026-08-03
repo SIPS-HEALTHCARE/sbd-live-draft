@@ -65,10 +65,10 @@ function sandbox({ schedule = [], attendance = [], fetcher }) {
   };
   let renders = 0;
   const factory = new Function(
-    'DB', 'ST', 'SB', 'IS_LIVE', 'console', '_refreshHAtt', 'renderXSchedule',
+    'DB', 'ST', 'SB', 'IS_LIVE', 'console', '_refreshHAtt', 'renderXSchedule', 'schMount',
     MAPPERS_SRC + '\n' + LOADER_SRC + '\nreturn {_loadFacilitySchedule,_mergeRowsById,_schedLoaded};'
   );
-  const api = factory(DB, ST, SB, true, { warn() {} }, () => { renders++; }, () => {});
+  const api = factory(DB, ST, SB, true, { warn() {} }, () => { renders++; }, () => {}, 'h');
   return { DB, SB, api, calls, renders: () => renders };
 }
 
@@ -167,6 +167,23 @@ async function main() {
     box.api._loadFacilitySchedule('fac-1', NOW);
     await flush();
     ok(box.DB.schedule.length === 1, 'the failed year is retried on the next render, not cached as done');
+  }
+
+  /* T58: the builders are mounted in three portals now, so the re-render every builder
+     onclick fires must follow the mount instead of assuming the leader portal. */
+  {
+    const REFRESH_SRC = extractFn(UI, '_refreshHAtt');
+    const fired = (mount, hView) => {
+      const hits = [];
+      new Function('schMount', 'ST', 'renderXSchedule', 'renderHAttendance', 'renderHSchedule',
+        REFRESH_SRC + '\n_refreshHAtt();'
+      )(mount, { hView }, () => hits.push('x'), () => hits.push('h-att'), () => hits.push('h-sch'));
+      return hits.join(',');
+    };
+    ok(fired('a', 'h-dashboard') === 'x', 'admin mount repaints the admin screen, not the leader portal');
+    ok(fired('x', 'h-dashboard') === 'x', 'system mount repaints the system screen');
+    ok(fired('h', 'h-attendance') === 'h-att', 'leader on h-attendance still gets the standalone view');
+    ok(fired('h', 'h-schedule') === 'h-sch', 'leader on h-schedule still gets the tabbed view');
   }
 
   console.log(`\n  ${passed} passed, ${failed} failed.\n`);

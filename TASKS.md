@@ -681,6 +681,32 @@ persisted.
   *Done when:* A master admin can open a facility's schedule and attendance from the admin
   portal, scoped by the facility switcher already on that screen, and the write rights they
   already hold are reachable from the interface.
+  *Status 2026-08-04:* wired, no new screen and no migration. `a-schedule` is a nav item and a
+  container that mount the existing `renderXSchedule` — the same five tabs (Overview, Builder,
+  Attendance, Record, Shifts) over a facility picker — so there is still one schedule screen,
+  not a copy. The picker is scoped like `renderAFacilities`: every active facility for a master
+  admin, `assignedFids` only for a staff_admin. Both roles already hold the INSERT/UPDATE
+  rights on `sbd_schedule` and `sbd_attendance` and read every facility under
+  `sbd_schedule_select` / `sbd_attendance_select`, so nothing in the database changed.
+  *Four faults found in the shared builders while wiring them, all of which had been
+  unreachable because nobody could open `x-schedule`:*
+
+  | Fault | Effect |
+  |---|---|
+  | `ST.portal==='h'` / `==='x'` after every write | `ST.portal` holds `admin`/`hospital`/`system_admin`/`staff_member`, never the one-letter prefix, so **no portal repainted after saving a shift, publishing, marking attendance or importing a CSV**. Now one `_refreshHAtt()` that follows the mount. |
+  | `_refreshHAtt` hard-coded to the leader portal | Every date, shift, year and staff control inside the shared builders repainted `h-schedule` instead of the screen you were on. |
+  | `attRecordStaffId=parseInt(this.value)` | `staff.id` is a uuid, so the Attendance Record staff picker snapped back to the first person on every change. Same for the unquoted uuid in the Download button and in `assignCoverage(...)`, which made those onclicks a syntax error. |
+  | `renderXSchedule` never called `_loadFacilityShiftDefs` | A facility's custom shifts were invisible outside the leader portal; the Shifts tab showed only the defaults. |
+
+  The first three are leader-portal bugs too, and are fixed for the leader in the same change.
+  *Left alone, deliberately:* `renderFacTab` has a `facSubTab==='schedule'` branch feeding
+  `renderAdminScheduleSection`, a read-only 7-day table. Nothing ever sets `facSubTab` to
+  `'schedule'` and the drill-down's tab list has no Schedule tab, so both are unreachable and
+  neither would satisfy this task (read-only, 7 days, no write path). Not deleted in passing —
+  worth its own line if the duplicate is to go, the way T57 handled the duplicate tables.
+  *Checked:* `node scripts/verify-schedule-hydration.js`, 19 passed, extended with the mount
+  dispatch. Still to do in the interface: open the screen as a master admin at Test Hospital
+  Facility and confirm a saved shift and an attendance mark match the leader's view (T59).
 
 - [ ] **T59** Close out the test leader account when the schedule testing is done · est 0.1d · Medium
   Created 2026-07-26 so that T26, T27, T28 and T28a could be verified in the interface at
