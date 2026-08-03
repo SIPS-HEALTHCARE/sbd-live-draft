@@ -135,9 +135,12 @@
 .fnd-blk-body{ font-size:13px; color:#cbd5e1; line-height:1.6 }
 
 /* label + list block */
-.fnd-blk-list{ border-left-color:#22c55e; background:rgba(34,197,94,.07) }
-.fnd-blk-list .fnd-blk-lbl{ color:#7ddba1 }
-.fnd-chips{ display:flex; flex-wrap:wrap; gap:6px }
+/* The source document is blue-dominant. Green and red are reserved there for
+   tip and warning callouts, so list blocks stay blue rather than becoming a
+   second colour that the document never uses for ordinary content. */
+.fnd-blk-list{ border-left-color:#3b82f6; background:rgba(59,130,246,.07) }
+.fnd-blk-list .fnd-blk-lbl{ color:#7cc4e8 }
+.fnd-chips{ display:flex; flex-wrap:wrap; gap:6px 7px; align-items:flex-start }
 .fnd-chip{
   font-size:12px; color:#d8e6ee;
   background:rgba(255,255,255,.05);
