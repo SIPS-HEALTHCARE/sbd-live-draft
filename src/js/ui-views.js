@@ -634,7 +634,7 @@ function renderXView(view){
     'x-facilities':renderXFacilities,
     'x-facility':()=>renderXFacilityDetail(ST.curFid),
     'x-staff':renderXStaff,
-    'x-schedule':renderXSchedule,
+    'x-schedule':()=>{ schMount='x'; renderXSchedule(); },
     'x-reports':renderXReports,
     'x-guide':()=>renderGuideView('x'),
     'x-settings':renderSettingsView,
@@ -710,7 +710,7 @@ function renderAView(view){
     toast('RBAC Guard: Unauthorized access to Network Portal', 'err');
     return;
   }
-  ['a-overview','a-leaderboard','a-allstaff','a-scoreboard','a-facilities','a-facility','a-registrations','a-assessments','a-progression','a-foundations','a-instruments','a-preceptor','a-upload','a-reports','a-david','a-daviddashboard','a-adminusers','a-rolemgmt','a-promoqueue','a-freeagents','a-placementreviews','a-observations','a-observationreviews','a-guide','a-settings','a-systems','a-systems-dashboard'].forEach(v=>{
+  ['a-overview','a-leaderboard','a-allstaff','a-scoreboard','a-facilities','a-facility','a-schedule','a-registrations','a-assessments','a-progression','a-foundations','a-instruments','a-preceptor','a-upload','a-reports','a-david','a-daviddashboard','a-adminusers','a-rolemgmt','a-promoqueue','a-freeagents','a-placementreviews','a-observations','a-observationreviews','a-guide','a-settings','a-systems','a-systems-dashboard'].forEach(v=>{
     const el=document.getElementById(v);
     if(el){ el.classList.add('hidden'); el.classList.remove('fade-in'); }
   });
@@ -723,6 +723,9 @@ function renderAView(view){
   const fns={
     'a-overview':renderAOverview,'a-leaderboard':renderALeaderboard,'a-allstaff':renderAAllStaff,'a-scoreboard':renderAScoreboard,
     'a-facilities':renderAFacilities,'a-facility':renderAFacility,
+    // T58: the schedule builder and the attendance register reach the admin portal by mount,
+    // not by a copy -- same renderXSchedule the system portal uses, pointed at a-schedule.
+    'a-schedule':()=>{ schMount='a'; renderXSchedule(); },
     'a-registrations':renderARegistrations,
     'a-assessments':()=>{ _inProgressCache=null; renderAAssessments(); },'a-progression':renderAProgression,'a-upload':renderAUpload,
     'a-foundations':()=>{ if(typeof renderHTraining==='function') renderHTraining(); },
@@ -10640,9 +10643,21 @@ let schTab = 'builder'; // 'builder' | 'attendance' | 'record'
 let schBuilderMonth = new Date().getMonth();
 let schBuilderYear  = new Date().getFullYear();
 
+// Which portal has the schedule/attendance builders mounted. They are shared by the leader
+// portal (h-schedule / h-attendance), the system portal (x-schedule) and, since T58, the admin
+// portal (a-schedule). Every builder onclick routes its re-render back through _refreshHAtt,
+// so the re-render has to follow the mount instead of assuming the leader portal.
+// The old `ST.portal==='x'` / `==='h'` checks here and after every write never fired at all:
+// ST.portal holds 'admin' | 'hospital' | 'system_admin' | 'staff_member' (see enterPortal),
+// not the one-letter prefixes, which is why nothing repainted after a save.
+let schMount = 'h';
+
 // Smart dispatch: re-renders the correct view depending on whether the user
 // is on h-attendance (standalone) or h-schedule (combined tabs)
-function _refreshHAtt(){ if(ST.hView==='h-attendance') renderHAttendance(); else renderHSchedule(); }
+function _refreshHAtt(){
+  if(schMount!=='h') return renderXSchedule();
+  if(ST.hView==='h-attendance') renderHAttendance(); else renderHSchedule();
+}
 
 // Custom shift definitions live in facility_shifts but DB.facilityShifts started as {}
 // and was never filled from the server, so saved shifts never came back. Load them once
@@ -10657,7 +10672,7 @@ function _loadFacilityShiftDefs(fid){
     if(!DB.facilityShifts) DB.facilityShifts = {};
     if(!DB.facilityShifts[fid]) DB.facilityShifts[fid] = {...SHIFT_DEF_DEFAULT};
     rows.forEach(r=>{ const d = mapShiftDefFromBackend(r); DB.facilityShifts[fid][d.id] = d; });
-    if(ST.hView==='h-schedule' && typeof renderHSchedule==='function') renderHSchedule();
+    if(schMount!=='h' || ST.hView==='h-schedule') _refreshHAtt();
   }).catch(e=>{ _shiftDefsLoaded[fid] = false; console.warn('[shifts] definition load failed', e && e.message); });
 }
 
@@ -10701,12 +10716,12 @@ function _loadFacilitySchedule(fid, year){
       _mergeRowsById(DB.schedule, sch.map(mapScheduleFromBackend));
       _mergeRowsById(DB.attendance, att.map(mapAttendanceFromBackend));
       if(!sch.length && !att.length) return;
-      if(ST.portal==='x'){ if(typeof renderXSchedule==='function') renderXSchedule(); }
-      else if(ST.hView==='h-schedule' || ST.hView==='h-attendance') _refreshHAtt();
+      if(schMount!=='h' || ST.hView==='h-schedule' || ST.hView==='h-attendance') _refreshHAtt();
     }).catch(e=>{ _schedLoaded[key] = false; console.warn('[schedule] facility load failed', e && e.message); });
   }));
 }
 function renderHSchedule(){
+  schMount = 'h';
   const fid = ST.hFid;
   _loadFacilityShiftDefs(fid);
   _loadFacilitySchedule(fid, schBuilderYear);
@@ -11021,7 +11036,7 @@ function saveShiftDef(fid, editId){
     SB.upsertFacilityShiftDef(mapShiftDefToBackend(fid, def)).catch(e => handleSyncError(e,'Shift definition sync'));
   closeModal();
   toast(`Shift "${name}" ${editId?'updated':'created'}.`,'ok');
-  renderHSchedule();
+  _refreshHAtt();
 }
 function deleteShift(fid, shiftId){
   if(!confirm('Delete this shift? Scheduled assignments for this shift will also be removed.')) return;
@@ -11039,7 +11054,7 @@ function deleteShift(fid, shiftId){
     });
   }
   toast('Shift deleted.','ok');
-  renderHSchedule();
+  _refreshHAtt();
 }
 
 function openShiftEditModal(fid, date, shift){
@@ -11209,8 +11224,7 @@ function saveShift(fid, date, shift){
   const def=shifts[shift]||SHIFT_DEF_DEFAULT[shift]||{icon:'',label:shift};
   const zoneCount=Object.keys(zoneAssignments).length;
   toast(`${def.icon} ${def.label} shift saved: ${_seAssigned.length} staff assigned${zoneCount?', '+zoneCount+' zones set':''}.`,'ok');
-  if(ST.portal==='h'||ST.portal==='a'){ if(ST.hView==='h-attendance') renderHAttendance(); else renderHSchedule(); }
-  if(ST.portal==='x') renderXSchedule();
+  _refreshHAtt();
 }
 
 function clearShift(fid,date,shift){
@@ -11286,8 +11300,7 @@ function publishSchedule(fid){
   // The count is what was sent. A rejected write reports itself through handleSyncError
   // rather than being folded into a success message, which is the fault this task fixes.
   toast(`${pending.length} shift${pending.length===1?'':'s'} published. Staff can now see ${pending.length===1?'it':'them'}.`,'ok');
-  if(ST.portal==='h') renderHSchedule();
-  if(ST.portal==='x') renderXSchedule();
+  _refreshHAtt();
 }
 
 
@@ -11420,7 +11433,7 @@ function buildAttendanceTab(fid, shifts){
               <option value="">Select coverage...</option>
               ${avail.map(x=>`<option value="${x.id}">${fullName(x)} – ${x.belt} Belt</option>`).join('')}
             </select>
-            <button class="btn btn-blue btn-sm" onclick="assignCoverage('${fid}','${attDate}','${attShift}',${sid})">Assign +${ATTEND_POINTS.coverage} bonus</button>
+            <button class="btn btn-blue btn-sm" onclick="assignCoverage('${fid}','${attDate}','${attShift}','${sid}')">Assign +${ATTEND_POINTS.coverage} bonus</button>
           </div>`;
         }).join('')}
       </div>
@@ -11473,7 +11486,9 @@ function buildAttendanceRecord(fid){
   let annualTotals={present:0,late:0,absent:0,coverage:0};
 
   // Staff selector
-  const staffSel = `<select class="form-select" style="width:auto;max-width:220px;font-size:12px" onchange="attRecordStaffId=parseInt(this.value);_refreshHAtt()">
+  // staff.id is a uuid, so parseInt made this NaN and the picker snapped back to the first
+  // person every time. Found while wiring this tab into the admin portal (T58).
+  const staffSel = `<select class="form-select" style="width:auto;max-width:220px;font-size:12px" onchange="attRecordStaffId=this.value;_refreshHAtt()">
     ${allSt.sort((a,b)=>beltIdx(b.belt)-beltIdx(a.belt)).map(x=>`<option value="${x.id}" ${x.id===s.id?'selected':''}>${fullName(x)} – ${x.belt}</option>`).join('')}
   </select>`;
 
@@ -11534,7 +11549,7 @@ function buildAttendanceRecord(fid){
         <div style="font-size:13px;font-weight:800;padding:0 4px">${attRecordYear}</div>
         <button class="btn btn-ghost btn-sm" onclick="attRecordYear++;_refreshHAtt()">${attRecordYear+1} ›</button>
       </div>
-      <button class="btn btn-gold btn-sm" onclick="downloadAttendanceRecord('${fid}',${attRecordStaffId},${attRecordYear})">📥 Download</button>
+      <button class="btn btn-gold btn-sm" onclick="downloadAttendanceRecord('${fid}','${attRecordStaffId}',${attRecordYear})">📥 Download</button>
     </div>
 
     <!-- Staff info bar -->
@@ -11660,6 +11675,7 @@ function downloadAttendanceRecord(fid, staffId, year){
 }
 
 function renderHAttendance(){
+  schMount = 'h';
   const fid = ST.hFid;
   const el = document.getElementById('h-attendance');
   if(!el) return;
@@ -11702,9 +11718,7 @@ function markAttend(fid, date, shift, staffId, status){
   const ptsVal = status==='coverage' ? ATTEND_POINTS.present+ATTEND_POINTS.coverage : (ATTEND_POINTS[status]||0);
   const pts = (ptsVal>0?'+':'')+ptsVal;
   toast(`${s?fullName(s):'Staff'} marked <strong>${ATTEND_LABELS[status]}</strong> – ${pts} pts`,'ok');
-  if(ST.portal==='h'){ if(ST.hView==='h-attendance') renderHAttendance(); else renderHSchedule(); }
-  if(ST.portal==='x') renderXSchedule();
-  if(ST.portal==='s') renderSSchedule();
+  _refreshHAtt();
 }
 
 function markAllAttend(fid, date, shift, status){
@@ -11722,8 +11736,7 @@ function markAllAttend(fid, date, shift, status){
     }
   });
   toast(`All ${sch.assignedStaff.length} staff marked <strong>${ATTEND_LABELS[status]}</strong>.`,'ok');
-  if(ST.portal==='h'){ if(ST.hView==='h-attendance') renderHAttendance(); else renderHSchedule(); }
-  if(ST.portal==='x') renderXSchedule();
+  _refreshHAtt();
 }
 
 
@@ -11752,8 +11765,7 @@ function assignCoverage(fid, date, shift, absentId){
   }
   const s=getStaff(covSid);
   toast(`${s?fullName(s):'Staff'} assigned as coverage. <strong>+${ATTEND_POINTS.present+ATTEND_POINTS.coverage} bonus pts</strong> earned.`,'ok');
-  if(ST.portal==='h'){ if(ST.hView==='h-attendance') renderHAttendance(); else renderHSchedule(); }
-  if(ST.portal==='x') renderXSchedule();
+  _refreshHAtt();
 }
 
 
@@ -11944,19 +11956,32 @@ function renderAdminScheduleSection(fid, elId){
 }
 
 
-// ============================================================ X SCHEDULE  --  SYSTEM ADMIN VIEW
+// ============================================================ X SCHEDULE  --  SYSTEM + SIPS ADMIN VIEW
 let xSchFid = null;
 let xSchTab2 = 'overview'; // 'overview'|'builder'|'attendance'|'record'
 
+// The system portal is scoped to one hospital system. The admin portal (T58) is the whole
+// network, narrowed to a staff_admin's assigned facilities -- the same scope renderAFacilities
+// uses, so the picker cannot offer a facility the rest of that portal hides.
+function _schedFacs(){
+  if(schMount!=='a') return systemFacs(ST.curSystemId).filter(f=>f.active!==false);
+  const fids = (ST.user && ST.user.role!=='master_admin' && (ST.user.assignedFids||[]).length) ? ST.user.assignedFids : null;
+  return DB.facilities.filter(f=>f.active!==false && (!fids || fids.includes(f.id)));
+}
+
 function renderXSchedule(){
-  const facs = systemFacs(ST.curSystemId).filter(f=>f.active!==false);
+  const facs = _schedFacs();
   if(!xSchFid||!facs.find(f=>f.id===xSchFid)) xSchFid=facs[0]?.id||null;
-  const el = document.getElementById('x-schedule');
+  const el = document.getElementById(schMount==='a' ? 'a-schedule' : 'x-schedule');
+  if(!el) return;
   if(!xSchFid){el.innerHTML='<div class="empty-state"><div class="empty-ttl">No facilities found</div></div>';return;}
   const fac = getFac(xSchFid);
   const shifts = getFacilityShifts(xSchFid);
   // Same read-path gap as the leader portal (QA finding 1): these tabs are the leader's
   // builder/attendance/record against a facility picker, and read the same two arrays.
+  // The shift definitions are the third one: without this the Shifts tab and every shift
+  // column fall back to the defaults and a facility's custom shifts are invisible here.
+  _loadFacilityShiftDefs(xSchFid);
   _loadFacilitySchedule(xSchFid, xSchTab2==='record' ? attRecordYear : schBuilderYear);
 
   // Tabs
@@ -11997,7 +12022,7 @@ function renderXSchedule(){
         <td><button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();xSchFid='${f.id}';xSchTab2='builder';renderXSchedule()">Manage →</button></td>
       </tr>`;
     }).join('');
-    el.innerHTML=tabs+facSel+`<div class="card"><div class="card-hd"><div class="card-ttl">System Schedule Overview: Today</div></div>
+    el.innerHTML=tabs+facSel+`<div class="card"><div class="card-hd"><div class="card-ttl">${schMount==='a'?'Network':'System'} Schedule Overview: Today</div></div>
       <div style="overflow-x:auto"><table class="tbl" style="min-width:380px">
         <thead><tr><th>Facility</th><th>Staff</th><th>On Shift Today</th><th>Attendance</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
@@ -18399,8 +18424,7 @@ async function importScheduleCSV(fid){
   if(failed) toast(`Import partly applied: ${imported-failed} of ${imported} shifts saved, ${failed} failed.`,'err');
   else toast(`Schedule imported: ${assignments} assignments across ${imported} shifts.`,'ok');
   _schedImportRows=[];
-  if(ST.portal==='h'){ if(ST.hView==='h-attendance') renderHAttendance(); else renderHSchedule(); }
-  if(ST.portal==='x') renderXSchedule();
+  _refreshHAtt();
 }
 
 function processBulkUpload(){
