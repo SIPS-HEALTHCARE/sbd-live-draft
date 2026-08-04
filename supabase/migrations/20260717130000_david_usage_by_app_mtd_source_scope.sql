@@ -71,12 +71,12 @@ BEGIN
     WHERE l.source = 'chat'          -- <<< THE FIX: assessment rows never reach the platform cards.
     GROUP BY l.facility_id, f.name, l.app
   )
-  SELECT fid, fname, app,
+  SELECT agg.fid, agg.fname, agg.app,
          q_mtd, t_mtd, c_mtd,          -- legacy names = month-to-date
          q_mtd, t_mtd, c_mtd,          -- _mtd
          q_all, t_all, c_all           -- _all
   FROM agg
-  ORDER BY fname, app;
+  ORDER BY agg.fname, agg.app;
 END;
 $function$;
 
