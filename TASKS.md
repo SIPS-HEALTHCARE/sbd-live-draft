@@ -453,8 +453,36 @@ persisted.
   `ovsUnlock` compares the observer PIN client side against `DB.staff`. Observation writes
   are separately gated server side, so this is an identity-of-observer weakness rather
   than an authorisation hole.
+  **Built and merged 2026-08-04 as PR #179, but only half of it reached production. Verified the
+  same evening by making real requests as a real signed-in `staff_member`, not by reading the
+  catalogue.** What holds and what does not:
+
+  * `sbd_observer_pins` exists in production and is correctly closed. Selecting from it as an
+    ordinary authenticated user returns `42501 permission denied for table sbd_observer_pins`.
+    That half worked.
+  * **`staff.observation_pin` still exists, and 4 of 70 rows still hold a value.** The migration
+    that drops it, `20260804130000_t37_drop_staff_observation_pin.sql` line 121, is in the
+    repository and was never applied: `supabase_migrations.schema_migrations` still ends at
+    `20260731130000`, and neither T37 migration has a row.
+  * **The old column is still readable.** Signed in as one `staff_member`, `public.staff` returns
+    7 rows and **1 of them carries a plaintext `observation_pin`**. A second `staff_member`
+    account sees 14 rows and 0 pins, so it depends on which facility you are in rather than on
+    the column being protected. `authenticated` still holds column-level `SELECT` on it.
+
+  So the new door is locked and the old door is still open beside it. **This is the exact pattern
+  this task already exists to correct**, a narrow rule added while the broad one underneath stays,
+  and it is the third time it has happened on this item.
+
+  Not a code change: the repository is already correct. What is missing is applying
+  `20260804120000` and `20260804130000` to production and recording both in migration history.
+
+  Separate and lower, worth a decision rather than an alarm: the PIN in the new table is stored as
+  written, 4 characters, not hashed. Nothing in the migration or the edge function hashes it. That
+  is defensible now that the table is unreadable over REST, but it should be a stated choice
+  rather than an accident, because it means anyone with database access reads live PINs.
+
   *Goal:* Who observed an assessment is decided by the server, not by the browser.
-  *Done when:* The PIN comparison happens server side; a forged client-side unlock does not produce a valid observation; the normal observer flow is unchanged.
+  *Done when:* The PIN comparison happens server side; a forged client-side unlock does not produce a valid observation; the normal observer flow is unchanged; **`staff.observation_pin` no longer exists in production**; and a signed-in staff member reading `public.staff` sees no pin column at all.
 - [x] ~~**T38** Consolidate Avery onto the work account (issue `D3`)~~
   `closed 2026-07-27, not needed` · est 0.25d
   Client confirmed: SIPS employee, home office, no facility, work address is the real

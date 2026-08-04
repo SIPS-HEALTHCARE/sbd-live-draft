@@ -10,8 +10,8 @@ up can see the shape of it in a minute rather than reading 1700 lines.
 
 ## Where the platform is
 
-Live at `belt.sterilebydesign.ai`. Serving `ui-views.js?v=200`, `foundations.js?v=17`,
-`foundations.css?v=5`, `auth-init.js?v=39`, `api-supabase.js?v=59`.
+Live at `belt.sterilebydesign.ai`. Serving `ui-views.js?v=201`, `foundations.js?v=17`,
+`foundations.css?v=5`, `auth-init.js?v=39`, `api-supabase.js?v=60`.
 
 The client's stated rollout is 30 leaders in a first phase and 175 technicians in a second,
 about 205 accounts. That figure is the 1 July footprint and is already out of date: on 31 July,
@@ -45,12 +45,17 @@ its own converter, because that set is mostly tables and is structured as exerci
 as reading sections. T90 is the small tail of T88: three module-level blocks per document that
 were deliberately held back.
 
-**3. Security hardening has to actually hold.** Two attempts in nine days added a narrow rule
-while the broad rule underneath stayed, so the narrow rule did nothing. T37 on the observer PIN
-is still rolled back and the plaintext PIN is still served over REST. The finding 4 publish gate
-was closed on 31 July by dropping the two unscoped policies underneath it. The lesson, now a
-standing review step: verify by making a real request as a real role, not by reading the
-catalogue.
+**3. Security hardening has to actually hold.** Three attempts now have added a narrow rule while
+the broad rule underneath stayed, so the narrow rule did nothing. The finding 4 publish gate was
+closed on 31 July by dropping the two unscoped policies underneath it. **T37 shipped on 4 August
+and did it again**: the new `sbd_observer_pins` table is correctly closed, and the old
+`staff.observation_pin` column is still there beside it with 4 values, still readable by a
+signed-in staff member, because the migration that drops it was never applied to production. The
+repository is right and production is half-right.
+
+The lesson, now a standing review step and the reason it was caught: verify by making a real
+request as a real role, not by reading the catalogue. And for anything server side, check
+`schema_migrations` as well as the branch, because merged is not applied.
 
 T91 belongs to this line as much as to the second one. An observation answered by picking from a
 list can be guessed, and the observation is what certifies that someone is safe to work
@@ -76,8 +81,11 @@ guessed, and the observation is the step that certifies someone is safe to work 
 is the only one of the four that affects whether the platform certifies the wrong person. T92 and
 T93 are both real requests but neither one changes an outcome if it slips a week.
 
-Running alongside, already dated: T60 and T30 and the preceptor half of T74 for Thursday 6 August,
-and T37, the observer PIN hardening, rebuilt narrower after the rollback.
+Running alongside, already dated: T60 and T30 and the preceptor half of T74 for Thursday 6 August.
+
+**T37 needs one more step before it can be called done.** It merged on 4 August and the frontend
+is live, but neither of its two migrations reached production, so the old plaintext pin column is
+still in place and still readable. Applying them is the whole remaining job.
 
 Carrying no date yet: T78, T79, T80, T83, T89, T90 and the MFA and retention work.
 
