@@ -476,6 +476,44 @@ persisted.
   Not a code change: the repository is already correct. What is missing is applying
   `20260804120000` and `20260804130000` to production and recording both in migration history.
 
+  **The fix is not RLS, and reaching for RLS would make things worse.** `staff_select` reads:
+
+  ```
+  (id = auth.uid())
+  OR role in (master_admin, staff_admin, system_admin)
+  OR (role in (facility_admin, hospital, staff_member) AND fid = get_user_fid())
+  OR sbd_is_assessor(fid)
+  ```
+
+  A staff member reading every row in their own facility is **correct**; that is the roster, and
+  narrowing it to hide one column would break a feature to patch a data-placement mistake. The
+  problem is not who can read the row, it is that a secret is sitting on a row colleagues are
+  meant to read. Dropping the column is the fix, which is what the migration already does.
+
+  **The migration copied the pins, it did not move them.** Measured, comparing the two stores
+  without reading any value out:
+
+  ```
+  old_store = 4    new_store = 4    identical = 4
+  ```
+
+  So the pins sitting in the readable column are **the same pins the observer flow uses right
+  now**, not stale leftovers. Blast radius by facility, one pin holder in each:
+
+  | staff in the facility | who can read that pin |
+  |---|---|
+  | 5 | 4 others |
+  | 3 | 2 others |
+  | 7 | 6 others |
+  | 18 | 17 others |
+
+  33 staff rows across the four, so **29 people can read a live pin that is not their own**, of
+  whom the ones with an active login can actually run the query.
+
+  **Because of that, dropping the column is not sufficient on its own.** All four pins have been
+  readable for as long as the column has existed and should be regenerated after the drop.
+  Otherwise the fix removes the exposure route and leaves the exposed credential in service.
+
   Separate and lower, worth a decision rather than an alarm: the PIN in the new table is stored as
   written, 4 characters, not hashed. Nothing in the migration or the edge function hashes it. That
   is defensible now that the table is unreadable over REST, but it should be a stated choice
