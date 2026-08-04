@@ -333,9 +333,13 @@ const SB = {
   getObservations(){ return sbFetch('/rest/v1/observations?select=*&order=created_at.desc'); },
   insertObservation(data){ return sbFetch('/rest/v1/observations', { method:'POST', body:data }); },
   updateObservation(id, data){ return sbFetch(`/rest/v1/observations?id=eq.${id}`, { method:'PATCH', body:data }); },
-  // T37: two-PIN check moved server-side (observation_pin is no longer shipped to the client).
+  // T37: two-PIN check moved server-side. Observer PINs live in sbd_observer_pins (RLS on,
+  // no policies), so no browser can read one — both calls below go through a service-role
+  // function, and the staff payload carries only the observer_pin_set flag.
   unlockObservation(observationId, observerPin, candidatePin){ return sbFetch('/functions/v1/sbd-observation-unlock', { method:'POST', body:{ observation_id:observationId, observer_pin:observerPin, candidate_pin:candidatePin } }); },
-  getObserverPin(staffId){ return sbFetch('/rest/v1/rpc/sbd_get_observer_pin', { method:'POST', body:{ p_staff_id:staffId } }); },
+  // Master-admin only, enforced in the function. Returns the observer's existing PIN, or
+  // mints one on first call; it never rotates an existing PIN.
+  setObserverPin(staffId){ return sbFetch('/functions/v1/sbd-observer-pin', { method:'POST', body:{ action:'get_or_create', staff_id:staffId } }).then(r => r && r.pin); },
   // ── Hospital Systems ──
   getHospitalSystems(){ return sbFetch('/rest/v1/hospital_systems?select=id,name,active,created_at&order=name.asc'); },
   createHospitalSystem(data){ return sbFetch('/rest/v1/hospital_systems?select=id,name,active,created_at', { method:'POST', body:data }); },
@@ -582,7 +586,10 @@ function mapStaffFromBackend(row){
     cur: { c: row.cur_comp || null, s: row.cur_sim || null, o: row.cur_obs || null },
     nxt: { c: row.nxt_comp || null, s: row.nxt_sim || null, o: row.nxt_obs || null },
     observer: row.observer || false,
-    observationPin: row.observation_pin || null,
+    // T37: the PIN itself is never sent to a browser (it lives in sbd_observer_pins).
+    // This flag is all the interface needs to render "PIN set" / "Generate PIN"; the value
+    // is fetched on demand, master-admin only, via SB.getObserverPin/setObserverPin.
+    observerPinSet: row.observer_pin_set || false,
     ps: {
       enrolled: row.ps_enrolled || false,
       done: row.ps_done || false,
