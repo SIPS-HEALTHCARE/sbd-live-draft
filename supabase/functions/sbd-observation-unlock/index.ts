@@ -7,8 +7,9 @@ const corsHeaders = {
 };
 
 // T37 (S12) — server-side two-PIN observation unlock. Was: ovsUnlock() in
-// ui-views.js compared both PINs in the browser against DB.staff, and
-// observation_pin was shipped to every role that can read a staff row. This
+// ui-views.js compared both PINs in the browser against DB.staff, and the PIN was
+// shipped to every role that can read a staff row (it was a column on public.staff;
+// it now lives in sbd_observer_pins, unreachable by any client). This
 // function is the template's sibling to sbd-assessor-pin's validate_pin —
 // same rate-limit shape (#60), same sbd_assessment_pin_attempts ledger, scoped
 // to assessment_type='observation'.
@@ -101,14 +102,29 @@ serve(async (req) => {
             }
         }
 
-        // ── Resolve the observer by PIN (service role — bypasses the column
-        // privilege that now hides observation_pin from ordinary clients) ──
-        const { data: observer } = await supabaseAdmin
-            .from('staff')
-            .select('id, first, last')
-            .eq('observer', true)
-            .eq('observation_pin', String(observer_pin).trim())
+        // ── Resolve the observer by PIN ──
+        // The PIN lives in public.sbd_observer_pins, which has RLS on and no policies, so
+        // this service-role read is the only path to it — no browser can reach the value
+        // under any query. Its pin column is uniquely indexed, so at most one row matches:
+        // a PIN identifies exactly one person, which is the point of the whole exercise.
+        // observer = true is re-checked on the staff row because observer access can be
+        // revoked (toggleObserver) without the PIN being cleared.
+        const { data: pinRow } = await supabaseAdmin
+            .from('sbd_observer_pins')
+            .select('staff_id')
+            .eq('pin', String(observer_pin).trim())
             .maybeSingle();
+
+        let observer: any = null;
+        if (pinRow) {
+            const { data: observerRow } = await supabaseAdmin
+                .from('staff')
+                .select('id, first, last')
+                .eq('id', pinRow.staff_id)
+                .eq('observer', true)
+                .maybeSingle();
+            observer = observerRow;
+        }
 
         if (!observer) {
             await supabaseAdmin
