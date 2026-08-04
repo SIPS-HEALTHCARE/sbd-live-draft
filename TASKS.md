@@ -490,15 +490,24 @@ persisted.
   problem is not who can read the row, it is that a secret is sitting on a row colleagues are
   meant to read. Dropping the column is the fix, which is what the migration already does.
 
-  **The migration copied the pins, it did not move them.** Measured, comparing the two stores
-  without reading any value out:
+  **The two stores hold the same four pins**, measured by comparing them without reading a value
+  out: `old_store = 4`, `new_store = 4`, `identical = 4`.
 
-  ```
-  old_store = 4    new_store = 4    identical = 4
-  ```
+  **That duplication is deliberate and this entry first said otherwise.** It is a transitional
+  write mirror, `sbd_staff_observation_pin_mirror` on `public.staff` calling
+  `sbd_mirror_observation_pin()`, so that the migration and the frontend deploy cannot fall out
+  of step during a two-part release. Reading the trigger body confirms it: a write to
+  `observation_pin` upserts into `sbd_observer_pins` and sets `observer_pin_set`, and clearing it
+  deletes the row. The earlier reading of this as a mistake was wrong.
 
-  So the pins sitting in the readable column are **the same pins the observer flow uses right
-  now**, not stale leftovers. Blast radius by facility, one pin holder in each:
+  **The rest of part 1 is applied and correct**, verified against production: RLS on, **zero**
+  policies, **zero** grants to `anon` or `authenticated`, two unique indexes, the non-secret
+  `staff.observer_pin_set` flag in step at 4 across both stores, and the `sbd_staff_privilege_guard`
+  trigger in place. `sbd-observer-pin` is deployed ACTIVE v1 and `sbd-observation-unlock` was
+  redeployed to v2.
+
+  **What the mirror does not change** is that the four pins have been sitting in a column
+  colleagues can read. Blast radius by facility, one pin holder in each:
 
   | staff in the facility | who can read that pin |
   |---|---|
@@ -512,7 +521,17 @@ persisted.
 
   **Because of that, dropping the column is not sufficient on its own.** All four pins have been
   readable for as long as the column has existed and should be regenerated after the drop.
-  Otherwise the fix removes the exposure route and leaves the exposed credential in service.
+  Otherwise the fix removes the exposure route and leaves the exposed credential in service. That
+  holds whether the duplication was intentional or not; it is about where the pins have been, not
+  about how they got there.
+
+  **Neither migration has a row in `supabase_migrations.schema_migrations`, and part 1 plainly
+  ran.** So production holds a table, a flag, two triggers and two indexes that the migration
+  history does not know about, while a fresh environment replaying from zero would build them from
+  the file. The two will not stay in agreement. Record both versions when part 2 goes in. This is
+  the same class of problem as the `david_usage_by_app_mtd` fix earlier the same day, which was
+  applied by hand and written back into an already-applied migration; that one was corrected by
+  moving the change into its own dated migration, and the same shape applies here.
 
   Separate and lower, worth a decision rather than an alarm: the PIN in the new table is stored as
   written, 4 characters, not hashed. Nothing in the migration or the edge function hashes it. That
