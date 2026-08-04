@@ -1748,7 +1748,59 @@ vocabulary these tasks are written in, including the SBD and SPD distinction tha
   deployment that needs it, the dependent feature is confirmed still working, and the old key is
   confirmed rejected.
 
-- [ ] **T88** Foundations content carries the document's structure, not just its words · est 4d · Medium
+- [x] **T88** Foundations content carries the document's structure, not just its words · est 4d · Medium
+  **Done 2026-08-04.** The source documents arrived that evening, the eleven attachments of
+  *Fwd: Foundations Training*, one Word file per module with Module 2 sent twice and both copies
+  byte-identical. All ten were converted and are in `foundations.js?v=17` with
+  `foundations.css?v=5`.
+
+  What is on screen now, per module, taken from the documents rather than summarised:
+
+  | | before | after |
+  |---|---|---|
+  | sections | 70 | **77** |
+  | content | 181 characters per section, average | 219,000 characters total |
+  | tables | 1 | 124 |
+  | callouts | 2 | 86 |
+  | lists | a handful | 209 |
+
+  **Seven sections existed in the curriculum and had never been in the app at all**: 2.9 Common
+  Decontamination Errors, 3.8 Lubrication & Instrument Care, 4.7 Weight Limits & Sterilization
+  Considerations, 4.8 Quality Verification Checkpoints, 5.8 Common Packaging Errors, 6.8
+  Sterilization Failures & Troubleshooting, and 8.8 Other Specialty Items. Two of those are
+  failure-and-error sections, which is the material a technician most needs and the least safe
+  thing to have been missing.
+
+  Section titles now read as the documents write them. The app had abbreviated every one of them,
+  *"1.1 The Mission"* against the document's *"1.1 The Mission: Why Sterile Processing Exists"*.
+
+  **Conversion, and why it is a script rather than hand-authoring.** Each `.docx` is walked in
+  document order and every construct is mapped once: `Heading1` numbered `N.N` opens a section,
+  `Heading2` and `Heading3` become sub-headings, list paragraphs become lists, multi-column tables
+  become tables, and single-cell tables become callouts coloured by the glyph the author put in
+  front of them, a warning triangle red, a lightbulb or target green, a heart or a book or a tick
+  blue. Nothing is summarised and nothing is invented. Checked by taking every unique word in each
+  document and every unique word in the generated HTML: **125 words across all ten modules appear
+  in a document and not on screen, and every one of them is a cover-page or module-title word**,
+  or belongs to the three module-level blocks below.
+
+  Three blocks per module are deliberately **not** carried over: *Knowledge Check*, *Skills
+  Validation* and *Module Summary*. They are module-level, not section-level, and Knowledge Check
+  in particular duplicates the 25-question gate the app already runs, with the answers printed
+  next to the questions. Skills Validation is a sign-off sheet with initials and date columns,
+  which is a records feature and not reading material. Raised as T90 rather than guessed at.
+
+  **The em dashes in the content are the curriculum's own.** 152 of the documents' 252 survive
+  into the sections that were carried over. Normalising them would be editing the client's study
+  material to suit a writing convention that applies to prose we author, so they stay.
+
+  Verified by rendering the real module data through the real `fndFmtBody` and the real stylesheet
+  at 900px and at iPhone width: tables scroll inside their own container and the page itself has
+  **0px of horizontal overflow** at 390px, which matters because the client reads this on a phone.
+
+  Original scoping follows, kept because it is what the estimate was built on.
+
+- [ ] **T88 (original scoping)** · est 4d · Medium
   Asked by the client on 2026-08-03 at 8:30 PM, with a recording of the source curriculum
   document held beside the app: *"Can we update the UI in foundations."* Clarified at 9:21 PM when
   asked which of two readings he meant: *"The UI should resemble the doc… colors. Sections,
@@ -1824,6 +1876,27 @@ vocabulary these tasks are written in, including the SBD and SPD distinction tha
   *Done when:* 2.1 renders with its table, its numbered donning and doffing steps, its procedure
   markers and its callouts; the pattern is applied across the remaining sections as their source
   documents arrive; and the client confirms a side-by-side against the document.
+
+- [ ] **T90** Decide where Knowledge Check, Skills Validation and Module Summary belong · est 0.5d · Low
+  Raised 2026-08-04 out of T88. Each of the ten Foundations documents ends with three blocks that
+  are module-level rather than section-level, so the section list has nowhere to put them:
+
+  * **Knowledge Check**, six to eight questions with the answers printed underneath. The app
+    already runs a 25-question gate per module, so showing these would hand a learner answers
+    beside questions on the same screen as an assessment.
+  * **Skills Validation**, a sign-off table with MET / NOT MET / DATE / INITIALS columns and a
+    learner-name block. That is a records feature, not reading material, and it overlaps whatever
+    the observation and assessment flow already records.
+  * **Module Summary**, a key-takeaways callout plus a "What's Next" pointer. This one is purely
+    reading material and is the easy yes.
+
+  All three are converted and sitting in the generated data; nothing has to be re-extracted. The
+  decision is where each goes, not whether it can be rendered.
+
+  *Goal:* Nothing in the source documents is silently dropped, and nothing lands somewhere that
+  weakens an assessment.
+  *Done when:* Module Summary renders at the end of a module, and Knowledge Check and Skills
+  Validation each have a decided home or a written reason for staying out.
 
 - [ ] **T89** David's knowledge base is seeded into an index David never reads · est 0.5d · High
   Found on 2026-08-04 while tracing where the Foundations curriculum is stored. Three files name

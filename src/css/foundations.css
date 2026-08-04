@@ -229,8 +229,37 @@
 .fnd-note-warn{ border-left-color:#ef4444; background:rgba(239,68,68,.08) }
 .fnd-note-warn .fnd-note-t{ color:#fca5a5 }
 
+/* Neutral callout. The source documents mark these with a heart, a book or a tick rather
+   than a warning sign: patient-connection notes, learning objectives, key takeaways. They
+   are emphasis, not caution, so they read blue rather than red or green. */
+.fnd-note-key{ border-left-color:#3b82f6; background:rgba(59,130,246,.08) }
+.fnd-note-key .fnd-note-t{ color:#93c5fd }
+
+/* Paragraphs and bulleted lines inside a callout. The documents bullet these with a dot,
+   a tick or an arrow, and the glyph is dropped on the way in, so the marker is drawn here. */
+.fnd-note p{ font-size:12.5px; line-height:1.6; color:#b9c7d6; margin:0 0 6px }
+.fnd-note p:last-child{ margin-bottom:0 }
+.fnd-note-li{
+  font-size:12.5px; line-height:1.6; color:#b9c7d6;
+  padding-left:14px; position:relative; margin-bottom:3px;
+}
+.fnd-note-li::before{ content:'\2022'; position:absolute; left:2px; opacity:.6 }
+
+/* Third-level heading. The documents nest three deep, so a section can hold a heading, a
+   sub-heading and then this. It sits below .fnd-h in weight without losing the hierarchy. */
+.fnd-h3{
+  font-size:12.5px; font-weight:600; color:#cbd5e1;
+  margin:12px 0 5px; letter-spacing:.01em;
+}
+
+/* Body paragraphs and list items rendered straight from the source, outside any callout. */
+.fnd-section-body > p, .fnd-section-body div > p{
+  font-size:13px; line-height:1.65; color:#94a3b8; margin:0 0 9px;
+}
+
 @media(max-width:560px){
   .fnd-step-n{ padding:0 8px; font-size:10px }
   .fnd-step-b{ padding:8px 10px }
   .fnd-table{ font-size:12px }
+  .fnd-table th, .fnd-table td{ padding:7px 9px }
 }
