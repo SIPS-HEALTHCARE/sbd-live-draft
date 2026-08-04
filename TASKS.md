@@ -1610,6 +1610,18 @@ vocabulary these tasks are written in, including the SBD and SPD distinction tha
   with "Adding in our tasks". It was not added.
   This is a learning-outcome request, not a cosmetic one. The client is saying that reformatted
   content teaches worse than the document it came from.
+
+  **Not blocked. The source documents have been in hand since 2026-07-28** and were logged as
+  missing until 2026-08-04 purely because nobody opened the archive: *Build spec + full
+  curriculum: SBD Preceptor Certification*, 21 files, 334,892 characters of text and 322 tables.
+  Fifteen learner workbooks across L1 to L3, five sets of certification gate materials split into
+  candidate and assessor copies, a facilitator programme and a developer synopsis.
+
+  That table count is the whole task in one number. The documents are mostly tables, and tables
+  are exactly what a reformat into flat text destroys, which is what the client was complaining
+  about. Unlike T88, nothing here has to be authored; the text exists and only has to survive the
+  trip onto the screen.
+
   *Goal:* Preceptor material on screen is as close to its source document as the medium allows.
   *Done when:* Headings, emphasis, lists and tables survive from the source into the rendered view,
   checked side by side against the document the client supplied.
@@ -1857,9 +1869,17 @@ vocabulary these tasks are written in, including the SBD and SPD distinction tha
   wrong side. Decide which index is canonical, correct the edge function, set `EMBED_FIELD` to
   `text`, and record why in a comment.
 
-  Reading the records themselves still needs an egress change: `api.pinecone.io` is reachable, but
-  the data plane at `*.svc.aped-4627-b74a.pinecone.io` returns `403` on the tunnel, so vector
-  counts and a test query cannot be run from here.
+  **Record counts, read the same day once the data plane opened.** `sbd-knowledge-ai/master-docs`
+  holds **1,418 vectors**; `sbd-wiki-graph` holds **0**. So the seeding did run, against the index
+  the scripts name, and the live edge function has been pointing away from 1,418 usable records
+  the whole time. It also settles which index is canonical: the one with the data in it, not the
+  one the tool's name suggests.
+
+  Three test queries confirm what is in there, and it is what the scripts put there: White and
+  Yellow Belt curriculum sections, belt knowledge questions with model answers, and QA School
+  material. *"PPE required before entering the decontamination area"* returns a White Belt
+  knowledge question, not a Foundations section. **No Foundations content is in the index**, which
+  is expected, since neither script reads `foundations.js`.
 
   *Goal:* One index name, in one place, that the edge function and the seeding scripts share.
   *Done when:* the host and the embed field are read from a single constant or environment
