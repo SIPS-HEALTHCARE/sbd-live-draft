@@ -3265,7 +3265,8 @@ function renderAObservations(){
     .map(s => {
       const fac = getFac(s.fid);
       const conducted = (DB.observations || []).filter(o => String(o.observerId) === String(s.id)).length;
-      const pinPill = s.observationPin
+      // T37: the flag, not the PIN — the value never reaches the browser.
+      const pinPill = s.observerPinSet
         ? '<span class="pill" style="color:#0ea5e9;background:#0ea5e91a;border:1px solid #0ea5e955">PIN set</span>'
         : '<span class="pill" style="color:#f59e0b;background:#f59e0b1a;border:1px solid #f59e0b55">No PIN yet</span>';
       return `<tr style="border-top:1px solid var(--bdr)">
@@ -10491,7 +10492,7 @@ function renderHProfile(sid,context){
             : `<button class="btn btn-ghost btn-sm" onclick="grantAssessmentOverride('${s.id}','${context}')" style="border-color:var(--gold-bd);color:var(--gold)" title="Let this candidate request an assessment without completing the practice tests"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg> Waive Practice Gate</button>`
         ):''}
         ${(ST.user&&ST.user.role==='master_admin')?`<button class="btn btn-ghost btn-sm" onclick="toggleObserver('${s.id}','${context}')" style="border-color:${s.observer?'#0ea5e9':'var(--bdr)'};color:${s.observer?'#0ea5e9':'var(--txt2)'}" title="${s.observer?'Revoke observer access':'Grant observer access'}"><svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 10s3-5.5 8-5.5S18 10 18 10s-3 5.5-8 5.5S2 10 2 10z"/><circle cx="10" cy="10" r="2.3"/></svg> ${s.observer?'Observer: On':'Make Observer'}</button>`:''}
-        ${(ST.user&&ST.user.role==='master_admin'&&s.observer)?(s.observationPin?`<span class="pill" style="background:#0ea5e91a;color:#0ea5e9;border:1px solid #0ea5e955;font-size:11px;padding:5px 9px;border-radius:8px;font-weight:700;align-self:center">Observer PIN: ${s.observationPin}</span>`:`<button class="btn btn-ghost btn-sm" onclick="generateObserverPin('${s.id}','${context}')" style="border-color:#0ea5e9;color:#0ea5e9">&#128273; Generate PIN</button>`):''}
+        ${(ST.user&&ST.user.role==='master_admin'&&s.observer)?`<button class="btn btn-ghost btn-sm" onclick="generateObserverPin('${s.id}','${context}')" style="border-color:#0ea5e9;color:#0ea5e9" title="${s.observerPinSet?'Show this observer\'s existing PIN':'Generate a reusable observation PIN'}">&#128273; ${s.observerPinSet?'Show PIN':'Generate PIN'}</button>`:''}
         ${context==='admin'&&(ST.user&&ST.user.role==='master_admin')?`<button class="btn btn-err btn-sm" onclick="releaseToFreeAgent('${s.id}')" title="Release staff member to Free Agent Registry" style="margin-left:auto"><svg width="13" height="13" viewBox="0 0 18 18" fill="none"><path d="M12 14H15a1 1 0 001-1V5a1 1 0 00-1-1H12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M9 12l3-3-3-3M12 9H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Release</button>`:''}
       </div>
       ${(ST.user&&ST.user.role==='master_admin'&&typeof prcAccessControlHTML==='function')?`<div style="margin-top:8px">${prcAccessControlHTML(s.id,context)}</div>`:''}
@@ -14018,30 +14019,32 @@ function toggleObserver(sid, context){
   _accessActionRerender(sid,context);
 }
 
-// Generate a reusable observation PIN for an authorized observer (master-admin only).
-// One-time generation; the same PIN is reused for every observation thereafter.
-// Stored via a targeted single-column write to staff.observation_pin.
-// T37 (S12): observation_pin is no longer shipped in the general staff payload,
-// so s.observationPin is never pre-populated — the "already has one" check reads
-// it back through the master-admin-only sbd_get_observer_pin RPC first.
+// Show, or first-time generate, an authorized observer's reusable observation PIN
+// (master-admin only). The same PIN is reused for every observation thereafter — a second
+// click shows the existing one, it never rotates.
+//
+// T37 (S12): the PIN is neither stored on nor read from the staff payload. It lives in
+// sbd_observer_pins, which has RLS on and no policies, so the only way to see one is the
+// master-admin-gated sbd-observer-pin function — which is also what generates it, because
+// a PIN minted in a browser cannot be checked for uniqueness against PINs the browser
+// cannot see, and two observers sharing a PIN makes the identity unresolvable. All the
+// staff payload carries is the observerPinSet flag, which drives this button's label.
 async function generateObserverPin(sid, context){
   const s=getStaff(sid); if(!s) return;
   if(!(ST.user&&ST.user.role==='master_admin')){toast('Only master admins can manage observer PINs.','err');return;}
   if(!s.observer){toast('Grant observer access first, then generate a PIN.','err');return;}
-  if(IS_LIVE && typeof SB!=='undefined' && SB.getObserverPin){
+  if(IS_LIVE && typeof SB!=='undefined' && SB.setObserverPin){
     try {
-      const existing = await SB.getObserverPin(sid);
-      if(existing){ s.observationPin=existing; toast(`Observer PIN is ${existing} (PINs are reused, not regenerated).`,'ok'); if(typeof renderHProfile==='function') renderHProfile(sid,context); return; }
-    } catch(e){ handleSyncError(e,'Observer PIN lookup'); return; }
-  } else if(s.observationPin){
-    toast(`Observer PIN is ${s.observationPin} (PINs are reused, not regenerated).`,'ok');return;
+      const pin = await SB.setObserverPin(sid);
+      if(!pin){ toast('No observer PIN came back. Try again.','err'); return; }
+      s.observerPinSet = true;
+      toast(`${fullName(s)}'s observer PIN: ${pin} (reused for every observation, not regenerated).`,'ok');
+    } catch(e){ handleSyncError(e,'Observer PIN'); return; }
+  } else {
+    // Local staging only — nothing is persisted and no live PIN is ever shown here.
+    s.observerPinSet = true;
+    toast(`${fullName(s)}'s observer PIN: ${String(Math.floor(1000+Math.random()*9000))} (local only)`,'ok');
   }
-  const pin=String(Math.floor(1000+Math.random()*9000)); // 4-digit, reused thereafter
-  s.observationPin=pin;
-  if(IS_LIVE && typeof SB!=='undefined' && SB.updateStaff){
-    SB.updateStaff(sid,{observation_pin:pin}).catch(e=>{ s.observationPin=null; handleSyncError(e,'Observer PIN'); if(typeof renderHProfile==='function') renderHProfile(sid,context); });
-  }
-  toast(`${fullName(s)}'s observer PIN: ${pin}`,'ok');
   if(typeof renderHProfile==='function') renderHProfile(sid,context);
 }
 
