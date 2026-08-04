@@ -1,4 +1,4 @@
--- 20260724120000_preceptor_apply_requested_state.sql
+-- 20260724101646_preceptor_apply_requested_state.sql
 -- Preceptor apply→approve flow (Ignacio 2026-07-23): add a 'requested' (application
 -- pending) state + a requested_at timestamp, and let a candidate self-apply for their
 -- OWN record only (default -> requested). Master-admin approval (-> granted) unchanged.

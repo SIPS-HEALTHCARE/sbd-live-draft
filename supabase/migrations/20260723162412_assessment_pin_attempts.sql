@@ -1,4 +1,4 @@
--- 20260710120000_assessment_pin_attempts.sql
+-- 20260723162412_assessment_pin_attempts.sql
 -- #60: assessor-PIN rate limiting. A dedicated failed-attempt ledger for the
 -- sbd-assessor-pin `validate_pin` action. Rows are written ONLY by that
 -- service-role edge function; clients never write here and cannot spoof identity.

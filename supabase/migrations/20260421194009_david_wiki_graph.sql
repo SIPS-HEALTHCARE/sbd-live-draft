@@ -1,4 +1,4 @@
--- 20260421160000_david_wiki_graph.sql
+-- 20260421194009_david_wiki_graph.sql
 -- Establishing Karpathy-styled LLM Wiki Compounding Knowledge Graph natively in Supabase
 
 -- Ensure pgvector is available
