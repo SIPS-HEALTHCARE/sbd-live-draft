@@ -1771,10 +1771,38 @@ vocabulary these tasks are written in, including the SBD and SPD distinction tha
   today with no change, and `cs-table` / `cs-para` styling already exists in `src/css/index.css`
   and is used by the Yellow Belt core study content. The work is authoring, not plumbing.
 
-  **Blocked on the source documents.** We have seen exactly one, 2.1, and only as frames pulled
-  from a phone recording. The other 69 sections cannot be matched to documents nobody has sent.
-  Requested from the client on 2026-08-03. **2.1 can be built now from the recording as a worked
-  example**, which is also the cheapest way to confirm the target before committing four days.
+  **Section 2.1 shipped on 2026-08-03** and is live on `foundations.js?v=16` with
+  `foundations.css?v=4`: the six-row table, six donning steps, six doffing steps with their bullet
+  lists, both hand-hygiene markers and both callouts. It was built from frames pulled from the
+  client's own recording, so it is a worked example of the target rather than a guess at it.
+
+  **Blocked on the source documents for the other 69.** Measured 2026-08-04 across the file:
+  10 modules, 70 sections, 1 section carrying document-shaped content, 69 still holding a plain
+  summary averaging 181 characters (shortest 107, longest 299). Two sentences cannot be laid out
+  into a curriculum section; the words are not there to lay out.
+
+  **Where the documents are not, so nobody searches these again.** Checked 2026-08-04:
+
+  * The WhatsApp export: 71 files. Non-image attachments are the SOP generator page, the DAVID
+    SOP app spec, three Belt Assessment Report PDFs and the DAVID slash-commands PDF. Its links
+    resolve to 29 unique Google file ids, 27 of them our own daily reports; the two the client
+    sent are a 2.7 KB David update note and a 154 KB `SBD Codes js` dump. No curriculum.
+  * Drive: a search by the client's address returns nothing owned, `sharedWithMe` returns 40
+    unrelated files, and a full-text search for `Bowie-Dick`, `Chain of Infection` and
+    `Foundations of Sterile Processing` returns 35 files, all other projects.
+  * Supabase: `david_wiki_pages` and `sources` hold 0 rows.
+  * This repo: no `.docx` or `.pdf` curriculum. `ui-views.js` holds a different curriculum, the
+    belt guides and the Position School tracks, and no Foundations module body.
+  * Pinecone: whatever is in `master-docs` was put there **from this repo**. Both
+    `scripts/seed-david-kb.mjs` and `scripts/ingest-curriculum-to-pinecone.mjs` read
+    `src/js/ui-views.js` and nothing else; a dry run builds 203 documents, 12 question banks,
+    59 placement items, 125 belt guides and 7 Position School tracks. Foundations was never
+    ingested, so the vector store cannot return what it was never given. It is also unreachable
+    from this environment: both `api.pinecone.io` and the index host return a `403` on the
+    egress tunnel.
+
+  So the documents exist only wherever the curriculum author keeps them. Requested from the
+  client on 2026-08-03 and still outstanding.
 
   Related to T81, which is the same complaint in the preceptor module. Same cause, different
   content set, so they are tracked separately rather than merged.
@@ -1784,6 +1812,35 @@ vocabulary these tasks are written in, including the SBD and SPD distinction tha
   *Done when:* 2.1 renders with its table, its numbered donning and doffing steps, its procedure
   markers and its callouts; the pattern is applied across the remaining sections as their source
   documents arrive; and the client confirms a side-by-side against the document.
+
+- [ ] **T89** David's knowledge base is seeded into an index David never reads · est 0.5d · High
+  Found on 2026-08-04 while tracing where the Foundations curriculum is stored. Three files name
+  a Pinecone index host and they do not agree:
+
+  * `supabase/functions/david-chat/index.ts:462` searches
+    `sbd-knowledge-ai-8al9o1g.svc.aped-4627-b74a.pinecone.io`
+  * `scripts/seed-david-kb.mjs:29` writes to `sbd-knowledge-ai-44928mo…`
+  * `scripts/ingest-curriculum-to-pinecone.mjs:35` writes to `sbd-knowledge-ai-44928mo…`
+
+  The live edge function reads one index and both seeding scripts fill a different one. Anyone
+  who runs a seed script and then asks David a curriculum question gets an empty answer and no
+  error, because `search_wiki_graph` returns nothing rather than failing. The scripts' own header
+  comments say the host "mirrors the proven call in `david-chat/index.ts`", so the divergence was
+  not intended and one side drifted.
+
+  Both scripts default to a dry run, so no wrong write is known to have happened. What is not yet
+  known is which of the two indexes is the real one and whether either currently holds records,
+  and that cannot be settled from this environment: Pinecone's control plane and both index hosts
+  return `403` on the egress tunnel. It needs one look at the Pinecone console.
+
+  Do not "fix" this by editing the scripts to match the edge function. Confirm which index the
+  live David actually reads and which one holds data first, then make the other two agree with it
+  and leave a comment saying why that host is the one.
+
+  *Goal:* One index name, in one place, that the edge function and the seeding scripts share.
+  *Done when:* the host is read from a single constant or environment variable rather than
+  repeated in three files; the console confirms which index holds records; and a David curriculum
+  question returns a cited answer instead of an empty one.
 
 ### Blocked, not on the critical path
 
@@ -1828,6 +1885,21 @@ vocabulary these tasks are written in, including the SBD and SPD distinction tha
 ---
 
 ## Totals
+
+**Updated 2026-08-04.** 36 items done, 60 open. T89 added, found while tracing where the
+Foundations curriculum is stored: the live David edge function searches one Pinecone index and
+both seeding scripts write to a different one, so seeding fills an index David never reads and the
+failure is silent. Both scripts default to a dry run, so no wrong write is known to have happened,
+and which index actually holds records cannot be settled from here because Pinecone returns `403`
+on the egress tunnel. It needs one look at the console.
+
+T88 gained the search record. Section 2.1 shipped and is live on `foundations.js?v=16`. The other
+69 sections still hold a plain summary averaging 181 characters, and the source documents are not
+in the WhatsApp export, Drive, Supabase, this repo, or Pinecone. Pinecone in particular was worth
+ruling out properly rather than assuming: everything in `master-docs` was put there **from
+`src/js/ui-views.js`** by our own scripts, which never touch the Foundations module bodies, so the
+vector store cannot return what it was never given. Each of those five is written into T88 so the
+same ground is not covered twice.
 
 **Updated 2026-08-03.** 36 items done, 59 open. T88 added: the client asked on 3 August for the
 Foundations UI to resemble the source curriculum document, and clarified it as *"colors. Sections,
