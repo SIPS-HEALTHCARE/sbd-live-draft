@@ -473,8 +473,12 @@ persisted.
   this task already exists to correct**, a narrow rule added while the broad one underneath stays,
   and it is the third time it has happened on this item.
 
-  Not a code change: the repository is already correct. What is missing is applying
-  `20260804120000` and `20260804130000` to production and recording both in migration history.
+  Not a code change: the repository is already correct. **And as of later the same night the
+  remaining half is scheduled rather than forgotten**: part 1 is applied and verified live, and
+  the `20260804130000` column drop is planned for **2026-08-07** after a two-day observation
+  window, with a re-verification the same day. Until the 7th the old column staying readable is a
+  stated, accepted exposure window rather than an oversight, and this entry is where that is
+  written down.
 
   **The fix is not RLS, and reaching for RLS would make things worse.** `staff_select` reads:
 
@@ -539,7 +543,7 @@ persisted.
   rather than an accident, because it means anyone with database access reads live PINs.
 
   *Goal:* Who observed an assessment is decided by the server, not by the browser.
-  *Done when:* The PIN comparison happens server side; a forged client-side unlock does not produce a valid observation; the normal observer flow is unchanged; **`staff.observation_pin` no longer exists in production**; and a signed-in staff member reading `public.staff` sees no pin column at all.
+  *Done when:* The PIN comparison happens server side; a forged client-side unlock does not produce a valid observation; the normal observer flow is unchanged; **`staff.observation_pin` no longer exists in production**; a signed-in staff member reading `public.staff` sees no pin column at all; and the four pins that lived in the readable column are regenerated.
 - [x] ~~**T38** Consolidate Avery onto the work account (issue `D3`)~~
   `closed 2026-07-27, not needed` · est 0.25d
   Client confirmed: SIPS employee, home office, no facility, work address is the real
