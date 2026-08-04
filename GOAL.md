@@ -52,23 +52,34 @@ was closed on 31 July by dropping the two unscoped policies underneath it. The l
 standing review step: verify by making a real request as a real role, not by reading the
 catalogue.
 
+T91 belongs to this line as much as to the second one. An observation answered by picking from a
+list can be guessed, and the observation is what certifies that someone is safe to work
+unsupervised, so it is an assessment-integrity item wearing a UI request's clothes.
+
 ---
 
-## What is moving right now
+## The goal for the rest of this week
 
-Dated for Thursday 6 August: T60, the last of the account request password work; T30, the read
-only checklist view for facility leaders; and the preceptor half of T74.
+**Close the 3 August call.** Everything the client asked for on that call is either done or has a
+row, and the rest of the week is about finishing the list rather than starting a new theme.
 
-Dated for Tuesday 4 August: T37, the observer PIN hardening, rebuilt narrower after the rollback.
+| | | |
+|---|---|---|
+| **T88** Foundations content | **done**, live 4 August | |
+| **T91** No multiple choice in observations | open, 1.5d | do this one first |
+| **T92** Scripts as an assignable module | open, 2d | |
+| **T93** Editable David chat titles | open, 0.5d | |
+| Inactivity timeout | **done**, live 4 August | |
 
-Shipped on Tuesday 4 August: T88, the full Foundations curriculum, and two corrections found
-alongside it. The `david_usage_by_app_mtd` fix moved out of an already-applied migration into its
-own, so an environment sitting at the old version picks it up. T89 was opened: the David edge
-function searches a Pinecone index that does not exist, while 1,418 usable records sit in the one
-the seeding scripts name, and it fails silently because an empty result and a failed call are
-handled alike.
+**T91 goes first, and not because it is the oldest.** A multiple-choice observation answer can be
+guessed, and the observation is the step that certifies someone is safe to work unsupervised. It
+is the only one of the four that affects whether the platform certifies the wrong person. T92 and
+T93 are both real requests but neither one changes an outcome if it slips a week.
 
-Carrying no date yet, pending scheduling: T78, T79, T80, T83 and the MFA and retention work.
+Running alongside, already dated: T60 and T30 and the preceptor half of T74 for Thursday 6 August,
+and T37, the observer PIN hardening, rebuilt narrower after the rollback.
+
+Carrying no date yet: T78, T79, T80, T83, T89, T90 and the MFA and retention work.
 
 This file does not record who holds what. `TASKS.md` does not either, and that is deliberate:
 the ledger tracks the work, not the assignment.

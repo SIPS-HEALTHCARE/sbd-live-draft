@@ -1798,9 +1798,9 @@ vocabulary these tasks are written in, including the SBD and SPD distinction tha
   at 900px and at iPhone width: tables scroll inside their own container and the page itself has
   **0px of horizontal overflow** at 390px, which matters because the client reads this on a phone.
 
-  Original scoping follows, kept because it is what the estimate was built on.
+  ---
 
-- [ ] **T88 (original scoping)** · est 4d · Medium
+  **How it was scoped, kept because the 4d estimate was built on it and the estimate held.**
   Asked by the client on 2026-08-03 at 8:30 PM, with a recording of the source curriculum
   document held beside the app: *"Can we update the UI in foundations."* Clarified at 9:21 PM when
   asked which of two readings he meant: *"The UI should resemble the doc… colors. Sections,
@@ -1877,27 +1877,6 @@ vocabulary these tasks are written in, including the SBD and SPD distinction tha
   markers and its callouts; the pattern is applied across the remaining sections as their source
   documents arrive; and the client confirms a side-by-side against the document.
 
-- [ ] **T90** Decide where Knowledge Check, Skills Validation and Module Summary belong · est 0.5d · Low
-  Raised 2026-08-04 out of T88. Each of the ten Foundations documents ends with three blocks that
-  are module-level rather than section-level, so the section list has nowhere to put them:
-
-  * **Knowledge Check**, six to eight questions with the answers printed underneath. The app
-    already runs a 25-question gate per module, so showing these would hand a learner answers
-    beside questions on the same screen as an assessment.
-  * **Skills Validation**, a sign-off table with MET / NOT MET / DATE / INITIALS columns and a
-    learner-name block. That is a records feature, not reading material, and it overlaps whatever
-    the observation and assessment flow already records.
-  * **Module Summary**, a key-takeaways callout plus a "What's Next" pointer. This one is purely
-    reading material and is the easy yes.
-
-  All three are converted and sitting in the generated data; nothing has to be re-extracted. The
-  decision is where each goes, not whether it can be rendered.
-
-  *Goal:* Nothing in the source documents is silently dropped, and nothing lands somewhere that
-  weakens an assessment.
-  *Done when:* Module Summary renders at the end of a module, and Knowledge Check and Skills
-  Validation each have a decided home or a written reason for staying out.
-
 - [ ] **T89** David's knowledge base is seeded into an index David never reads · est 0.5d · High
   Found on 2026-08-04 while tracing where the Foundations curriculum is stored. Three files name
   a Pinecone index host and they do not agree:
@@ -1959,6 +1938,94 @@ vocabulary these tasks are written in, including the SBD and SPD distinction tha
   variable rather than repeated across three files; the canonical index is named in a comment;
   and a David curriculum question returns a cited answer instead of an empty one.
 
+- [ ] **T90** Decide where Knowledge Check, Skills Validation and Module Summary belong · est 0.5d · Low
+  Raised 2026-08-04 out of T88. Each of the ten Foundations documents ends with three blocks that
+  are module-level rather than section-level, so the section list has nowhere to put them:
+
+  * **Knowledge Check**, six to eight questions with the answers printed underneath. The app
+    already runs a 25-question gate per module, so showing these would hand a learner answers
+    beside questions on the same screen as an assessment.
+  * **Skills Validation**, a sign-off table with MET / NOT MET / DATE / INITIALS columns and a
+    learner-name block. That is a records feature, not reading material, and it overlaps whatever
+    the observation and assessment flow already records.
+  * **Module Summary**, a key-takeaways callout plus a "What's Next" pointer. This one is purely
+    reading material and is the easy yes.
+
+  All three are converted and sitting in the generated data; nothing has to be re-extracted. The
+  decision is where each goes, not whether it can be rendered.
+
+  *Goal:* Nothing in the source documents is silently dropped, and nothing lands somewhere that
+  weakens an assessment.
+  *Done when:* Module Summary renders at the end of a module, and Knowledge Check and Skills
+  Validation each have a decided home or a written reason for staying out.
+
+### Asked on the 2026-08-03 client call, recorded 2026-08-04
+
+Three asks made on the same call, alongside the Foundations formatting request that became T88.
+The formatting request was the loud one and these three went in unrecorded, which is the failure
+already named above: **an ask next to an urgent one still needs its own row.**
+
+- [ ] **T91** Observation answers must be typed or spoken, never multiple choice · est 1.5d · High
+  His words on the call: *"in the observation module, we wanted no multiple choice. All the
+  answers should be answers that they have to type or speak into the assessment, versus selecting
+  multiple choice in the observations."* Asked again immediately after, to be sure it was scoped
+  to one place: *"In the observations."*
+
+  This is an assessment-integrity request, not a UI preference. A multiple-choice observation
+  answer can be guessed, and an observation is the step that certifies someone is safe to work
+  unsupervised. It is the highest-value item of the three for that reason.
+
+  **Scope it carefully before building.** The request is for the observation module only, and the
+  client said so twice. Belt knowledge gates and placement questions are a different flow and are
+  not covered by this. Check what the observation checklist currently renders before assuming how
+  many question types are involved.
+
+  Speech input is the half with a real cost. T43 already exists for voice dictation on typed
+  answers, so these two overlap and should be scoped together rather than built twice.
+
+  *Goal:* An observation cannot be passed by choosing from a list.
+  *Done when:* Every observation answer is a typed or spoken response, existing observation
+  records still read correctly, and the client confirms against a real observation.
+
+- [ ] **T92** Scripts as a separate module that can be assigned on its own · est 2d · Medium
+  His words: *"we want it to still be here, but we also want to have a separate module just for
+  the scripts on the side… it's going to stay here, but also be here."* And the reason, which is
+  the part that matters: *"in the development process, if somebody passes belts but they need to
+  refine their scripts, we want to be able to assign them just that module so they can go back
+  and work over just that part."*
+
+  So this is **not a move, it is a second surface**. The scripts stay where they are inside the
+  belt content, and additionally exist as an assignable module. He asked for the assign screen to
+  look like the one already used: *"it'll have an assigned dashboard like this."* When assigned,
+  it appears as a tab for that person only.
+
+  Closest existing pattern is Position School track assignment, which already does assign, appear
+  for one person, and track completion. Read that before designing a new one.
+
+  *Goal:* A leader can send one person back to the scripts without re-assigning a whole belt.
+  *Done when:* Scripts can be assigned to an individual, appear for that person only, remain in
+  place inside the belt content unchanged, and the assign screen matches the existing pattern.
+
+- [ ] **T93** David chat titles can be edited · est 0.5d · Medium
+  His words: *"in David, if we could update it so that we can edit the title of the chat, the chat
+  history, so that it's easier to reference. If we have to go back to that chat later, we know
+  exactly what that chat was."*
+
+  Answered on the call with *"we already have that in our task list."* It was not in the list.
+  This row is that correction.
+
+  The smallest of the three and the one with the least risk attached. It is a rename on an
+  existing chat record plus an inline edit in the history list. Check how chat history rows are
+  stored and whether the title is currently derived from the first message, because if it is,
+  an edited title has to survive the next message rather than being regenerated.
+
+  Belongs with the David work rather than ahead of it. Read `docs/DAVID_OG_EXTRACTION_PLAN.md`
+  first so the change stays compatible with the extraction.
+
+  *Goal:* A chat can be found later by what it was about.
+  *Done when:* A chat title can be edited from the history list, the edit persists across
+  sessions, and a later message does not overwrite it.
+
 ### Blocked, not on the critical path
 
 - [ ] **T49** Strip and rotate the PSOP credentials, gate the public page
@@ -2003,20 +2070,47 @@ vocabulary these tasks are written in, including the SBD and SPD distinction tha
 
 ## Totals
 
-**Updated 2026-08-04.** 36 items done, 60 open. T89 added, found while tracing where the
-Foundations curriculum is stored: the live David edge function searches one Pinecone index and
-both seeding scripts write to a different one, so seeding fills an index David never reads and the
-failure is silent. Both scripts default to a dry run, so no wrong write is known to have happened,
-and which index actually holds records cannot be settled from here because Pinecone returns `403`
-on the egress tunnel. It needs one look at the console.
+**Updated 2026-08-04, end of day.** 36 items done, 57 open. One shipped, five opened, and one
+correction to how a fix was recorded.
 
-T88 gained the search record. Section 2.1 shipped and is live on `foundations.js?v=16`. The other
-69 sections still hold a plain summary averaging 181 characters, and the source documents are not
-in the WhatsApp export, Drive, Supabase, this repo, or Pinecone. Pinecone in particular was worth
-ruling out properly rather than assuming: everything in `master-docs` was put there **from
-`src/js/ui-views.js`** by our own scripts, which never touch the Foundations module bodies, so the
-vector store cannot return what it was never given. Each of those five is written into T88 so the
-same ground is not covered twice.
+**T91, T92 and T93 are three client asks from the 3 August call that were never written down.**
+Observation answers typed or spoken with no multiple choice, scripts as a separately assignable
+module, and editable David chat titles. They were made on the same call as the Foundations
+formatting request that became T88, and that request was the loud one. T93 was answered on the
+call with *"we already have that in our task list"*, which was not true. This is the second time
+the same failure has been recorded here, so it is worth stating as a rule rather than an
+observation: **an ask made next to an urgent one still needs its own row, written during the
+call.**
+
+**T88 shipped**, and it is the largest single content change the platform has had. All ten
+Foundations modules now carry their source documents' own words and structure: 77 sections where
+there were 70, 219,000 characters where there were 181 per section, 124 tables where there was 1,
+86 callouts where there were 2. **Seven sections existed in the curriculum and had never been in
+the app at all**, two of them error and failure sections, which is the material a technician most
+needs. It is generated by `scripts/foundations-from-docx.py` and re-runnable, so a corrected
+document from the client is a file swap rather than a rewrite.
+
+**T89 opened**, found while tracing where the curriculum was stored. The live David edge function
+searches a Pinecone index that does not exist, while 1,418 usable records sit in the one both
+seeding scripts name. It fails silently because an empty result and a failed call are handled
+alike, so David answers from reasoning and nothing surfaces. **T90 opened** as the small tail of
+T88: three module-level blocks per document that were deliberately held back.
+
+**T81 was never blocked.** It had been logged as waiting on source documents that had been sitting
+in an uploaded archive since 28 July. That is corrected, and the documents are now in the
+repository.
+
+**The `david_usage_by_app_mtd` fix was recorded wrongly and is now recorded properly.** It was
+applied to production by hand and then written back into a migration that had already run, so an
+environment sitting at that version would never have picked it up. The applied migration is
+restored and the fix moved into its own.
+
+**The lesson worth keeping, because it cost most of a day.** The Foundations documents were
+searched for across the client conversation, Drive, Supabase, Pinecone and this repository and
+reported as not existing anywhere. The preceptor set was in hand the whole time and the client had
+to be asked twice for something already sent. Anything that arrives from the client and is worth
+keeping now goes into `docs/curriculum/`, with a README stating where each set came from and what
+generates what.
 
 **Updated 2026-08-03.** 36 items done, 59 open. T88 added: the client asked on 3 August for the
 Foundations UI to resemble the source curriculum document, and clarified it as *"colors. Sections,
