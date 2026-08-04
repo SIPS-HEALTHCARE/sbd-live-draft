@@ -1828,19 +1828,43 @@ vocabulary these tasks are written in, including the SBD and SPD distinction tha
   comments say the host "mirrors the proven call in `david-chat/index.ts`", so the divergence was
   not intended and one side drifted.
 
-  Both scripts default to a dry run, so no wrong write is known to have happened. What is not yet
-  known is which of the two indexes is the real one and whether either currently holds records,
-  and that cannot be settled from this environment: Pinecone's control plane and both index hosts
-  return `403` on the egress tunnel. It needs one look at the Pinecone console.
+  Both scripts default to a dry run, so no wrong write is known to have happened.
 
-  Do not "fix" this by editing the scripts to match the edge function. Confirm which index the
-  live David actually reads and which one holds data first, then make the other two agree with it
-  and leave a comment saying why that host is the one.
+  **Settled 2026-08-04 against the Pinecone control plane.** The account holds three indexes and
+  every one of them carries the project suffix `44928mo`:
+
+  | index | dimension | integrated embed field | model |
+  |---|---|---|---|
+  | `sbd-knowledge-ai` | 1024 | `text` | `multilingual-e5-large` |
+  | `sbd-wiki-graph` | 1024 | `content_md` | `multilingual-e5-large` |
+  | `sbd-knowledge` | 3072 | none | none |
+
+  **There is no `8al9o1g` index.** The scripts are right and the live edge function is the one
+  pointing at a host that does not resolve, which means `search_wiki_graph` has never been able to
+  return anything. It fails silently because the tool handler treats an empty result and a failed
+  call the same way, so David answers from reasoning alone and no error surfaces.
+
+  **A second mismatch sits underneath it.** `seed-david-kb.mjs:31` defaults `EMBED_FIELD` to
+  `chunk_text`, and its own comment says to confirm that against the console before pushing. The
+  console says the field is `text`. Pushing with the default would have written records the index
+  cannot embed.
+
+  **And the index names disagree about intent.** The tool is called `search_wiki_graph`, which
+  points at `sbd-wiki-graph`, but both the edge function and the scripts target `sbd-knowledge-ai`.
+  Three indexes exist and nothing in the repo says which is canonical.
+
+  Do not "fix" this by editing the scripts to match the edge function; the edge function is the
+  wrong side. Decide which index is canonical, correct the edge function, set `EMBED_FIELD` to
+  `text`, and record why in a comment.
+
+  Reading the records themselves still needs an egress change: `api.pinecone.io` is reachable, but
+  the data plane at `*.svc.aped-4627-b74a.pinecone.io` returns `403` on the tunnel, so vector
+  counts and a test query cannot be run from here.
 
   *Goal:* One index name, in one place, that the edge function and the seeding scripts share.
-  *Done when:* the host is read from a single constant or environment variable rather than
-  repeated in three files; the console confirms which index holds records; and a David curriculum
-  question returns a cited answer instead of an empty one.
+  *Done when:* the host and the embed field are read from a single constant or environment
+  variable rather than repeated across three files; the canonical index is named in a comment;
+  and a David curriculum question returns a cited answer instead of an empty one.
 
 ### Blocked, not on the critical path
 
