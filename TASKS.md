@@ -2015,10 +2015,33 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Done when:* Every observation answer is a typed or spoken response, existing observation
   records still read correctly, and the client confirms against a real observation.
 
+  **Built and merged 2026-08-06 (#180), reviewed 2026-08-07, still open on one thing: the
+  client.** Reading the code changed the shape of the fix — the observation console has no
+  multiple-choice questions at all, it has a 0/1/2/3 and PASS/FAIL rubric the observer taps, and
+  those numbers cannot be removed because `ovsComputeOutcome` derives the outcome from them across
+  all five instrument schemas and every stored record is read back through them. So the score
+  stayed and the evidence became mandatory: a tap alone is no longer an answer. **That is not the
+  literal ask, so it is the client who closes this, against a real observation, not the review.**
+
+  The review's two code findings are fixed (2026-08-07):
+  - The floor was 10 characters, so *"did it fine"* passed. It is now a sentence — 25 characters
+    and 4 words — which also rejects a padded single token. No text check can tell whether an
+    answer is truthful; this only rules out the answers that are obviously not answers.
+  - `observations` write policies called the zero-arg `sbd_is_assessor()`, so a granted assessor
+    could write in **any** facility, and `obs_select_scoped` had no assessor branch at all, so a
+    capability-only assessor could type evidence they could not read back. Migration
+    `20260807120000` adopts the facility-aware `sbd_is_assessor(fid)` on all three policies and
+    gives SELECT the same branch, so read never exceeds write on this table. Behaviour-neutral for
+    writes today (no holder has an `assessor_facilities` list yet, which T74 treats as system
+    wide); it is what makes setting that list actually bite here.
+
+  Not tested, and cannot be from here: the real click-through and device dictation, which need
+  writes on production.
+
 - [x] **T92** Scripts as a separate module that can be assigned on its own · est 2d · Medium
-  **Code-complete 2026-08-06, no migration needed, pending deploy + client confirmation.**
-  Built as a second surface over the same content: `scriptSectionsForBelt()` in the new
-  `src/js/scripts-module.js` selects the script sections out of `FULL_CURRICULUM_DATA.belts`
+  **Code-complete 2026-08-06, reviewed 2026-08-07, no migration needed, pending deploy + client
+  confirmation.** Built as a second surface over the same content: `scriptSectionsForBelt()` in
+  the new `src/js/scripts-module.js` selects the script sections out of `FULL_CURRICULUM_DATA.belts`
   at render time, and the existing Study & Practice Scripts tab now calls that same function,
   so the scripts are not copied and not moved. Assignment reuses `foundations_assignments`
   with `module_id='scripts'` — free-text column, unique constraint and the right RLS already
@@ -2026,7 +2049,20 @@ already named above: **an ask next to an urgent one still needs its own row.**
   waiting. `getFoundationsAssignments()` filters that row out, so Foundations still counts 10.
   Assigned from the Scripts column in the existing Training table; a Scripts tab then appears
   for that person only; the leader marks it complete (no gates — scripts are spoken language
-  with no question bank). Verified by `node scripts/verify-scripts-module.js` (24 assertions).
+  with no question bank).
+
+  The review's two findings are fixed (2026-08-07):
+  - The module offered all six belts. Nowhere else does a staffer read curriculum above their own
+    belt — Study & Practice is hard-locked to `s.belt` with no selector — so this was the one place
+    a White Belt could read the Black Belt scripts. It now offers White through their own belt.
+    Not only their current belt: the ask is about somebody who *passes belts* and needs to refine
+    them, so belts already earned is the line.
+  - `foundations.js` read `SCRIPTS_MODULE_ID` from `scripts-module.js`, which loads after it. The
+    declaration moved to `foundations.js`, so a 404 on the new file can no longer take out every
+    Foundations screen. A `typeof` guard was the wrong fix — it would have made Foundations
+    silently stop filtering the scripts row (10 becomes 11) instead of failing loudly.
+
+  Verified by `node scripts/verify-scripts-module.js` (33 assertions).
   Design note: `docs/decisions/2026-08-06-t92-scripts-standalone-module.md`, §16B in ARCHITECTURE.
   His words: *"we want it to still be here, but we also want to have a separate module just for
   the scripts on the side… it's going to stay here, but also be here."* And the reason, which is

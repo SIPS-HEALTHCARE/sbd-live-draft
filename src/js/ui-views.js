@@ -3120,9 +3120,19 @@ function ovsScorableUnits(cl){
 // with no evidence is invisible to ovsComputeOutcome, so the observation stays
 // IN PROGRESS and the submit button will not arm. No change to the engine itself, and
 // no change to how an already-submitted record is read back.
-const OVS_MIN_NOTE = 10;   // ponytail: flat character floor. Swap for a per-instrument
-                           // minimum only if the client says one line is too easy.
-function ovsNoteOk(t){ return String(t == null ? '' : t).trim().length >= OVS_MIN_NOTE; }
+// Review 2026-08-07: a 10-character floor let "did it fine" through, which is not an
+// account of anything on a record that certifies someone to work unsupervised. Raised to
+// a sentence: enough characters AND enough words, so a padded single token ("okokokokok",
+// "ffffffffffffff") fails too. No text check can judge whether an answer is truthful —
+// this only rules out the answers that are obviously not answers.
+const OVS_MIN_NOTE  = 25;  // characters, trimmed
+const OVS_MIN_WORDS = 4;   // ponytail: flat floor for every item. Per-instrument minimums
+                           // only if the client says a sentence is still too easy.
+const OVS_NOTE_HINT = 'What you saw — required, a full sentence';
+function ovsNoteOk(t){
+  const s = String(t == null ? '' : t).trim();
+  return s.length >= OVS_MIN_NOTE && s.split(/\s+/).length >= OVS_MIN_WORDS;
+}
 function ovsEffectiveScores(scores, notes){
   const out = {};
   Object.keys(scores || {}).forEach(id => { if(ovsNoteOk((notes || {})[id])) out[id] = scores[id]; });
@@ -3481,6 +3491,13 @@ function ovsRefreshProgress(){
   units.forEach(u => {
     const card = document.getElementById('ovs-item-' + u.id);
     if(card) card.style.borderLeftColor = (eff[u.id] !== undefined && eff[u.id] !== null) ? '#22c55e' : 'var(--bdr)';
+    // The floor is a sentence now, so the observer needs to see the item accept the answer
+    // as they type rather than guess why submit is still disabled.
+    const nOk = ovsNoteOk((ovsCapture.notes || {})[u.id]);
+    const lab = document.getElementById('ovs-lab-' + u.id);
+    if(lab){ lab.style.color = nOk ? 'var(--txt3)' : '#f59e0b'; lab.textContent = nOk ? 'What you saw' : OVS_NOTE_HINT; }
+    const ta = document.getElementById('ovs-note-' + u.id);
+    if(ta) ta.style.borderColor = nOk ? 'var(--bdr2)' : '#f59e0b66';
   });
 }
 
@@ -3578,7 +3595,7 @@ function ovsRenderCapture(){
     const ok = ovsNoteOk(val);
     return `<div style="margin-top:9px">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px">
-        <label for="${tid}" style="font-size:11px;font-weight:700;color:${ok?'var(--txt3)':'#f59e0b'}">What you saw${ok?'':' — required'}</label>
+        <label id="ovs-lab-${u.id}" for="${tid}" style="font-size:11px;font-weight:700;color:${ok?'var(--txt3)':'#f59e0b'}">${ok?'What you saw':OVS_NOTE_HINT}</label>
         ${(window.micButtonHTML?micButtonHTML(tid,{title:'Speak this answer instead of typing it'}):'')}
       </div>
       <textarea id="${tid}" rows="2" oninput="ovsNote('${u.id}', this.value)"
@@ -3619,7 +3636,7 @@ function ovsRenderCapture(){
       <div style="margin-top:10px;height:5px;border-radius:4px;background:rgba(148,163,184,.18);overflow:hidden" title="${scored} of ${units.length} items answered">
         <div id="ovs-bar" style="height:100%;width:${units.length?Math.round(scored/units.length*100):0}%;background:${(units.length&&scored>=units.length)?'#22c55e':'#0ea5e9'};transition:width .25s"></div>
       </div>
-      <div style="margin-top:8px;font-size:11.5px;color:var(--txt3);line-height:1.5">Every item needs both a score and a written or spoken account of what you saw. A score on its own does not count.</div>
+      <div style="margin-top:8px;font-size:11.5px;color:var(--txt3);line-height:1.5">Every item needs both a score and a written or spoken account of what you saw — a full sentence, not "did it fine". A score on its own does not count.</div>
     </div></div>
     ${stop.active?`<div style="margin:10px 0;padding:10px 12px;background:#ef44441a;border:1px solid #ef444455;border-radius:8px;color:#ef4444;font-size:12px;font-weight:600">Stop-Work is active. On submit this observation records DO NOT ADVANCE regardless of item scores.</div>`:''}
     <div style="margin-top:14px">${body}</div>

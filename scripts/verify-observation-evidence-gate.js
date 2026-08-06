@@ -32,9 +32,10 @@ function lift(name) {
   throw new Error('unterminated function: ' + name);
 }
 
-const OVS_MIN_NOTE = Number((SRC.match(/const OVS_MIN_NOTE = (\d+)/) || [])[1]);
+const OVS_MIN_NOTE  = Number((SRC.match(/const OVS_MIN_NOTE  = (\d+)/) || [])[1]);
+const OVS_MIN_WORDS = Number((SRC.match(/const OVS_MIN_WORDS = (\d+)/) || [])[1]);
 const sandbox = new Function(
-  'const OVS_MIN_NOTE = ' + OVS_MIN_NOTE + ';\n' +
+  'const OVS_MIN_NOTE = ' + OVS_MIN_NOTE + ', OVS_MIN_WORDS = ' + OVS_MIN_WORDS + ';\n' +
   lift('ovsNoteOk') + '\n' + lift('ovsEffectiveScores') + '\n' + lift('ovsComputeOutcome') +
   '\nreturn { ovsNoteOk, ovsEffectiveScores, ovsComputeOutcome };'
 )();
@@ -67,17 +68,26 @@ const COMPOSITE = { belt: 'Brown', schema: { type: 'composite',
 
 const noteAll = ids => ids.reduce((o, id) => (o[id] = EVIDENCE, o), {});
 
-console.log('\nOVS_MIN_NOTE =', OVS_MIN_NOTE, '\n');
+console.log('\nOVS_MIN_NOTE =', OVS_MIN_NOTE, ' OVS_MIN_WORDS =', OVS_MIN_WORDS, '\n');
+
+// Exactly at both floors, built from the constants so it tracks any change to them.
+const AT_FLOOR = ('word '.repeat(OVS_MIN_WORDS - 1) + 'x'.repeat(Math.max(1, OVS_MIN_NOTE - 5 * (OVS_MIN_WORDS - 1))));
 
 console.log('1. ovsNoteOk — what counts as a typed or spoken answer');
-ok(OVS_MIN_NOTE > 0, 'a minimum evidence length is configured');
+ok(OVS_MIN_NOTE > 0 && OVS_MIN_WORDS > 0, 'a minimum evidence length and word count are configured');
 ok(ovsNoteOk(EVIDENCE) === true, 'a real sentence is accepted');
 ok(ovsNoteOk('') === false, 'empty string rejected');
 ok(ovsNoteOk(null) === false, 'null rejected');
 ok(ovsNoteOk(undefined) === false, 'undefined rejected');
 ok(ovsNoteOk('   \n\t  ') === false, 'whitespace-only rejected (trimmed, not counted)');
-ok(ovsNoteOk('x'.repeat(OVS_MIN_NOTE - 1)) === false, 'one char under the floor rejected');
-ok(ovsNoteOk('x'.repeat(OVS_MIN_NOTE)) === true, 'exactly the floor accepted');
+ok(ovsNoteOk(AT_FLOOR.trim()) === true, 'exactly at both floors accepted');
+ok(ovsNoteOk('x'.repeat(OVS_MIN_NOTE * 3)) === false,
+  'one padded token is rejected however long — words are counted, not characters alone');
+// Review 2026-08-07: the floor used to be 10 characters, so this passed.
+ok(ovsNoteOk('did it fine') === false, '"did it fine" rejected — not an account of anything');
+ok(ovsNoteOk('ok') === false, '"ok" rejected');
+ok(ovsNoteOk('he did all four steps') === false,
+  'four short words under the character floor rejected');
 
 console.log('\n2. ovsEffectiveScores — a tapped score with no evidence is not an answer');
 ok(Object.keys(ovsEffectiveScores({ p1: 3 }, {})).length === 0,
