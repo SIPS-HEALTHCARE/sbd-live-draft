@@ -2015,6 +2015,29 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Done when:* Every observation answer is a typed or spoken response, existing observation
   records still read correctly, and the client confirms against a real observation.
 
+  **Built and merged 2026-08-06 (#180), reviewed 2026-08-07, still open on one thing: the
+  client.** Reading the code changed the shape of the fix — the observation console has no
+  multiple-choice questions at all, it has a 0/1/2/3 and PASS/FAIL rubric the observer taps, and
+  those numbers cannot be removed because `ovsComputeOutcome` derives the outcome from them across
+  all five instrument schemas and every stored record is read back through them. So the score
+  stayed and the evidence became mandatory: a tap alone is no longer an answer. **That is not the
+  literal ask, so it is the client who closes this, against a real observation, not the review.**
+
+  The review's two code findings are fixed (2026-08-07):
+  - The floor was 10 characters, so *"did it fine"* passed. It is now a sentence — 25 characters
+    and 4 words — which also rejects a padded single token. No text check can tell whether an
+    answer is truthful; this only rules out the answers that are obviously not answers.
+  - `observations` write policies called the zero-arg `sbd_is_assessor()`, so a granted assessor
+    could write in **any** facility, and `obs_select_scoped` had no assessor branch at all, so a
+    capability-only assessor could type evidence they could not read back. Migration
+    `20260807120000` adopts the facility-aware `sbd_is_assessor(fid)` on all three policies and
+    gives SELECT the same branch, so read never exceeds write on this table. Behaviour-neutral for
+    writes today (no holder has an `assessor_facilities` list yet, which T74 treats as system
+    wide); it is what makes setting that list actually bite here.
+
+  Not tested, and cannot be from here: the real click-through and device dictation, which need
+  writes on production.
+
 - [ ] **T92** Scripts as a separate module that can be assigned on its own · est 2d · Medium
   His words: *"we want it to still be here, but we also want to have a separate module just for
   the scripts on the side… it's going to stay here, but also be here."* And the reason, which is
