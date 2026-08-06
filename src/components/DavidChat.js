@@ -175,8 +175,19 @@ class DavidChat {
             }
             .david-session-item-content { flex: 1; min-width: 0; }
             .david-session-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+            .david-session-title[contenteditable="true"] {
+                white-space: normal;
+                overflow-wrap: anywhere;
+                outline: none;
+                cursor: text;
+                background: var(--s2);
+                border: 1px solid var(--gold-bd);
+                border-radius: 4px;
+                padding: 2px 4px;
+                margin: -3px -5px;
+            }
             .david-session-date { font-size: 10px; color: var(--txt3); margin-top: 2px; }
-            .david-session-delete {
+            .david-session-delete, .david-session-edit {
                 opacity: 0;
                 color: var(--txt3);
                 display: inline-flex;
@@ -186,11 +197,15 @@ class DavidChat {
                 flex-shrink: 0;
                 transition: opacity .15s, color .15s;
             }
-            .david-session-item:hover .david-session-delete { opacity: .6; }
+            .david-session-item:hover .david-session-delete,
+            .david-session-item:hover .david-session-edit { opacity: .6; }
             .david-session-delete:hover { opacity: 1 !important; color: var(--err); }
-            @media (hover: none) { .david-session-delete { opacity: .45; } }
+            .david-session-edit:hover { opacity: 1 !important; color: var(--gold); }
+            @media (hover: none) { .david-session-delete, .david-session-edit { opacity: .45; } }
             .david-session-confirm-wrapper { display: none; gap: 6px; align-items: center; margin-left: auto; flex-shrink: 0; }
-            .david-session-item.confirming .david-session-delete { display: none; }
+            .david-session-item.confirming .david-session-delete,
+            .david-session-item.confirming .david-session-edit { display: none; }
+            .david-session-item.editing .david-session-delete { display: none; }
             .david-session-item.confirming .david-session-confirm-wrapper { display: flex; }
             .david-session-action {
                 font-size: 10.5px;
@@ -1258,8 +1273,11 @@ class DavidChat {
 
             div.innerHTML = `
                 <div class="david-session-item-content">
-                    <div class="david-session-title">${s.title}</div>
+                    <div class="david-session-title"></div>
                     <div class="david-session-date">${timeStr}</div>
+                </div>
+                <div class="david-session-edit" title="Rename conversation">
+                    <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M10 2.2l3.8 3.8L5.6 14.2H1.8v-3.8L10 2.2z"/></svg>
                 </div>
                 <div class="david-session-delete" title="Delete conversation">
                     <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2.5 4h11M6.5 4V2.8a.8.8 0 01.8-.8h1.4a.8.8 0 01.8.8V4m2.7 0l-.5 9.2a1 1 0 01-1 .95H5.3a1 1 0 01-1-.95L3.8 4M6.5 7v4M9.5 7v4"/></svg>
@@ -1269,15 +1287,24 @@ class DavidChat {
                     <div class="david-session-action david-session-cancel" title="Cancel">Cancel</div>
                 </div>
             `;
-            
+
+            const titleEl = div.querySelector('.david-session-title');
+            titleEl.textContent = s.title || 'New Chat';   // textContent, not innerHTML: a title is user-authored
+
             div.onclick = () => {
                 if (div.classList.contains('confirming')) return; // Prevent switching when confirming delete
+                if (div.classList.contains('editing')) return;    // T93: don't switch chats mid-rename
                 this.loadSession(s.id);
                 if (window.matchMedia && window.matchMedia('(max-width: 900px)').matches) {
                     this.toggleSidebar(false);
                 }
             };
-            
+
+            div.querySelector('.david-session-edit').onclick = (e) => {
+                e.stopPropagation();
+                this.beginRenameSession(div, titleEl, s);
+            };
+
             const delBtn = div.querySelector('.david-session-delete');
             const confirmBtn = div.querySelector('.david-session-confirm');
             const cancelBtn = div.querySelector('.david-session-cancel');
@@ -1304,6 +1331,65 @@ class DavidChat {
             
             list.appendChild(div);
         });
+    }
+
+    // T93 — inline rename in the history list. Enter or blur commits, Escape reverts.
+    beginRenameSession(itemEl, titleEl, session) {
+        if (itemEl.classList.contains('editing')) return;
+        const original = session.title || 'New Chat';
+        itemEl.classList.add('editing');
+        titleEl.contentEditable = 'true';
+        titleEl.spellcheck = false;
+        titleEl.focus();
+        const sel = document.getSelection();
+        if (sel) sel.selectAllChildren(titleEl);   // start with the old title selected, so typing replaces it
+
+        let settled = false;
+        const finish = (commit) => {
+            if (settled) return;
+            settled = true;
+            titleEl.contentEditable = 'false';
+            itemEl.classList.remove('editing');
+            // textContent drops any markup a paste dragged in, and caps the length so one
+            // pathological title can't push the rest of the list off screen.
+            const next = commit ? titleEl.textContent.replace(/\s+/g, ' ').trim().slice(0, 120) : '';
+            if (!next || next === original) {
+                titleEl.textContent = original;
+                return;
+            }
+            titleEl.textContent = next;
+            this.renameSession(session.id, next, original, titleEl);
+        };
+
+        titleEl.onkeydown = (e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+            else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+        };
+        titleEl.onblur = () => finish(true);
+        titleEl.onclick = (e) => e.stopPropagation();
+    }
+
+    // Title-only PATCH: does not send `messages`, so renaming a chat that isn't the open one
+    // can never write this.history over that chat's transcript. updated_at is left alone too,
+    // so a rename doesn't reshuffle the list out from under the person doing it.
+    async renameSession(sessionId, title, previousTitle, titleEl) {
+        const { token } = this.getAuthContext();
+        const local = this.sessions.find(s => s.id === sessionId);
+        if (local) local.title = title;
+        if (!window.sbFetch || !token) return;
+        try {
+            await window.sbFetch(`/rest/v1/david_chat_sessions?id=eq.${sessionId}`, {
+                method: 'PATCH',
+                headers: { 'Authorization': `Bearer ${token}` },
+                body: { title }
+            });
+        } catch (e) {
+            console.warn('[DAVID] Failed to rename session:', e);
+            if (local) local.title = previousTitle;
+            if (titleEl) titleEl.textContent = previousTitle;
+            this.showModal({ title: 'Error', text: 'Could not rename this chat. Please try again.', isAlert: true });
+        }
     }
 
     async executeDeleteSession(sessionId) {
@@ -2087,8 +2173,13 @@ class DavidChat {
                 this.msgArea.scrollTop = this.msgArea.scrollHeight;
 
                 // Always save to the sessionId that was active when this stream commenced!
+                // T93: auto-title only an untouched chat. It already fires on the first message
+                // only, so a rename on a chat with history was always safe — but a chat renamed
+                // while still empty would otherwise be relabelled by its own first question.
                 let newTitle = null;
-                if (preStreamHistoryLengths === 0 && streamSessionId) {
+                const _streamSession = this.sessions.find(s => s.id === streamSessionId);
+                const _untitled = !_streamSession || !_streamSession.title || _streamSession.title === 'New Chat';
+                if (preStreamHistoryLengths === 0 && streamSessionId && _untitled) {
                     newTitle = text.length > 30 ? text.substring(0, 30) + '...' : text;
                 }
                 await this.saveSessionMessages(newTitle, streamSessionId);
