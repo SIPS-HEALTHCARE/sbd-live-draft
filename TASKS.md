@@ -2015,7 +2015,19 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Done when:* Every observation answer is a typed or spoken response, existing observation
   records still read correctly, and the client confirms against a real observation.
 
-- [ ] **T92** Scripts as a separate module that can be assigned on its own · est 2d · Medium
+- [x] **T92** Scripts as a separate module that can be assigned on its own · est 2d · Medium
+  **Code-complete 2026-08-06, no migration needed, pending deploy + client confirmation.**
+  Built as a second surface over the same content: `scriptSectionsForBelt()` in the new
+  `src/js/scripts-module.js` selects the script sections out of `FULL_CURRICULUM_DATA.belts`
+  at render time, and the existing Study & Practice Scripts tab now calls that same function,
+  so the scripts are not copied and not moved. Assignment reuses `foundations_assignments`
+  with `module_id='scripts'` — free-text column, unique constraint and the right RLS already
+  there — so this ships with **zero migrations** instead of queueing behind the ones already
+  waiting. `getFoundationsAssignments()` filters that row out, so Foundations still counts 10.
+  Assigned from the Scripts column in the existing Training table; a Scripts tab then appears
+  for that person only; the leader marks it complete (no gates — scripts are spoken language
+  with no question bank). Verified by `node scripts/verify-scripts-module.js` (24 assertions).
+  Design note: `docs/decisions/2026-08-06-t92-scripts-standalone-module.md`, §16B in ARCHITECTURE.
   His words: *"we want it to still be here, but we also want to have a separate module just for
   the scripts on the side… it's going to stay here, but also be here."* And the reason, which is
   the part that matters: *"in the development process, if somebody passes belts but they need to

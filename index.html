@@ -555,6 +555,10 @@
       <div class="nav-item" data-view="s-instruments" onclick="sNav(this,'s-instruments','SBD Instruments')">
         <span class="ico"><svg viewBox="0 0 18 18" fill="none"><path d="M3 13l8-8 3 3-8 8H3v-3z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M11 5l2-2 3 3-2 2" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span>SBD Instruments
       </div>
+      <!-- T92: assigned-only module. Revealed by applyScriptsNavGate() in enterPortal. -->
+      <div class="nav-item" data-view="s-scripts" id="s-nav-scripts" onclick="sNav(this,'s-scripts','Scripts')" style="display:none">
+        <span class="ico"><svg viewBox="0 0 18 18" fill="none"><path d="M4 2h7l3 3v11H4V2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M11 2v3h3" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M6.5 8.5h5M6.5 11h5M6.5 13.5h3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>Scripts
+      </div>
       <div class="nav-item" data-view="s-preceptor" onclick="sNav(this,'s-preceptor','Preceptor Certification')">
         <span class="ico"><svg viewBox="0 0 18 18" fill="none"><circle cx="6.5" cy="6" r="2.4" stroke="currentColor" stroke-width="1.4"/><path d="M2.5 15c0-2.2 1.8-3.6 4-3.6s4 1.4 4 3.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M12 5.5l3 1.5-3 1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Preceptor Certification
       </div>
@@ -613,6 +617,7 @@
       <div id="s-study" class="hidden"></div>
       <div id="s-foundations" class="hidden"></div>
       <div id="s-instruments" class="hidden"></div>
+      <div id="s-scripts" class="hidden"></div>
       <div id="s-preceptor" class="hidden"></div>
       <div id="s-observations" class="hidden"></div>
       <div id="s-observationreviews" class="hidden"></div>
@@ -753,10 +758,11 @@
   <script src="src/js/activity.js?v=1"></script>
   <script src="src/js/ovs-guidance.js?v=1"></script>
   <script src="src/js/dictation.js?v=1"></script>
-  <script src="src/js/foundations.js?v=17"></script>
+  <script src="src/js/foundations.js?v=18"></script>
   <script src="src/js/instruments.js?v=14"></script>
   <script src="src/js/preceptor.js?v=9"></script>
-  <script src="src/js/ui-views.js?v=202"></script>
+  <script src="src/js/scripts-module.js?v=1"></script>
+  <script src="src/js/ui-views.js?v=203"></script>
   <script src="src/js/belt-test-engine.js?v=1"></script>
   <script src="src/js/belt-test-flow.js?v=5"></script>
   <script src="src/js/settings.js?v=20"></script>

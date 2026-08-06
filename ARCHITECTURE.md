@@ -43,6 +43,7 @@ src/js/api-supabase.js         (566 lines)   ← Supabase client: SB_AUTH, SB (C
 src/js/auth-password.js        (172 lines)   ← Password reset, forgot password, strength bar.
 src/js/ui-views.js          (14,432 lines)   ← ⚠️ MONOLITH. All view rendering, all portal logic. 294 functions.
 src/js/settings.js             (239 lines)   ← Account settings UI.
+src/js/scripts-module.js       (250 lines)   ← T92: Scripts as a standalone assignable module (§16B).
 src/js/onboarding.js           (312 lines)   ← Onboarding state, tour state, L3 study content helpers.
 src/js/auth-init.js          (2,141 lines)   ← L3 study system, tour system, guide views, section walkthroughs.
 src/components/DavidChat.js  (1,639 lines)   ← DAVID AI chat component (SSE, session persistence, markdown).
@@ -178,7 +179,7 @@ Every view has this pattern:
 | `sbd_facility_trends` | Analytics trend data | `facility_id` → `facilities` |
 | `sbd_report_audit_log` | Report download audit trail | — |
 | `sbd_onboarding_state` | Tour/walkthrough completion state | — |
-| `foundations_assignments` / `foundations_progress` | Foundations curriculum: one assignment + one 3-gate progress row per staff+module. RLS via `sbd_fi_leader_scope`. See §16A. | `staff_id` → `staff`, `facility_id` → `facilities` |
+| `foundations_assignments` / `foundations_progress` | Foundations curriculum: one assignment + one 3-gate progress row per staff+module. RLS via `sbd_fi_leader_scope`. See §16A. **Also stores the T92 Scripts module assignment as `module_id='scripts'`** (no progress row) — see §16B. | `staff_id` → `staff`, `facility_id` → `facilities` |
 | `instrument_assignments` / `instrument_progress` | Instruments curriculum (mirror of Foundations, same 3-gate engine). RLS via `sbd_fi_leader_scope`. See §16A. | `staff_id` → `staff`, `facility_id` → `facilities` |
 
 ### Row Level Security (RLS)
@@ -456,6 +457,42 @@ Two parallel curriculum systems that share **one 3-gate engine** (mirrors of eac
 - **RLS:** `sbd_fi_leader_scope(target_staff)` (migration `20260702130000`): master_admin/SIPS-email → all; `staff_admin` (Assessor) → `assigned_facility_ids` (empty = all); `facility_admin`/`hospital` → own facility. ⚠️ **`system_admin` is NOT in this helper** (those users get zero F&I rows) and all live `staff_admin` are facility-scoped — so multi-facility/network reports viewed by those roles under-populate F&I. Network/system F&I must use a **server-side scoped fetch**, not the in-memory arrays (open Ph.2c risk — see `docs/decisions/2026-07-17-ph2-development-plan.md` §2).
 - **#55 (`20260707120000`):** blocks `staff_admin`/staff from INSERT/UPDATE on the two *assignment* tables at the RLS layer. Do not re-open it (see the Preceptor decision doc).
 - **Reporting (Ph.2b):** pure read helpers `fiModuleSummary()` / `fiDomainSummaryForStaff()` / `fndSummaryForStaff()` / `fiSummaryForStaff()` / `fiFacilityRollup()` (foundations.js) + `instSummaryForStaff()` (instruments.js). Rendered by `fiStaffSectionHTML`/`fiStaffSectionPDF` + `fiFacilitySectionHTML`/`fiFacilitySectionPDF` (ui-views.js), wired into `renderSReport`/`downloadStaffReport` (personal), `renderHReports`/`downloadFacilityReportV2` (facility), and an F&I completion card in `renderHDashboard`. Completion date shown is **derived/approximate** (no `completed_at` column yet — Ph.3a).
+
+---
+
+## 16B. Scripts as a standalone assignable module (T92)
+
+The communication scripts have **two surfaces over one copy of the content**.
+
+- **Where the scripts live (unchanged):** sections inside `FULL_CURRICULUM_DATA.belts[belt]`
+  (`ui-views.js` ~8199). They keep rendering inside the belt content — Study & Practice →
+  Full Curriculum, and its Scripts tab. **Nothing was moved.**
+- **File:** `src/js/scripts-module.js`. `scriptSectionsForBelt(belt)` is the single definition
+  of "which curriculum sections are the scripts" (title matches `/script|approved
+  language|forbidden language/i`); the Study & Practice Scripts tab calls it too, so there is
+  one definition, not two.
+- **Storage:** `foundations_assignments` with `module_id='scripts'`. **No migration** — that
+  column is free text with no FK/CHECK, `UNIQUE(staff_id,module_id)` already exists, and its
+  RLS is already the needed rule set (leaders write, assessors blocked by #55, DELETE
+  master_admin only, reads own-or-leader). **No `foundations_progress` row is created** —
+  this module has no gates, which is why `assignModule()` is not reused.
+- **⚠️ The one coupling to remember:** `getFoundationsAssignments()` (foundations.js) filters
+  the `'scripts'` row out. Every Foundations consumer routes through that accessor, so counts
+  and the "N/10" convention are unaffected. Code that reads `DB.foundationsAssignments`
+  **directly** would count Scripts as an 11th module.
+- **Staff surface:** nav item `s-nav-scripts` + view `s-scripts`, hidden by default and
+  revealed by `applyScriptsNavGate(staffId)` in `enterPortal` (safe there: `initAppData()`
+  is awaited before `enterPortal`, and it is the only entry point). `renderSScripts()`
+  re-checks the assignment itself. A leader's assignment appears after the staffer's next
+  login, same as Foundations.
+- **Leader surface:** one **Scripts** column in the existing Training table
+  (`renderHTraining`, both `h-training` and `a-foundations`) → `scriptsCellHTML()`.
+  Assign/Mark done are leaders-only (assessors are refused client-side *and* by RLS);
+  Unassign is master_admin only, matching `hUnassignFnd`.
+- **Completion is leader-confirmed**, carried by `assignment.status`
+  (`assigned` ⇄ `completed`). Scripts are spoken language with no question bank.
+- **Verify:** `node scripts/verify-scripts-module.js`.
+  Design note: `docs/decisions/2026-08-06-t92-scripts-standalone-module.md`.
 
 ---
 

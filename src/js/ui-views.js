@@ -380,6 +380,10 @@ function enterPortal(type){
       const n=document.getElementById(id);
       if(n) n.style.display = _sAssessor ? (id==='s-nav-assessor-lbl'?'block':'flex') : 'none';
     });
+    // T92: the Scripts tab appears only for the person it was assigned to. Safe
+    // here because initAppData() has already hydrated DB.foundationsAssignments
+    // (doLogin awaits it before calling enterPortal), and this is the only door in.
+    if(typeof applyScriptsNavGate==='function') applyScriptsNavGate(sid);
     renderSView(_sv);
     return;
   }
@@ -577,7 +581,7 @@ function renderSView(view){
     toast('RBAC Guard: Unauthorized access to Staff Portal', 'err');
     return;
   }
-  ['s-dashboard','s-belt','s-window','s-scoreboard','s-posschool','s-report','s-oip','s-schedule','s-history','s-study','s-foundations','s-instruments','s-preceptor','s-observations','s-observationreviews','s-assessments','s-guide','s-settings','s-david'].forEach(v=>{
+  ['s-dashboard','s-belt','s-window','s-scoreboard','s-posschool','s-report','s-oip','s-schedule','s-history','s-study','s-foundations','s-instruments','s-scripts','s-preceptor','s-observations','s-observationreviews','s-assessments','s-guide','s-settings','s-david'].forEach(v=>{
     const el=document.getElementById(v);
     if(el){el.classList.add('hidden');el.classList.remove('fade-in');}
   });
@@ -600,6 +604,9 @@ function renderSView(view){
     's-study':renderSStudy,
     's-foundations':()=>{ if(typeof renderSFoundations==='function') renderSFoundations(); },
     's-instruments':()=>{ if(typeof renderSInstruments==='function') renderSInstruments(); },
+    // T92: assigned-only surface. renderSScripts re-checks the assignment itself,
+    // because a saved sessionStorage view can route straight to a view id.
+    's-scripts':()=>{ if(typeof renderSScripts==='function') renderSScripts(); },
     's-preceptor':()=>{ if(typeof renderSPreceptor==='function') renderSPreceptor(); },
     // #73: assessor consoles inside the staff portal. Re-checked here, not just at nav
     // visibility, because a saved view in sessionStorage can route straight to a view id.
@@ -9614,21 +9621,16 @@ function renderSStudy() {
 
   // ── SCRIPTS TAB ──────────────────────────────────────────────────
   } else if (tab === 'scripts') {
-    // Extract scripts section from FULL_CURRICULUM_DATA for this belt
-    const beltData = FULL_CURRICULUM_DATA.belts[curBelt] || [];
-    // Find script-related sections
-    const scriptSections = beltData.filter(sec => 
-      /script/i.test(sec.title) || /approved language/i.test(sec.title) || /forbidden language/i.test(sec.title)
-    );
-    const allScriptHTML = scriptSections.length > 0 
-      ? scriptSections.map(sec => `
+    // T92: the section selection lives in scripts-module.js, so this tab and the
+    // standalone assignable Scripts module read the SAME definition of "which
+    // curriculum sections are the scripts" (Standards B6). The scripts stay here.
+    const scriptSections = (typeof scriptSectionsForBelt === 'function') ? scriptSectionsForBelt(curBelt) : [];
+    const allScriptHTML = scriptSections.map(sec => `
           <div style="margin-bottom:20px">
             <div style="font-size:11px;font-weight:700;color:${bColor};letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px">${sec.title}</div>
             <div class="cs-body">${_styleCurriculumHTML(sec.html)}</div>
-          </div>`).join('')
-      : beltData.filter(sec => sec.title.match(/section [45]/i) || /two.*script|script.*belt/i.test(sec.title))
-          .map(sec => `<div style="margin-bottom:20px"><div style="font-size:11px;font-weight:700;color:${bColor};letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px">${sec.title}</div><div class="cs-body">${_styleCurriculumHTML(sec.html)}</div></div>`).join('');
-    
+          </div>`).join('');
+
     tabContent = `
       <div style="background:${bColor}08;border:1px solid ${bColor}20;border-radius:var(--rs);padding:12px 16px;margin-bottom:14px">
         <div style="font-size:12.5px;font-weight:700;color:${bColor};margin-bottom:4px">${curBelt} Belt Scripts: Master These</div>
