@@ -901,6 +901,7 @@ function mapObservationFromBackend(row){
     checklistVersion:row.checklist_version || 1,
     status:          row.status || 'draft',
     itemScores:      row.item_scores || {},
+    itemNotes:       row.item_notes || {},   // T91: typed/dictated evidence, keyed by item id
     stopWork:        row.stop_work || null,
     totalPoints:     row.total_points,
     outcome:         row.outcome || null,

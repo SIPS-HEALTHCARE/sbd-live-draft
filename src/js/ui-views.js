@@ -3103,6 +3103,25 @@ function ovsScorableUnits(cl){
   return units;
 }
 
+// ── T91: typed-or-spoken evidence gate ───────────────────────────────────────
+// Client ask (2026-08-03): an observation answer must be typed or spoken, never only
+// selected from a list. The 0-3 / PASS-FAIL taps stay — ovsComputeOutcome and every
+// stored record depend on them — but a tap alone no longer counts as an answer. The
+// observer must also write (or dictate, via the mic) what they actually saw.
+//
+// Enforced by filtering the score map before it reaches the outcome engine: an item
+// with no evidence is invisible to ovsComputeOutcome, so the observation stays
+// IN PROGRESS and the submit button will not arm. No change to the engine itself, and
+// no change to how an already-submitted record is read back.
+const OVS_MIN_NOTE = 10;   // ponytail: flat character floor. Swap for a per-instrument
+                           // minimum only if the client says one line is too easy.
+function ovsNoteOk(t){ return String(t == null ? '' : t).trim().length >= OVS_MIN_NOTE; }
+function ovsEffectiveScores(scores, notes){
+  const out = {};
+  Object.keys(scores || {}).forEach(id => { if(ovsNoteOk((notes || {})[id])) out[id] = scores[id]; });
+  return out;
+}
+
 // Compute the outcome from stored scores + the instrument's schema. Mirrors
 // SBD_OVS_Observation_Logic: POINTS / MR / COMPOSITE / COMPONENTS / TIERED.
 // Returns {outcome, total, reasons[], recommendedBelt}. outcome ∈
@@ -3163,11 +3182,22 @@ function ovsComputeOutcome(cl, scores, stopWork){
   if(type === 'tiered'){
     const tiers = schema.tiers || [];
     let placed = null;
+    // Unlike the other four schemas, tiered had no 'incomplete' path: an unscored item
+    // simply failed its tier, so an untouched checklist reported "Below White" and the
+    // submit button armed on an empty observation. Found by the T91 harness
+    // (scripts/verify-observation-evidence-gate.js) — an ungated submit here would also
+    // have been the one way to file an observation with no typed or spoken answers.
+    if(!items.some(it => scores[it.id] !== undefined && scores[it.id] !== null))
+      return { outcome:'incomplete', total:null, reasons:['Score every item to compute placement'], recommendedBelt:null };
     for(let i=0;i<tiers.length;i++){
       const t = tiers[i];
       const tierItems = items.filter(it => (it.tier||'') === t.label);
       const met = tierItems.length > 0 && tierItems.every(it => Number(scores[it.id]) >= 2);
-      if(met) placed = t; else break; // contiguous from the floor — stop at the first unmet tier
+      if(met){ placed = t; continue; }
+      // A tier that is merely unfinished is not a tier the candidate failed.
+      if(tierItems.some(it => scores[it.id] === undefined || scores[it.id] === null))
+        return { outcome:'incomplete', total:null, reasons:[`Score every ${t.label} item to compute placement`], recommendedBelt:null };
+      break; // contiguous from the floor — stop at the first genuinely unmet tier
     }
     if(!placed) return { outcome:'do_not_advance', total:0, reasons:['No tier fully met — not ready for independent placement'], recommendedBelt:'Below White' };
     return { outcome:'advance', total:null, reasons:[`Highest tier fully met: ${placed.label}`], recommendedBelt:placed.places };
@@ -3350,10 +3380,12 @@ function ovsOpenCapture(obsId){
   // Resume: load the server-saved scores, then overlay any local crash-safety draft
   // (written on every score) so an accidental close before an explicit save isn't lost.
   if(o.status === 'in_progress' && o.itemScores) ovsCapture.scores = { ...o.itemScores };
+  if(o.status === 'in_progress' && o.itemNotes)  ovsCapture.notes  = { ...o.itemNotes };
   if(o.stopWork) ovsCapture.stopWork = { ...o.stopWork };
   const draft = ovsLoadDraft(obsId);
   if(draft){
     ovsCapture.scores = { ...(ovsCapture.scores||{}), ...(draft.scores||{}) };
+    ovsCapture.notes  = { ...(ovsCapture.notes||{}),  ...(draft.notes||{}) };
     if(draft.stopWork) ovsCapture.stopWork = { ...draft.stopWork };
   }
   renderAObservations();
@@ -3380,6 +3412,7 @@ async function ovsUnlock(){
     ovsCapture.observerStaffId = res.observer_id;
     ovsCapture.observerName = res.observer_name;
     if(!ovsCapture.scores) ovsCapture.scores = { ...(o.itemScores||{}) };
+    if(!ovsCapture.notes)  ovsCapture.notes  = { ...(o.itemNotes||{}) };
     if(!ovsCapture.stopWork) ovsCapture.stopWork = o.stopWork || { active:false };
     toast(`Verified — observer ${ovsCapture.observerName}. Begin scoring.`,'ok');
     renderAObservations();
@@ -3394,6 +3427,54 @@ function ovsScore(itemId, value){
   ovsCapture.scores[itemId] = value;
   ovsSaveDraft();
   renderAObservations();
+}
+
+// T91: the typed/dictated half of an answer. Deliberately does NOT re-render — a full
+// re-render on every keystroke would replace the textarea the observer is typing in and
+// throw away the caret (the mic writes through the same path, firing 'input' per phrase).
+// The derived UI is patched in place instead.
+function ovsNote(itemId, val){
+  if(!ovsCapture || !ovsCapture.unlocked) return;
+  ovsCapture.notes = ovsCapture.notes || {};
+  ovsCapture.notes[itemId] = val;
+  ovsSaveDraft();
+  ovsRefreshProgress();
+}
+
+// Patch the counter, progress bar, outcome chips, submit button and per-item accent to
+// match the current scores+evidence, without rebuilding the capture screen.
+function ovsRefreshProgress(){
+  if(!ovsCapture) return;
+  const o = (DB.observations||[]).find(x => x.id === ovsCapture.obsId); if(!o) return;
+  const cl = ovsInstrument(o.checklistBelt || o.targetBelt); if(!cl) return;
+  const units = ovsScorableUnits(cl);
+  const eff = ovsEffectiveScores(ovsCapture.scores, ovsCapture.notes);
+  const answered = units.filter(u => eff[u.id] !== undefined && eff[u.id] !== null).length;
+  const outcome = ovsComputeOutcome(cl, eff, ovsCapture.stopWork || { active:false });
+
+  const cnt = document.getElementById('ovs-count');
+  if(cnt) cnt.textContent = `${answered}/${units.length} answered`;
+  const bar = document.getElementById('ovs-bar');
+  if(bar){
+    bar.style.width = (units.length ? Math.round(answered/units.length*100) : 0) + '%';
+    bar.style.background = (units.length && answered >= units.length) ? '#22c55e' : '#0ea5e9';
+  }
+  ['ovs-chip','ovs-chip2'].forEach(id => { const e = document.getElementById(id); if(e) e.innerHTML = ovsOutcomeChip(outcome.outcome); });
+  const rsn = document.getElementById('ovs-reason');
+  if(rsn) rsn.textContent = outcome.reasons[0] ? '— ' + outcome.reasons[0] : '';
+  const btn = document.getElementById('ovs-submit');
+  const armed = ovsArmed && ovsArmed.action==='submit' && ovsArmed.id===ovsCapture.obsId;
+  if(btn && !armed){
+    const ok = outcome.outcome !== 'incomplete';
+    btn.disabled = !ok;
+    btn.style.opacity = ok ? '' : '.5';
+    btn.style.cursor = ok ? '' : 'not-allowed';
+    btn.textContent = ok ? 'Submit observation' : 'Answer every item to submit';
+  }
+  units.forEach(u => {
+    const card = document.getElementById('ovs-item-' + u.id);
+    if(card) card.style.borderLeftColor = (eff[u.id] !== undefined && eff[u.id] !== null) ? '#22c55e' : 'var(--bdr)';
+  });
 }
 
 function ovsToggleStopWork(){
@@ -3441,9 +3522,14 @@ function ovsRenderCapture(){
   // Unlocked → scored checklist, grouped, with a live outcome preview.
   const units = ovsScorableUnits(cl);
   const scores = ovsCapture.scores || {};
+  const notes  = ovsCapture.notes  || {};
   const stop = ovsCapture.stopWork || { active:false };
-  const scored = units.filter(u => scores[u.id] !== undefined && scores[u.id] !== null).length;
-  const outcome = ovsComputeOutcome(cl, scores, stop);
+  // T91: only an item with typed/dictated evidence counts as answered, and only those
+  // reach the outcome engine. `scores` is still what highlights the tapped button, so a
+  // score entered before its evidence stays visible rather than appearing to be lost.
+  const eff = ovsEffectiveScores(scores, notes);
+  const scored = units.filter(u => eff[u.id] !== undefined && eff[u.id] !== null).length;
+  const outcome = ovsComputeOutcome(cl, eff, stop);
 
   // Group units in render order.
   const groups = []; const gmap = {};
@@ -3476,17 +3562,36 @@ function ovsRenderCapture(){
     </div>`;
   };
 
+  // T91: the required typed-or-spoken answer for one item. The mic writes into the same
+  // textarea and fires 'input', so dictation and typing go down one path (dictation.js;
+  // the button renders as '' where the Web Speech API is unavailable).
+  const evidenceBox = (u) => {
+    const tid = 'ovs-note-' + u.id;
+    const val = notes[u.id] || '';
+    const ok = ovsNoteOk(val);
+    return `<div style="margin-top:9px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px">
+        <label for="${tid}" style="font-size:11px;font-weight:700;color:${ok?'var(--txt3)':'#f59e0b'}">What you saw${ok?'':' — required'}</label>
+        ${(window.micButtonHTML?micButtonHTML(tid,{title:'Speak this answer instead of typing it'}):'')}
+      </div>
+      <textarea id="${tid}" rows="2" oninput="ovsNote('${u.id}', this.value)"
+        placeholder="Type or dictate what you actually observed for this item…"
+        style="width:100%;box-sizing:border-box;background:var(--bg2,#0e1328);border:1px solid ${ok?'var(--bdr2)':'#f59e0b66'};border-radius:8px;padding:7px 9px;color:var(--txt1);font-size:12.5px;font-family:inherit;line-height:1.5;resize:vertical">${esc0(val)}</textarea>
+    </div>`;
+  };
+
   const body = groups.map(g => `
     <div style="margin-bottom:14px">
       <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--txt3);font-weight:700;margin:6px 0 8px">${g}</div>
       ${gmap[g].map(u => `
-        <div style="padding:10px 12px;border:1px solid var(--bdr);border-left:3px solid ${(scores[u.id]!==undefined&&scores[u.id]!==null)?'#22c55e':'var(--bdr)'};border-radius:10px;margin-bottom:8px;background:var(--s1)">
+        <div id="ovs-item-${u.id}" style="padding:10px 12px;border:1px solid var(--bdr);border-left:3px solid ${(eff[u.id]!==undefined&&eff[u.id]!==null)?'#22c55e':'var(--bdr)'};border-radius:10px;margin-bottom:8px;background:var(--s1)">
           <div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:8px">
             <div style="font-size:13px;line-height:1.5">${u.n?`<span style="color:var(--txt3)">${u.n}.</span> `:''}${u.text}</div>
             ${u.meta?`<span style="font-size:10px;color:${u.meta==='Mandatory'?'#ef4444':'var(--txt3)'};font-weight:700;white-space:nowrap;align-self:flex-start">${u.meta}</span>`:''}
           </div>
           ${guideBlock(u)}
           <div style="display:flex;gap:6px">${u.kind==='pf'?pfBtns(u):scaleBtns(u)}</div>
+          ${evidenceBox(u)}
         </div>`).join('')}
     </div>`).join('');
 
@@ -3496,23 +3601,24 @@ function ovsRenderCapture(){
   return `<div style="max-width:760px">${header}
     <div class="card" style="position:sticky;top:0;z-index:5"><div class="card-body">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-        <div style="font-size:12px;color:var(--txt2)">Observer: <strong>${ovsCapture.observerName}</strong> &middot; ${scored}/${units.length} scored</div>
+        <div style="font-size:12px;color:var(--txt2)">Observer: <strong>${ovsCapture.observerName}</strong> &middot; <span id="ovs-count">${scored}/${units.length} answered</span></div>
         <div style="display:flex;align-items:center;gap:10px">
-          ${ovsOutcomeChip(outcome.outcome)}
+          <span id="ovs-chip">${ovsOutcomeChip(outcome.outcome)}</span>
           <button class="btn btn-ghost btn-sm" onclick="ovsToggleGuide()" title="Show or hide the per-item observer guidance">${guideOpen?'Hide guidance':'Show guidance'}</button>
           <button class="btn btn-ghost btn-sm" onclick="ovsSaveProgress()" title="Save your progress and finish later">Save &amp; resume later</button>
           <button class="btn btn-sm" onclick="ovsToggleStopWork()" style="border:1.5px solid #ef4444;color:${stop.active?'#0b0f17':'#ef4444'};background:${stop.active?'#ef4444':'transparent'};font-weight:800">${stop.active?'■ STOP-WORK ON':'⛔ Stop-Work'}</button>
         </div>
       </div>
-      <div style="margin-top:10px;height:5px;border-radius:4px;background:rgba(148,163,184,.18);overflow:hidden" title="${scored} of ${units.length} items scored">
-        <div style="height:100%;width:${units.length?Math.round(scored/units.length*100):0}%;background:${(units.length&&scored>=units.length)?'#22c55e':'#0ea5e9'};transition:width .25s"></div>
+      <div style="margin-top:10px;height:5px;border-radius:4px;background:rgba(148,163,184,.18);overflow:hidden" title="${scored} of ${units.length} items answered">
+        <div id="ovs-bar" style="height:100%;width:${units.length?Math.round(scored/units.length*100):0}%;background:${(units.length&&scored>=units.length)?'#22c55e':'#0ea5e9'};transition:width .25s"></div>
       </div>
+      <div style="margin-top:8px;font-size:11.5px;color:var(--txt3);line-height:1.5">Every item needs both a score and a written or spoken account of what you saw. A score on its own does not count.</div>
     </div></div>
     ${stop.active?`<div style="margin:10px 0;padding:10px 12px;background:#ef44441a;border:1px solid #ef444455;border-radius:8px;color:#ef4444;font-size:12px;font-weight:600">Stop-Work is active. On submit this observation records DO NOT ADVANCE regardless of item scores.</div>`:''}
     <div style="margin-top:14px">${body}</div>
     <div class="card"><div class="card-body">
-      <div style="font-size:12px;color:var(--txt2);margin-bottom:10px"><strong>Result preview:</strong> ${ovsOutcomeChip(outcome.outcome)} ${outcome.reasons[0]?`<span style="color:var(--txt3)">— ${outcome.reasons[0]}</span>`:''}</div>
-      <button class="btn ${armed?'btn-gold':'btn-primary'}" style="width:100%;justify-content:center" ${canSubmit?'':'disabled style="opacity:.5;cursor:not-allowed;width:100%;justify-content:center"'} onclick="ovsSubmit()">${armed?'Tap again to confirm submit':canSubmit?'Submit observation':'Score every item to submit'}</button>
+      <div style="font-size:12px;color:var(--txt2);margin-bottom:10px"><strong>Result preview:</strong> <span id="ovs-chip2">${ovsOutcomeChip(outcome.outcome)}</span> <span id="ovs-reason" style="color:var(--txt3)">${outcome.reasons[0]?`— ${outcome.reasons[0]}`:''}</span></div>
+      <button id="ovs-submit" class="btn ${armed?'btn-gold':'btn-primary'}" style="width:100%;justify-content:center${canSubmit?'':';opacity:.5;cursor:not-allowed'}" ${canSubmit?'':'disabled'} onclick="ovsSubmit()">${armed?'Tap again to confirm submit':canSubmit?'Submit observation':'Answer every item to submit'}</button>
     </div></div>
   </div>`;
 }
@@ -3524,9 +3630,13 @@ function ovsSubmit(){
   const o = (DB.observations||[]).find(x => x.id === ovsCapture.obsId); if(!o) return;
   const cl = ovsInstrument(o.checklistBelt || o.targetBelt);
   const scores = ovsCapture.scores || {};
+  const notes  = ovsCapture.notes  || {};
   const stop = ovsCapture.stopWork || { active:false };
-  const outcome = ovsComputeOutcome(cl, scores, stop);
-  if(outcome.outcome === 'incomplete'){ toast('Score every item before submitting.','err'); return; }
+  // T91: submit on the evidence-gated scores. Every unit reaching the engine therefore
+  // carries a written or dictated answer, so item_scores and item_notes agree on submit
+  // and confirmObservation's later recompute from item_scores alone still matches.
+  const outcome = ovsComputeOutcome(cl, ovsEffectiveScores(scores, notes), stop);
+  if(outcome.outcome === 'incomplete'){ toast('Every item needs a score and a typed or spoken answer before submitting.','err'); return; }
   // Two-tap arm
   if(!(ovsArmed && ovsArmed.action==='submit' && ovsArmed.id===o.id)){
     ovsArmed = { action:'submit', id:o.id };
@@ -3537,13 +3647,13 @@ function ovsSubmit(){
   const now = new Date().toISOString();
   const handshake = { ...(o.handshake||{}), observer_id: ovsCapture.observerStaffId, observer_used_at: now };
   // local
-  o.status = 'submitted'; o.reviewStatus = 'pending'; o.itemScores = scores;
+  o.status = 'submitted'; o.reviewStatus = 'pending'; o.itemScores = scores; o.itemNotes = notes;
   o.stopWork = stop; o.totalPoints = outcome.total; o.outcome = outcome.outcome;
   o.outcomeReasons = outcome.reasons; o.recommendedBelt = outcome.recommendedBelt;
   o.observerId = ovsCapture.observerStaffId; o.observerName = ovsCapture.observerName;
   o.handshake = handshake; o.submittedAt = now;
   const backend = {
-    status:'submitted', review_status:'pending', item_scores:scores, stop_work:stop,
+    status:'submitted', review_status:'pending', item_scores:scores, item_notes:notes, stop_work:stop,
     total_points: outcome.total, outcome: outcome.outcome, outcome_reasons: outcome.reasons,
     recommended_belt: outcome.recommendedBelt, assessor_id: ovsCapture.observerStaffId,
     assessor_name: ovsCapture.observerName, handshake, submitted_at: now, last_active_at: now
@@ -3569,6 +3679,7 @@ function ovsSaveDraft(){
   try {
     localStorage.setItem(ovsDraftKey(ovsCapture.obsId), JSON.stringify({
       scores: ovsCapture.scores || {},
+      notes: ovsCapture.notes || {},          // T91: evidence is drafted with the scores
       stopWork: ovsCapture.stopWork || { active:false },
       ts: Date.now()
     }));
@@ -3587,18 +3698,22 @@ function ovsSaveProgress(){
   if(!ovsCapture || !ovsCapture.unlocked) return;
   const o = (DB.observations||[]).find(x => x.id === ovsCapture.obsId); if(!o) return;
   const scores = ovsCapture.scores || {};
+  const notes  = ovsCapture.notes  || {};
   const stop = ovsCapture.stopWork || { active:false };
   const now = new Date().toISOString();
-  o.status = 'in_progress'; o.itemScores = scores; o.stopWork = stop; o.lastActiveAt = now;
+  o.status = 'in_progress'; o.itemScores = scores; o.itemNotes = notes; o.stopWork = stop; o.lastActiveAt = now;
   if(IS_LIVE && typeof SB!=='undefined' && SB.updateObservation && !String(o.id).startsWith('obs-')){
-    SB.updateObservation(o.id, { status:'in_progress', item_scores:scores, stop_work:stop, last_active_at:now })
+    SB.updateObservation(o.id, { status:'in_progress', item_scores:scores, item_notes:notes, stop_work:stop, last_active_at:now })
       .catch(e => handleSyncError(e,'Observation save'));
   }
   ovsSaveDraft();                 // keep the local draft as a same-device safety net
   ovsCapture = null; ovsArmed = null;
   const cl = ovsInstrument(o.checklistBelt || o.targetBelt);
-  const scored = cl ? ovsScorableUnits(cl).filter(u => scores[u.id] !== undefined && scores[u.id] !== null).length : Object.keys(scores).length;
-  toast(`Saved — ${scored} item${scored===1?'':'s'} recorded. Resume anytime from Observations.`,'ok');
+  // Count what is genuinely complete (score + evidence), so a resumed observation does
+  // not report progress the gate will not accept.
+  const eff = ovsEffectiveScores(scores, notes);
+  const scored = cl ? ovsScorableUnits(cl).filter(u => eff[u.id] !== undefined && eff[u.id] !== null).length : Object.keys(eff).length;
+  toast(`Saved — ${scored} item${scored===1?'':'s'} fully answered. Resume anytime from Observations.`,'ok');
   renderAObservations();
 }
 
@@ -3611,6 +3726,35 @@ function ovsReviewSearch(v){
   const inp = document.getElementById('ovs-rev-search');
   if(inp){ inp.focus(); try{ inp.setSelectionRange(v.length, v.length); }catch(_){} }
 }
+// T91: the reviewer confirming the gate has to be able to read the answers the observer
+// typed or spoke, or the evidence is write-only. Native <details>, so no extra state.
+// Records submitted before T91 have no item_notes and say so plainly rather than
+// rendering as an empty checklist.
+function ovsEvidenceBlock(o){
+  const cl = ovsInstrument(o.checklistBelt || o.targetBelt);
+  const units = cl ? ovsScorableUnits(cl) : [];
+  const notes = o.itemNotes || {};
+  const scores = o.itemScores || {};
+  if(!units.length) return '';
+  const written = units.filter(u => ovsNoteOk(notes[u.id])).length;
+  const rows = units.map(u => {
+    const v = scores[u.id];
+    const shown = (v === undefined || v === null) ? '—' : (u.kind === 'pf' ? String(v).toUpperCase() : v);
+    const note = notes[u.id];
+    return `<div style="padding:7px 0;border-top:1px solid var(--bdr)">
+      <div style="display:flex;gap:8px;align-items:baseline">
+        <span style="flex:0 0 34px;font-weight:800;font-size:12px;color:var(--txt2)">${shown}</span>
+        <span style="font-size:12px;color:var(--txt2);line-height:1.5">${u.n?`${u.n}. `:''}${u.text}</span>
+      </div>
+      <div style="margin:3px 0 0 42px;font-size:12px;line-height:1.55;color:${note?'var(--txt1)':'#f59e0b'}">${note?esc0(note):'No answer recorded for this item.'}</div>
+    </div>`;
+  }).join('');
+  return `<details style="border:1px solid var(--bdr);border-radius:10px;background:var(--s1);padding:8px 12px">
+    <summary style="cursor:pointer;font-size:11.5px;color:var(--txt3);font-weight:700">Observer's answers — ${written}/${units.length} items with a written or spoken account</summary>
+    <div style="margin-top:6px">${rows}</div>
+  </details>`;
+}
+
 function renderAObservationReviews(){
   const el = ovsEl('observationreviews');
   if(!el) return;
@@ -3646,7 +3790,8 @@ function renderAObservationReviews(){
       <td style="padding:10px 8px">${ovsOutcomeChip(o.outcome)}</td>
       <td style="padding:10px 8px;font-size:12px;color:var(--txt2)">${o.observerName||'—'}<div style="font-size:11px;color:var(--txt3)">${o.outcomeReasons&&o.outcomeReasons[0]?o.outcomeReasons[0]:''}</div></td>
       <td style="padding:10px 8px;text-align:right">${actions}</td>
-    </tr>`;
+    </tr>
+    <tr><td colspan="5" style="padding:0 8px 10px">${ovsEvidenceBlock(o)}</td></tr>`;
   }).join('');
 
   el.innerHTML = `
