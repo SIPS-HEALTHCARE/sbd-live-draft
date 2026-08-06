@@ -2012,8 +2012,12 @@ window.onload = function(){
   // He was describing two separate faults, not one.
   //
   // 1. Two minutes is far too short for a platform people read and study on.
-  //    Raised to thirty, which is the usual figure for a training system and still
-  //    well inside what an unattended shared workstation should tolerate.
+  //    Raised to fifteen. Thirty was tried first, but on a shared clinical
+  //    workstation thirty idle minutes is too long to leave a session open, and to
+  //    the client it read as "the logout is not working" because it never fired
+  //    inside a normal sitting. Fifteen logs an unattended station out on a sensible
+  //    security window while, with fault 2 below fixed, never interrupting someone
+  //    who is actually reading or scrolling.
   //
   // 2. The activity listeners missed most real engagement, which is why it fired
   //    even while someone was clearly using it:
@@ -2024,7 +2028,7 @@ window.onload = function(){
   //      - there were no touch listeners at all, so on a phone the only things
   //        that counted were a tap or a keystroke. Reading on mobile logged you
   //        out on a timer regardless of what you were doing.
-  const INACTIVITY_MS = 30 * 60 * 1000;
+  const INACTIVITY_MS = 15 * 60 * 1000;
   let inactivityTimer;
   const onboardingActive = () => {
     // Tour engine running, or the welcome/tour overlays are visible on screen
