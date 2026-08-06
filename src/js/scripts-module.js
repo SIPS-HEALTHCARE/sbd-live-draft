@@ -31,7 +31,8 @@
 // ============================================================================
 'use strict';
 
-const SCRIPTS_MODULE_ID = 'scripts';
+// SCRIPTS_MODULE_ID ('scripts') is declared in foundations.js, which loads
+// first and whose getFoundationsAssignments() filter needs it. Consumed here.
 
 // Titles that name script content in the belt curriculum. Covers every belt:
 // White S5+S6, Yellow S4, Green S4, Blue S4-S8, Brown S4, Black S4.
@@ -46,10 +47,20 @@ function scriptSectionsForBelt(belt) {
 }
 
 // Belts that actually carry script sections, in belt order.
-function scriptsBeltsWithContent() {
+//
+// `upTo` caps the list at one belt — pass a staff member's own belt and they get
+// White..theirs. Nowhere else on the platform does a staffer read curriculum
+// above their own belt (Study & Practice is hard-locked to s.belt, no selector),
+// and the client's ask was for people who "pass belts but need to refine their
+// scripts", i.e. belts already earned. Called with no argument it returns every
+// belt, which is what leader-side totals want.
+function scriptsBeltsWithContent(upTo) {
   const order = (typeof BELT_ORDER !== 'undefined') ? BELT_ORDER
     : ['White', 'Yellow', 'Green', 'Blue', 'Brown', 'Black'];
-  return order.filter(b => scriptSectionsForBelt(b).length > 0);
+  // An unrecognised belt caps at nothing rather than at everything — a scope
+  // guard should fail closed.
+  const cap = upTo ? order.indexOf(upTo) : order.length - 1;
+  return order.slice(0, cap + 1).filter(b => scriptSectionsForBelt(b).length > 0);
 }
 
 // ── Assignment state ────────────────────────────────────────────────────────
@@ -138,7 +149,7 @@ function renderSScripts() {
     return;
   }
 
-  const belts = scriptsBeltsWithContent();
+  const belts = scriptsBeltsWithContent(s.belt);
   if (!belts.length) { el.innerHTML = '<div class="empty-state"><div class="empty-ttl">No script content found</div></div>'; return; }
   if (!window._scriptsBelt || belts.indexOf(window._scriptsBelt) === -1) {
     window._scriptsBelt = belts.indexOf(s.belt) !== -1 ? s.belt : belts[0];
@@ -160,7 +171,7 @@ function renderSScripts() {
     + '</div></div>';
 
   // Belt selector — someone sent back to refine scripts may need any belt they
-  // have already earned, not only their current one.
+  // have already earned, not only their current one. Never a belt above it.
   html += '<div style="display:flex;gap:6px;overflow-x:auto;margin-bottom:14px;padding-bottom:2px">'
     + belts.map(b => {
       const on = b === belt;
@@ -214,10 +225,12 @@ function hAssignScriptsModal(staffId) {
   if (!scriptsCanAssign()) { toast('Assessors cannot assign modules', 'err'); return; }
   const s = getStaff(staffId); if (!s) return;
   if (isScriptsAssigned(staffId)) { toast('Scripts already assigned', 'info'); return; }
-  const total = scriptsBeltsWithContent().reduce((n, b) => n + scriptSectionsForBelt(b).length, 0);
+  const belts = scriptsBeltsWithContent(s.belt);
+  const total = belts.reduce((n, b) => n + scriptSectionsForBelt(b).length, 0);
   let html = '<div style="margin-bottom:12px;font-size:13px;color:var(--txt2)">Assign the <strong style="color:var(--txt)">Scripts</strong> module to <strong style="color:var(--txt)">' + fullName(s) + '</strong>.</div>';
-  html += '<div style="font-size:12px;color:var(--txt3);line-height:1.6;margin-bottom:14px">A Scripts tab appears for this person only, carrying all ' + total
-    + ' script sections across every belt. The scripts stay in place inside the belt curriculum — this does not move them.</div>';
+  html += '<div style="font-size:12px;color:var(--txt3);line-height:1.6;margin-bottom:14px">A Scripts tab appears for this person only, carrying the ' + total
+    + ' script sections from White through ' + s.belt + ' Belt — the belts they have reached. '
+    + 'The scripts stay in place inside the belt curriculum — this does not move them.</div>';
   html += '<div style="margin-bottom:12px"><label style="display:block;font-size:12px;color:var(--txt2);margin-bottom:4px">Reason <span style="color:var(--txt3)">(what prompted this, optional)</span></label>';
   html += '<input id="scripts-assign-trigger" type="text" class="form-input" placeholder="e.g. OR phone script drift, observed 2026-08-05"></div>';
   html += '<div style="display:flex;gap:8px;justify-content:flex-end">';

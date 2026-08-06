@@ -798,9 +798,17 @@ function _fndSaveAssignmentStatus(staffId,moduleId,status){try{if(typeof IS_LIVE
 
 // ── Foundations 3-Gate Data Helpers ──
 // T92: the standalone Scripts module stores its assignment in this same table
-// (module_id='scripts' — see scripts-module.js for why). Filtered out here, in
-// the one accessor every Foundations consumer routes through, so counts, rollups
-// and the "N/10" convention keep meaning exactly what they meant before.
+// (see scripts-module.js for why). Filtered out here, in the one accessor every
+// Foundations consumer routes through, so counts, rollups and the "N/10"
+// convention keep meaning exactly what they meant before.
+//
+// The id is DECLARED HERE, not in scripts-module.js, because this file loads
+// first and getFoundationsAssignments — which every Foundations screen calls —
+// cannot work without it. Declaring it in the later file would make Foundations
+// depend on Scripts loading, so a 404 on scripts-module.js would take out
+// Foundations too. scripts-module.js consumes this const; it must not redeclare
+// it (a second top-level `const` of the same name is a SyntaxError).
+const SCRIPTS_MODULE_ID = 'scripts';
 function getFoundationsAssignments(staffId){return (DB.foundationsAssignments||[]).filter(a=>a.staffId===staffId&&a.moduleId!==SCRIPTS_MODULE_ID);}
 function isModuleAssigned(staffId,moduleId){return (DB.foundationsAssignments||[]).some(a=>a.staffId===staffId&&a.moduleId===moduleId);}
 function getModuleGates(staffId,moduleId){

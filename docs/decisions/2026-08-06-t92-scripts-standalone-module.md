@@ -37,6 +37,14 @@ sections out of `FULL_CURRICULUM_DATA.belts[belt]` at render time, and the exist
 Practice → Scripts tab is switched over to that same function, so there is one definition of
 "which sections are the scripts" instead of two (B6).
 
+**Belt scope (review follow-up, 2026-08-07):** the assigned module offers White through the
+staff member's own belt, not all six. Study & Practice is hard-locked to `s.belt` with no belt
+selector, so an all-belts module would have been the one place a White Belt could read the
+Black Belt scripts. The client's case is somebody who "passes belts" and needs to refine them,
+which means belts already earned — `scriptsBeltsWithContent(s.belt)`. Called with no argument
+it still returns every belt, which is what the leader-side total wants. An unrecognised belt
+offers nothing rather than everything.
+
 Completion is leader-confirmed, not gated. Scripts are spoken language with no question bank;
 there is nothing to auto-score, and the leader is the one judging whether the delivery has
 been refined. The assignment's own `status` column carries it (`assigned` → `completed`).
@@ -46,7 +54,7 @@ been refined. The assignment's own `status` column carries it (`assigned` → `c
 | File | Change |
 |---|---|
 | `src/js/scripts-module.js` | **new** (B7: new domain → new file, not `ui-views.js`) |
-| `src/js/foundations.js` | `getFoundationsAssignments()` filters the scripts row out — the one shared accessor every Foundations consumer routes through; `renderHTraining()` gains one Scripts column |
+| `src/js/foundations.js` | declares `SCRIPTS_MODULE_ID` (this file loads first, and its accessor needs it — declaring it in `scripts-module.js` would make every Foundations screen depend on that file loading); `getFoundationsAssignments()` filters the scripts row out — the one shared accessor every Foundations consumer routes through; `renderHTraining()` gains one Scripts column |
 | `src/js/ui-views.js` | `renderSView` route + hide-list, `enterPortal` nav gate, Study Scripts tab switched to the shared extractor (net deletion there) |
 | `index.html` | nav item, view container, script tag, cache-bust bumps |
 
@@ -61,6 +69,8 @@ uses it, and `assignModule`'s own dedupe check, which is keyed on module id anyw
 `delete from public.foundations_assignments where module_id = 'scripts';`
 No schema to unwind.
 
-**Verify:** `node scripts/verify-scripts-module.js` — asserts every belt yields at least one
-script section, that the belt curriculum arrays are unchanged by this feature, and that the
-scripts assignment row is invisible to the Foundations accessor.
+**Verify:** `node scripts/verify-scripts-module.js` (33 assertions) — asserts every belt yields
+at least one script section, that a staffer of each belt is offered exactly White..their own,
+that the belt curriculum arrays are unchanged by this feature, that the scripts assignment row
+is invisible to the Foundations accessor, and that `foundations.js` — not the later-loading
+`scripts-module.js` — owns the `SCRIPTS_MODULE_ID` declaration.
