@@ -2038,7 +2038,32 @@ already named above: **an ask next to an urgent one still needs its own row.**
   Not tested, and cannot be from here: the real click-through and device dictation, which need
   writes on production.
 
-- [ ] **T92** Scripts as a separate module that can be assigned on its own · est 2d · Medium
+- [x] **T92** Scripts as a separate module that can be assigned on its own · est 2d · Medium
+  **Code-complete 2026-08-06, reviewed 2026-08-07, no migration needed, pending deploy + client
+  confirmation.** Built as a second surface over the same content: `scriptSectionsForBelt()` in
+  the new `src/js/scripts-module.js` selects the script sections out of `FULL_CURRICULUM_DATA.belts`
+  at render time, and the existing Study & Practice Scripts tab now calls that same function,
+  so the scripts are not copied and not moved. Assignment reuses `foundations_assignments`
+  with `module_id='scripts'` — free-text column, unique constraint and the right RLS already
+  there — so this ships with **zero migrations** instead of queueing behind the ones already
+  waiting. `getFoundationsAssignments()` filters that row out, so Foundations still counts 10.
+  Assigned from the Scripts column in the existing Training table; a Scripts tab then appears
+  for that person only; the leader marks it complete (no gates — scripts are spoken language
+  with no question bank).
+
+  The review's two findings are fixed (2026-08-07):
+  - The module offered all six belts. Nowhere else does a staffer read curriculum above their own
+    belt — Study & Practice is hard-locked to `s.belt` with no selector — so this was the one place
+    a White Belt could read the Black Belt scripts. It now offers White through their own belt.
+    Not only their current belt: the ask is about somebody who *passes belts* and needs to refine
+    them, so belts already earned is the line.
+  - `foundations.js` read `SCRIPTS_MODULE_ID` from `scripts-module.js`, which loads after it. The
+    declaration moved to `foundations.js`, so a 404 on the new file can no longer take out every
+    Foundations screen. A `typeof` guard was the wrong fix — it would have made Foundations
+    silently stop filtering the scripts row (10 becomes 11) instead of failing loudly.
+
+  Verified by `node scripts/verify-scripts-module.js` (33 assertions).
+  Design note: `docs/decisions/2026-08-06-t92-scripts-standalone-module.md`, §16B in ARCHITECTURE.
   His words: *"we want it to still be here, but we also want to have a separate module just for
   the scripts on the side… it's going to stay here, but also be here."* And the reason, which is
   the part that matters: *"in the development process, if somebody passes belts but they need to

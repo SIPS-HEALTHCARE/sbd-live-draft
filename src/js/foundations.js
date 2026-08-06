@@ -797,7 +797,19 @@ function _fndSaveAssignment(a){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typ
 function _fndSaveAssignmentStatus(staffId,moduleId,status){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.updateFoundationsAssignmentStatus){SB.updateFoundationsAssignmentStatus(staffId,moduleId,status).catch(e=>{if(typeof handleSyncError==='function')handleSyncError(e,'Foundations status');else console.warn('[fnd] status sync',e&&e.message);});}}catch(e){}}
 
 // ── Foundations 3-Gate Data Helpers ──
-function getFoundationsAssignments(staffId){return (DB.foundationsAssignments||[]).filter(a=>a.staffId===staffId);}
+// T92: the standalone Scripts module stores its assignment in this same table
+// (see scripts-module.js for why). Filtered out here, in the one accessor every
+// Foundations consumer routes through, so counts, rollups and the "N/10"
+// convention keep meaning exactly what they meant before.
+//
+// The id is DECLARED HERE, not in scripts-module.js, because this file loads
+// first and getFoundationsAssignments — which every Foundations screen calls —
+// cannot work without it. Declaring it in the later file would make Foundations
+// depend on Scripts loading, so a 404 on scripts-module.js would take out
+// Foundations too. scripts-module.js consumes this const; it must not redeclare
+// it (a second top-level `const` of the same name is a SyntaxError).
+const SCRIPTS_MODULE_ID = 'scripts';
+function getFoundationsAssignments(staffId){return (DB.foundationsAssignments||[]).filter(a=>a.staffId===staffId&&a.moduleId!==SCRIPTS_MODULE_ID);}
 function isModuleAssigned(staffId,moduleId){return (DB.foundationsAssignments||[]).some(a=>a.staffId===staffId&&a.moduleId===moduleId);}
 function getModuleGates(staffId,moduleId){
  const p=(DB.foundationsProgress||[]).find(x=>x.staffId===staffId&&x.moduleId===moduleId);
@@ -1360,13 +1372,17 @@ function renderHTraining(){
  
  // Staff table
  html+='<div class="card mb16"><div class="card-hd"><div class="card-ttl">Staff Training</div></div>';
- html+='<div class="card-body" style="padding:0"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Name</th>'+(isSystemWide?'<th>Facility</th>':'')+'<th>Belt</th><th>Modules</th><th>Actions</th></tr></thead><tbody>';
+ html+='<div class="card-body" style="padding:0"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Name</th>'+(isSystemWide?'<th>Facility</th>':'')+'<th>Belt</th><th>Modules</th><th>Scripts</th><th>Actions</th></tr></thead><tbody>';
  rows.sort((a,b)=>fullName(a.s).localeCompare(fullName(b.s)));
  rows.forEach(r=>{
    html+='<tr><td style="font-weight:600">'+fullName(r.s)+'</td>';
    if(isSystemWide){const _fn=(DB.facilities.find(f=>f.id===r.s.fid)||{}).name||'—';html+='<td style="font-size:12px;color:#94a3b8">'+_fn+'</td>';}
    html+='<td><span class="bb bb-'+r.s.belt+'">'+r.s.belt+'</span></td>';
    html+='<td>'+(r.assigned>0?'<span class="'+(r.pct===100?'tc-ok':r.pct>0?'tc-warn':'tc-muted')+'">'+r.done+'/'+r.assigned+'</span>':'<span class="tc-muted">None</span>')+'</td>';
+   // T92: the standalone Scripts module, assigned from the same screen as the
+   // Foundations modules because the client asked for the assign surface he
+   // already knows. Its own file owns the cell's state and buttons.
+   html+='<td style="white-space:nowrap">'+((typeof scriptsCellHTML==='function')?scriptsCellHTML(r.s.id):'')+'</td>';
    html+='<td style="white-space:nowrap">';
    if(r.assigned>0) html+='<button class="btn btn-ghost btn-xs" onclick="hFndStaffDetail(\''+r.s.id+'\')">View</button> ';
    if(!isAssessor){
