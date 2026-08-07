@@ -675,7 +675,7 @@ function renderHView(view){
     toast('RBAC Guard: Unauthorized access to Facility Portal', 'err');
     return;
   }
-  ['h-dashboard','h-staff','h-profile','h-milestones','h-posschool','h-training','h-instruments','h-preceptor','h-scoreboard','h-schedule','h-attendance','h-reports','h-assessments','h-progression','h-guide','h-settings','h-david'].forEach(v=>{
+  ['h-dashboard','h-staff','h-profile','h-milestones','h-posschool','h-training','h-instruments','h-checklists','h-preceptor','h-scoreboard','h-schedule','h-attendance','h-reports','h-assessments','h-progression','h-guide','h-settings','h-david'].forEach(v=>{
     const el=document.getElementById(v);
     if(el){ el.classList.add('hidden'); el.classList.remove('fade-in'); }
   });
@@ -696,6 +696,7 @@ function renderHView(view){
     'h-posschool':()=>renderHPosSchool(),
     'h-training':()=>{ if(typeof renderHTraining==='function') renderHTraining(); },
     'h-instruments':()=>{ if(typeof renderHInstruments==='function') renderHInstruments(); },
+    'h-checklists':()=>renderHChecklists(),
     'h-preceptor':()=>{ if(typeof renderHPreceptor==='function') renderHPreceptor(); },
     'h-scoreboard':()=>renderHScoreboard(),
     'h-schedule':()=>renderHSchedule(),
@@ -3108,6 +3109,93 @@ function ovsScorableUnits(cl){
     id: d.id, text: d.text, kind: 'pf', meta: 'Pass / Fail', group: c.name
   })));
   return units;
+}
+
+// ── T30: read-only instrument view for facility leaders ──────────────────────
+// Client ask (2026-07-25): a leader can read the checklist their people are scored
+// against, and still cannot change it. There is one checklist per belt shared
+// platform-wide with no per-facility copy, so edit rights are not a permission toggle —
+// visibility is. The lock is already server-side and this screen adds no write path:
+// oc_authenticated_select lets any signed-in user READ active rows,
+// oc_write_master (20260703233921) restricts every write to master_admin/system_admin.
+//
+// Flattened with ovsScorableUnits, NOT cl.items. Five schema kinds are live and the
+// observer console scores exactly what that function returns, so a hand-rolled flatten
+// would show leaders a different list from the one observers work off. Concretely: the
+// Black instrument carries items = [] with its dimensions in schema.components, so an
+// items.map here renders an empty screen for the one belt that certifies independent work.
+function ovsPassRule(cl){
+  const s = (cl && cl.schema) || {};
+  // ponytail: thresholds mirror ovsComputeOutcome's defaults and read the same schema
+  // keys. If a rule moves in the engine it moves here — one grep for the key finds both.
+  if(s.type === 'points')     return `Advances at ${s.floorPoints || 55} points or better, and no item may score 0.`;
+  if(s.type === 'mr')         return `Every Mandatory item must score 2 or better, plus at least ${(s.rules&&s.rules.advance&&s.rules.advance.minRecommended)||4} Recommended items passed.`;
+  if(s.type === 'composite')  return `Every Mandatory shift item must score 2 or better, plus ${(s.rules&&s.rules.presentation&&s.rules.presentation.advance)||8}/10 presentation criteria (${(s.rules&&s.rules.presentation&&s.rules.presentation.conditionalMin)||6}/10 is conditional).`;
+  if(s.type === 'components') return 'Every component dimension must pass. There is no partial credit.';
+  if(s.type === 'tiered')     return 'Places at the highest tier where every item scores 2 or better.';
+  return '';
+}
+
+function renderHChecklists(){
+  const el = document.getElementById('h-checklists'); if(!el) return;
+  const all = ((window.DB && DB.observationChecklists) || []).filter(c => c.active !== false);
+  const isPlacement = c => /^placement/i.test(String(c.belt || ''));
+  const rank = c => {
+    const b = String(c.belt || '').replace(/^placement[\s_-]*/i, '');
+    const i = (typeof BELT_ORDER !== 'undefined') ? BELT_ORDER.indexOf(b) : -1;
+    return i < 0 ? 99 : i;
+  };
+  const sorted = all.slice().sort((a, b) => rank(a) - rank(b) || String(a.belt||'').localeCompare(String(b.belt||'')));
+  const belts = sorted.filter(c => !isPlacement(c));
+  const placements = sorted.filter(isPlacement);
+
+  if(!sorted.length){
+    el.innerHTML = `<div class="card"><div class="card-body" style="text-align:center;color:var(--txt2);font-size:13px;padding:28px">No active observation checklists are loaded.</div></div>`;
+    return;
+  }
+
+  const sel = sorted.find(c => c.belt === ST._clBelt) || sorted[0];
+  const opt = c => `<option value="${esc0(c.belt)}"${c.belt===sel.belt?' selected':''}>${esc0(c.title || c.name || c.belt)}</option>`;
+  const picker = `<select class="form-select" style="max-width:340px" onchange="ST._clBelt=this.value;renderHChecklists()">
+    ${belts.length ? `<optgroup label="Belt Instruments">${belts.map(opt).join('')}</optgroup>` : ''}
+    ${placements.length ? `<optgroup label="Placement Instruments">${placements.map(opt).join('')}</optgroup>` : ''}
+  </select>`;
+
+  const units = ovsScorableUnits(sel);
+  const groups = []; const gmap = {};
+  units.forEach(u => { const g = u.group || 'Checklist Items'; if(!gmap[g]){ gmap[g] = []; groups.push(g); } gmap[g].push(u); });
+
+  const body = units.length ? groups.map(g => `
+    <div style="margin-top:16px">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;font-weight:800;color:var(--txt3);margin-bottom:6px">${esc0(g)}</div>
+      ${gmap[g].map(u => `
+        <div style="border:1px solid var(--bdr);border-radius:10px;padding:10px 12px;margin-bottom:6px;background:var(--s1)">
+          <div style="display:flex;gap:10px;align-items:baseline">
+            <span style="flex:0 0 auto;font-weight:800;color:var(--txt3);font-size:12px">${u.n != null ? esc0(u.n) : '&bull;'}</span>
+            <span style="font-size:13px;line-height:1.55;color:var(--txt1)">${esc0(u.text)}</span>
+          </div>
+          <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
+            <span class="pill" style="color:#94a3b8;background:#94a3b81a;border:1px solid #94a3b855">${u.kind === 'pf' ? 'Pass / Fail' : 'Scored 0&ndash;3'}</span>
+            ${u.meta && u.meta !== 'Pass / Fail' ? `<span class="pill" style="color:#0ea5e9;background:#0ea5e91a;border:1px solid #0ea5e955">${esc0(u.meta)}</span>` : ''}
+          </div>
+        </div>`).join('')}
+    </div>`).join('')
+    : `<div style="border:1px dashed var(--bdr);border-radius:12px;padding:28px;text-align:center;color:var(--txt2);font-size:13px;margin-top:16px">No scored items are seeded on this instrument yet.</div>`;
+
+  const rule = ovsPassRule(sel);
+  el.innerHTML = `
+    <div class="card mb16"><div class="card-hd"><div class="card-ttl">Observation Checklists</div>
+      <span class="pill" style="color:#94a3b8;background:#94a3b81a;border:1px solid #94a3b855">Read only</span></div>
+      <div class="card-body">
+        <p style="font-size:13px;color:var(--txt2);line-height:1.6;margin:0 0 14px">The instruments your people are observed against. One checklist per belt, shared platform-wide &mdash; SIPS maintains them, so there is nothing to edit here.</p>
+        ${picker}
+      </div></div>
+    <div class="card"><div class="card-hd"><div class="card-ttl">${esc0(sel.title || sel.name || sel.belt)}</div>
+      <span class="pill" style="color:#94a3b8;background:#94a3b81a;border:1px solid #94a3b855">${units.length} scored item${units.length===1?'':'s'}</span></div>
+      <div class="card-body">
+        ${rule ? `<div style="font-size:12.5px;color:var(--txt2);line-height:1.6;padding:10px 12px;background:rgba(14,165,233,.05);border:1px solid rgba(14,165,233,.18);border-radius:8px">${esc0(rule)}</div>` : ''}
+        ${body}
+      </div></div>`;
 }
 
 // ── T91: typed-or-spoken evidence gate ───────────────────────────────────────
