@@ -1469,7 +1469,7 @@ class DavidChat {
             .replace(/```[A-Za-z]*\s*(<|&lt;)thinking(>|&gt;)[\s\S]*?(<\/|&lt;\/)thinking(>|&gt;|$)\s*```/gi, '')
             .replace(/(<|&lt;)thinking(>|&gt;)[\s\S]*?(<\/|&lt;\/)thinking(>|&gt;|$)/gi, '')
             .trim();
-        return noThinking || "I started working through that but didn't land on a clear answer for you — I may still be loading the material for it. Mind rephrasing, or asking me something else?";
+        return noThinking || "I worked through that but didn't produce a visible answer. Mind rephrasing, or asking me something else?";
     }
 
     addParsedMessage(text, role, isLatest = false, messageIndex = null) {
@@ -2059,6 +2059,7 @@ class DavidChat {
             const reader = res.body.getReader();
             const decoder = new TextDecoder();
             let fullContent = '';
+            let streamError = '';
             let buffer = '';
 
             try {
@@ -2116,14 +2117,26 @@ class DavidChat {
                                     // Gap 2 — non-blocking heads-up at 75% (NOTICE) / 90% (UPGRADE).
                                     this.renderQuotaNotice(msgDiv, json.meta.quota);
                                 } else if (json.error) {
+                                    streamError = json.error;
                                     contentTarget.innerHTML += `<span style="color:var(--err)">Error: ${json.error}</span>`;
                                 }
                             } catch (e) {}
                         }
                     }
                 }
+            } catch (e) {
+                // Capture mid-stream failures so the final redraw below shows them —
+                // the outer catch writes into contentTarget, which that redraw detaches.
+                streamError = streamError || e.message;
+                throw e;
             } finally {
                 buffer += decoder.decode();
+
+                // A failed turn must show (and save) the real error, not the empty-answer
+                // placeholder — reopening the chat replays whatever gets pushed here.
+                if (!fullContent.trim() && streamError) {
+                    fullContent = `⚠️ **Error:** ${streamError}`;
+                }
 
                 // Final UI Update
                 this.history.push({ role: 'user', content: text }, { role: 'assistant', content: fullContent });
