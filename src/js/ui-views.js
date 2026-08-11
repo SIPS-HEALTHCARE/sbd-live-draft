@@ -2389,28 +2389,22 @@ function sbdSpecOveralls(belt){
   return { blended: f.blendedMin, k: f.kOverallMin, knowledge: f.kOverallMin,
            sim: f.simOverallMin, individual: f.simIndividualMin };
 }
-// Spec 5.2: knowledge overall is the AVERAGE OF THE FIVE LEVEL SCORES, and the spec says
-// in as many words not to use correct-over-total. The two agree only while every level has
-// the same number of questions. L5 has 7 since the TIR34 question was pulled at the client's
-// request, so they stopped agreeing: David Williams came out 97.4 (38/39) where the spec
-// gives 97.5 (the mean of 87.5, 100, 100, 100, 100). The client's own corrected report used
-// the spec figure and ours was the one that was wrong.
+// Scoring Specification v1.0 §4.4: knowledge overall is the ITEM-WEIGHTED mean across every
+// knowledge item, and the spec says in as many words that this is canonical and NOT the mean
+// of the five level means. This reverses the earlier reading, which took the level mean from
+// a corrected report the client had sent.
 //
-// Levels with no questions answered are skipped rather than counted as zero, otherwise a
-// partial assessment would read far below what the candidate actually scored.
+// The two agree only while every level holds the same item count. L5 holds 7 since the TIR34
+// question was pulled at the client's request, so they differ by about a tenth of a point:
+// David Williams reads 97.4 (38 of 39) item-weighted where the level mean gave 97.5. No belt
+// in the current records moves on that difference.
+//
+// Items are counted directly, so a level nobody answered contributes nothing rather than
+// dragging the mean down as a zero.
 function sbdKnowledgeOverall(kResponses){
-  const byLevel = {};
-  (kResponses || []).forEach(r => {
-    const l = Number(r.level); if(!l) return;
-    (byLevel[l] = byLevel[l] || []).push(r);
-  });
-  const levelAverages = Object.keys(byLevel).map(l => {
-    const rows = byLevel[l];
-    const correct = rows.filter(r => r.correct).length;
-    return (correct / rows.length) * 100;
-  });
-  if(!levelAverages.length) return 0;
-  return levelAverages.reduce((a, b) => a + b, 0) / levelAverages.length;
+  const rows = (kResponses || []).filter(r => Number(r.level));
+  if(!rows.length) return 0;
+  return (rows.filter(r => r.correct).length / rows.length) * 100;
 }
 
 function sbdSuggestBelt(kOverall, kL1, simOverall, blended, hasDangerousKAnswer){
@@ -2430,8 +2424,13 @@ function sbdSuggestBelt(kOverall, kL1, simOverall, blended, hasDangerousKAnswer)
       return simOverall >= t.sim ? t.belt + ' Belt' : t.belt + ' Belt Conditional';
     }
   }
-  // Step 3 -- K-based White Belt
-  if(kOverall >= 80 && kL1 >= 80) return 'White Belt Conditional';
+  // Step 3 -- Knowledge Foundation (Scoring Specification v1.0 §8.6). This is NOT a belt and
+  // must not be reported as one: it acknowledges a candidate whose knowledge base is genuinely
+  // built while the applied side has not caught up. It replaces the old K-based "White Belt
+  // Conditional", which awarded a belt the blended score had not earned. A dangerous answer
+  // defers the acknowledgment until it is resolved through observed practice; it is never a
+  // permanent denial (§14.6).
+  if(kOverall >= 80 && kL1 >= 80) return hasDangerousKAnswer ? 'Knowledge Foundation Deferred' : 'Knowledge Foundation';
   // Step 4 -- no belt
   return 'No Belt';
 }
@@ -2444,17 +2443,18 @@ function prSuggestion(pr){
   const simR = (pr && pr.responses || []).filter(r => r.type === 'simulation');
   if(!kR.length && !simR.length) return null;
   const avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
-  // Blend the RAW averages, then round once — same as rptComputeModel(). Rounding the
-  // component scores BEFORE blending (e.g. 87.5 -> 88) used to flip belts at a threshold
-  // boundary (Bond: 77.5 read as 78 = Yellow), which made the card disagree with the report.
-  const kRaw = sbdKnowledgeOverall(kR);        // spec 5.2, not correct-over-total
+  // Scoring Specification v1.0 §7.6: every score is carried at full precision through every
+  // threshold comparison, and rounding happens only where a number is displayed. Rounding
+  // first is what the spec's own worked example warns about. A candidate at 80.12 reads as
+  // 80.1 against a Green line of 81, and a whole-number round would have placed them wrong.
+  const kRaw = sbdKnowledgeOverall(kR);        // spec §4.4, item-weighted
   const simRaw = avg(simR.map(r => Number(r.aiScore) || 0));
-  const kOverall = Math.round(kRaw);
-  const kL1 = Math.round(avg(kR.filter(r => r.level === 1).map(r => Number(r.score) || 0)));
-  const simOverall = Math.round(simRaw);
-  const blended = Math.round(kRaw * 0.6 + simRaw * 0.4);
+  // L1 knowledge on the same item-weighted rule, rather than a `score` field the knowledge
+  // responses do not carry (it read 0 for every candidate).
+  const kL1 = sbdKnowledgeOverall(kR.filter(r => Number(r.level) === 1));
+  const blended = kRaw * 0.6 + simRaw * 0.4;
   const dangerous = kR.some(r => r.isDangerous && !r.correct);
-  return sbdSuggestBelt(kOverall, kL1, simOverall, blended, dangerous);
+  return sbdSuggestBelt(kRaw, kL1, simRaw, blended, dangerous);
 }
 
 // The label shown on the placement-review CARD. It is derived from rptComputeModel() — the
@@ -2576,14 +2576,17 @@ async function paPersistSubmission({ staffId, answers, questions, sessionId, ses
   const _kResp = responses.filter(r => r.type === 'knowledge');
   const _simResp = responses.filter(r => r.type === 'simulation');
   const _avg = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
-  // Blend the RAW averages, then round once (matches rptComputeModel + prSuggestion). Do NOT
-  // round the component scores before blending -- that flips belts at threshold boundaries.
-  const _kRaw = sbdKnowledgeOverall(_kResp);   // spec 5.2, not correct-over-total
+  // Full precision all the way to the comparison (Scoring Specification v1.0 §7.6), and
+  // item-weighted components (§4.4, §5.7). Rounding anywhere before the threshold check is
+  // what the spec's worked example warns about, and this is the path that WRITES the belt.
+  const _kRaw = sbdKnowledgeOverall(_kResp);   // spec §4.4, item-weighted
   const _simRaw = _avg(_simResp.map(r => Number(r.aiScore) || 0));
-  const kOverall = Math.round(_kRaw);
-  const kL1 = Math.round(_avg(_kResp.filter(r => r.level === 1).map(r => Number(r.score) || 0)));
-  const simOverall = Math.round(_simRaw);
-  const blended = Math.round(_kRaw * 0.6 + _simRaw * 0.4);
+  const kOverall = _kRaw;
+  // L1 knowledge on the same item-weighted rule. It used to read a `score` field the
+  // knowledge responses do not carry, so it evaluated to 0 for every candidate.
+  const kL1 = sbdKnowledgeOverall(_kResp.filter(r => Number(r.level) === 1));
+  const simOverall = _simRaw;
+  const blended = _kRaw * 0.6 + _simRaw * 0.4;
   // Dangerous-answer block is wired but stays inert until SIPS supplies the per-question
   // dangerous-answer list (Governing Standards) and questions carry q.isDangerous.
   const hasDangerousKAnswer = _kResp.some(r => r.isDangerous && !r.correct);
@@ -4176,17 +4179,21 @@ function rptComputeModel(pr){
     kLevels.push({ level:l, pct:kPct, correct, of:ks.length, floor:null, pass:true });
     simLevels.push({ level:l, pct:simPct, scores, floor:null, pass:true });
   }
-  // Spec 5.2: the average of the five LEVEL scores, not correct over total. kLevels already
-  // holds each level's percentage, so average those and skip levels with no questions.
-  const _kLevelPcts = kLevels.map(k => k.pct).filter(p => p !== null);
-  const kOverall = _kLevelPcts.length ? r1(_kLevelPcts.reduce((a,b)=>a+b,0)/_kLevelPcts.length) : 0;
-  const simOverall = simN ? r1(simSum/simN) : 0;
-  const blended = r1(RPT_STANDARDS.weights.k*kOverall + RPT_STANDARDS.weights.sim*simOverall);
+  // Scoring Specification v1.0 §4.4 and §5.7: both components are the ITEM-WEIGHTED mean
+  // across every item, not the mean of the five level means. §6.3 and §7.6: the values that
+  // get COMPARED against a threshold are carried at full precision, and only the values that
+  // get PRINTED are rounded, otherwise a candidate at 80.96 reads as meeting a floor of 81.
+  const kOverallRaw  = kTotal ? (kCorrect / kTotal) * 100 : 0;
+  const simOverallRaw = simN ? simSum / simN : 0;
+  const blendedRaw   = RPT_STANDARDS.weights.k*kOverallRaw + RPT_STANDARDS.weights.sim*simOverallRaw;
+  const kOverall = r1(kOverallRaw);
+  const simOverall = r1(simOverallRaw);
+  const blended = r1(blendedRaw);
   // The belt this report is about. A confirmed belt wins; otherwise take what the engine
   // actually determines from the scores. It used to fall back to 'White' whenever nothing was
   // stored, which is the placeholder that printed White thresholds on a Green candidate.
   const _engineBelt = (() => {
-    for(const t of sbdBeltThresholds()){ if(blended >= t.blended && kOverall >= t.k) return t.belt; }
+    for(const t of sbdBeltThresholds()){ if(blendedRaw >= t.blended && kOverallRaw >= t.k) return t.belt; }
     return null;
   })();
   const belt = pr.confirmedBelt || pr.tentativeBelt || _engineBelt || 'White';
@@ -4269,9 +4276,9 @@ function rptComputeModel(pr){
   const allSimPass = simLevels.filter(s=>s.pct!==null).every(s=>s.pass);
   const belowMin = (pr.responses||[]).some(r=>r.type!=='knowledge' && (r.aiScore||0) < simResponseMin);
   let outcome;
-  if(blended>=th.blended && allKPass && allSimPass && !belowMin && !anyDangerous) outcome='CLEAN';
-  else if(blended>=th.blended) outcome='CONDITIONAL';
-  else if(kOverall>=80 && kL1pct!=null && kL1pct>=80 && !anyDangerous && (simOverall<WHITE.sim || blended<WHITE.blended)) outcome='KNOWLEDGE_FOUNDATION';
+  if(blendedRaw>=th.blended && allKPass && allSimPass && !belowMin && !anyDangerous) outcome='CLEAN';
+  else if(blendedRaw>=th.blended) outcome='CONDITIONAL';
+  else if(kOverallRaw>=80 && kL1pct!=null && kL1pct>=80 && !anyDangerous && (simOverallRaw<WHITE.sim || blendedRaw<WHITE.blended)) outcome='KNOWLEDGE_FOUNDATION';
   else outcome='NO_BELT';
   const clean = outcome==='CLEAN';
   const beltAwarded = (outcome==='CLEAN'||outcome==='CONDITIONAL') ? belt : null;

@@ -30,39 +30,57 @@
   function beltRank(belt) { return BELTS.indexOf(belt); }
 
   /* --------------------------------------------------------------------------
-   * BELT_TEST_CONFIG — spec §9 consolidated threshold table, verbatim.
-   * Per belt: knowledge overall min, per-level knowledge floors (null = N/A),
-   * simulation overall min, per-level simulation floors, individual simulation
-   * response min, blended min. Weights and severity margins are belt-invariant.
-   * "Do not hardcode these values inline" (spec §9) — they live here only.
+   * BELT_TEST_CONFIG, the consolidated threshold table from the Scoring
+   * Specification v1.0 §7. Per belt: knowledge overall min (the hard gate on
+   * belt selection), per-level knowledge floors, simulation overall min,
+   * per-level simulation floors, individual simulation response min, blended
+   * min. Weights and severity bands are belt-invariant. The spec says not to
+   * hardcode these values inline, so they live here only.
    * ------------------------------------------------------------------------*/
   var BELT_TEST_CONFIG = {
     weights: { knowledge: 0.60, simulation: 0.40 },
-    // Severity margins (spec §8.3 / §10.1).
+    // Condition severity is graded by the SIZE of the miss (Scoring Specification
+    // v1.0 §10.2), not by a per-component margin: a 0.5-point miss and a 20-point
+    // miss must not read the same. Two severities are fixed and never computed
+    // from a gap (a dangerous finding, and an individual response below the
+    // minimum) are set at the point they are raised.
     severity: {
-      knowledgeRequiredMargin: 8, // K level >8 below floor => REQUIRED, else ADVISORY
-      simRequiredMargin: 5,       // Sim level >5 below floor => REQUIRED, else ADVISORY
-      watchMargin: 5              // passed but within this margin => WATCH flag
+      blockingGap: 5.0,  // gap > 5.0 below the floor  => BLOCKING
+      requiredGap: 2.0,  // gap 2.0..5.0 inclusive     => REQUIRED, under 2.0 => ADVISORY
+      watchMargin: 5     // passed but within this margin => WATCH flag
     },
+    // Master constants, Scoring Specification v1.0 §7. Belt thresholds and the
+    // component overall floors are §7.1. The knowledge per-level floor is a flat
+    // 80.0 at every level and every belt (§7.2). The simulation per-level floors
+    // step down from the belt's own simulation floor F as [F, F-5, F-10, F-10,
+    // F-10] (§7.3), on the reasoning that the foundational scenarios are the ones
+    // putting a patient at risk today. The individual response minimum is a
+    // universal 65.0 (§7.4), the band the calibration standard defines as
+    // passing at every belt level.
+    //
+    // No level is ungated any more: a null floor used to mean "this belt does not
+    // gate this level", and the spec replaces that with a floor everywhere. Reader
+    // code that still handles null is left alone rather than deleted, so restoring
+    // a null floor stays a config change.
     belts: {
-      White:  { kOverallMin: 80, kLevelFloors: { 1: 80, 2: null, 3: null, 4: null, 5: null },
-                simOverallMin: 72, simLevelFloors: { 1: 70, 2: null, 3: null, 4: null, 5: null },
+      White:  { kOverallMin: 80, kLevelFloors: { 1: 80, 2: 80, 3: 80, 4: 80, 5: 80 },
+                simOverallMin: 72, simLevelFloors: { 1: 72, 2: 67, 3: 62, 4: 62, 5: 62 },
                 simIndividualMin: 65, blendedMin: 75 },
-      Yellow: { kOverallMin: 83, kLevelFloors: { 1: 88, 2: 80, 3: null, 4: null, 5: null },
-                simOverallMin: 75, simLevelFloors: { 1: 75, 2: 70, 3: null, 4: null, 5: null },
-                simIndividualMin: 68, blendedMin: 78 },
-      Green:  { kOverallMin: 86, kLevelFloors: { 1: 90, 2: 85, 3: 80, 4: null, 5: null },
-                simOverallMin: 78, simLevelFloors: { 1: 78, 2: 75, 3: 70, 4: null, 5: null },
-                simIndividualMin: 72, blendedMin: 81 },
-      Blue:   { kOverallMin: 89, kLevelFloors: { 1: 95, 2: 90, 3: 85, 4: 80, 5: null },
-                simOverallMin: 82, simLevelFloors: { 1: 82, 2: 80, 3: 78, 4: 75, 5: null },
-                simIndividualMin: 75, blendedMin: 85 },
-      Brown:  { kOverallMin: 91, kLevelFloors: { 1: 98, 2: 93, 3: 88, 4: 85, 5: 80 },
-                simOverallMin: 84, simLevelFloors: { 1: 83, 2: 82, 3: 80, 4: 78, 5: 75 },
-                simIndividualMin: 77, blendedMin: 87 },
-      Black:  { kOverallMin: 92, kLevelFloors: { 1: 100, 2: 95, 3: 90, 4: 88, 5: 85 },
-                simOverallMin: 87, simLevelFloors: { 1: 85, 2: 85, 3: 82, 4: 80, 5: 78 },
-                simIndividualMin: 78, blendedMin: 90 }
+      Yellow: { kOverallMin: 83, kLevelFloors: { 1: 80, 2: 80, 3: 80, 4: 80, 5: 80 },
+                simOverallMin: 75, simLevelFloors: { 1: 75, 2: 70, 3: 65, 4: 65, 5: 65 },
+                simIndividualMin: 65, blendedMin: 78 },
+      Green:  { kOverallMin: 86, kLevelFloors: { 1: 80, 2: 80, 3: 80, 4: 80, 5: 80 },
+                simOverallMin: 78, simLevelFloors: { 1: 78, 2: 73, 3: 68, 4: 68, 5: 68 },
+                simIndividualMin: 65, blendedMin: 81 },
+      Blue:   { kOverallMin: 89, kLevelFloors: { 1: 80, 2: 80, 3: 80, 4: 80, 5: 80 },
+                simOverallMin: 82, simLevelFloors: { 1: 82, 2: 77, 3: 72, 4: 72, 5: 72 },
+                simIndividualMin: 65, blendedMin: 85 },
+      Brown:  { kOverallMin: 91, kLevelFloors: { 1: 80, 2: 80, 3: 80, 4: 80, 5: 80 },
+                simOverallMin: 84, simLevelFloors: { 1: 84, 2: 79, 3: 74, 4: 74, 5: 74 },
+                simIndividualMin: 65, blendedMin: 87 },
+      Black:  { kOverallMin: 92, kLevelFloors: { 1: 80, 2: 80, 3: 80, 4: 80, 5: 80 },
+                simOverallMin: 87, simLevelFloors: { 1: 87, 2: 82, 3: 77, 4: 77, 5: 77 },
+                simIndividualMin: 65, blendedMin: 90 }
     }
   };
 
@@ -82,8 +100,12 @@
 
   /* ---- Stage inputs ------------------------------------------------------ */
 
-  // scoreKnowledge: per-level % correct, overall = MEAN OF LEVEL SCORES (spec
-  // §5.2 — NOT raw count / total). answers: { questionId: selectedOptionIndex }.
+  // scoreKnowledge: per-level % correct, overall = the ITEM-WEIGHTED mean across
+  // every knowledge item (Scoring Specification v1.0 §4.4), which is the canonical
+  // rule and is NOT the mean of the five level means. The two agree only while
+  // every level holds the same item count, and L5 holds 7 rather than 8 since the
+  // TIR34 question was pulled, so they disagree by about a tenth of a point.
+  // answers: { questionId: selectedOptionIndex }.
   function scoreKnowledge(questions, answers) {
     answers = answers || {};
     var by = groupByLevel(questions);
@@ -101,14 +123,17 @@
       });
       levelScores[L] = qs.length ? (correct / qs.length) * 100 : null;
     });
-    var present = LEVELS.map(function (L) { return levelScores[L]; })
-                        .filter(function (v) { return v != null; });
-    var overall = present.length ? present.reduce(function (a, b) { return a + b; }, 0) / present.length : 0;
+    // Item-weighted: every answered item carries equal weight, so a level holding
+    // fewer questions does not carry the same weight as a full one.
+    var overall = perQuestion.length
+      ? (perQuestion.filter(function (q) { return q.correct; }).length / perQuestion.length) * 100
+      : 0;
     return { levelScores: levelScores, overall: overall, perQuestion: perQuestion };
   }
 
-  // scoreSimulation: per-level average, overall = mean of level averages,
-  // individual min = lowest single response. scores: { questionId: 0-100 }.
+  // scoreSimulation: per-level average, overall = the ITEM-WEIGHTED mean across
+  // every response (spec §5.7), individual min = lowest single response.
+  // scores: { questionId: 0-100 }.
   function scoreSimulation(questions, scores) {
     scores = scores || {};
     var by = groupByLevel(questions);
@@ -128,9 +153,10 @@
       });
       levelAvgs[L] = n ? sum / n : null;
     });
-    var present = LEVELS.map(function (L) { return levelAvgs[L]; })
-                        .filter(function (v) { return v != null; });
-    var overall = present.length ? present.reduce(function (a, b) { return a + b; }, 0) / present.length : 0;
+    // Item-weighted, same rule and same reasoning as knowledge (spec §5.7).
+    var overall = allScores.length
+      ? allScores.reduce(function (a, b) { return a + b; }, 0) / allScores.length
+      : 0;
     var individualMin = allScores.length ? Math.min.apply(null, allScores) : 0;
     return { levelAvgs: levelAvgs, overall: overall, individualMin: individualMin, perResponse: perResponse };
   }
@@ -208,27 +234,39 @@
     return { passed: misses.length === 0, misses: misses };
   }
 
-  /* ---- Severity classification (spec §8.3) ------------------------------- */
-  // Component OVERALL minimum failures are REQUIRED regardless of margin
-  // (spec §8.3 lists ADVISORY only for LEVEL averages; spec §14 classifies a
-  // 3.5-pt overall miss as REQUIRED). LEVEL failures split on the margin.
+  /* ---- Severity classification (Scoring Specification v1.0 §10.2) --------- */
+  // Graded by the size of the miss, on the spec's proportionality requirement.
+  // The same three bands apply to every floor family that is graded at all, so
+  // knowledge and simulation no longer carry separate margins. The severities
+  // that are FIXED, supervised practice for a dangerous finding and BLOCKING
+  // for an individual response under the minimum, never come through here.
 
-  function knowledgeLevelSeverity(scored, required) {
-    var m = BELT_TEST_CONFIG.severity.knowledgeRequiredMargin;
-    return (required - scored) > m ? 'REQUIRED' : 'ADVISORY';
+  function severityForGap(gap) {
+    var s = BELT_TEST_CONFIG.severity;
+    if (gap > s.blockingGap) return 'BLOCKING';
+    if (gap >= s.requiredGap) return 'REQUIRED';
+    return 'ADVISORY';
   }
-  function simLevelSeverity(scored, required) {
-    var m = BELT_TEST_CONFIG.severity.simRequiredMargin;
-    return (required - scored) > m ? 'REQUIRED' : 'ADVISORY';
-  }
+  function knowledgeLevelSeverity(scored, required) { return severityForGap(required - scored); }
+  function simLevelSeverity(scored, required) { return severityForGap(required - scored); }
 
-  /* ---- Belt suggestion engine (spec §8.2) -------------------------------- */
-  // Blended score SETS the belt: first belt (walking Black->White) whose
-  // blended min the candidate meets. Floors then set PASS vs CONDITIONAL_PASS.
-  function suggestBeltFromBlended(blended) {
+  /* ---- Belt suggestion engine (Scoring Specification v1.0 §8.2) ----------- */
+  // Walking Black->White, take the first belt satisfying BOTH the blended
+  // threshold AND the knowledge gate. The knowledge floor is a hard gate on
+  // selection, not a condition trigger (§8.4): a candidate whose blended reaches
+  // Green on a knowledge overall of 84 does not get a conditional Green, the
+  // engine steps down and awards Yellow. Knowledge is what confirms the
+  // foundational framework is right, and no condition can hold that open while
+  // the operator works at a level the framework does not support. Simulation
+  // floors work the other way and only turn the belt conditional.
+  //
+  // This used to select on the blended score alone, which is the regression the
+  // spec's own Vector 4 exists to catch.
+  function suggestBeltFromBlended(blended, kOverall) {
     for (var i = 0; i < BELT_ORDER_DESC.length; i++) {
       var b = BELT_ORDER_DESC[i];
-      if (blended >= BELT_TEST_CONFIG.belts[b].blendedMin) return b;
+      var c = BELT_TEST_CONFIG.belts[b];
+      if (blended >= c.blendedMin && kOverall >= c.kOverallMin) return b;
     }
     return null; // below even White -> REMEDIATION
   }
@@ -281,10 +319,12 @@
     });
     if (sFloors.failures.length) reasonCodes.push('SIM_FLOOR_FAIL');
 
-    // Individual simulation response failures (grouped by level). BLOCKING if
-    // any response in the group is critical-tagged, else REQUIRED (spec §14).
+    // Individual simulation response failures (grouped by level). A response
+    // under the minimum is BLOCKING outright, whether or not the scenario is
+    // critical-tagged (spec §10.2, one of the two fixed severities). This is
+    // the check that catches the gap a level average hides.
     indFloor.groups.forEach(function (g) {
-      var sev = g.critical ? 'BLOCKING' : 'REQUIRED';
+      var sev = 'BLOCKING';
       conditions.push({ type: 'SIM_INDIVIDUAL_FAIL', severity: sev, level: g.level,
         required: g.required, responses: g.responses });
       g.responses.forEach(function (r) {
@@ -301,7 +341,8 @@
       reasonCodes.push('KNOWLEDGE_OVERALL_FAIL');
     }
     if (!sOverallPassed) {
-      conditions.push({ type: 'SIM_OVERALL_FAIL', severity: 'REQUIRED',
+      conditions.push({ type: 'SIM_OVERALL_FAIL',
+        severity: severityForGap(cfg.simOverallMin - sScore.overall),
         scored: round1(sScore.overall), required: cfg.simOverallMin });
       reasonCodes.push('SIM_OVERALL_FAIL');
     }
@@ -387,7 +428,7 @@
     var blended = (kScore.overall * BELT_TEST_CONFIG.weights.knowledge) +
                   (sScore.overall * BELT_TEST_CONFIG.weights.simulation);
 
-    var suggestedBelt = suggestBeltFromBlended(blended);
+    var suggestedBelt = suggestBeltFromBlended(blended, kScore.overall);
 
     var outcome, evalAtBelt, conditions, reasonCodes, remediationFlags, watchFlags;
 
