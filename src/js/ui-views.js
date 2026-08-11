@@ -4205,7 +4205,8 @@ function rptComputeModel(pr){
   // The scores below still grade against the overridden belt; only the award honors the
   // assessor's decision. Belt-test rows never carry status 'adjusted', so this cannot fire there.
   const override = (pr.status === 'adjusted' && pr.confirmedBelt)
-    ? { by: pr.confirmedBy || 'Assessor', at: pr.confirmedAt || null, note: pr.assessorNote || '' }
+    // confirmed_at is a timestamptz; keep the date only, this prints on the report.
+    ? { by: pr.confirmedBy || 'Assessor', at: pr.confirmedAt ? String(pr.confirmedAt).slice(0, 10) : null, note: pr.assessorNote || '' }
     : null;
   const th = sbdSpecOveralls(belt) || sbdSpecOveralls('White') || { blended: 0, k: 0, sim: 0, individual: 0 };
   // Section 9 sets the individual simulation response minimum per belt (Green 72, White 65).
@@ -5130,7 +5131,8 @@ function buildAssessmentReportHTML(pr, staff, fac) {
   // cannot disagree about an overridden award. Belt-test rows (_precomputed) are excluded:
   // their statuses are the belt-test lifecycle, not the placement review's.
   const override = (!pr._precomputed && pr.status === 'adjusted' && pr.confirmedBelt)
-    ? { by: pr.confirmedBy || 'Assessor', at: pr.confirmedAt || null, note: pr.assessorNote || '' }
+    // confirmed_at is a timestamptz; keep the date only, this prints on the report.
+    ? { by: pr.confirmedBy || 'Assessor', at: pr.confirmedAt ? String(pr.confirmedAt).slice(0, 10) : null, note: pr.assessorNote || '' }
     : null;
   const overrideAward = !!override && !(outcome === 'CLEAN' || outcome === 'CONDITIONAL');
   const candidateName = pr.staffName || fullName(staff) || 'Candidate';

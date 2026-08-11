@@ -111,7 +111,7 @@ function mkResponses(kCorrectOf40, simScore) {
 const overriddenPR = {
   id: 'pr-override', staffId: 'st1', fid: 'f1', staffName: 'Sharon Test', staffTitle: 'Technician',
   status: 'adjusted', tentativeBelt: 'Blue', confirmedBelt: 'Brown',
-  confirmedBy: 'J. Jacobs', confirmedAt: '2026-08-08',
+  confirmedBy: 'J. Jacobs', confirmedAt: '2026-08-08T00:00:00+00:00', // timestamptz shape, as PostgREST returns it
   assessorNote: 'Assessor Error Correction — simulation scored by the pre-calibration evaluator',
   responses: mkResponses(39, 68), levelScores: {}, submittedAt: '2026-05-01',
 };
