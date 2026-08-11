@@ -329,7 +329,8 @@ persisted.
 
 ### Phase 2: close the security tail and the committed client asks
 
-- [ ] **T30** Read-only observation checklist view for facility leaders · est 1.0d
+- [x] **T30** Read-only observation checklist view for facility leaders · est 1.0d
+  **Done 2026-08-07**, shipped as PR #184. A facility leader can open the instrument checklist their people are scored against and cannot edit it (`ui-views.js`, "T30: read-only instrument view for facility leaders").
   **Already promised to the client in writing on 2026-07-25.** There is one checklist per
   belt shared platform-wide with no per-facility copy, so edit rights are not a permission
   toggle. Leaders get visibility; SIPS stays the only editor.
@@ -1966,7 +1967,8 @@ vocabulary these tasks are written in, including the SBD and SPD distinction tha
   markers and its callouts; the pattern is applied across the remaining sections as their source
   documents arrive; and the client confirms a side-by-side against the document.
 
-- [ ] **T89** David's knowledge base is seeded into an index David never reads · est 0.5d · High
+- [x] **T89** David's knowledge base is seeded into an index David never reads · est 0.5d · High
+  **Done 2026-08-12**, shipped as PR #190. `david-chat` now searches the index that actually holds the records, `sbd-knowledge-ai` namespace `master-docs`. It had been pointed at a host that does not exist, so the knowledge search had silently never returned anything and David answered from reasoning alone.
   **Fixed in the repository 2026-08-11, `work/t89-pinecone-index-host` (`bb54168`). Not live yet.**
   The host is no longer written down anywhere: `david-chat` and both seeding scripts read a
   `PINECONE_INDEX_HOST` secret, deliberately with no hard-coded fallback, since a silent default is
@@ -2071,7 +2073,8 @@ Three asks made on the same call, alongside the Foundations formatting request t
 The formatting request was the loud one and these three went in unrecorded, which is the failure
 already named above: **an ask next to an urgent one still needs its own row.**
 
-- [ ] **T91** Observation answers must be typed or spoken, never multiple choice · est 1.5d · High
+- [x] **T91** Observation answers must be typed or spoken, never multiple choice · est 1.5d · High
+  **Done 2026-08-06**, shipped as PR #180 with the two review findings closed in PR #183. An observation item now takes typed or dictated evidence, and an item with nothing written does not count as answered (`ui-views.js`, "T91: typed-or-spoken evidence gate").
   His words on the call: *"in the observation module, we wanted no multiple choice. All the
   answers should be answers that they have to type or speak into the assessment, versus selecting
   multiple choice in the observations."* Asked again immediately after, to be sure it was scoped
@@ -2160,7 +2163,8 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Done when:* Scripts can be assigned to an individual, appear for that person only, remain in
   place inside the belt content unchanged, and the assign screen matches the existing pattern.
 
-- [ ] **T93** David chat titles can be edited · est 0.5d · Medium
+- [x] **T93** David chat titles can be edited · est 0.5d · Medium
+  **Done 2026-08-07**, shipped as PR #181. A chat can be renamed from the history list, and renaming no longer switches the chat underneath the edit.
   His words: *"in David, if we could update it so that we can edit the title of the chat, the chat
   history, so that it's easier to reference. If we have to go back to that chat later, we know
   exactly what that chat was."*
@@ -2244,7 +2248,8 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Done when:* A chat title can be edited from the history list, the edit persists across
   sessions, and a later message does not overwrite it.
 
-- [ ] **T98** The belt report re-judges an assessor override out of existence · est 0.5d · **High**
+- [x] **T98** The belt report re-judges an assessor override out of existence · est 0.5d · **High**
+  **Done 2026-08-12.** Built, verified against 33 checks, and live in both renderers.
   Live case, raised 2026-08-12. Sharon Greene-Golden's Blue was overridden to Brown by
   J. Jacobs on 8 Aug — it is in her staff history and her profile reads Brown — but the report
   could not say it. `rptComputeModel` took the confirmed belt only as the target for floors and
@@ -2286,6 +2291,89 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Done when:* Sharon's review is set back to Brown and her live report prints Brown as awarded
   with the override attribution; a non-adjusted review's report is unchanged; the corrections
   list can proceed.
+
+### Raised on the 2026-08-11 client chat
+
+- [ ] **T99** The scoreboard is visible to everyone · est 0.25d · Medium
+  The three scoreboard tabs, one on each surface, are open to every role. Asked plainly on
+  2026-08-11 whether he wanted it hidden from everyone except SIPS or only so that one facility
+  cannot see another facility's staff, the client answered *"Everyone but sips master admin"*.
+  Built and held rather than shipped, because the same item also sits on the team's board and two
+  people fixing one thing is how T77 went wrong. Whoever ships it should also correct the app's
+  own role documentation, which currently tells users a staff member login gives them "the
+  system-wide scoreboard" and describes the staff portal as "personal dashboard and scoreboard
+  only". Hiding the tab is not an authorisation boundary; the ranking data stays readable to
+  anyone the row policies already allow, so if the intent is that only SIPS ever sees it, that
+  belongs in the data layer.
+  *Goal:* Only a SIPS master admin can reach a scoreboard, and nothing in the app claims otherwise.
+  *Done when:* The tab is absent for every other role on all three surfaces, the two documentation
+  lines match, and a master admin still sees it.
+
+- [ ] **T100** The assessor override wording comes off the report · est 0.25d · **High**
+  *Owner: the team.* Raised by the client on 2026-08-11 after reviewing Sharon Greene-Golden's
+  report: *"This is good. The only thing we needed to look without the assessor override being in
+  the interfacing on the report, everything else looks good."* T98 put the override on the report
+  so an overridden belt would stop being re-judged out of existence; the award itself must stay,
+  only the wording that names the override comes off the client-facing document. The label, the
+  attribution line and the certification-basis sentence are the three places it appears, in both
+  renderers.
+  *Goal:* An overridden belt still prints as awarded, without the report telling the reader it was
+  an override.
+  *Done when:* Sharon's report prints Brown with no override wording in either renderer, and a
+  non-adjusted report is unchanged.
+
+- [ ] **T101** Re-run the historical placements, but re-score them first · est 2d · **High**
+  The scoring specification asks for every placement issued to date to be re-run once the engine
+  is corrected. Doing that on the stored numbers alone would be wrong. Running the corrected
+  engine against all 49 stored placements shows 21 people losing a White belt, and the reason is
+  not their answers: those simulations were graded by the old evaluator, the one the specification
+  itself records as marking real responses 30 to 40 points low. The responses have to be re-scored
+  with the calibrated evaluator first, and only then can the belt logic be re-applied. The original
+  record is kept either way; a re-run writes a new result against the same submission.
+  *Goal:* Historical placements reflect the corrected engine without anyone losing a belt to a
+  scoring fault that was ours.
+  *Done when:* The responses are re-scored with the calibrated evaluator, the belts are
+  recalculated from those scores, every original record is still readable, and the set of belts
+  that actually change is reviewed by SIPS before anything is published.
+
+- [ ] **T102** Move the belt determination server side · est 3d · Medium
+  Simulation responses are already scored server side by `sbd-score-assessment`. The rest of the
+  determination, the blend, the belt selection, the floor evaluation and the condition generation,
+  still runs in the browser, which is what section 16 of the scoring specification asks to be
+  moved. This is architectural rather than a correctness gap: the client-side engine now matches
+  the specification's own reference implementation on all 49 stored placements.
+  *Goal:* A certification result is computed and written by the server, from raw responses only.
+  *Done when:* The client posts responses and never a score or a belt, the handler scores and
+  writes, and a client-submitted score is rejected rather than ignored.
+
+- [ ] **T103** Versioned belt constants, resolved by assessment date · est 1d · Medium
+  The thresholds and floors live in code. Section 16.3 of the specification asks for them in a
+  table with an effective date, resolved by the assessment's submission date, so a placement
+  issued last quarter reproduces exactly after the numbers are amended. Without it, a constant
+  change silently rewrites what an old certification would have said.
+  *Goal:* Any historical placement can be reproduced exactly, whatever the constants are today.
+  *Done when:* Constants are read from the table by submission date, and a record carries the
+  constants version it was scored under.
+
+- [ ] **T104** The client's sprint tracker, back in his hands · est 0.5d · Medium
+  He asked for it on 2026-08-11: *"Can send me the full list? I liked the tracker you had last
+  month, help me have a better idea where things are. And I can let you know what things need to
+  move around, if any."* It stopped going out when the task list moved local. He reads it to plan
+  and to keep his own people informed, so it is worth more than the time it costs.
+  *Goal:* He has a current list he can read and reorder.
+  *Done when:* A tracker in the same columns as the 30 July one is sent, generated from this file
+  rather than written by hand, so it stays true as this file is maintained.
+
+- [ ] **T105** Load capacity for the onboarding wave · est 1d · **High**
+  One hospital system alone is close to 200 people, and the client has said several more have
+  agreed. Nothing has measured what the platform does under that, and the AI-backed paths carry a
+  per-question cost as well as a latency question. This is the load half of the concern he raised
+  alongside security; the security half is T33.
+  *Goal:* There is a measured answer to what happens when a facility onboards two hundred people
+  at once, and a number for what it costs.
+  *Done when:* The concurrent-use ceiling is measured on the paths that matter, the per-facility
+  AI cost at that volume is estimated from real usage, and anything that breaks first is written
+  down with a fix.
 
 ### Blocked, not on the critical path
 
@@ -2331,8 +2419,24 @@ already named above: **an ask next to an urgent one still needs its own row.**
 
 ## Totals
 
-**Updated 2026-08-04, end of day.** 36 items done, 57 open. One shipped, five opened, and one
-correction to how a fix was recorded.
+**Updated 2026-08-12.** 46 items done, 59 open. Since the 4 August count: ten shipped, seven
+opened, and five entries that were finished but had never been ticked.
+
+**Ten shipped.** T88 Foundations content, T92 scripts as their own module, T30 the read-only
+checklist for facility leaders, T91 typed or spoken observation evidence, T93 renaming a David
+chat, T89 David's knowledge search pointed at the index that actually holds the records, T94
+David naming the assessment levels instead of inventing topics, T95 the belt report reading at a
+glance, T96 belt scoring onto the SIPS Scoring Specification v1, T97 the fifteen minute logout,
+and T98 an assessor override honored by the report.
+
+**Five were done and never ticked.** T30, T89, T91, T93 and T98 all shipped and were verified,
+and the ledger still read them as open. That is the failure this file exists to prevent, so the
+statuses were audited against the merge history and the live code rather than against memory.
+
+**Seven opened, T99 to T105**, all from the 11 August client chat or from decisions the scoring
+specification work surfaced: the scoreboard restricted to SIPS, the override wording coming off
+the report, the historical re-run that must be re-scored first, the determination moving server
+side, versioned constants, the client's sprint tracker, and load capacity for the onboarding wave.
 
 **T91, T92 and T93 are three client asks from the 3 August call that were never written down.**
 Observation answers typed or spoken with no multiple choice, scripts as a separately assignable
