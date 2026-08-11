@@ -473,8 +473,69 @@ persisted.
   this task already exists to correct**, a narrow rule added while the broad one underneath stays,
   and it is the third time it has happened on this item.
 
-  Not a code change: the repository is already correct. What is missing is applying
-  `20260804120000` and `20260804130000` to production and recording both in migration history.
+  Not a code change: the repository is already correct. **And as of later the same night the
+  remaining half is scheduled rather than forgotten**: part 1 is applied and verified live, and
+  the `20260804130000` column drop is planned for **2026-08-07** after a two-day observation
+  window, with a re-verification the same day. Until the 7th the old column staying readable is a
+  stated, accepted exposure window rather than an oversight, and this entry is where that is
+  written down.
+
+  **The fix is not RLS, and reaching for RLS would make things worse.** `staff_select` reads:
+
+  ```
+  (id = auth.uid())
+  OR role in (master_admin, staff_admin, system_admin)
+  OR (role in (facility_admin, hospital, staff_member) AND fid = get_user_fid())
+  OR sbd_is_assessor(fid)
+  ```
+
+  A staff member reading every row in their own facility is **correct**; that is the roster, and
+  narrowing it to hide one column would break a feature to patch a data-placement mistake. The
+  problem is not who can read the row, it is that a secret is sitting on a row colleagues are
+  meant to read. Dropping the column is the fix, which is what the migration already does.
+
+  **The two stores hold the same four pins**, measured by comparing them without reading a value
+  out: `old_store = 4`, `new_store = 4`, `identical = 4`.
+
+  **That duplication is deliberate and this entry first said otherwise.** It is a transitional
+  write mirror, `sbd_staff_observation_pin_mirror` on `public.staff` calling
+  `sbd_mirror_observation_pin()`, so that the migration and the frontend deploy cannot fall out
+  of step during a two-part release. Reading the trigger body confirms it: a write to
+  `observation_pin` upserts into `sbd_observer_pins` and sets `observer_pin_set`, and clearing it
+  deletes the row. The earlier reading of this as a mistake was wrong.
+
+  **The rest of part 1 is applied and correct**, verified against production: RLS on, **zero**
+  policies, **zero** grants to `anon` or `authenticated`, two unique indexes, the non-secret
+  `staff.observer_pin_set` flag in step at 4 across both stores, and the `sbd_staff_privilege_guard`
+  trigger in place. `sbd-observer-pin` is deployed ACTIVE v1 and `sbd-observation-unlock` was
+  redeployed to v2.
+
+  **What the mirror does not change** is that the four pins have been sitting in a column
+  colleagues can read. Blast radius by facility, one pin holder in each:
+
+  | staff in the facility | who can read that pin |
+  |---|---|
+  | 5 | 4 others |
+  | 3 | 2 others |
+  | 7 | 6 others |
+  | 18 | 17 others |
+
+  33 staff rows across the four, so **29 people can read a live pin that is not their own**, of
+  whom the ones with an active login can actually run the query.
+
+  **Because of that, dropping the column is not sufficient on its own.** All four pins have been
+  readable for as long as the column has existed and should be regenerated after the drop.
+  Otherwise the fix removes the exposure route and leaves the exposed credential in service. That
+  holds whether the duplication was intentional or not; it is about where the pins have been, not
+  about how they got there.
+
+  **Neither migration has a row in `supabase_migrations.schema_migrations`, and part 1 plainly
+  ran.** So production holds a table, a flag, two triggers and two indexes that the migration
+  history does not know about, while a fresh environment replaying from zero would build them from
+  the file. The two will not stay in agreement. Record both versions when part 2 goes in. This is
+  the same class of problem as the `david_usage_by_app_mtd` fix earlier the same day, which was
+  applied by hand and written back into an already-applied migration; that one was corrected by
+  moving the change into its own dated migration, and the same shape applies here.
 
   Separate and lower, worth a decision rather than an alarm: the PIN in the new table is stored as
   written, 4 characters, not hashed. Nothing in the migration or the edge function hashes it. That
@@ -482,7 +543,7 @@ persisted.
   rather than an accident, because it means anyone with database access reads live PINs.
 
   *Goal:* Who observed an assessment is decided by the server, not by the browser.
-  *Done when:* The PIN comparison happens server side; a forged client-side unlock does not produce a valid observation; the normal observer flow is unchanged; **`staff.observation_pin` no longer exists in production**; and a signed-in staff member reading `public.staff` sees no pin column at all.
+  *Done when:* The PIN comparison happens server side; a forged client-side unlock does not produce a valid observation; the normal observer flow is unchanged; **`staff.observation_pin` no longer exists in production**; a signed-in staff member reading `public.staff` sees no pin column at all; and the four pins that lived in the readable column are regenerated.
 - [x] ~~**T38** Consolidate Avery onto the work account (issue `D3`)~~
   `closed 2026-07-27, not needed` · est 0.25d
   Client confirmed: SIPS employee, home office, no facility, work address is the real
