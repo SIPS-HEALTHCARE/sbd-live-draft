@@ -2244,6 +2244,49 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Done when:* A chat title can be edited from the history list, the edit persists across
   sessions, and a later message does not overwrite it.
 
+- [ ] **T98** The belt report re-judges an assessor override out of existence · est 0.5d · **High**
+  Live case, raised 2026-08-12. Sharon Greene-Golden's Blue was overridden to Brown by
+  J. Jacobs on 8 Aug — it is in her staff history and her profile reads Brown — but the report
+  could not say it. `rptComputeModel` took the confirmed belt only as the target for floors and
+  then re-derived the award purely from scores (`beltAwarded` null unless CLEAN/CONDITIONAL);
+  her blended 85.9 against Brown's 87 printed **BELT AWARDED NONE, Knowledge Foundation**.
+  Verified on the live report 2026-08-12 and reverted: review `02cac3d4` is back at confirmed
+  Blue (report reads Blue Conditional), her profile stays Brown. This blocks the whole
+  corrections list the client sent — the overrides are his corrections for the old,
+  uncalibrated evaluator's simulation scores (per the spec v1 rollout note), so nothing here
+  is re-graded; the override is honored as data. Re-scoring is T632's job (external tracker)
+  and needs the calibrated evaluator first.
+
+  *Built 2026-08-12, display-only, no scoring rule touched.* A review with `status='adjusted'`
+  now awards the adjusted belt in both renderers, labelled **ASSESSOR OVERRIDE** and attributed
+  from `confirmed_by` / `confirmed_at` (plus the assessor note when present). The score-derived
+  outcome, conditions, floors and every threshold comparison are unchanged and still grade
+  against the overridden belt — the award is no longer stripped, and the certification basis
+  states plainly that the override supersedes the score-based determination without changing
+  the scores. Where the scores DO clear the adjusted belt, the report keeps its normal wording
+  and adds the attribution line. Both renderers changed in step (`rptComputeModel` /
+  `downloadAssessmentReport` and `deriveOutcome`'s consumer `buildAssessmentReportHTML`),
+  because T95 already caught them drifting once. Belt-test rows are excluded (`_precomputed`,
+  and their statuses never read `adjusted`); the card's SUGGESTED chip renders only on pending
+  reviews, so it cannot move.
+
+  *Verified:* `node scripts/verify-override-award.js <pre-change ui-views.js>` — 33 checks.
+  The override case awards Brown with attribution and Black as the next target; the identical
+  scores under `status='confirmed'` still award nothing; non-adjusted reviews produce output
+  field-for-field identical to the pre-change model extracted from git; both renderers carry
+  the override wording and the confirmed twin carries none. The T65 harness fails 14 checks
+  before AND after (identical sets — pre-existing, not this change).
+
+  *For the operator applying the correction:* set `status='adjusted'`, `confirmed_belt='Brown'`,
+  and `confirmed_by` / `confirmed_at` to the overriding assessor and date — the report prints
+  the attribution from those two columns and falls back to a bare "Assessor" if they are absent.
+
+  *Goal:* An assessor override on a placement review is honored by the report as data, with
+  attribution, without re-grading anything.
+  *Done when:* Sharon's review is set back to Brown and her live report prints Brown as awarded
+  with the override attribution; a non-adjusted review's report is unchanged; the corrections
+  list can proceed.
+
 ### Blocked, not on the critical path
 
 - [ ] **T49** Strip and rotate the PSOP credentials, gate the public page

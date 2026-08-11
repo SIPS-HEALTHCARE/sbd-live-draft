@@ -4198,6 +4198,16 @@ function rptComputeModel(pr){
   })();
   const belt = pr.confirmedBelt || pr.tentativeBelt || _engineBelt || 'White';
   const beltIsDetermined = !!(pr.confirmedBelt || pr.tentativeBelt || _engineBelt);
+  // An assessor override (review status 'adjusted') is data, not a score outcome. The client
+  // corrects placements whose stored simulation scores came from the old, uncalibrated
+  // evaluator, and re-judging the award from those scores erases the correction: an overridden
+  // Brown printed BELT AWARDED NONE because the blended score sat under Brown's threshold.
+  // The scores below still grade against the overridden belt; only the award honors the
+  // assessor's decision. Belt-test rows never carry status 'adjusted', so this cannot fire there.
+  const override = (pr.status === 'adjusted' && pr.confirmedBelt)
+    // confirmed_at is a timestamptz; keep the date only, this prints on the report.
+    ? { by: pr.confirmedBy || 'Assessor', at: pr.confirmedAt ? String(pr.confirmedAt).slice(0, 10) : null, note: pr.assessorNote || '' }
+    : null;
   const th = sbdSpecOveralls(belt) || sbdSpecOveralls('White') || { blended: 0, k: 0, sim: 0, individual: 0 };
   // Section 9 sets the individual simulation response minimum per belt (Green 72, White 65).
   // The report used to test every response against a flat 50 that appears nowhere in the spec.
@@ -4281,10 +4291,14 @@ function rptComputeModel(pr){
   else if(kOverallRaw>=80 && kL1pct!=null && kL1pct>=80 && !anyDangerous && (simOverallRaw<WHITE.sim || blendedRaw<WHITE.blended)) outcome='KNOWLEDGE_FOUNDATION';
   else outcome='NO_BELT';
   const clean = outcome==='CLEAN';
-  const beltAwarded = (outcome==='CLEAN'||outcome==='CONDITIONAL') ? belt : null;
+  const scoreAwarded = (outcome==='CLEAN'||outcome==='CONDITIONAL');
+  // overrideAward: the award stands on the assessor's override rather than on the scores.
+  const overrideAward = !!override && !scoreAwarded;
+  const beltAwarded = (scoreAwarded || overrideAward) ? belt : null;
   const condSummary = [nSup&&`${nSup} supervised-practice`, nBlock&&`${nBlock} blocking`, nReq&&`${nReq} required`, nAdv&&`${nAdv} advisory`].filter(Boolean).join(', ') || 'no conditions';
   const determination =
-      outcome==='CLEAN' ? `${belt.toUpperCase()} BELT -- Clean`
+      overrideAward ? `${belt.toUpperCase()} BELT -- Assessor Override (${condSummary})`
+    : outcome==='CLEAN' ? `${belt.toUpperCase()} BELT -- Clean`
     : outcome==='CONDITIONAL' ? `${belt.toUpperCase()} BELT -- Conditional (${condSummary})`
     : outcome==='KNOWLEDGE_FOUNDATION' ? `Knowledge Foundation Acknowledged -- belt not yet issued`
     : `No Belt Issued`;
@@ -4313,7 +4327,7 @@ function rptComputeModel(pr){
   const nb = beltAwarded ? (order[order.indexOf(beltAwarded)+1] || null) : 'White';
   const nextTh = nb ? sbdSpecOveralls(nb) : null;
   const gap = (cur, need)=> cur>=need ? 'Already meets' : `+${r1(need-cur)} pts needed`;
-  return { belt, beltAwarded, beltIsDetermined, outcome, classification, topStrength, th, simResponseMin, blended, kOverall, simOverall, kLevels, simLevels, conditions, dangerous, anyDangerous, roleAmp, nSup, nBlock, nReq, nAdv, clean, determination,
+  return { belt, beltAwarded, beltIsDetermined, override, overrideAward, outcome, classification, topStrength, th, simResponseMin, blended, kOverall, simOverall, kLevels, simLevels, conditions, dangerous, anyDangerous, roleAmp, nSup, nBlock, nReq, nAdv, clean, determination,
     nextBelt: nb, nextRows: nextTh ? [
       ['Blended Score', blended, nextTh.blended, gap(blended,nextTh.blended)],
       ['Knowledge Overall', kOverall, nextTh.k, gap(kOverall,nextTh.k)],
@@ -4354,16 +4368,19 @@ function downloadAssessmentReport(prId){
       <td style="padding:5px;border:1px solid #e2e8f0;color:#475569">${r.aiFeedback||''}</td></tr>`).join('');
   const tbl = 'width:100%;border-collapse:collapse;font-size:8pt';
   const OUT = { CLEAN:['CLEAN','#16a34a'], CONDITIONAL:['CONDITIONAL','#b45309'], KNOWLEDGE_FOUNDATION:['KNOWLEDGE FOUNDATION','#2563eb'], NO_BELT:['NO BELT','#b91c1c'] };
-  const [outLabel, outClr] = OUT[m.outcome] || OUT.NO_BELT;
+  const [outLabel, outClr] = m.overrideAward ? ['ASSESSOR OVERRIDE','#b45309'] : (OUT[m.outcome] || OUT.NO_BELT);
   const condText = [m.nSup&&`${m.nSup} supervised-practice`, m.nBlock&&`${m.nBlock} blocking`, m.nReq&&`${m.nReq} required`, m.nAdv&&`${m.nAdv} advisory`].filter(Boolean).join(', ') || 'no conditions';
   const strengthLead = (m.outcome!=='CLEAN' && m.topStrength) ? `The candidate's strongest area was ${m.topStrength}. ` : '';
   const closeNote = m.classification==='A' ? ' This is a close miss; a focused, targeted remediation should produce a passing result.' : '';
-  const basis = strengthLead + (
+  const ovAttr = m.override ? `Override recorded by ${m.override.by}${m.override.at ? ' on ' + m.override.at : ''}` : '';
+  const basis = m.overrideAward
+    ? `${m.belt} Belt is awarded by assessor override, superseding the score-based determination. ${ovAttr}.${m.override.note ? ` Note: ${m.override.note}.` : ''} The scores are reported unchanged against the ${m.belt} Belt standard: blended ${m.blended}% against the ${m.th.blended}% threshold, knowledge overall ${m.kOverall}%, simulation overall ${m.simOverall}%. The conditions below stand as the development path; they do not withdraw the award.` + (m.roleAmp ? ` ${m.roleAmp}` : '')
+    : strengthLead + (
       m.outcome==='CLEAN' ? `The candidate met the ${m.belt} Belt blended threshold of ${m.th.blended}% with ${m.blended}%, and passed every knowledge and simulation level floor. ${m.belt} Belt is awarded clean, with no conditions attached.`
     : m.outcome==='CONDITIONAL' ? `The candidate met the ${m.belt} Belt blended threshold (${m.blended}% against ${m.th.blended}%), with knowledge overall ${m.kOverall}% and simulation overall ${m.simOverall}%. ${m.belt} Belt is awarded with conditions: ${condText}. The conditions below are the path to the next level, not penalties.`
     : m.outcome==='KNOWLEDGE_FOUNDATION' ? `The candidate demonstrated a genuine knowledge foundation (knowledge overall ${m.kOverall}%, meeting the 80% standard), but simulation overall of ${m.simOverall}% is not yet at the threshold to issue a belt. This is a real achievement; the belt is the next concrete target once the simulation gaps below are developed.`
     : `The blended score of ${m.blended}% is below the White Belt threshold of 75%${m.kOverall<80?`, and knowledge overall (${m.kOverall}%) is below the 80% foundation`:''}. No belt is issued at this assessment. The path forward below is structured and achievable; re-assessment is at White Belt.`
-  ) + closeNote + (m.roleAmp ? ` ${m.roleAmp}` : '');
+  ) + closeNote + (m.roleAmp ? ` ${m.roleAmp}` : '') + (m.override ? ` The belt placement was set by assessor adjustment. ${ovAttr}.` : '');
   const body = `
   <div style="font-family:Arial,Helvetica,sans-serif;color:#1f2430;font-size:9pt;line-height:1.45">
     <div>${hdr(1)}
@@ -5110,6 +5127,14 @@ function buildAssessmentReportHTML(pr, staff, fac) {
   // from the same determination now.
   const displayBelt = pr.confirmedBelt || ((outcome === 'CLEAN' || outcome === 'CONDITIONAL') && beltIsDetermined ? targetBelt : null);
   const nextB = nextBelt(targetBelt) || null;
+  // Assessor override — same rule as rptComputeModel, kept in step so the two renderers
+  // cannot disagree about an overridden award. Belt-test rows (_precomputed) are excluded:
+  // their statuses are the belt-test lifecycle, not the placement review's.
+  const override = (!pr._precomputed && pr.status === 'adjusted' && pr.confirmedBelt)
+    // confirmed_at is a timestamptz; keep the date only, this prints on the report.
+    ? { by: pr.confirmedBy || 'Assessor', at: pr.confirmedAt ? String(pr.confirmedAt).slice(0, 10) : null, note: pr.assessorNote || '' }
+    : null;
+  const overrideAward = !!override && !(outcome === 'CLEAN' || outcome === 'CONDITIONAL');
   const candidateName = pr.staffName || fullName(staff) || 'Candidate';
   const beltColors = { White:'#94a3b8', Yellow:'#c49a20', Green:'#16a34a', Blue:'#2563eb', Brown:'#92400e', Black:'#374151' };
   const beltClr = beltColors[displayBelt || targetBelt] || '#c49a20';
@@ -5135,9 +5160,12 @@ function buildAssessmentReportHTML(pr, staff, fac) {
   if (condCounts['ADVISORY']) condParts.push(`${condCounts['ADVISORY']} advisory`);
   const condSummary = condParts.join(', ') || 'no conditions';
 
-  const reportStatus = displayBelt ? `FINAL — ${displayBelt.toUpperCase()} BELT, ${outcome === 'CONDITIONAL' ? 'Conditional' : outcome === 'CLEAN' ? 'Clean' : outcome}` : `FINAL — ${outcome}`;
+  const reportStatus = displayBelt ? `FINAL — ${displayBelt.toUpperCase()} BELT, ${overrideAward ? 'Assessor Override' : outcome === 'CONDITIONAL' ? 'Conditional' : outcome === 'CLEAN' ? 'Clean' : outcome}` : `FINAL — ${outcome}`;
 
-  const certBasis = _certBasis(outcome, classification, candidateName, blended, thresh, targetBelt, knowledgeOverall, simOverall, nextB || '—', conditions);
+  const ovAttr = override ? `Override recorded by ${override.by}${override.at ? ' on ' + override.at : ''}` : '';
+  const certBasis = overrideAward
+    ? `${displayBelt} Belt is awarded by assessor override, superseding the score-based determination. ${ovAttr}.${override.note ? ` Note: ${override.note}.` : ''} The scores are reported unchanged against the ${displayBelt} Belt standard: blended ${blended}% against the ${thresh.blended}% threshold, knowledge overall ${knowledgeOverall}%, simulation overall ${simOverall}%. The conditions in this report stand as the development path; they do not withdraw the award.`
+    : _certBasis(outcome, classification, candidateName, blended, thresh, targetBelt, knowledgeOverall, simOverall, nextB || '—', conditions) + (override ? ` The belt placement was set by assessor adjustment. ${ovAttr}.` : '');
 
   const pageHdr = n => `<div class="ar-running"><span><span style="color:#c49a20;font-weight:700">SBD OS</span>&nbsp;|&nbsp;Belt Assessment Report&nbsp;|&nbsp;CONFIDENTIAL</span><span>Page ${n}&nbsp;|&nbsp;SIPS Healthcare Solutions</span></div>`;
   const pageFooter = () => `<div class="ar-page-footer"><span>Generated ${genDate}&nbsp;|&nbsp;Formal certification record. Retain in personnel file.</span><span style="color:#c49a20">sipshealthcare.com/sbd</span></div>`;
@@ -5228,7 +5256,9 @@ function buildAssessmentReportHTML(pr, staff, fac) {
   const signOffAuth = /manager|director|vp|chief/i.test(titleLower) ? 'Director-level or above' : /supervisor/i.test(titleLower) ? 'Manager or Director' : (/lead.{0,5}tech/i.test(titleLower) && hasDangerous) ? 'Supervisor and Manager (co-sign)' : 'Supervisor';
   const condsToClear = conditions.filter(c => c.severity !== 'ADVISORY').length;
   let eligibilityText;
-  if (outcome === 'CLEAN') {
+  if (overrideAward) {
+    eligibilityText = `${safe(displayBelt)} Belt is active by assessor override. ${condsToClear} condition${condsToClear !== 1 ? 's' : ''} must be cleared before ${safe(nextB || 'next-level')} Belt assessment. Sign-off authority: ${safe(signOffAuth)}.${hasDangerous ? ' Supervised Practice Required conditions must be resolved before any other conditions are evaluated.' : ''}`;
+  } else if (outcome === 'CLEAN') {
     eligibilityText = `${candidateName} is cleared for placement at ${safe(displayBelt || targetBelt)} Belt without conditions. The path forward is progression toward ${safe(nextB || 'the next')} Belt assessment when eligible.`;
   } else if (outcome === 'KNOWLEDGE FOUNDATION') {
     eligibilityText = `The Knowledge Foundation is acknowledged. ${candidateName} may advance to the ${safe(targetBelt)} Belt assessment once the simulation conditions are resolved through documented scenario practice. Sign-off authority: ${safe(signOffAuth)}. Minimum timeframe: ${safe(timeframe || '30 days')}.`;
@@ -5237,7 +5267,9 @@ function buildAssessmentReportHTML(pr, staff, fac) {
   } else {
     eligibilityText = `${safe(displayBelt || targetBelt)} Belt is active. ${condsToClear} condition${condsToClear !== 1 ? 's' : ''} must be cleared before ${safe(nextB || 'next-level')} Belt assessment. Sign-off authority: ${safe(signOffAuth)}.${timeframe ? ' Minimum timeframe: ' + safe(timeframe) + '.' : ''}${hasDangerous ? ' Supervised Practice Required conditions must be resolved before any other conditions are evaluated.' : ''}`;
   }
-  const condFrameIntro = outcome === 'CONDITIONAL'
+  const condFrameIntro = overrideAward
+    ? `${safe(displayBelt)} Belt is active by assessor override. The following conditions represent the development gaps identified by the scores; they do not withdraw the award.`
+    : outcome === 'CONDITIONAL'
     ? `${safe(displayBelt || targetBelt)} Belt is active. The following conditions represent the specific development gaps that stand between this result and a clean ${safe(nextB || 'next-level')} Belt assessment.`
     : outcome === 'NO BELT'
     ? `No belt is issued at this assessment. Supervised Practice Required conditions take precedence and must be resolved before any other conditions are evaluated.`
@@ -5303,7 +5335,7 @@ function buildAssessmentReportHTML(pr, staff, fac) {
   }).join('');
 
   // Next Belt Target table per §8.3 — 3 rows with gap column
-  const nextTargetBelt = (outcome === 'CLEAN' || outcome === 'CONDITIONAL') ? (nextB || targetBelt) : targetBelt;
+  const nextTargetBelt = (outcome === 'CLEAN' || outcome === 'CONDITIONAL' || overrideAward) ? (nextB || targetBelt) : targetBelt;
   const nextThresh = sbdSpecOveralls(nextTargetBelt) || thresh;
   const gapStr = (current, required) => { const g = required - current; return g > 0 ? `+${Math.round(g * 10) / 10} pts needed` : 'Already meets'; };
   const gapClr = (current, required) => current >= required ? '#16a34a' : '#d97706';
@@ -5343,7 +5375,7 @@ function buildAssessmentReportHTML(pr, staff, fac) {
     : `<tr><td style="padding:7px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;font-weight:700;color:#16a34a;white-space:nowrap">CLEAR</td><td style="padding:7px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;color:#374151">No required development conditions were identified for this assessment.</td></tr>`;
 
   // (signOffAuth already computed above in this function.)
-  const reAssessLevel = (outcome === 'NO BELT') ? 'White Belt assessment (regardless of level assessed)' : `${safe(nextB || targetBelt)} Belt assessment`;
+  const reAssessLevel = (outcome === 'NO BELT' && !overrideAward) ? 'White Belt assessment (regardless of level assessed)' : `${safe(nextB || targetBelt)} Belt assessment`;
 
   return `
   <!-- PAGE 1 -->
@@ -5369,12 +5401,12 @@ function buildAssessmentReportHTML(pr, staff, fac) {
           <div style="background:#0f2340;padding:18px 12px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center">
             <div style="font-size:7pt;font-weight:700;color:#94a3b8;letter-spacing:.1em;margin-bottom:8px">BELT AWARDED</div>
             <div style="font-size:20pt;font-weight:900;color:${beltClr};line-height:1">${safe(displayBelt ? displayBelt.toUpperCase() : 'NONE')}</div>
-            <div style="font-size:7.5pt;font-weight:700;color:${outcome === 'CLEAN' ? '#16a34a' : outcome === 'CONDITIONAL' ? '#94a3b8' : '#94a3b8'};margin-top:7px;letter-spacing:.06em">${safe(outcome === 'CONDITIONAL' ? 'CONDITIONAL' : outcome === 'CLEAN' ? 'CLEAN' : outcome.toUpperCase())}</div>
+            <div style="font-size:7.5pt;font-weight:700;color:${outcome === 'CLEAN' ? '#16a34a' : '#94a3b8'};margin-top:7px;letter-spacing:.06em">${safe(overrideAward ? 'ASSESSOR OVERRIDE' : outcome === 'CONDITIONAL' ? 'CONDITIONAL' : outcome === 'CLEAN' ? 'CLEAN' : outcome.toUpperCase())}</div>
           </div>
           <div style="padding:18px 16px;background:#fffdf5;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0">
             <div style="font-size:7pt;font-weight:700;color:#c49a20;letter-spacing:.1em;margin-bottom:7px">FINAL DETERMINATION</div>
             <div style="font-size:13pt;font-weight:900;color:${outcome === 'CLEAN' ? '#16a34a' : outcome === 'CONDITIONAL' ? '#0d9488' : outcome === 'KNOWLEDGE FOUNDATION' ? '#d97706' : '#dc2626'};line-height:1.2;margin-bottom:5px">${safe(displayBelt ? displayBelt.toUpperCase() + ' BELT' : outcome)}</div>
-            <div style="font-size:8pt;color:#64748b">${conditions.length ? safe((outcome === 'CONDITIONAL' ? 'Conditional' : outcome) + ' — ' + condSummary) : 'Clean — no conditions'}</div>
+            <div style="font-size:8pt;color:#64748b">${conditions.length ? safe((overrideAward ? 'Assessor Override' : outcome === 'CONDITIONAL' ? 'Conditional' : outcome) + ' — ' + condSummary) : (overrideAward ? 'Assessor Override — no conditions' : 'Clean — no conditions')}</div>
           </div>
           <div style="padding:18px 16px;background:#fffdf5">
             <div style="font-size:7pt;font-weight:700;color:#c49a20;letter-spacing:.1em;margin-bottom:7px">BLENDED SCORE</div>
