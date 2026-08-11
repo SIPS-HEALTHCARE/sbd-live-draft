@@ -1967,6 +1967,23 @@ vocabulary these tasks are written in, including the SBD and SPD distinction tha
   documents arrive; and the client confirms a side-by-side against the document.
 
 - [ ] **T89** David's knowledge base is seeded into an index David never reads · est 0.5d · High
+  **Fixed in the repository 2026-08-11, `work/t89-pinecone-index-host` (`bb54168`). Not live yet.**
+  The host is no longer written down anywhere: `david-chat` and both seeding scripts read a
+  `PINECONE_INDEX_HOST` secret, deliberately with no hard-coded fallback, since a silent default is
+  what hid this. `search_wiki_graph` now checks `r.ok`, logs the status and body, and hands the
+  model an error instead of a 404 index-not-found body dressed as search results.
+  `seed-david-kb.mjs` defaults `EMBED_FIELD` to `text`, the field the console reports. Both scripts
+  still dry-run by default and still dry-run clean with no secret set. `grep pinecone.io` over
+  every `.ts`, `.js` and `.mjs` in the repository now returns nothing.
+
+  **What is left is all outside the repository, and the order matters.** Set the secret first —
+  `supabase secrets set PINECONE_INDEX_HOST=https://sbd-knowledge-ai-44928mo.svc.aped-4627-b74a.pinecone.io`
+  — then `supabase functions deploy david-chat`. Deploy first and the tool throws until the secret
+  lands, which is no worse than the silent failure it has had all along but is visible. Then close
+  it out against the two checks the client asked for: a White or Yellow Belt curriculum question
+  whose answer carries content only the 1,418 seeded records hold, and one deliberate wrong host to
+  watch the failure appear in the `david-chat` logs.
+
   Found on 2026-08-04 while tracing where the Foundations curriculum is stored. Three files name
   a Pinecone index host and they do not agree:
 
