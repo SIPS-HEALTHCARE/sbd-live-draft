@@ -89,3 +89,177 @@
 #sbd-root .prc-callout{background:#0e1328 !important}
 #sbd-root .prc-check{background:#0e1328 !important}
 #sbd-root .prc-callout-body, #sbd-root .prc-check-row{color:#cbd5e1 !important}
+
+/* ── Foundations section layout, client request 2026-08-03 ────────────────────
+   "The UI should resemble the doc... colors. Sections, separated text,
+   adjusted format." The source documents use a blue section header, blue
+   labelled blocks and clearly separated lines. These are the dark-theme
+   equivalents of that language, not a copy of the light-theme document. */
+
+.fnd-section{
+  background:var(--s2);
+  border:1px solid var(--bdr);
+  border-radius:var(--r);
+  margin-bottom:14px;
+  overflow:hidden;
+}
+.fnd-section-head{
+  display:flex; align-items:center; gap:9px;
+  padding:11px 14px;
+  background:linear-gradient(90deg, rgba(59,130,246,.16), rgba(59,130,246,.04));
+  border-bottom:1px solid rgba(59,130,246,.22);
+}
+.fnd-section-num{
+  flex-shrink:0;
+  font-size:11px; font-weight:700; letter-spacing:.04em;
+  color:#0b1220; background:#7cc4e8;
+  padding:3px 7px; border-radius:5px;
+}
+.fnd-section-title{
+  font-size:14px; font-weight:700; color:#cfe6f5; letter-spacing:.01em;
+}
+.fnd-section-body{ padding:12px 14px 14px }
+
+/* label + value block */
+.fnd-blk{
+  border-left:3px solid #3b82f6;
+  background:rgba(59,130,246,.07);
+  border-radius:0 6px 6px 0;
+  padding:9px 12px;
+  margin-bottom:9px;
+}
+.fnd-blk-lbl{
+  font-size:11.5px; font-weight:700; letter-spacing:.05em; text-transform:uppercase;
+  color:#7cc4e8; margin-bottom:5px;
+}
+.fnd-blk-body{ font-size:13px; color:#cbd5e1; line-height:1.6 }
+
+/* label + list block */
+/* The source document is blue-dominant. Green and red are reserved there for
+   tip and warning callouts, so list blocks stay blue rather than becoming a
+   second colour that the document never uses for ordinary content. */
+.fnd-blk-list{ border-left-color:#3b82f6; background:rgba(59,130,246,.07) }
+.fnd-blk-list .fnd-blk-lbl{ color:#7cc4e8 }
+.fnd-chips{ display:flex; flex-wrap:wrap; gap:6px 7px; align-items:flex-start }
+.fnd-chip{
+  font-size:12px; color:#d8e6ee;
+  background:rgba(255,255,255,.05);
+  border:1px solid rgba(255,255,255,.09);
+  border-radius:5px; padding:4px 9px; line-height:1.35;
+}
+
+/* plain statement line */
+.fnd-line{
+  position:relative;
+  font-size:13px; color:#a8b6c6; line-height:1.62;
+  padding:5px 0 5px 15px; margin-bottom:2px;
+}
+.fnd-line::before{
+  content:''; position:absolute; left:3px; top:12px;
+  width:5px; height:5px; border-radius:50%; background:#3b82f6; opacity:.75;
+}
+.fnd-line + .fnd-line{ border-top:1px solid rgba(255,255,255,.05) }
+
+@media(max-width:560px){
+  .fnd-section-body{ padding:10px 11px 12px }
+  .fnd-blk{ padding:8px 10px }
+  .fnd-chip{ font-size:11.5px; padding:3px 8px }
+}
+
+/* ── Full document content, client request 2026-08-03 ─────────────────────────
+   "all of the information on the documents we want inside the technology and
+   then we want the UI to kind of format it similarly. It don't have to be
+   exactly the same, but ... it makes it easier on the eyes."
+   The source documents use a blue section heading, a header-row table, numbered
+   step blocks, and green tip / red warning callouts. These are those, in the
+   dark theme. */
+
+.fnd-intro{ font-size:13px; color:#a8b6c6; line-height:1.65; margin:0 0 14px }
+.fnd-h{
+  font-size:14px; font-weight:700; color:#7cc4e8;
+  margin:20px 0 8px; padding-bottom:6px;
+  border-bottom:1px solid rgba(59,130,246,.25);
+}
+.fnd-h:first-child{ margin-top:0 }
+.fnd-sub{ font-size:12.5px; color:#94a3b8; margin:0 0 10px }
+
+/* table */
+.fnd-tw{ overflow-x:auto; -webkit-overflow-scrolling:touch; margin-bottom:6px }
+.fnd-table{ width:100%; border-collapse:collapse; font-size:12.5px; min-width:520px }
+.fnd-table th{
+  text-align:left; font-weight:700; color:#dbeafe;
+  background:rgba(59,130,246,.20);
+  padding:9px 11px; border:1px solid rgba(59,130,246,.28);
+  white-space:nowrap;
+}
+.fnd-table td{
+  padding:9px 11px; color:#b9c7d6; line-height:1.55;
+  border:1px solid rgba(255,255,255,.07);
+  vertical-align:top;
+}
+.fnd-table tbody tr:nth-child(odd){ background:rgba(255,255,255,.02) }
+.fnd-table b{ color:#e2e8f0 }
+
+/* numbered step block */
+.fnd-step{ display:flex; align-items:stretch; margin-bottom:8px; border-radius:6px; overflow:hidden }
+.fnd-step-n{
+  flex:0 0 auto; display:flex; align-items:center;
+  padding:0 11px; font-size:10.5px; font-weight:700; letter-spacing:.06em;
+  color:#dbeafe; background:#1e3a6b;
+}
+.fnd-step-b{ flex:1; padding:9px 12px; background:rgba(59,130,246,.08) }
+.fnd-step-t{ font-size:13px; font-weight:600; color:#7cc4e8; margin-bottom:3px }
+.fnd-step-d{ font-size:12.5px; color:#b9c7d6; line-height:1.55 }
+.fnd-ul{ margin:4px 0 0; padding-left:17px }
+.fnd-ul li{ font-size:12.5px; color:#b9c7d6; line-height:1.6; margin-bottom:2px }
+
+/* procedure marker between steps */
+.fnd-act{
+  font-size:11.5px; font-weight:700; letter-spacing:.05em;
+  color:#fca5a5; margin:10px 0 12px; padding-left:2px;
+}
+.fnd-act::before{ content:'\2192\00a0' }
+
+/* tip and warning callouts */
+.fnd-note{ border-radius:6px; padding:10px 13px; margin:12px 0 14px; border-left:3px solid }
+.fnd-note-t{ font-size:12.5px; font-weight:700; margin-bottom:4px }
+.fnd-note-b{ font-size:12.5px; line-height:1.6; color:#b9c7d6 }
+.fnd-note-tip{ border-left-color:#22c55e; background:rgba(34,197,94,.08) }
+.fnd-note-tip .fnd-note-t{ color:#7ddba1 }
+.fnd-note-warn{ border-left-color:#ef4444; background:rgba(239,68,68,.08) }
+.fnd-note-warn .fnd-note-t{ color:#fca5a5 }
+
+/* Neutral callout. The source documents mark these with a heart, a book or a tick rather
+   than a warning sign: patient-connection notes, learning objectives, key takeaways. They
+   are emphasis, not caution, so they read blue rather than red or green. */
+.fnd-note-key{ border-left-color:#3b82f6; background:rgba(59,130,246,.08) }
+.fnd-note-key .fnd-note-t{ color:#93c5fd }
+
+/* Paragraphs and bulleted lines inside a callout. The documents bullet these with a dot,
+   a tick or an arrow, and the glyph is dropped on the way in, so the marker is drawn here. */
+.fnd-note p{ font-size:12.5px; line-height:1.6; color:#b9c7d6; margin:0 0 6px }
+.fnd-note p:last-child{ margin-bottom:0 }
+.fnd-note-li{
+  font-size:12.5px; line-height:1.6; color:#b9c7d6;
+  padding-left:14px; position:relative; margin-bottom:3px;
+}
+.fnd-note-li::before{ content:'\2022'; position:absolute; left:2px; opacity:.6 }
+
+/* Third-level heading. The documents nest three deep, so a section can hold a heading, a
+   sub-heading and then this. It sits below .fnd-h in weight without losing the hierarchy. */
+.fnd-h3{
+  font-size:12.5px; font-weight:600; color:#cbd5e1;
+  margin:12px 0 5px; letter-spacing:.01em;
+}
+
+/* Body paragraphs and list items rendered straight from the source, outside any callout. */
+.fnd-section-body > p, .fnd-section-body div > p{
+  font-size:13px; line-height:1.65; color:#94a3b8; margin:0 0 9px;
+}
+
+@media(max-width:560px){
+  .fnd-step-n{ padding:0 8px; font-size:10px }
+  .fnd-step-b{ padding:8px 10px }
+  .fnd-table{ font-size:12px }
+  .fnd-table th, .fnd-table td{ padding:7px 9px }
+}

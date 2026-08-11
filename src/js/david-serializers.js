@@ -158,17 +158,28 @@
   // Fix 4 D1 — compact placement-review lines for the platform snapshot. Serializes ONLY
   // summary fields; responses[] (full answer transcripts) are deliberately excluded (token blowup).
   // Sync: reads the already-mapped rows it is given, never fetches.
+  // L1 to L5 are COGNITIVE COMPLEXITY levels, not topics and not content modules. Every domain
+  // is tested at several levels, so a gap at L3 is never remediated by assigning "L3 training".
+  // This block used to send bare numbers ("L1 89% / L2 90%"), which left the model to supply
+  // its own meaning for each level, and it filled the gap with invented topic names that appear
+  // nowhere in the curriculum. Naming the levels in the data removes the ambiguity at source,
+  // which holds better than asking the model not to guess.
+  const LEVEL_NAMES = (typeof LEVEL_LABELS !== 'undefined' && LEVEL_LABELS)
+    || { '1': 'Foundational', '2': 'Operational', '3': 'Applied', '4': 'Advanced', '5': 'Systems' };
+
   function aiSerializePlacements(reviews) {
     if (!Array.isArray(reviews) || reviews.length === 0) return '';
     const lines = reviews.map(pr => {
       const levels = Object.entries(pr.levelScores || {})
-        .map(([lvl, pct]) => `L${lvl} ${Math.round(Number(pct) || 0)}%`).join(' / ');
+        .map(([lvl, pct]) => `L${lvl} ${LEVEL_NAMES[String(lvl)] || ''} ${Math.round(Number(pct) || 0)}%`).join(' / ');
       return `  • ${pr.staffName || 'Unknown'} (staff ${pr.staffId || '—'}): status=${pr.status || '—'}, tentative=${pr.tentativeBelt || '—'}, confirmed=${pr.confirmedBelt || '—'}`
         + (levels ? `, levels: ${levels}` : '')
         + (pr.submittedAt ? `, submitted ${String(pr.submittedAt).slice(0, 10)}` : '')
         + (pr.reviewedAt ? `, reviewed ${String(pr.reviewedAt).slice(0, 10)}` : '');
     });
-    return `[PLACEMENTS] (placement assessments, summary only — answer transcripts not included):\n${lines.join('\n')}`;
+    return `[PLACEMENTS] (placement assessments, summary only, answer transcripts not included).\n`
+      + `L1 to L5 are cognitive complexity levels (L1 Foundational, L2 Operational, L3 Applied, L4 Advanced, L5 Systems), NOT topics or content areas. Report them by these names only and never substitute a subject name.\n`
+      + lines.join('\n');
   }
 
   // Fix 4 D2 — static F/I module catalog, one line per module, so David can name real module

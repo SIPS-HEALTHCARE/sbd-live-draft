@@ -264,19 +264,19 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
     <div class="hero-card">
       <div class="hero-lbl">Network Token Usage</div>
       <div class="hero-row">
-        <div class="hero-val">12.4K</div>
+        <div class="hero-val">—</div>
         <div class="hero-unit">tokens this month</div>
       </div>
-      <div class="hero-trend trend-up">↑ 18% vs last month</div>
+      <div class="hero-trend trend-neutral">Loading…</div>
       <div class="sparkline" id="sparkline"></div>
     </div>
     <div class="hero-card">
-      <div class="hero-lbl">Estimated AI Cost</div>
+      <div class="hero-lbl">AI Cost (logged)</div>
       <div class="hero-row">
-        <div class="hero-val">$4.20</div>
+        <div class="hero-val">—</div>
         <div class="hero-unit">MTD</div>
       </div>
-      <div class="hero-trend trend-neutral">— On budget</div>
+      <div class="hero-trend trend-neutral">Loading…</div>
     </div>
   </div>
 
@@ -553,7 +553,7 @@ async function loadFacilities(){
   // Month-to-date usage split by platform (sbd = belt app, psop = SOP tool), per
   // facility. Ignacio 2026-07-02: usage must be visible per platform while still
   // tracked by facility on both. Master-admin-gated RPC (david_usage_by_app_mtd).
-  let byAppMap = {};
+  let byAppMap = {}, byAppOk = false;
   try {
     const uaRes = await fetch(SB_URL+'/rest/v1/rpc/david_usage_by_app_mtd', {
       method:'POST',
@@ -561,6 +561,7 @@ async function loadFacilities(){
       body:'{}'
     });
     if(uaRes.ok){
+      byAppOk = true;
       const rows = await uaRes.json();
       (Array.isArray(rows)?rows:[]).forEach(r => {
         if(!byAppMap[r.facility_id]) byAppMap[r.facility_id] = {};
@@ -597,6 +598,7 @@ async function loadFacilities(){
 
   renderCards(FACILITIES);
   updateDeployCount();
+  updateUsageHero(byAppMap, byAppOk);
   renderTelemetryChart();
 }
 
@@ -788,14 +790,43 @@ function updateDeployCount(){
   const pct=active/total;
   document.getElementById('gauge-arc').style.strokeDashoffset=188.5*(1-pct);
   document.querySelector('.gauge-text').textContent=Math.round(pct*100)+'%';
-  // Update token total
-  const totalTokens=FACILITIES.reduce((s,f)=>s+f.tokens,0);
-  const tokenVal=document.querySelectorAll('.hero-val')[1];
-  if(tokenVal) tokenVal.textContent=totalTokens>=1000?(totalTokens/1000).toFixed(1)+'K':totalTokens;
-  // Update cost
-  const cost=((totalTokens/1000)*0.015).toFixed(2);
+}
+
+// QA-2026-07-29 (Iggie): the old cost/token hero math summed only FACILITIES.tokens
+// (real facilities, excludes master-admin-global) and multiplied by a flat $0.015/1K
+// guess — off by ~53x against real spend ($1.09 shown vs $58+ actual), because ~99.5%
+// of usage runs under master-admin-global, and cost is provider-billed, not linear per
+// token. byAppMap comes straight from david_usage_by_app_mtd(), the same
+// david_usage_logs/source=chat/MTD scope the Prompt Cache panel's cacheSavings.cost
+// reads, so SIPS + Platform here sums to that panel's number.
+// `ok` is false when the RPC failed — then show "—" rather than $0.00, which would
+// read as "no spend" and repeat the understatement this fix exists to remove.
+function updateUsageHero(byAppMap, ok){
+  const tokVal=document.querySelectorAll('.hero-val')[1];
+  const tokTrend=document.querySelectorAll('.hero-trend')[1];
   const costVal=document.querySelectorAll('.hero-val')[2];
-  if(costVal) costVal.textContent='$'+cost;
+  const costTrend=document.querySelectorAll('.hero-trend')[2];
+  if(!ok){
+    if(tokVal) tokVal.textContent='—';
+    if(costVal) costVal.textContent='—';
+    [tokTrend,costTrend].forEach(el=>{ if(el){ el.className='hero-trend trend-neutral'; el.textContent='Usage data unavailable'; } });
+    return;
+  }
+  let sipsTok=0, sipsCost=0, platTok=0, platCost=0;
+  Object.entries(byAppMap||{}).forEach(([fid, apps])=>{
+    const isSips = fid === 'master-admin-global';
+    Object.values(apps).forEach(a=>{
+      if(isSips){ sipsTok+=a.tok_mtd; sipsCost+=a.cost_mtd; }
+      else      { platTok+=a.tok_mtd; platCost+=a.cost_mtd; }
+    });
+  });
+  const totTok=sipsTok+platTok, totCost=sipsCost+platCost;
+  const fmtTok = n => n>=1e6?(n/1e6).toFixed(1)+'M':n>=1000?(n/1000).toFixed(1)+'K':String(n);
+
+  if(tokVal) tokVal.textContent=fmtTok(totTok);
+  if(tokTrend){ tokTrend.className='hero-trend trend-neutral'; tokTrend.textContent=`SIPS ${fmtTok(sipsTok)} · Platform ${fmtTok(platTok)}`; }
+  if(costVal) costVal.textContent='$'+totCost.toFixed(2);
+  if(costTrend){ costTrend.className='hero-trend trend-neutral'; costTrend.textContent=`SIPS $${sipsCost.toFixed(2)} · Platform $${platCost.toFixed(2)}`; }
 }
 
 // ── Sparkline ──

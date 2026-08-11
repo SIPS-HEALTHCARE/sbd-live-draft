@@ -9,7 +9,7 @@ window.handleSyncError = function(e, context) {
 };
 
 // ============================================================ STATE
-const ST={portal:null,hView:'h-dashboard',aView:'a-overview',sView:'s-dashboard',xView:'x-dashboard',curFid:'test-a',hFid:'test-a',curSystemId:null,aTab:'all',facTab:'staff',charts:{},user:null,staffId:null};
+const ST={portal:null,hView:'h-dashboard',aView:'a-overview',sView:'s-dashboard',xView:'x-dashboard',curFid:null,hFid:null,curSystemId:null,aTab:'all',facTab:'staff',charts:{},user:null,staffId:null};
 
 function killChart(k){ if(ST.charts[k]){ST.charts[k].destroy();delete ST.charts[k];} }
 function mkChart(k,el,cfg){ killChart(k); ST.charts[k]=new Chart(el,cfg); return ST.charts[k]; }
@@ -372,6 +372,18 @@ function enterPortal(type){
     document.getElementById('s-topbar-title').textContent=_st;
     document.getElementById('s-portal').classList.remove('hidden');
     applyDavidNavGate('nav-david-s', u);
+    // #73: a granted assessor whose base role is staff_member lands here, and the assessor
+    // consoles only ever lived in the admin portal. Reveal them in this portal instead, since
+    // the portal switcher is master/SIPS admin only (T72), so this is the only door they get.
+    const _sAssessor = effIsAssessor(u);
+    ['s-nav-assessor-lbl','s-nav-assessments','s-nav-observations','s-nav-observationreviews'].forEach(id=>{
+      const n=document.getElementById(id);
+      if(n) n.style.display = _sAssessor ? (id==='s-nav-assessor-lbl'?'block':'flex') : 'none';
+    });
+    // T92: the Scripts tab appears only for the person it was assigned to. Safe
+    // here because initAppData() has already hydrated DB.foundationsAssignments
+    // (doLogin awaits it before calling enterPortal), and this is the only door in.
+    if(typeof applyScriptsNavGate==='function') applyScriptsNavGate(sid);
     renderSView(_sv);
     return;
   }
@@ -399,7 +411,7 @@ function enterPortal(type){
   }
 
   if(type==='hospital'){
-    const fid=u?u.fid:'test-a';
+    const fid=u.fid;
     ST.hFid=fid;
     ST.curFid=fid;
     const fac=getFac(fid);
@@ -569,11 +581,13 @@ function renderSView(view){
     toast('RBAC Guard: Unauthorized access to Staff Portal', 'err');
     return;
   }
-  ['s-dashboard','s-belt','s-window','s-scoreboard','s-posschool','s-report','s-oip','s-schedule','s-history','s-study','s-foundations','s-instruments','s-preceptor','s-guide','s-settings','s-david'].forEach(v=>{
+  ['s-dashboard','s-belt','s-window','s-scoreboard','s-posschool','s-report','s-oip','s-schedule','s-history','s-study','s-foundations','s-instruments','s-scripts','s-preceptor','s-observations','s-observationreviews','s-assessments','s-guide','s-settings','s-david'].forEach(v=>{
     const el=document.getElementById(v);
     if(el){el.classList.add('hidden');el.classList.remove('fade-in');}
   });
   ST.sView=view;
+  ovsMount='s';   // #73: Observations render into the staff portal from here
+  asmMount='s';   // #77: and the assessment queue, same indirection
   if(typeof logActivity==='function') logActivity('view',{view});
   const el=document.getElementById(view);
   if(el){el.classList.remove('hidden');void el.offsetWidth;el.classList.add('fade-in');}
@@ -590,7 +604,16 @@ function renderSView(view){
     's-study':renderSStudy,
     's-foundations':()=>{ if(typeof renderSFoundations==='function') renderSFoundations(); },
     's-instruments':()=>{ if(typeof renderSInstruments==='function') renderSInstruments(); },
+    // T92: assigned-only surface. renderSScripts re-checks the assignment itself,
+    // because a saved sessionStorage view can route straight to a view id.
+    's-scripts':()=>{ if(typeof renderSScripts==='function') renderSScripts(); },
     's-preceptor':()=>{ if(typeof renderSPreceptor==='function') renderSPreceptor(); },
+    // #73: assessor consoles inside the staff portal. Re-checked here, not just at nav
+    // visibility, because a saved view in sessionStorage can route straight to a view id.
+    's-observations':()=>{ if(effIsAssessor()) renderAObservations(); else toast('Assessor access required.','err'); },
+    's-observationreviews':()=>{ if(effIsAssessor()) renderAObservationReviews(); else toast('Assessor access required.','err'); },
+    // #77: same re-check. The queue itself is facility-scoped inside renderAAssessments.
+    's-assessments':()=>{ if(effIsAssessor()) renderAAssessments(); else toast('Assessor access required.','err'); },
     's-guide':()=>renderGuideView('s'),
     's-settings':renderSettingsView,
     's-david':()=>renderDavidView('s-david'),
@@ -618,7 +641,7 @@ function renderXView(view){
     'x-facilities':renderXFacilities,
     'x-facility':()=>renderXFacilityDetail(ST.curFid),
     'x-staff':renderXStaff,
-    'x-schedule':renderXSchedule,
+    'x-schedule':()=>{ schMount='x'; renderXSchedule(); },
     'x-reports':renderXReports,
     'x-guide':()=>renderGuideView('x'),
     'x-settings':renderSettingsView,
@@ -652,7 +675,7 @@ function renderHView(view){
     toast('RBAC Guard: Unauthorized access to Facility Portal', 'err');
     return;
   }
-  ['h-dashboard','h-staff','h-profile','h-milestones','h-posschool','h-training','h-instruments','h-preceptor','h-scoreboard','h-schedule','h-attendance','h-reports','h-assessments','h-progression','h-guide','h-settings','h-david'].forEach(v=>{
+  ['h-dashboard','h-staff','h-profile','h-milestones','h-posschool','h-training','h-instruments','h-checklists','h-preceptor','h-scoreboard','h-schedule','h-attendance','h-reports','h-assessments','h-progression','h-guide','h-settings','h-david'].forEach(v=>{
     const el=document.getElementById(v);
     if(el){ el.classList.add('hidden'); el.classList.remove('fade-in'); }
   });
@@ -673,6 +696,7 @@ function renderHView(view){
     'h-posschool':()=>renderHPosSchool(),
     'h-training':()=>{ if(typeof renderHTraining==='function') renderHTraining(); },
     'h-instruments':()=>{ if(typeof renderHInstruments==='function') renderHInstruments(); },
+    'h-checklists':()=>renderHChecklists(),
     'h-preceptor':()=>{ if(typeof renderHPreceptor==='function') renderHPreceptor(); },
     'h-scoreboard':()=>renderHScoreboard(),
     'h-schedule':()=>renderHSchedule(),
@@ -694,17 +718,22 @@ function renderAView(view){
     toast('RBAC Guard: Unauthorized access to Network Portal', 'err');
     return;
   }
-  ['a-overview','a-leaderboard','a-allstaff','a-scoreboard','a-facilities','a-facility','a-registrations','a-assessments','a-progression','a-foundations','a-instruments','a-preceptor','a-upload','a-reports','a-david','a-daviddashboard','a-adminusers','a-rolemgmt','a-promoqueue','a-freeagents','a-placementreviews','a-observations','a-observationreviews','a-guide','a-settings','a-systems','a-systems-dashboard'].forEach(v=>{
+  ['a-overview','a-leaderboard','a-allstaff','a-scoreboard','a-facilities','a-facility','a-schedule','a-registrations','a-assessments','a-progression','a-foundations','a-instruments','a-preceptor','a-upload','a-reports','a-david','a-daviddashboard','a-adminusers','a-rolemgmt','a-promoqueue','a-freeagents','a-placementreviews','a-observations','a-observationreviews','a-guide','a-settings','a-systems','a-systems-dashboard'].forEach(v=>{
     const el=document.getElementById(v);
     if(el){ el.classList.add('hidden'); el.classList.remove('fade-in'); }
   });
   ST.aView=view;
+  ovsMount='a';   // #73: Observations render into the admin portal from here
+  asmMount='a';   // #77: and the assessment queue
   if(typeof logActivity==='function') logActivity('view',{view});
   const el=document.getElementById(view);
   if(el){ el.classList.remove('hidden'); void el.offsetWidth; el.classList.add('fade-in'); }
   const fns={
     'a-overview':renderAOverview,'a-leaderboard':renderALeaderboard,'a-allstaff':renderAAllStaff,'a-scoreboard':renderAScoreboard,
     'a-facilities':renderAFacilities,'a-facility':renderAFacility,
+    // T58: the schedule builder and the attendance register reach the admin portal by mount,
+    // not by a copy -- same renderXSchedule the system portal uses, pointed at a-schedule.
+    'a-schedule':()=>{ schMount='a'; renderXSchedule(); },
     'a-registrations':renderARegistrations,
     'a-assessments':()=>{ _inProgressCache=null; renderAAssessments(); },'a-progression':renderAProgression,'a-upload':renderAUpload,
     'a-foundations':()=>{ if(typeof renderHTraining==='function') renderHTraining(); },
@@ -893,8 +922,8 @@ function adminFilterBar(showFacility, facList, onChangeFn){
 // Keep focus + caret in the admin staff search box across the re-render each keystroke triggers.
 // Typing sets the filter then re-renders the whole view (including this input), which would
 // otherwise destroy the focused box and force the user to click back in after every letter.
-function adminStaffSearchInput(el, fnName){
-  adminStaffFilter.q = el.value;
+function adminStaffSearchInput(el, fnName, filterObj){
+  (filterObj||adminStaffFilter).q = el.value;
   const caret = el.selectionStart;
   if(typeof window[fnName] === 'function') window[fnName]();
   const fresh = document.getElementById('adminStaffSearch_' + fnName);
@@ -2265,25 +2294,143 @@ if(typeof window !== 'undefined'){ window.addEventListener('online', function(){
 // dangerous-answer block and the K-based White Belt rule. Replaces the prior logic that
 // suggested a belt from level/knowledge scores alone, which could label a candidate above
 // what they actually earned (or ignore a dangerous answer).
-const SBD_BELT_THRESHOLDS = [
-  { belt: 'Black',  blended: 90, k: 92, sim: 87 },
-  { belt: 'Brown',  blended: 87, k: 91, sim: 84 },
-  { belt: 'Blue',   blended: 85, k: 89, sim: 82 },
-  { belt: 'Green',  blended: 81, k: 86, sim: 78 },
-  { belt: 'Yellow', blended: 78, k: 83, sim: 75 },
-  { belt: 'White',  blended: 75, k: 80, sim: 72 },
-];
+//
+// Spec section 9 keeps ONE consolidated threshold table and says in as many words not to
+// hardcode these values inline. That table already exists, verbatim, in belt-test-engine.js
+// as BELT_TEST_CONFIG, and the dynamic belt test reads it. This file used to carry three
+// separate copies of it (here, RPT_STANDARDS.belts, and BELT_THRESHOLDS in the report
+// generator), which is how a Green candidate's report came to print White floors and mark
+// levels the belt does not gate at all as failures.
+//
+// Read it lazily inside a function, never at file scope: index.html loads belt-test-engine.js
+// AFTER ui-views.js, so at parse time the global does not exist yet. By call time it does.
+const SBD_BELT_ORDER = ['Black', 'Brown', 'Blue', 'Green', 'Yellow', 'White']; // highest first
+
+function sbdSpecConfig(){
+  return (typeof BELT_TEST_CONFIG !== 'undefined' && BELT_TEST_CONFIG)
+      || (typeof window !== 'undefined' && window.BELT_TEST_CONFIG)
+      || null;
+}
+
+// The overall gates per belt, highest belt first, in the shape the suggestion engine walks.
+// Returns [] if the config has not loaded, and callers must treat that as "cannot determine"
+// rather than falling through to a lower belt.
+function sbdBeltThresholds(){
+  const cfg = sbdSpecConfig();
+  if(!cfg || !cfg.belts) return [];
+  return SBD_BELT_ORDER.filter(b => cfg.belts[b]).map(b => ({
+    belt: b, blended: cfg.belts[b].blendedMin, k: cfg.belts[b].kOverallMin, sim: cfg.belts[b].simOverallMin
+  }));
+}
+
+// A null floor means the belt does not gate that level. That is not the same as a floor of
+// zero, so callers must treat null as "no row", not as "passes automatically".
+function sbdSpecFloors(belt){
+  const cfg = sbdSpecConfig();
+  const b = cfg && cfg.belts && cfg.belts[belt];
+  if(!b) return null;
+  return {
+    kOverallMin: b.kOverallMin, kLevelFloors: b.kLevelFloors,
+    simOverallMin: b.simOverallMin, simLevelFloors: b.simLevelFloors,
+    simIndividualMin: b.simIndividualMin, blendedMin: b.blendedMin
+  };
+}
+
+// ---------------------------------------------------------------- Dangerous provisions (T65)
+// The client's ruling, 2026-07-28: a dangerous answer does not reduce the belt. It raises a
+// patient-safety provision that sits on the person's account, visible there, until a SIPS
+// admin clears it. Cleared entries are kept rather than removed, because the record of who
+// cleared it and when is the point of the feature. While an entry is open the person keeps
+// the belt they hold but cannot be put forward for the next one.
+
+// Build provision entries from a set of assessment responses. One entry per knowledge answer
+// that is flagged dangerous and was answered wrongly.
+function sbdBuildProvisions(responses, reviewId){
+  const now = new Date().toISOString();
+  return (responses || [])
+    .filter(sbdIsDangerousResponse)
+    .map(r => ({
+      qid: r.qId || r.id || null,
+      label: String(r.question || '').slice(0, 200),
+      answer: String(r.answer || ''),
+      flagged_at: now,
+      source_review_id: reviewId || null,
+      cleared_by: null,
+      cleared_by_name: null,
+      cleared_at: null,
+    }));
+}
+
+function sbdOpenProvisions(staff){
+  return ((staff && staff.dangerousProvisions) || []).filter(p => !p.cleared_at);
+}
+
+function sbdHasOpenProvision(staff){
+  return sbdOpenProvisions(staff).length > 0;
+}
+
+// Who may clear: a master admin or a SIPS admin, per the client's ruling and confirmed
+// 2026-07-27 as the position for now. That is the same pair the belt override uses
+// (isOverrideAdmin), which is the closest existing decision of this weight. Facility-side
+// roles are deliberately not on this list: the provision is a SIPS determination, and the
+// facility the person works at is not the party that clears it.
+//
+// A role-management toggle for this capability is queued separately, so this is one function
+// rather than a check scattered through the interface.
+const SBD_PROVISION_CLEAR_ROLES = ['master_admin', 'staff_admin'];
+function sbdCanClearProvision(){
+  return !!(ST.user && SBD_PROVISION_CLEAR_ROLES.includes(ST.user.role));
+}
+
+// The three overall gates for a belt, named the way the report templates read them.
+function sbdSpecOveralls(belt){
+  const f = sbdSpecFloors(belt);
+  if(!f) return null;
+  return { blended: f.blendedMin, k: f.kOverallMin, knowledge: f.kOverallMin,
+           sim: f.simOverallMin, individual: f.simIndividualMin };
+}
+// Scoring Specification v1.0 §4.4: knowledge overall is the ITEM-WEIGHTED mean across every
+// knowledge item, and the spec says in as many words that this is canonical and NOT the mean
+// of the five level means. This reverses the earlier reading, which took the level mean from
+// a corrected report the client had sent.
+//
+// The two agree only while every level holds the same item count. L5 holds 7 since the TIR34
+// question was pulled at the client's request, so they differ by about a tenth of a point:
+// David Williams reads 97.4 (38 of 39) item-weighted where the level mean gave 97.5. No belt
+// in the current records moves on that difference.
+//
+// Items are counted directly, so a level nobody answered contributes nothing rather than
+// dragging the mean down as a zero.
+function sbdKnowledgeOverall(kResponses){
+  const rows = (kResponses || []).filter(r => Number(r.level));
+  if(!rows.length) return 0;
+  return (rows.filter(r => r.correct).length / rows.length) * 100;
+}
+
 function sbdSuggestBelt(kOverall, kL1, simOverall, blended, hasDangerousKAnswer){
-  // Step 1 -- dangerous knowledge answers block all belt issuance
-  if(hasDangerousKAnswer) return 'No Belt';
+  // A dangerous knowledge answer used to return 'No Belt' here and block issuance outright.
+  // The client ruled on 2026-07-28 that the belt is issued on the scores and the dangerous
+  // item becomes a provision on the person's account instead, which is also what the spec
+  // describes in section 8: the blended score sets the belt, floor failures set the
+  // conditions. The parameter stays because callers use it to raise the provision.
   // Step 2 -- highest belt where blended AND K both pass; sim decides Clean vs Conditional
-  for(const t of SBD_BELT_THRESHOLDS){
+  const _rows = sbdBeltThresholds();
+  // No threshold table means we cannot say what was earned. Returning 'No Belt' here would
+  // print a determination we did not actually make, which is the same class of bug as the
+  // White placeholder. Say nothing instead and let the caller show nothing.
+  if(!_rows.length) return null;
+  for(const t of _rows){
     if(blended >= t.blended && kOverall >= t.k){
       return simOverall >= t.sim ? t.belt + ' Belt' : t.belt + ' Belt Conditional';
     }
   }
-  // Step 3 -- K-based White Belt
-  if(kOverall >= 80 && kL1 >= 80) return 'White Belt Conditional';
+  // Step 3 -- Knowledge Foundation (Scoring Specification v1.0 §8.6). This is NOT a belt and
+  // must not be reported as one: it acknowledges a candidate whose knowledge base is genuinely
+  // built while the applied side has not caught up. It replaces the old K-based "White Belt
+  // Conditional", which awarded a belt the blended score had not earned. A dangerous answer
+  // defers the acknowledgment until it is resolved through observed practice; it is never a
+  // permanent denial (§14.6).
+  if(kOverall >= 80 && kL1 >= 80) return hasDangerousKAnswer ? 'Knowledge Foundation Deferred' : 'Knowledge Foundation';
   // Step 4 -- no belt
   return 'No Belt';
 }
@@ -2296,17 +2443,18 @@ function prSuggestion(pr){
   const simR = (pr && pr.responses || []).filter(r => r.type === 'simulation');
   if(!kR.length && !simR.length) return null;
   const avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
-  // Blend the RAW averages, then round once — same as rptComputeModel(). Rounding the
-  // component scores BEFORE blending (e.g. 87.5 -> 88) used to flip belts at a threshold
-  // boundary (Bond: 77.5 read as 78 = Yellow), which made the card disagree with the report.
-  const kRaw = avg(kR.map(r => Number(r.score) || 0));
+  // Scoring Specification v1.0 §7.6: every score is carried at full precision through every
+  // threshold comparison, and rounding happens only where a number is displayed. Rounding
+  // first is what the spec's own worked example warns about. A candidate at 80.12 reads as
+  // 80.1 against a Green line of 81, and a whole-number round would have placed them wrong.
+  const kRaw = sbdKnowledgeOverall(kR);        // spec §4.4, item-weighted
   const simRaw = avg(simR.map(r => Number(r.aiScore) || 0));
-  const kOverall = Math.round(kRaw);
-  const kL1 = Math.round(avg(kR.filter(r => r.level === 1).map(r => Number(r.score) || 0)));
-  const simOverall = Math.round(simRaw);
-  const blended = Math.round(kRaw * 0.6 + simRaw * 0.4);
+  // L1 knowledge on the same item-weighted rule, rather than a `score` field the knowledge
+  // responses do not carry (it read 0 for every candidate).
+  const kL1 = sbdKnowledgeOverall(kR.filter(r => Number(r.level) === 1));
+  const blended = kRaw * 0.6 + simRaw * 0.4;
   const dangerous = kR.some(r => r.isDangerous && !r.correct);
-  return sbdSuggestBelt(kOverall, kL1, simOverall, blended, dangerous);
+  return sbdSuggestBelt(kRaw, kL1, simRaw, blended, dangerous);
 }
 
 // The label shown on the placement-review CARD. It is derived from rptComputeModel() — the
@@ -2428,22 +2576,28 @@ async function paPersistSubmission({ staffId, answers, questions, sessionId, ses
   const _kResp = responses.filter(r => r.type === 'knowledge');
   const _simResp = responses.filter(r => r.type === 'simulation');
   const _avg = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
-  // Blend the RAW averages, then round once (matches rptComputeModel + prSuggestion). Do NOT
-  // round the component scores before blending -- that flips belts at threshold boundaries.
-  const _kRaw = _avg(_kResp.map(r => Number(r.score) || 0));
+  // Full precision all the way to the comparison (Scoring Specification v1.0 §7.6), and
+  // item-weighted components (§4.4, §5.7). Rounding anywhere before the threshold check is
+  // what the spec's worked example warns about, and this is the path that WRITES the belt.
+  const _kRaw = sbdKnowledgeOverall(_kResp);   // spec §4.4, item-weighted
   const _simRaw = _avg(_simResp.map(r => Number(r.aiScore) || 0));
-  const kOverall = Math.round(_kRaw);
-  const kL1 = Math.round(_avg(_kResp.filter(r => r.level === 1).map(r => Number(r.score) || 0)));
-  const simOverall = Math.round(_simRaw);
-  const blended = Math.round(_kRaw * 0.6 + _simRaw * 0.4);
+  const kOverall = _kRaw;
+  // L1 knowledge on the same item-weighted rule. It used to read a `score` field the
+  // knowledge responses do not carry, so it evaluated to 0 for every candidate.
+  const kL1 = sbdKnowledgeOverall(_kResp.filter(r => Number(r.level) === 1));
+  const simOverall = _simRaw;
+  const blended = _kRaw * 0.6 + _simRaw * 0.4;
   // Dangerous-answer block is wired but stays inert until SIPS supplies the per-question
   // dangerous-answer list (Governing Standards) and questions carry q.isDangerous.
   const hasDangerousKAnswer = _kResp.some(r => r.isDangerous && !r.correct);
-  // Full engine determination (e.g. "Brown Belt Conditional", "No Belt") is shown to the
-  // assessor as a suggestion chip; tentativeBelt stores the clean belt word the plumbing
-  // (badge, confirm dropdown) expects. "No Belt" falls back to White as a safe placeholder.
+  // The determination used to fall back to White whenever the engine returned something with
+  // no belt word in it. That is how a correct dangerous-answer flag came out as "White Belt
+  // Conditional" on a real candidate's report, measured against White thresholds, when the
+  // engine had actually said no belt. A placeholder must never be printed as a decision, so
+  // there is no fallback now: if the engine names no belt, nothing is stored.
   const _suggestion = sbdSuggestBelt(kOverall, kL1, simOverall, blended, hasDangerousKAnswer);
-  const suggestedBelt = (_suggestion.match(/White|Yellow|Green|Blue|Brown|Black/) || ['White'])[0];
+  const _beltWord = ((_suggestion || '').match(/White|Yellow|Green|Blue|Brown|Black/) || [])[0] || null;
+  const suggestedBelt = _beltWord;
 
   // Create placement review record
   const s = getStaff(staffId);
@@ -2475,6 +2629,16 @@ async function paPersistSubmission({ staffId, answers, questions, sessionId, ses
   DB.placementReviews.push(pr);
   // Mark staff no longer needs placement (assessment done, awaiting review)
   if(s) s.placementNeeded = false;
+
+  // T65: raise a Dangerous provision on the person for every knowledge answer flagged as
+  // dangerous and answered wrongly. The client's ruling on 2026-07-28 is that the belt is
+  // still issued on the scores; the safety item becomes a provision that lives on the account
+  // until a SIPS admin clears it. Until now the flag existed only inside the report, worked
+  // out afresh every time it was opened, so there was nowhere for a provision to live.
+  const _newProvisions = sbdBuildProvisions(responses, pr.id);
+  if(s && _newProvisions.length){
+    s.dangerousProvisions = (s.dangerousProvisions || []).concat(_newProvisions);
+  }
   let pendingSync = false;
   if(IS_LIVE){
     // [GUARDRAIL] These payload keys map directly to the placement_reviews schema.
@@ -2494,7 +2658,19 @@ async function paPersistSubmission({ staffId, answers, questions, sessionId, ses
     try {
       // Durable submit: retry through transient network blips before giving up.
       await sbFetchWithRetry('/rest/v1/placement_reviews', { method:'POST', body: prBody }, 4);
+      // Single-column PATCHes, deliberately. A whole-record write from this in-memory copy is
+      // how oip, history and the progress gates have been wiped before.
       await sbFetchWithRetry(`/rest/v1/staff?id=eq.${pr.staffId}`, { method:'PATCH', body:{placement_needed:false} }, 3).catch(()=>{});
+      if(s && _newProvisions.length){
+        await sbFetchWithRetry(`/rest/v1/staff?id=eq.${pr.staffId}`,
+          { method:'PATCH', body: mapStaffProvisionsToBackend(s) }, 3).catch(e=>{
+            console.warn('Dangerous provision sync failed:', e);
+          });
+        try { if(typeof logActivity==='function') logActivity('dangerous_provision_raised', {
+          staffId: pr.staffId, reviewId: pr.id, count: _newProvisions.length,
+          questions: _newProvisions.map(p => p.label)
+        }); } catch(_){}
+      }
       // Mark the assessment session as completed
       if(sessionToken){
         SB.completeAssessmentSession(sessionToken).catch(()=>{});
@@ -2895,6 +3071,23 @@ let ovsCapture = null;      // { obsId, unlocked, observerStaffId, observerName 
 let obsConsoleTab = 'queue';// Observations page tab: 'queue' | 'observers'
 let ovsArmed = null;        // { action, id } two-tap confirmation (sandbox-safe; no native confirm())
 
+// #73: shared Observations mount. Both consoles render into whichever portal the viewer is
+// actually in, the admin portal, or the staff portal when a granted assessor's base role is
+// staff_member. Same approach as the shared DAVID mount below: a user is only ever in one
+// portal at a time, so re-pointing the container is safe. Held as module state rather than
+// threaded as an argument because every re-render in this section is argument-less.
+let ovsMount = 'a';         // 'a' = admin portal, 's' = staff portal
+function ovsEl(view){ return document.getElementById(ovsMount + '-' + view); }
+// #77: the assessment queue needs the same indirection for the same reason. Kept as its own
+// variable rather than reusing ovsMount so the two sections stay independently movable.
+let asmMount = 'a';         // 'a' = admin portal, 's' = staff portal
+// #77: every action in that section re-rendered on `ST.aView === 'a-assessments'` alone, which
+// is false in the staff portal, so a granted assessor's queue would go stale after approving or
+// recording. One predicate for both mounts, so a new call site cannot miss one.
+function asmRerender(){
+  if(ST.aView==='a-assessments' || ST.sView==='s-assessments') renderAAssessments();
+}
+
 // The active belt instrument for a given belt label (system of record; read-only).
 function ovsInstrument(belt){
   const list = (window.DB && DB.observationChecklists) || [];
@@ -2919,6 +3112,122 @@ function ovsScorableUnits(cl){
     id: d.id, text: d.text, kind: 'pf', meta: 'Pass / Fail', group: c.name
   })));
   return units;
+}
+
+// ── T30: read-only instrument view for facility leaders ──────────────────────
+// Client ask (2026-07-25): a leader can read the checklist their people are scored
+// against, and still cannot change it. There is one checklist per belt shared
+// platform-wide with no per-facility copy, so edit rights are not a permission toggle —
+// visibility is. The lock is already server-side and this screen adds no write path:
+// oc_authenticated_select lets any signed-in user READ active rows,
+// oc_write_master (20260703233921) restricts every write to master_admin/system_admin.
+//
+// Flattened with ovsScorableUnits, NOT cl.items. Five schema kinds are live and the
+// observer console scores exactly what that function returns, so a hand-rolled flatten
+// would show leaders a different list from the one observers work off. Concretely: the
+// Black instrument carries items = [] with its dimensions in schema.components, so an
+// items.map here renders an empty screen for the one belt that certifies independent work.
+function ovsPassRule(cl){
+  const s = (cl && cl.schema) || {};
+  // ponytail: thresholds mirror ovsComputeOutcome's defaults and read the same schema
+  // keys. If a rule moves in the engine it moves here — one grep for the key finds both.
+  if(s.type === 'points')     return `Advances at ${s.floorPoints || 55} points or better, and no item may score 0.`;
+  if(s.type === 'mr')         return `Every Mandatory item must score 2 or better, plus at least ${(s.rules&&s.rules.advance&&s.rules.advance.minRecommended)||4} Recommended items passed.`;
+  if(s.type === 'composite')  return `Every Mandatory shift item must score 2 or better, plus ${(s.rules&&s.rules.presentation&&s.rules.presentation.advance)||8}/10 presentation criteria (${(s.rules&&s.rules.presentation&&s.rules.presentation.conditionalMin)||6}/10 is conditional).`;
+  if(s.type === 'components') return 'Every component dimension must pass. There is no partial credit.';
+  if(s.type === 'tiered')     return 'Places at the highest tier where every item scores 2 or better.';
+  return '';
+}
+
+function renderHChecklists(){
+  const el = document.getElementById('h-checklists'); if(!el) return;
+  const all = ((window.DB && DB.observationChecklists) || []).filter(c => c.active !== false);
+  const isPlacement = c => /^placement/i.test(String(c.belt || ''));
+  const rank = c => {
+    const b = String(c.belt || '').replace(/^placement[\s_-]*/i, '');
+    const i = (typeof BELT_ORDER !== 'undefined') ? BELT_ORDER.indexOf(b) : -1;
+    return i < 0 ? 99 : i;
+  };
+  const sorted = all.slice().sort((a, b) => rank(a) - rank(b) || String(a.belt||'').localeCompare(String(b.belt||'')));
+  const belts = sorted.filter(c => !isPlacement(c));
+  const placements = sorted.filter(isPlacement);
+
+  if(!sorted.length){
+    el.innerHTML = `<div class="card"><div class="card-body" style="text-align:center;color:var(--txt2);font-size:13px;padding:28px">No active observation checklists are loaded.</div></div>`;
+    return;
+  }
+
+  const sel = sorted.find(c => c.belt === ST._clBelt) || sorted[0];
+  const opt = c => `<option value="${esc0(c.belt)}"${c.belt===sel.belt?' selected':''}>${esc0(c.title || c.name || c.belt)}</option>`;
+  const picker = `<select class="form-select" style="max-width:340px" onchange="ST._clBelt=this.value;renderHChecklists()">
+    ${belts.length ? `<optgroup label="Belt Instruments">${belts.map(opt).join('')}</optgroup>` : ''}
+    ${placements.length ? `<optgroup label="Placement Instruments">${placements.map(opt).join('')}</optgroup>` : ''}
+  </select>`;
+
+  const units = ovsScorableUnits(sel);
+  const groups = []; const gmap = {};
+  units.forEach(u => { const g = u.group || 'Checklist Items'; if(!gmap[g]){ gmap[g] = []; groups.push(g); } gmap[g].push(u); });
+
+  const body = units.length ? groups.map(g => `
+    <div style="margin-top:16px">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;font-weight:800;color:var(--txt3);margin-bottom:6px">${esc0(g)}</div>
+      ${gmap[g].map(u => `
+        <div style="border:1px solid var(--bdr);border-radius:10px;padding:10px 12px;margin-bottom:6px;background:var(--s1)">
+          <div style="display:flex;gap:10px;align-items:baseline">
+            <span style="flex:0 0 auto;font-weight:800;color:var(--txt3);font-size:12px">${u.n != null ? esc0(u.n) : '&bull;'}</span>
+            <span style="font-size:13px;line-height:1.55;color:var(--txt1)">${esc0(u.text)}</span>
+          </div>
+          <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
+            <span class="pill" style="color:#94a3b8;background:#94a3b81a;border:1px solid #94a3b855">${u.kind === 'pf' ? 'Pass / Fail' : 'Scored 0&ndash;3'}</span>
+            ${u.meta && u.meta !== 'Pass / Fail' ? `<span class="pill" style="color:#0ea5e9;background:#0ea5e91a;border:1px solid #0ea5e955">${esc0(u.meta)}</span>` : ''}
+          </div>
+        </div>`).join('')}
+    </div>`).join('')
+    : `<div style="border:1px dashed var(--bdr);border-radius:12px;padding:28px;text-align:center;color:var(--txt2);font-size:13px;margin-top:16px">No scored items are seeded on this instrument yet.</div>`;
+
+  const rule = ovsPassRule(sel);
+  el.innerHTML = `
+    <div class="card mb16"><div class="card-hd"><div class="card-ttl">Observation Checklists</div>
+      <span class="pill" style="color:#94a3b8;background:#94a3b81a;border:1px solid #94a3b855">Read only</span></div>
+      <div class="card-body">
+        <p style="font-size:13px;color:var(--txt2);line-height:1.6;margin:0 0 14px">The instruments your people are observed against. One checklist per belt, shared platform-wide &mdash; SIPS maintains them, so there is nothing to edit here.</p>
+        ${picker}
+      </div></div>
+    <div class="card"><div class="card-hd"><div class="card-ttl">${esc0(sel.title || sel.name || sel.belt)}</div>
+      <span class="pill" style="color:#94a3b8;background:#94a3b81a;border:1px solid #94a3b855">${units.length} scored item${units.length===1?'':'s'}</span></div>
+      <div class="card-body">
+        ${rule ? `<div style="font-size:12.5px;color:var(--txt2);line-height:1.6;padding:10px 12px;background:rgba(14,165,233,.05);border:1px solid rgba(14,165,233,.18);border-radius:8px">${esc0(rule)}</div>` : ''}
+        ${body}
+      </div></div>`;
+}
+
+// ── T91: typed-or-spoken evidence gate ───────────────────────────────────────
+// Client ask (2026-08-03): an observation answer must be typed or spoken, never only
+// selected from a list. The 0-3 / PASS-FAIL taps stay — ovsComputeOutcome and every
+// stored record depend on them — but a tap alone no longer counts as an answer. The
+// observer must also write (or dictate, via the mic) what they actually saw.
+//
+// Enforced by filtering the score map before it reaches the outcome engine: an item
+// with no evidence is invisible to ovsComputeOutcome, so the observation stays
+// IN PROGRESS and the submit button will not arm. No change to the engine itself, and
+// no change to how an already-submitted record is read back.
+// Review 2026-08-07: a 10-character floor let "did it fine" through, which is not an
+// account of anything on a record that certifies someone to work unsupervised. Raised to
+// a sentence: enough characters AND enough words, so a padded single token ("okokokokok",
+// "ffffffffffffff") fails too. No text check can judge whether an answer is truthful —
+// this only rules out the answers that are obviously not answers.
+const OVS_MIN_NOTE  = 25;  // characters, trimmed
+const OVS_MIN_WORDS = 4;   // ponytail: flat floor for every item. Per-instrument minimums
+                           // only if the client says a sentence is still too easy.
+const OVS_NOTE_HINT = 'What you saw — required, a full sentence';
+function ovsNoteOk(t){
+  const s = String(t == null ? '' : t).trim();
+  return s.length >= OVS_MIN_NOTE && s.split(/\s+/).length >= OVS_MIN_WORDS;
+}
+function ovsEffectiveScores(scores, notes){
+  const out = {};
+  Object.keys(scores || {}).forEach(id => { if(ovsNoteOk((notes || {})[id])) out[id] = scores[id]; });
+  return out;
 }
 
 // Compute the outcome from stored scores + the instrument's schema. Mirrors
@@ -2981,11 +3290,22 @@ function ovsComputeOutcome(cl, scores, stopWork){
   if(type === 'tiered'){
     const tiers = schema.tiers || [];
     let placed = null;
+    // Unlike the other four schemas, tiered had no 'incomplete' path: an unscored item
+    // simply failed its tier, so an untouched checklist reported "Below White" and the
+    // submit button armed on an empty observation. Found by the T91 harness
+    // (scripts/verify-observation-evidence-gate.js) — an ungated submit here would also
+    // have been the one way to file an observation with no typed or spoken answers.
+    if(!items.some(it => scores[it.id] !== undefined && scores[it.id] !== null))
+      return { outcome:'incomplete', total:null, reasons:['Score every item to compute placement'], recommendedBelt:null };
     for(let i=0;i<tiers.length;i++){
       const t = tiers[i];
       const tierItems = items.filter(it => (it.tier||'') === t.label);
       const met = tierItems.length > 0 && tierItems.every(it => Number(scores[it.id]) >= 2);
-      if(met) placed = t; else break; // contiguous from the floor — stop at the first unmet tier
+      if(met){ placed = t; continue; }
+      // A tier that is merely unfinished is not a tier the candidate failed.
+      if(tierItems.some(it => scores[it.id] === undefined || scores[it.id] === null))
+        return { outcome:'incomplete', total:null, reasons:[`Score every ${t.label} item to compute placement`], recommendedBelt:null };
+      break; // contiguous from the floor — stop at the first genuinely unmet tier
     }
     if(!placed) return { outcome:'do_not_advance', total:0, reasons:['No tier fully met — not ready for independent placement'], recommendedBelt:'Below White' };
     return { outcome:'advance', total:null, reasons:[`Highest tier fully met: ${placed.label}`], recommendedBelt:placed.places };
@@ -3046,7 +3366,7 @@ function requestObservation(sid, targetBelt){
 
 // ── Step 4: observer-side list + capture ─────────────────────────────────────
 function renderAObservations(){
-  const el = document.getElementById('a-observations');
+  const el = ovsEl('observations');
   if(!el) return;
   if(ovsCapture){ el.innerHTML = ovsRenderCapture(); return; }
 
@@ -3083,7 +3403,8 @@ function renderAObservations(){
     .map(s => {
       const fac = getFac(s.fid);
       const conducted = (DB.observations || []).filter(o => String(o.observerId) === String(s.id)).length;
-      const pinPill = s.observationPin
+      // T37: the flag, not the PIN — the value never reaches the browser.
+      const pinPill = s.observerPinSet
         ? '<span class="pill" style="color:#0ea5e9;background:#0ea5e91a;border:1px solid #0ea5e955">PIN set</span>'
         : '<span class="pill" style="color:#f59e0b;background:#f59e0b1a;border:1px solid #f59e0b55">No PIN yet</span>';
       return `<tr style="border-top:1px solid var(--bdr)">
@@ -3167,10 +3488,12 @@ function ovsOpenCapture(obsId){
   // Resume: load the server-saved scores, then overlay any local crash-safety draft
   // (written on every score) so an accidental close before an explicit save isn't lost.
   if(o.status === 'in_progress' && o.itemScores) ovsCapture.scores = { ...o.itemScores };
+  if(o.status === 'in_progress' && o.itemNotes)  ovsCapture.notes  = { ...o.itemNotes };
   if(o.stopWork) ovsCapture.stopWork = { ...o.stopWork };
   const draft = ovsLoadDraft(obsId);
   if(draft){
     ovsCapture.scores = { ...(ovsCapture.scores||{}), ...(draft.scores||{}) };
+    ovsCapture.notes  = { ...(ovsCapture.notes||{}),  ...(draft.notes||{}) };
     if(draft.stopWork) ovsCapture.stopWork = { ...draft.stopWork };
   }
   renderAObservations();
@@ -3184,21 +3507,26 @@ function ovsToggleGuide(){ ST.ovsGuideHidden = (ST.ovsGuideHidden !== true); ren
 
 // Two-PIN handshake: the observer proves identity with their reusable PIN, the
 // candidate consents with the PIN they were issued. Both must match to unlock.
-function ovsUnlock(){
+// T37 (S12): verified server-side (sbd-observation-unlock) — observer PINs are no
+// longer shipped to the browser, so there is nothing left to compare locally.
+async function ovsUnlock(){
   const o = (DB.observations||[]).find(x => x.id === ovsCapture.obsId); if(!o) return;
-  const obsPin  = (document.getElementById('ovs-observer-pin')||{}).value || '';
-  const candPin = (document.getElementById('ovs-candidate-pin')||{}).value || '';
-  const observer = (DB.staff||[]).find(s => s.observer && s.observationPin && String(s.observationPin) === obsPin.trim());
-  if(!observer){ toast('Observer PIN not recognized. Only an authorized observer with a PIN can begin.','err'); return; }
-  if(String(observer.id) === String(o.staffId)){ toast('A candidate cannot observe their own assessment. A different authorized observer must score it.','err'); return; }
-  if(!o.handshake || String(o.handshake.candidate_pin) !== candPin.trim()){ toast('Candidate PIN does not match this observation.','err'); return; }
-  ovsCapture.unlocked = true;
-  ovsCapture.observerStaffId = observer.id;
-  ovsCapture.observerName = fullName(observer);
-  if(!ovsCapture.scores) ovsCapture.scores = { ...(o.itemScores||{}) };
-  if(!ovsCapture.stopWork) ovsCapture.stopWork = o.stopWork || { active:false };
-  toast(`Verified — observer ${ovsCapture.observerName}. Begin scoring.`,'ok');
-  renderAObservations();
+  const obsPin  = ((document.getElementById('ovs-observer-pin')||{}).value || '').trim();
+  const candPin = ((document.getElementById('ovs-candidate-pin')||{}).value || '').trim();
+  if(!obsPin || !candPin){ toast('Enter both PINs to unlock.','err'); return; }
+  try {
+    const res = await SB.unlockObservation(o.id, obsPin, candPin);
+    ovsCapture.unlocked = true;
+    ovsCapture.observerStaffId = res.observer_id;
+    ovsCapture.observerName = res.observer_name;
+    if(!ovsCapture.scores) ovsCapture.scores = { ...(o.itemScores||{}) };
+    if(!ovsCapture.notes)  ovsCapture.notes  = { ...(o.itemNotes||{}) };
+    if(!ovsCapture.stopWork) ovsCapture.stopWork = o.stopWork || { active:false };
+    toast(`Verified — observer ${ovsCapture.observerName}. Begin scoring.`,'ok');
+    renderAObservations();
+  } catch(e){
+    toast(e.message || 'PIN verification failed.','err');
+  }
 }
 
 function ovsScore(itemId, value){
@@ -3207,6 +3535,61 @@ function ovsScore(itemId, value){
   ovsCapture.scores[itemId] = value;
   ovsSaveDraft();
   renderAObservations();
+}
+
+// T91: the typed/dictated half of an answer. Deliberately does NOT re-render — a full
+// re-render on every keystroke would replace the textarea the observer is typing in and
+// throw away the caret (the mic writes through the same path, firing 'input' per phrase).
+// The derived UI is patched in place instead.
+function ovsNote(itemId, val){
+  if(!ovsCapture || !ovsCapture.unlocked) return;
+  ovsCapture.notes = ovsCapture.notes || {};
+  ovsCapture.notes[itemId] = val;
+  ovsSaveDraft();
+  ovsRefreshProgress();
+}
+
+// Patch the counter, progress bar, outcome chips, submit button and per-item accent to
+// match the current scores+evidence, without rebuilding the capture screen.
+function ovsRefreshProgress(){
+  if(!ovsCapture) return;
+  const o = (DB.observations||[]).find(x => x.id === ovsCapture.obsId); if(!o) return;
+  const cl = ovsInstrument(o.checklistBelt || o.targetBelt); if(!cl) return;
+  const units = ovsScorableUnits(cl);
+  const eff = ovsEffectiveScores(ovsCapture.scores, ovsCapture.notes);
+  const answered = units.filter(u => eff[u.id] !== undefined && eff[u.id] !== null).length;
+  const outcome = ovsComputeOutcome(cl, eff, ovsCapture.stopWork || { active:false });
+
+  const cnt = document.getElementById('ovs-count');
+  if(cnt) cnt.textContent = `${answered}/${units.length} answered`;
+  const bar = document.getElementById('ovs-bar');
+  if(bar){
+    bar.style.width = (units.length ? Math.round(answered/units.length*100) : 0) + '%';
+    bar.style.background = (units.length && answered >= units.length) ? '#22c55e' : '#0ea5e9';
+  }
+  ['ovs-chip','ovs-chip2'].forEach(id => { const e = document.getElementById(id); if(e) e.innerHTML = ovsOutcomeChip(outcome.outcome); });
+  const rsn = document.getElementById('ovs-reason');
+  if(rsn) rsn.textContent = outcome.reasons[0] ? '— ' + outcome.reasons[0] : '';
+  const btn = document.getElementById('ovs-submit');
+  const armed = ovsArmed && ovsArmed.action==='submit' && ovsArmed.id===ovsCapture.obsId;
+  if(btn && !armed){
+    const ok = outcome.outcome !== 'incomplete';
+    btn.disabled = !ok;
+    btn.style.opacity = ok ? '' : '.5';
+    btn.style.cursor = ok ? '' : 'not-allowed';
+    btn.textContent = ok ? 'Submit observation' : 'Answer every item to submit';
+  }
+  units.forEach(u => {
+    const card = document.getElementById('ovs-item-' + u.id);
+    if(card) card.style.borderLeftColor = (eff[u.id] !== undefined && eff[u.id] !== null) ? '#22c55e' : 'var(--bdr)';
+    // The floor is a sentence now, so the observer needs to see the item accept the answer
+    // as they type rather than guess why submit is still disabled.
+    const nOk = ovsNoteOk((ovsCapture.notes || {})[u.id]);
+    const lab = document.getElementById('ovs-lab-' + u.id);
+    if(lab){ lab.style.color = nOk ? 'var(--txt3)' : '#f59e0b'; lab.textContent = nOk ? 'What you saw' : OVS_NOTE_HINT; }
+    const ta = document.getElementById('ovs-note-' + u.id);
+    if(ta) ta.style.borderColor = nOk ? 'var(--bdr2)' : '#f59e0b66';
+  });
 }
 
 function ovsToggleStopWork(){
@@ -3254,9 +3637,14 @@ function ovsRenderCapture(){
   // Unlocked → scored checklist, grouped, with a live outcome preview.
   const units = ovsScorableUnits(cl);
   const scores = ovsCapture.scores || {};
+  const notes  = ovsCapture.notes  || {};
   const stop = ovsCapture.stopWork || { active:false };
-  const scored = units.filter(u => scores[u.id] !== undefined && scores[u.id] !== null).length;
-  const outcome = ovsComputeOutcome(cl, scores, stop);
+  // T91: only an item with typed/dictated evidence counts as answered, and only those
+  // reach the outcome engine. `scores` is still what highlights the tapped button, so a
+  // score entered before its evidence stays visible rather than appearing to be lost.
+  const eff = ovsEffectiveScores(scores, notes);
+  const scored = units.filter(u => eff[u.id] !== undefined && eff[u.id] !== null).length;
+  const outcome = ovsComputeOutcome(cl, eff, stop);
 
   // Group units in render order.
   const groups = []; const gmap = {};
@@ -3289,17 +3677,36 @@ function ovsRenderCapture(){
     </div>`;
   };
 
+  // T91: the required typed-or-spoken answer for one item. The mic writes into the same
+  // textarea and fires 'input', so dictation and typing go down one path (dictation.js;
+  // the button renders as '' where the Web Speech API is unavailable).
+  const evidenceBox = (u) => {
+    const tid = 'ovs-note-' + u.id;
+    const val = notes[u.id] || '';
+    const ok = ovsNoteOk(val);
+    return `<div style="margin-top:9px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px">
+        <label id="ovs-lab-${u.id}" for="${tid}" style="font-size:11px;font-weight:700;color:${ok?'var(--txt3)':'#f59e0b'}">${ok?'What you saw':OVS_NOTE_HINT}</label>
+        ${(window.micButtonHTML?micButtonHTML(tid,{title:'Speak this answer instead of typing it'}):'')}
+      </div>
+      <textarea id="${tid}" rows="2" oninput="ovsNote('${u.id}', this.value)"
+        placeholder="Type or dictate what you actually observed for this item…"
+        style="width:100%;box-sizing:border-box;background:var(--bg2,#0e1328);border:1px solid ${ok?'var(--bdr2)':'#f59e0b66'};border-radius:8px;padding:7px 9px;color:var(--txt1);font-size:12.5px;font-family:inherit;line-height:1.5;resize:vertical">${esc0(val)}</textarea>
+    </div>`;
+  };
+
   const body = groups.map(g => `
     <div style="margin-bottom:14px">
       <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--txt3);font-weight:700;margin:6px 0 8px">${g}</div>
       ${gmap[g].map(u => `
-        <div style="padding:10px 12px;border:1px solid var(--bdr);border-left:3px solid ${(scores[u.id]!==undefined&&scores[u.id]!==null)?'#22c55e':'var(--bdr)'};border-radius:10px;margin-bottom:8px;background:var(--s1)">
+        <div id="ovs-item-${u.id}" style="padding:10px 12px;border:1px solid var(--bdr);border-left:3px solid ${(eff[u.id]!==undefined&&eff[u.id]!==null)?'#22c55e':'var(--bdr)'};border-radius:10px;margin-bottom:8px;background:var(--s1)">
           <div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:8px">
             <div style="font-size:13px;line-height:1.5">${u.n?`<span style="color:var(--txt3)">${u.n}.</span> `:''}${u.text}</div>
             ${u.meta?`<span style="font-size:10px;color:${u.meta==='Mandatory'?'#ef4444':'var(--txt3)'};font-weight:700;white-space:nowrap;align-self:flex-start">${u.meta}</span>`:''}
           </div>
           ${guideBlock(u)}
           <div style="display:flex;gap:6px">${u.kind==='pf'?pfBtns(u):scaleBtns(u)}</div>
+          ${evidenceBox(u)}
         </div>`).join('')}
     </div>`).join('');
 
@@ -3309,23 +3716,24 @@ function ovsRenderCapture(){
   return `<div style="max-width:760px">${header}
     <div class="card" style="position:sticky;top:0;z-index:5"><div class="card-body">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-        <div style="font-size:12px;color:var(--txt2)">Observer: <strong>${ovsCapture.observerName}</strong> &middot; ${scored}/${units.length} scored</div>
+        <div style="font-size:12px;color:var(--txt2)">Observer: <strong>${ovsCapture.observerName}</strong> &middot; <span id="ovs-count">${scored}/${units.length} answered</span></div>
         <div style="display:flex;align-items:center;gap:10px">
-          ${ovsOutcomeChip(outcome.outcome)}
+          <span id="ovs-chip">${ovsOutcomeChip(outcome.outcome)}</span>
           <button class="btn btn-ghost btn-sm" onclick="ovsToggleGuide()" title="Show or hide the per-item observer guidance">${guideOpen?'Hide guidance':'Show guidance'}</button>
           <button class="btn btn-ghost btn-sm" onclick="ovsSaveProgress()" title="Save your progress and finish later">Save &amp; resume later</button>
           <button class="btn btn-sm" onclick="ovsToggleStopWork()" style="border:1.5px solid #ef4444;color:${stop.active?'#0b0f17':'#ef4444'};background:${stop.active?'#ef4444':'transparent'};font-weight:800">${stop.active?'■ STOP-WORK ON':'⛔ Stop-Work'}</button>
         </div>
       </div>
-      <div style="margin-top:10px;height:5px;border-radius:4px;background:rgba(148,163,184,.18);overflow:hidden" title="${scored} of ${units.length} items scored">
-        <div style="height:100%;width:${units.length?Math.round(scored/units.length*100):0}%;background:${(units.length&&scored>=units.length)?'#22c55e':'#0ea5e9'};transition:width .25s"></div>
+      <div style="margin-top:10px;height:5px;border-radius:4px;background:rgba(148,163,184,.18);overflow:hidden" title="${scored} of ${units.length} items answered">
+        <div id="ovs-bar" style="height:100%;width:${units.length?Math.round(scored/units.length*100):0}%;background:${(units.length&&scored>=units.length)?'#22c55e':'#0ea5e9'};transition:width .25s"></div>
       </div>
+      <div style="margin-top:8px;font-size:11.5px;color:var(--txt3);line-height:1.5">Every item needs both a score and a written or spoken account of what you saw — a full sentence, not "did it fine". A score on its own does not count.</div>
     </div></div>
     ${stop.active?`<div style="margin:10px 0;padding:10px 12px;background:#ef44441a;border:1px solid #ef444455;border-radius:8px;color:#ef4444;font-size:12px;font-weight:600">Stop-Work is active. On submit this observation records DO NOT ADVANCE regardless of item scores.</div>`:''}
     <div style="margin-top:14px">${body}</div>
     <div class="card"><div class="card-body">
-      <div style="font-size:12px;color:var(--txt2);margin-bottom:10px"><strong>Result preview:</strong> ${ovsOutcomeChip(outcome.outcome)} ${outcome.reasons[0]?`<span style="color:var(--txt3)">— ${outcome.reasons[0]}</span>`:''}</div>
-      <button class="btn ${armed?'btn-gold':'btn-primary'}" style="width:100%;justify-content:center" ${canSubmit?'':'disabled style="opacity:.5;cursor:not-allowed;width:100%;justify-content:center"'} onclick="ovsSubmit()">${armed?'Tap again to confirm submit':canSubmit?'Submit observation':'Score every item to submit'}</button>
+      <div style="font-size:12px;color:var(--txt2);margin-bottom:10px"><strong>Result preview:</strong> <span id="ovs-chip2">${ovsOutcomeChip(outcome.outcome)}</span> <span id="ovs-reason" style="color:var(--txt3)">${outcome.reasons[0]?`— ${outcome.reasons[0]}`:''}</span></div>
+      <button id="ovs-submit" class="btn ${armed?'btn-gold':'btn-primary'}" style="width:100%;justify-content:center${canSubmit?'':';opacity:.5;cursor:not-allowed'}" ${canSubmit?'':'disabled'} onclick="ovsSubmit()">${armed?'Tap again to confirm submit':canSubmit?'Submit observation':'Answer every item to submit'}</button>
     </div></div>
   </div>`;
 }
@@ -3337,9 +3745,13 @@ function ovsSubmit(){
   const o = (DB.observations||[]).find(x => x.id === ovsCapture.obsId); if(!o) return;
   const cl = ovsInstrument(o.checklistBelt || o.targetBelt);
   const scores = ovsCapture.scores || {};
+  const notes  = ovsCapture.notes  || {};
   const stop = ovsCapture.stopWork || { active:false };
-  const outcome = ovsComputeOutcome(cl, scores, stop);
-  if(outcome.outcome === 'incomplete'){ toast('Score every item before submitting.','err'); return; }
+  // T91: submit on the evidence-gated scores. Every unit reaching the engine therefore
+  // carries a written or dictated answer, so item_scores and item_notes agree on submit
+  // and confirmObservation's later recompute from item_scores alone still matches.
+  const outcome = ovsComputeOutcome(cl, ovsEffectiveScores(scores, notes), stop);
+  if(outcome.outcome === 'incomplete'){ toast('Every item needs a score and a typed or spoken answer before submitting.','err'); return; }
   // Two-tap arm
   if(!(ovsArmed && ovsArmed.action==='submit' && ovsArmed.id===o.id)){
     ovsArmed = { action:'submit', id:o.id };
@@ -3350,13 +3762,13 @@ function ovsSubmit(){
   const now = new Date().toISOString();
   const handshake = { ...(o.handshake||{}), observer_id: ovsCapture.observerStaffId, observer_used_at: now };
   // local
-  o.status = 'submitted'; o.reviewStatus = 'pending'; o.itemScores = scores;
+  o.status = 'submitted'; o.reviewStatus = 'pending'; o.itemScores = scores; o.itemNotes = notes;
   o.stopWork = stop; o.totalPoints = outcome.total; o.outcome = outcome.outcome;
   o.outcomeReasons = outcome.reasons; o.recommendedBelt = outcome.recommendedBelt;
   o.observerId = ovsCapture.observerStaffId; o.observerName = ovsCapture.observerName;
   o.handshake = handshake; o.submittedAt = now;
   const backend = {
-    status:'submitted', review_status:'pending', item_scores:scores, stop_work:stop,
+    status:'submitted', review_status:'pending', item_scores:scores, item_notes:notes, stop_work:stop,
     total_points: outcome.total, outcome: outcome.outcome, outcome_reasons: outcome.reasons,
     recommended_belt: outcome.recommendedBelt, assessor_id: ovsCapture.observerStaffId,
     assessor_name: ovsCapture.observerName, handshake, submitted_at: now, last_active_at: now
@@ -3382,6 +3794,7 @@ function ovsSaveDraft(){
   try {
     localStorage.setItem(ovsDraftKey(ovsCapture.obsId), JSON.stringify({
       scores: ovsCapture.scores || {},
+      notes: ovsCapture.notes || {},          // T91: evidence is drafted with the scores
       stopWork: ovsCapture.stopWork || { active:false },
       ts: Date.now()
     }));
@@ -3400,18 +3813,22 @@ function ovsSaveProgress(){
   if(!ovsCapture || !ovsCapture.unlocked) return;
   const o = (DB.observations||[]).find(x => x.id === ovsCapture.obsId); if(!o) return;
   const scores = ovsCapture.scores || {};
+  const notes  = ovsCapture.notes  || {};
   const stop = ovsCapture.stopWork || { active:false };
   const now = new Date().toISOString();
-  o.status = 'in_progress'; o.itemScores = scores; o.stopWork = stop; o.lastActiveAt = now;
+  o.status = 'in_progress'; o.itemScores = scores; o.itemNotes = notes; o.stopWork = stop; o.lastActiveAt = now;
   if(IS_LIVE && typeof SB!=='undefined' && SB.updateObservation && !String(o.id).startsWith('obs-')){
-    SB.updateObservation(o.id, { status:'in_progress', item_scores:scores, stop_work:stop, last_active_at:now })
+    SB.updateObservation(o.id, { status:'in_progress', item_scores:scores, item_notes:notes, stop_work:stop, last_active_at:now })
       .catch(e => handleSyncError(e,'Observation save'));
   }
   ovsSaveDraft();                 // keep the local draft as a same-device safety net
   ovsCapture = null; ovsArmed = null;
   const cl = ovsInstrument(o.checklistBelt || o.targetBelt);
-  const scored = cl ? ovsScorableUnits(cl).filter(u => scores[u.id] !== undefined && scores[u.id] !== null).length : Object.keys(scores).length;
-  toast(`Saved — ${scored} item${scored===1?'':'s'} recorded. Resume anytime from Observations.`,'ok');
+  // Count what is genuinely complete (score + evidence), so a resumed observation does
+  // not report progress the gate will not accept.
+  const eff = ovsEffectiveScores(scores, notes);
+  const scored = cl ? ovsScorableUnits(cl).filter(u => eff[u.id] !== undefined && eff[u.id] !== null).length : Object.keys(eff).length;
+  toast(`Saved — ${scored} item${scored===1?'':'s'} fully answered. Resume anytime from Observations.`,'ok');
   renderAObservations();
 }
 
@@ -3424,8 +3841,37 @@ function ovsReviewSearch(v){
   const inp = document.getElementById('ovs-rev-search');
   if(inp){ inp.focus(); try{ inp.setSelectionRange(v.length, v.length); }catch(_){} }
 }
+// T91: the reviewer confirming the gate has to be able to read the answers the observer
+// typed or spoke, or the evidence is write-only. Native <details>, so no extra state.
+// Records submitted before T91 have no item_notes and say so plainly rather than
+// rendering as an empty checklist.
+function ovsEvidenceBlock(o){
+  const cl = ovsInstrument(o.checklistBelt || o.targetBelt);
+  const units = cl ? ovsScorableUnits(cl) : [];
+  const notes = o.itemNotes || {};
+  const scores = o.itemScores || {};
+  if(!units.length) return '';
+  const written = units.filter(u => ovsNoteOk(notes[u.id])).length;
+  const rows = units.map(u => {
+    const v = scores[u.id];
+    const shown = (v === undefined || v === null) ? '—' : (u.kind === 'pf' ? String(v).toUpperCase() : v);
+    const note = notes[u.id];
+    return `<div style="padding:7px 0;border-top:1px solid var(--bdr)">
+      <div style="display:flex;gap:8px;align-items:baseline">
+        <span style="flex:0 0 34px;font-weight:800;font-size:12px;color:var(--txt2)">${shown}</span>
+        <span style="font-size:12px;color:var(--txt2);line-height:1.5">${u.n?`${u.n}. `:''}${u.text}</span>
+      </div>
+      <div style="margin:3px 0 0 42px;font-size:12px;line-height:1.55;color:${note?'var(--txt1)':'#f59e0b'}">${note?esc0(note):'No answer recorded for this item.'}</div>
+    </div>`;
+  }).join('');
+  return `<details style="border:1px solid var(--bdr);border-radius:10px;background:var(--s1);padding:8px 12px">
+    <summary style="cursor:pointer;font-size:11.5px;color:var(--txt3);font-weight:700">Observer's answers — ${written}/${units.length} items with a written or spoken account</summary>
+    <div style="margin-top:6px">${rows}</div>
+  </details>`;
+}
+
 function renderAObservationReviews(){
-  const el = document.getElementById('a-observationreviews');
+  const el = ovsEl('observationreviews');
   if(!el) return;
   const u = ST.user;
   const canWrite = _canWriteObs(u);
@@ -3459,7 +3905,8 @@ function renderAObservationReviews(){
       <td style="padding:10px 8px">${ovsOutcomeChip(o.outcome)}</td>
       <td style="padding:10px 8px;font-size:12px;color:var(--txt2)">${o.observerName||'—'}<div style="font-size:11px;color:var(--txt3)">${o.outcomeReasons&&o.outcomeReasons[0]?o.outcomeReasons[0]:''}</div></td>
       <td style="padding:10px 8px;text-align:right">${actions}</td>
-    </tr>`;
+    </tr>
+    <tr><td colspan="5" style="padding:0 8px 10px">${ovsEvidenceBlock(o)}</td></tr>`;
   }).join('');
 
   el.innerHTML = `
@@ -3695,25 +4142,16 @@ function togglePRCard(prId){
 // "CANDIDATE NAME Assessment Report" template (both from SIPS).
 // ============================================================
 
-// Thresholds per the governing standards + template.
-// DOCUMENTED: White (blended 75 / K 80 / Sim 72), Yellow (K 83 / Sim 75),
-// Green (blended 81 / K 86 / Sim 78). Blue/Brown/Black follow the same +3
-// progression PENDING the "SBD OS Assessment Scoring Logic Specification"
-// -- confirm those three rows against that document before relying on them.
+// What is left of the report's own constants. Every threshold that the spec's section 9
+// table defines has been removed from here and is now read from that table through
+// sbdSpecFloors() / sbdSpecOveralls(); the belt list, the per-level floors and the
+// individual-response minimum all used to be duplicated in this object, which is how the
+// report drifted from the engine. Only the two values section 9 does NOT carry remain:
+// the blend weights (belt-invariant, and also in the config) and the advisory band, which
+// is a presentation choice about how close to a floor counts as borderline.
 const RPT_STANDARDS = {
-  weights: { k: 0.6, sim: 0.4 },                  // blended = 60% knowledge + 40% simulation (template math)
-  kLevelFloor: 80,                                 // knowledge floor, every level
-  simLevelFloors: { 1: 75, 2: 70, 3: 65, 4: 65, 5: 65 },
-  simResponseMin: 50,                              // individual response minimum
-  advisoryBand: 3,                                 // passing within this of a floor -> advisory
-  belts: {
-    White:  { blended: 75, k: 80, sim: 72 },
-    Yellow: { blended: 78, k: 83, sim: 75 },
-    Green:  { blended: 81, k: 86, sim: 78 },
-    Blue:   { blended: 85, k: 89, sim: 82 },
-    Brown:  { blended: 87, k: 91, sim: 84 },
-    Black:  { blended: 90, k: 92, sim: 87 }
-  }
+  weights: { k: 0.6, sim: 0.4 },  // blended = 60% knowledge + 40% simulation (spec section 9)
+  advisoryBand: 3,                // passing within this of a floor -> advisory
 };
 
 // Derive the full report model from a placement review's stored responses.
@@ -3736,15 +4174,58 @@ function rptComputeModel(pr){
     const scores = ss.map(q=>Number(q.aiScore)||0);
     scores.forEach(s=>{ simSum+=s; simN++; });
     const simPct = scores.length ? r1(scores.reduce((a,b)=>a+b,0)/scores.length) : null;
-    const sFloor = RPT_STANDARDS.simLevelFloors[l];
-    kLevels.push({ level:l, pct:kPct, correct, of:ks.length, floor:RPT_STANDARDS.kLevelFloor, pass: kPct!==null && kPct>=RPT_STANDARDS.kLevelFloor });
-    simLevels.push({ level:l, pct:simPct, scores, floor:sFloor, pass: simPct!==null && simPct>=sFloor });
+    // Floors are attached below, once the belt this report is about is known. They depend on
+    // the belt, so they cannot be decided inside this loop.
+    kLevels.push({ level:l, pct:kPct, correct, of:ks.length, floor:null, pass:true });
+    simLevels.push({ level:l, pct:simPct, scores, floor:null, pass:true });
   }
-  const kOverall = kTotal ? r1(kCorrect/kTotal*100) : 0;
-  const simOverall = simN ? r1(simSum/simN) : 0;
-  const blended = r1(RPT_STANDARDS.weights.k*kOverall + RPT_STANDARDS.weights.sim*simOverall);
-  const belt = pr.confirmedBelt || pr.tentativeBelt || 'White';
-  const th = RPT_STANDARDS.belts[belt] || RPT_STANDARDS.belts.White;
+  // Scoring Specification v1.0 §4.4 and §5.7: both components are the ITEM-WEIGHTED mean
+  // across every item, not the mean of the five level means. §6.3 and §7.6: the values that
+  // get COMPARED against a threshold are carried at full precision, and only the values that
+  // get PRINTED are rounded, otherwise a candidate at 80.96 reads as meeting a floor of 81.
+  const kOverallRaw  = kTotal ? (kCorrect / kTotal) * 100 : 0;
+  const simOverallRaw = simN ? simSum / simN : 0;
+  const blendedRaw   = RPT_STANDARDS.weights.k*kOverallRaw + RPT_STANDARDS.weights.sim*simOverallRaw;
+  const kOverall = r1(kOverallRaw);
+  const simOverall = r1(simOverallRaw);
+  const blended = r1(blendedRaw);
+  // The belt this report is about. A confirmed belt wins; otherwise take what the engine
+  // actually determines from the scores. It used to fall back to 'White' whenever nothing was
+  // stored, which is the placeholder that printed White thresholds on a Green candidate.
+  const _engineBelt = (() => {
+    for(const t of sbdBeltThresholds()){ if(blendedRaw >= t.blended && kOverallRaw >= t.k) return t.belt; }
+    return null;
+  })();
+  const belt = pr.confirmedBelt || pr.tentativeBelt || _engineBelt || 'White';
+  const beltIsDetermined = !!(pr.confirmedBelt || pr.tentativeBelt || _engineBelt);
+  const th = sbdSpecOveralls(belt) || sbdSpecOveralls('White') || { blended: 0, k: 0, sim: 0, individual: 0 };
+  // Section 9 sets the individual simulation response minimum per belt (Green 72, White 65).
+  // The report used to test every response against a flat 50 that appears nowhere in the spec.
+  const simResponseMin = th.individual;
+
+  // Attach the section 9 floors for that belt. Where the spec gives null the belt does not
+  // gate the level, so the level carries no floor and cannot fail: at Green, L4 and L5
+  // simulation are ungated, and marking a candidate's 67.5 there as a failure (which the
+  // old flat table did) is simply wrong.
+  const _sf = sbdSpecFloors(belt);
+  if(_sf){
+    kLevels.forEach(k => {
+      const f = _sf.kLevelFloors[k.level];
+      k.floor = (f == null) ? null : f;
+      k.gated = f != null;
+      k.pass  = (f == null) || (k.pct !== null && k.pct >= f);
+    });
+    simLevels.forEach(sl => {
+      const f = _sf.simLevelFloors[sl.level];
+      sl.floor = (f == null) ? null : f;
+      sl.gated = f != null;
+      sl.pass  = (f == null) || (sl.pct !== null && sl.pct >= f);
+    });
+  } else {
+    // No spec entry for this belt. Rather than invent floors, say so.
+    kLevels.forEach(k => { k.floor = null; k.gated = false; k.pass = true; });
+    simLevels.forEach(sl => { sl.floor = null; sl.gated = false; sl.pass = true; });
+  }
 
   // Dangerous answers (Governing Standards): WRONG -- DANGEROUS knowledge responses.
   // Wired to q.isDangerous; stays inert until SIPS supplies the dangerous-answer list.
@@ -3765,8 +4246,8 @@ function rptComputeModel(pr){
       finding:`Simulation level ${s.level} scored ${s.pct}% against the ${s.floor}% floor.`,
       action:`Scenario practice in the level ${s.level} topic areas with supervisor review, then re-assessment of this simulation level.` });
   });
-  (pr.responses||[]).filter(r=>r.type!=='knowledge' && (r.aiScore||0) < RPT_STANDARDS.simResponseMin).forEach(r=>{
-    conditions.push({ sev:'BLOCKING', title:`Individual response below the ${RPT_STANDARDS.simResponseMin}-point minimum`,
+  (pr.responses||[]).filter(r=>r.type!=='knowledge' && (r.aiScore||0) < simResponseMin).forEach(r=>{
+    conditions.push({ sev:'BLOCKING', title:`Individual response below the ${simResponseMin}-point minimum for ${belt} Belt`,
       finding:`"${(r.question||'').slice(0,90)}" scored ${r.aiScore}.`,
       action:`Tabletop walk-through of this scenario with a supervisor; correct handling must be demonstrated and signed off.` });
   });
@@ -3775,8 +4256,10 @@ function rptComputeModel(pr){
       finding:`Level ${k.level} knowledge scored ${k.pct}% (${k.correct}/${k.of} correct).`,
       action:`Re-study the level ${k.level} material and re-test; ${k.floor}% or above required.` });
   });
-  [...kLevels.filter(k=>k.pass && k.pct!==null && k.pct < k.floor+RPT_STANDARDS.advisoryBand),
-   ...simLevels.filter(s=>s.pass && s.pct!==null && s.pct < s.floor+RPT_STANDARDS.advisoryBand)].forEach(b=>{
+  // Ungated levels (floor null) are skipped: a level the belt does not gate cannot be
+  // "close to its floor", and null+3 would have quietly compared against 3.
+  [...kLevels.filter(k=>k.pass && k.pct!==null && k.floor!=null && k.pct < k.floor+RPT_STANDARDS.advisoryBand),
+   ...simLevels.filter(s=>s.pass && s.pct!==null && s.floor!=null && s.pct < s.floor+RPT_STANDARDS.advisoryBand)].forEach(b=>{
     conditions.push({ sev:'ADVISORY', title:`Level ${b.level} ${b.scores?'simulation':'knowledge'} is borderline`,
       finding:`Passed at ${b.pct}%, within ${RPT_STANDARDS.advisoryBand} points of the ${b.floor}% floor.`,
       action:`Acknowledge and fold into the development plan. Does not block advancement.` });
@@ -3788,14 +4271,14 @@ function rptComputeModel(pr){
 
   // Outcome -- the four Governing-Standards outcomes (Clean / Conditional / Knowledge
   // Foundation / No Belt), not just clean-vs-conditional.
-  const WHITE = RPT_STANDARDS.belts.White;
+  const WHITE = sbdSpecOveralls('White') || { blended: 75, k: 80, sim: 72 };
   const allKPass = kLevels.filter(k=>k.pct!==null).every(k=>k.pass);
   const allSimPass = simLevels.filter(s=>s.pct!==null).every(s=>s.pass);
-  const belowMin = (pr.responses||[]).some(r=>r.type!=='knowledge' && (r.aiScore||0) < RPT_STANDARDS.simResponseMin);
+  const belowMin = (pr.responses||[]).some(r=>r.type!=='knowledge' && (r.aiScore||0) < simResponseMin);
   let outcome;
-  if(blended>=th.blended && allKPass && allSimPass && !belowMin && !anyDangerous) outcome='CLEAN';
-  else if(blended>=th.blended) outcome='CONDITIONAL';
-  else if(kOverall>=80 && kL1pct!=null && kL1pct>=80 && !anyDangerous && (simOverall<WHITE.sim || blended<WHITE.blended)) outcome='KNOWLEDGE_FOUNDATION';
+  if(blendedRaw>=th.blended && allKPass && allSimPass && !belowMin && !anyDangerous) outcome='CLEAN';
+  else if(blendedRaw>=th.blended) outcome='CONDITIONAL';
+  else if(kOverallRaw>=80 && kL1pct!=null && kL1pct>=80 && !anyDangerous && (simOverallRaw<WHITE.sim || blendedRaw<WHITE.blended)) outcome='KNOWLEDGE_FOUNDATION';
   else outcome='NO_BELT';
   const clean = outcome==='CLEAN';
   const beltAwarded = (outcome==='CLEAN'||outcome==='CONDITIONAL') ? belt : null;
@@ -3828,9 +4311,9 @@ function rptComputeModel(pr){
   // issued, the path is White Belt (re-assess at White first per the standard).
   const order = ['White','Yellow','Green','Blue','Brown','Black'];
   const nb = beltAwarded ? (order[order.indexOf(beltAwarded)+1] || null) : 'White';
-  const nextTh = nb ? RPT_STANDARDS.belts[nb] : null;
+  const nextTh = nb ? sbdSpecOveralls(nb) : null;
   const gap = (cur, need)=> cur>=need ? 'Already meets' : `+${r1(need-cur)} pts needed`;
-  return { belt, beltAwarded, outcome, classification, topStrength, th, blended, kOverall, simOverall, kLevels, simLevels, conditions, dangerous, anyDangerous, roleAmp, nSup, nBlock, nReq, nAdv, clean, determination,
+  return { belt, beltAwarded, beltIsDetermined, outcome, classification, topStrength, th, simResponseMin, blended, kOverall, simOverall, kLevels, simLevels, conditions, dangerous, anyDangerous, roleAmp, nSup, nBlock, nReq, nAdv, clean, determination,
     nextBelt: nb, nextRows: nextTh ? [
       ['Blended Score', blended, nextTh.blended, gap(blended,nextTh.blended)],
       ['Knowledge Overall', kOverall, nextTh.k, gap(kOverall,nextTh.k)],
@@ -3889,7 +4372,7 @@ function downloadAssessmentReport(prId){
       ${sect('CANDIDATE INFORMATION')}
       <table style="${tbl}">
         <tr><td style="padding:6px;border:1px solid #e2e8f0;width:30%;font-weight:700">Candidate Name</td><td style="padding:6px;border:1px solid #e2e8f0">${pr.staffName||(s?fullName(s):'--')}</td></tr>
-        <tr><td style="padding:6px;border:1px solid #e2e8f0;font-weight:700">Current Title</td><td style="padding:6px;border:1px solid #e2e8f0">${pr.staffTitle||s?.role||'--'}</td></tr>
+        <tr><td style="padding:6px;border:1px solid #e2e8f0;font-weight:700">Title at Assessment</td><td style="padding:6px;border:1px solid #e2e8f0">${pr.staffTitle||s?.role||'--'}</td></tr>
         <tr><td style="padding:6px;border:1px solid #e2e8f0;font-weight:700">Facility</td><td style="padding:6px;border:1px solid #e2e8f0">${fac}</td></tr>
         <tr><td style="padding:6px;border:1px solid #e2e8f0;font-weight:700">Report Status</td><td style="padding:6px;border:1px solid #e2e8f0">${draft?'DRAFT -- pending assessor confirmation':'FINAL -- '+m.determination}</td></tr>
       </table>
@@ -3899,13 +4382,19 @@ function downloadAssessmentReport(prId){
         <td style="padding:10px;border:1px solid #e2e8f0;text-align:center;width:34%"><div style="font-size:7.5pt;color:#64748b;font-weight:700">FINAL DETERMINATION</div><div style="font-size:9.5pt;font-weight:700;margin-top:4px">${m.determination}</div></td>
         <td style="padding:10px;border:1px solid #e2e8f0;text-align:center"><div style="font-size:7.5pt;color:#64748b;font-weight:700">BLENDED SCORE</div><div style="font-size:15pt;font-weight:800;color:#0d1b35">${m.blended}%</div><div style="font-size:7.5pt;color:#64748b">K ${m.kOverall}% | Sim ${m.simOverall}%</div></td>
       </tr></table>
+      ${sect('LEVEL SCORES AT A GLANCE')}
+      <div style="font-size:7.5pt;font-weight:700;color:#64748b;letter-spacing:.05em;margin-bottom:3px">KNOWLEDGE BY LEVEL</div>
+      <table style="${tbl}"><tr>${m.kLevels.map(k=>`<td style="padding:8px 4px;border:1px solid #e2e8f0;text-align:center;width:20%"><div style="font-size:8.5pt;font-weight:800;color:#0d1b35">L${k.level}</div><div style="font-size:6.5pt;color:#64748b;line-height:1.15">${LEVEL_LABELS[String(k.level)]||''}</div><div style="font-size:14pt;font-weight:800;color:#0d1b35;margin-top:2px">${k.pct==null?'--':k.pct+'%'}</div></td>`).join('')}</tr></table>
+      <div style="font-size:7.5pt;font-weight:700;color:#64748b;letter-spacing:.05em;margin:8px 0 3px">SIMULATION BY LEVEL</div>
+      <table style="${tbl}"><tr>${m.simLevels.map(sv=>`<td style="padding:8px 4px;border:1px solid #e2e8f0;text-align:center;width:20%"><div style="font-size:8.5pt;font-weight:800;color:#0d1b35">L${sv.level}</div><div style="font-size:6.5pt;color:#64748b;line-height:1.15">${LEVEL_LABELS[String(sv.level)]||''}</div><div style="font-size:14pt;font-weight:800;color:#0d1b35;margin-top:2px">${sv.pct==null?'--':sv.pct+'%'}</div></td>`).join('')}</tr></table>
+      <div style="margin-top:8px;padding:7px 10px;background:#eff6ff;border-left:3px solid #2563eb;font-size:8pt;color:#374151;line-height:1.5">The percent for each level is shown above. Every level carries a minimum for the belt being assessed, and the sections below show that minimum next to the result for each one. The overall score carries its own pass mark on top of the level minimums.</div>
       ${sect('CERTIFICATION BASIS AND CONDITIONS')}
       <div style="font-size:8.5pt">${basis}</div>
       <div style="page-break-after:always"></div></div>
     <div>${hdr(2)}
       ${sect('KNOWLEDGE COMPONENT')}
       <table style="${tbl}"><tr style="background:#f7f4ef"><th style="padding:5px;border:1px solid #e2e8f0">Level</th><th style="padding:5px;border:1px solid #e2e8f0">Score</th><th style="padding:5px;border:1px solid #e2e8f0">Floor</th><th style="padding:5px;border:1px solid #e2e8f0">Result</th><th style="padding:5px;border:1px solid #e2e8f0">Correct</th></tr>
-        ${m.kLevels.map(k=>`<tr><td style="padding:5px;border:1px solid #e2e8f0;font-weight:700">L${k.level}</td><td style="padding:5px;border:1px solid #e2e8f0">${k.pct??'--'}%</td><td style="padding:5px;border:1px solid #e2e8f0">${k.floor}%</td><td style="padding:5px;border:1px solid #e2e8f0">${pf(k.pass)}</td><td style="padding:5px;border:1px solid #e2e8f0">${k.correct}/${k.of}</td></tr>`).join('')}
+        ${m.kLevels.map(k=>`<tr><td style="padding:5px;border:1px solid #e2e8f0;font-weight:700">L${k.level} ${LEVEL_LABELS[String(k.level)]||''}</td><td style="padding:5px;border:1px solid #e2e8f0">${k.pct??'--'}%</td><td style="padding:5px;border:1px solid #e2e8f0">${k.floor==null?'Not required at '+m.belt+' Belt':k.floor+'%'}</td><td style="padding:5px;border:1px solid #e2e8f0">${k.floor==null?'<span style="color:#64748b">Counts toward overall</span>':pf(k.pass)}</td><td style="padding:5px;border:1px solid #e2e8f0">${k.correct}/${k.of}</td></tr>`).join('')}
       </table>
       <div style="margin:8px 0;font-size:9pt"><b>KNOWLEDGE OVERALL: ${m.kOverall}%</b> &nbsp; ${m.belt} Belt floor: ${m.th.k}% | ${m.kOverall>=m.th.k?'PASS':'FAIL by '+(Math.round((m.th.k-m.kOverall)*10)/10)+' pts'}</div>
       ${sect('INCORRECT AND BLANK RESPONSES')}
@@ -3915,7 +4404,7 @@ function downloadAssessmentReport(prId){
     <div>${hdr(3)}
       ${sect('SIMULATION COMPONENT')}
       <table style="${tbl}"><tr style="background:#f7f4ef"><th style="padding:5px;border:1px solid #e2e8f0">Level</th><th style="padding:5px;border:1px solid #e2e8f0">Score</th><th style="padding:5px;border:1px solid #e2e8f0">Floor</th><th style="padding:5px;border:1px solid #e2e8f0">Result</th><th style="padding:5px;border:1px solid #e2e8f0">Responses</th></tr>
-        ${m.simLevels.map(sv=>`<tr><td style="padding:5px;border:1px solid #e2e8f0;font-weight:700">L${sv.level}</td><td style="padding:5px;border:1px solid #e2e8f0">${sv.pct??'--'}%</td><td style="padding:5px;border:1px solid #e2e8f0">${sv.floor}%</td><td style="padding:5px;border:1px solid #e2e8f0">${pf(sv.pass)}</td><td style="padding:5px;border:1px solid #e2e8f0">${sv.scores.join(' ')}</td></tr>`).join('')}
+        ${m.simLevels.map(sv=>`<tr><td style="padding:5px;border:1px solid #e2e8f0;font-weight:700">L${sv.level} ${LEVEL_LABELS[String(sv.level)]||''}</td><td style="padding:5px;border:1px solid #e2e8f0">${sv.pct??'--'}%</td><td style="padding:5px;border:1px solid #e2e8f0">${sv.floor==null?'Not required at '+m.belt+' Belt':sv.floor+'%'}</td><td style="padding:5px;border:1px solid #e2e8f0">${sv.floor==null?'<span style="color:#64748b">Counts toward overall</span>':pf(sv.pass)}</td><td style="padding:5px;border:1px solid #e2e8f0">${sv.scores.join(' ')}</td></tr>`).join('')}
       </table>
       <div style="margin:8px 0;font-size:9pt"><b>SIMULATION OVERALL: ${m.simOverall}%</b> &nbsp; ${m.belt} Belt floor: ${m.th.sim}% | ${m.simOverall>=m.th.sim?'PASS':'FAIL by '+(Math.round((m.th.sim-m.simOverall)*10)/10)+' pts'}</div>
       ${sect('SIMULATION RESPONSE DETAIL')}
@@ -4240,7 +4729,7 @@ function rptBeltBars(staffArr){
 // Assessment pass rate from history
 function rptPassRate(staffArr){
   let pass=0, total=0;
-  staffArr.forEach(s=>{ (s.history||[]).forEach(h=>{ total++; if(h.res==='pass') pass++; }); });
+  staffArr.forEach(s=>{ (s.history||[]).forEach(h=>{ total++; if(isSuccessOutcome(h.res)) pass++; }); });
   return total>0?Math.round(pass/total*100):null;
 }
 
@@ -4298,56 +4787,79 @@ function rptHandoffStatus(staffArr){
 
 // ============================================================ ASSESSMENT REPORT GENERATOR
 
-// Belt scoring thresholds — White Belt values from SBD OS Governing Standards §2
-// Single source of truth: these MUST match SBD_BELT_THRESHOLDS / RPT_STANDARDS so the
-// confirmed-report engine (deriveOutcome) agrees with the card + the draft report.
-const BELT_THRESHOLDS = {
-  White:  { blended: 75, sim: 72, knowledge: 80 },
-  Yellow: { blended: 78, sim: 75, knowledge: 83 },
-  Green:  { blended: 81, sim: 78, knowledge: 86 },
-  Blue:   { blended: 85, sim: 82, knowledge: 89 },
-  Brown:  { blended: 87, sim: 84, knowledge: 91 },
-  Black:  { blended: 90, sim: 87, knowledge: 92 },
-};
-
+// The belt thresholds and the per-level floors used to be a third hardcoded copy here. They
+// were annotated "these MUST match SBD_BELT_THRESHOLDS / RPT_STANDARDS", which is the note
+// you write when the same table lives in three places and nothing enforces it. Section 9 of
+// the scoring spec says not to hardcode them inline at all, so this engine now reads the
+// one table in belt-test-engine.js through sbdSpecOveralls() / sbdSpecFloors().
+//
+// The old per-level constants were flat across belts (knowledge 80 everywhere, simulation
+// 75/70/65/65/65). The spec gates by belt, and gates fewer levels at the lower belts: a
+// Green candidate is not measured on simulation L4 or L5 at all. The flat table marked those
+// ungated levels FAIL on a real candidate's report.
 const LEVEL_LABELS = { '1':'Foundational','2':'Operational','3':'Applied','4':'Advanced','5':'Systems' };
-const SIM_LEVEL_FLOORS = { '1':75,'2':70,'3':65,'4':65,'5':65 };
-const KNOWLEDGE_LEVEL_FLOOR = 80;
 
-const DANGEROUS_PATTERNS = [
-  /re.?use.{0,20}(single.?use|disposable|instrument|pack)/i,
-  /skip.{0,20}decontam|no.{0,10}need.{0,10}(to.{0,5})?clean|just.{0,10}wipe/i,
-  /(still|just).{0,15}(use|usable|ok|fine).{0,20}(wet.?pack|pack|it)|just.{0,10}dry.{0,10}it/i,
-  /ignore.{0,20}(bi|biological.?indicator)|bi.{0,20}fail.{0,30}(still|ok|use)/i,
-  /no.{0,10}(gloves|ppe|protection)|don.{0,5}t.{0,10}(need|wear).{0,10}(gloves|ppe)/i,
-  /(still|is).{0,10}sterile|open.{0,15}pack.{0,15}(is.{0,5})?(fine|ok|sterile)|re.?package/i,
-];
+// Per-level floors for a belt, keyed by level as a string to match this file's level maps.
+// A null value means the belt does not gate that level, and callers must render that as
+// "not gated" rather than as a pass or a zero floor.
+function sbdKnowledgeFloor(belt, level){
+  const f = sbdSpecFloors(belt);
+  const v = f && f.kLevelFloors ? f.kLevelFloors[Number(level)] : undefined;
+  return v == null ? null : v;
+}
+function sbdSimFloor(belt, level){
+  const f = sbdSpecFloors(belt);
+  const v = f && f.simLevelFloors ? f.simLevelFloors[Number(level)] : undefined;
+  return v == null ? null : v;
+}
 
-const _DANGEROUS_RISKS = [
-  'Reusing a single-use item bypasses sterilization barriers, creating a direct cross-contamination pathway to patients.',
-  'Skipping decontamination leaves organic material that shields pathogens during sterilization, producing a non-sterile instrument.',
-  'Using a wet pack releases the sterility event-related barrier; moisture is a direct contamination pathway.',
-  'Disregarding a biological indicator failure means releasing a load that may not be sterile into the OR.',
-  'Proceeding without appropriate PPE exposes the technician to blood-borne pathogens and risks contaminating clean areas.',
-  'An open or compromised package cannot be considered sterile regardless of contents or perceived integrity.',
-];
+// A dangerous answer is not a wrong answer. It is a specific wrong OPTION that would cause
+// harm if somebody acted on it in the department, and the flag sits on the option, not on the
+// question: a question can carry three wrong options with only one of them flagged. Five
+// questions carry flagged options today, eight options in total, and the flag travels with
+// the stored response as `isDangerous`.
+//
+// This used to be decided by matching regular expressions against the text of the answer,
+// which is a different thing entirely and got it wrong in both directions. Measured across all
+// 49 stored reviews before this change: the patterns fired 19 times across 15 reports, 17 of
+// those on free-text simulation answers, and they agreed with the authored flag exactly zero
+// times. On one real candidate the pattern `skip.{0,20}decontam` matched the sentence "under no
+// circumstances should a visibly soiled instrument skip the full decontamination process",
+// which is the correct answer, so the report raised the most severe finding it has against a
+// candidate for getting it right, while the option he actually did pick went unmentioned.
+//
+// The authored flag matches the client's own account of the data exactly: he said three of the
+// five flagged questions have ever been picked, and the stored flags give exactly three, p6,
+// p32 and p37. Checked back to April, every knowledge response carries the field, so nothing
+// historical is lost by relying on it.
+//
+// One predicate, used by both the report and the account provision, so the two can never name
+// different items for the same assessment again.
+function sbdIsDangerousResponse(r){
+  // Knowledge only: the flag lives on a multiple-choice option, and simulation answers are
+  // free text with no options to flag. If SIPS ever flags one, widen this in one place.
+  return !!(r && r.type === 'knowledge' && r.isDangerous && r.correct !== true);
+}
 
-function _dangerousRiskDesc(answer) {
-  const ans = (answer || '').toLowerCase();
-  for (let i = 0; i < DANGEROUS_PATTERNS.length; i++) {
-    if (DANGEROUS_PATTERNS[i].test(ans)) return _DANGEROUS_RISKS[i];
+// Describes the risk from what the response itself stores. A per-option risk statement really
+// belongs in the question bank next to the flag; until it is there, saying what was picked and
+// what the correct handling is beats a canned sentence guessed from the wording.
+function _dangerousRiskDesc(response) {
+  const r = (response && typeof response === 'object') ? response : null;
+  if (!r) return 'This response, if acted upon, would create a direct patient safety risk in the sterile processing department.';
+  const picked = String(r.answer || '').trim();
+  const right  = String(r.correctAnswer || '').trim();
+  if (picked && right) {
+    return `Answered "${picked}" where the correct handling is "${right}". Acting on this in the department would create a direct patient safety risk.`;
+  }
+  if (picked) {
+    return `Answered "${picked}". Acting on this in the department would create a direct patient safety risk.`;
   }
   return 'This response, if acted upon, would create a direct patient safety risk in the sterile processing department.';
 }
 
-// Checks both knowledge AND simulation responses per §5
 function detectDangerousAnswers(responses) {
-  const flagged = [];
-  (responses || []).forEach(r => {
-    const ans = (r.answer || '').toLowerCase();
-    if (DANGEROUS_PATTERNS.some(p => p.test(ans))) flagged.push(r.qId || r.id);
-  });
-  return flagged;
+  return (responses || []).filter(sbdIsDangerousResponse).map(r => r.qId || r.id);
 }
 
 function deriveOutcome(pr) {
@@ -4363,7 +4875,7 @@ function deriveOutcome(pr) {
 
   const kTotal = knowledge.length;
   const kCorrect = knowledge.filter(r => r.correct).length;
-  const knowledgeOverall = kTotal ? (kCorrect / kTotal) * 100 : 0;
+  const knowledgeOverall = sbdKnowledgeOverall(knowledge);   // spec 5.2, not correct-over-total
   const simScored = simulation.filter(r => r.aiScore != null);
   const simOverall = simScored.length ? simScored.reduce((a, r) => a + (Number(r.aiScore) || 0), 0) / simScored.length : 0;
   // 60% knowledge / 40% simulation -- the governed blend (matches rptComputeModel + the
@@ -4376,11 +4888,77 @@ function deriveOutcome(pr) {
   const hasDangerousKnowledge = dangerousKnowledge.length > 0;
   const hasDangerous = dangerousIds.length > 0;
 
-  const targetBelt = pr.confirmedBelt || pr.tentativeBelt || 'White';
-  const thresh = BELT_THRESHOLDS[targetBelt] || BELT_THRESHOLDS.White;
-  const levelEntries = Object.entries(pr.levelScores || {});
-  const floorFails = levelEntries.filter(([, v]) => Number(v) < 65).map(([k]) => k);
-  const nearMisses = levelEntries.filter(([, v]) => { const p = Number(v); return p >= 60 && p < 65; }).map(([k]) => k);
+  // The belt this report is measured against. It used to fall back to 'White' whenever the
+  // review carried no belt, and that placeholder is what put WHITE BELT on the header of a
+  // candidate the engine had actually placed at Green: the thresholds, the floors, the gap
+  // table and the certification basis were all then computed against the wrong belt. Derive
+  // the determination from the scores when none is stored, and if the threshold table is not
+  // loaded, name no belt at all rather than invent one.
+  const _derivedBelt = (() => {
+    for (const t of sbdBeltThresholds()) { if (blended >= t.blended && knowledgeOverall >= t.k) return t.belt; }
+    return null;
+  })();
+  const targetBelt = pr.confirmedBelt || pr.tentativeBelt || _derivedBelt;
+  const beltIsDetermined = !!targetBelt;
+  const beltForFloors = targetBelt || 'White';
+  const thresh = sbdSpecOveralls(beltForFloors) || { blended: 0, sim: 0, knowledge: 0, k: 0, individual: 0 };
+  const sevCfg = (sbdSpecConfig() || {}).severity || { blockingGap: 5, requiredGap: 2, watchMargin: 5 };
+
+  // Per-level pass/fail against the section 9 floors for that belt, computed from the stored
+  // responses. This used to read pr.levelScores -- a single blended knowledge-plus-simulation
+  // figure per level -- test it against a hardcoded 65, and then word the failure as though it
+  // had been measured against the 80% knowledge floor: three different numbers in one
+  // condition. Knowledge and simulation are gated separately, and each belt gates a different
+  // set of levels. Where the spec gives no floor the level is not gated and cannot fail.
+  const _kPct = {}, _sPct = {};
+  for (let i = 1; i <= 5; i++) {
+    const lk = knowledge.filter(r => Number(r.level) === i);
+    const ls = simulation.filter(r => Number(r.level) === i && r.aiScore != null);
+    _kPct[i] = lk.length ? lk.filter(r => r.correct).length / lk.length * 100 : null;
+    _sPct[i] = ls.length ? ls.reduce((a, r) => a + (Number(r.aiScore) || 0), 0) / ls.length : null;
+  }
+  const floorFails = [], nearMisses = [];
+  for (let i = 1; i <= 5; i++) {
+    const kf = sbdKnowledgeFloor(beltForFloors, i);
+    if (kf != null && _kPct[i] != null) {
+      if (_kPct[i] < kf) floorFails.push({ level: i, kind: 'knowledge', pct: _kPct[i], floor: kf });
+      else if (_kPct[i] < kf + sevCfg.watchMargin) nearMisses.push({ level: i, kind: 'knowledge', pct: _kPct[i], floor: kf });
+    }
+    const sf = sbdSimFloor(beltForFloors, i);
+    if (sf != null && _sPct[i] != null) {
+      if (_sPct[i] < sf) floorFails.push({ level: i, kind: 'simulation', pct: _sPct[i], floor: sf });
+      else if (_sPct[i] < sf + sevCfg.watchMargin) nearMisses.push({ level: i, kind: 'simulation', pct: _sPct[i], floor: sf });
+    }
+  }
+  // Findings read as coaching, not as a verdict. Every one names the level, the number, the
+  // distance to the minimum, and one concrete thing to do, and it ends with a path rather than
+  // a wall. The severity bands themselves are unchanged in strictness: they are graded by the
+  // size of the miss (Scoring Specification v1.0 §10.2), so a half-point miss and a
+  // twenty-point miss no longer read the same.
+  const _sevForGap = (gap) => gap > sevCfg.blockingGap ? 'BLOCKING'
+                            : gap >= sevCfg.requiredGap ? 'REQUIRED'
+                            : 'ADVISORY';
+  const _devPlan = 'Carry this into the development plan. It does not hold up advancement.';
+  const _failCond = (f) => {
+    const short = Math.round((f.floor - f.pct) * 10) / 10;
+    const sev = _sevForGap(f.floor - f.pct);
+    return {
+      severity: sev,
+      title: `Level ${f.level} ${f.kind} &middot; ${LEVEL_LABELS[String(f.level)] || ''}`,
+      finding: `Level ${f.level} ${f.kind} came in at ${Math.round(f.pct)}%, ${short} points under the ${f.floor}% minimum for ${beltForFloors} Belt.`,
+      requiredAction: sev === 'ADVISORY'
+        ? _devPlan
+        : (f.kind === 'knowledge'
+            ? `Re-study this level and sit the knowledge check again at ${f.floor}% or above.`
+            : `Work through scenario practice at this level with a reviewer, then re-sit this simulation level.`),
+    };
+  };
+  const _nearCond = (n) => ({
+    severity: 'ADVISORY',
+    title: `Level ${n.level} ${n.kind} &middot; ${LEVEL_LABELS[String(n.level)] || ''} (close to the minimum)`,
+    finding: `Level ${n.level} ${n.kind} cleared at ${Math.round(n.pct)}%, within ${sevCfg.watchMargin} points of the ${n.floor}% minimum for ${beltForFloors} Belt.`,
+    requiredAction: _devPlan,
+  });
 
   let outcome, classification, tone;
   const conditions = [];
@@ -4394,79 +4972,68 @@ function deriveOutcome(pr) {
       conditions.push({
         severity: 'SUPERVISED PRACTICE REQUIRED',
         title: `Patient Safety Response — "${q.slice(0, 60)}${q.length > 60 ? '…' : ''}"`,
-        finding: _dangerousRiskDesc(r.answer),
+        finding: _dangerousRiskDesc(r),
         requiredAction: 'A supervisor must directly observe correct practice in this specific area before any other conditions are evaluated. Written re-study alone does not satisfy this requirement.',
       });
     });
   }
 
-  if (blended >= thresh.blended && floorFails.length === 0 && !hasDangerous) {
+  // Section 8.2: the blended score sets the belt, floor failures set the conditions. Clean
+  // means every gate cleared, so the overall simulation floor and the individual-response
+  // minimum count here too; they used not to, which let a report read Clean while a level
+  // sat below its floor.
+  const _anyBelowIndividual = simulation.some(r => r.aiScore != null && Number(r.aiScore) < thresh.individual);
+  if (blended >= thresh.blended && floorFails.length === 0 && !hasDangerous && simOverall >= thresh.sim && !_anyBelowIndividual) {
     outcome = 'CLEAN'; tone = '#16a34a';
     classification = (blended - thresh.blended) >= 10 ? 'A+' : 'A';
   } else if (blended >= thresh.blended) {
     outcome = 'CONDITIONAL'; classification = 'B'; tone = '#60a5fa';
     if (simOverall < thresh.sim) conditions.push({
-      severity: 'BLOCKING', title: `Simulation Overall Floor — ${targetBelt} Belt`,
-      finding: `Simulation overall of ${Math.round(simOverall)}% falls below the ${thresh.sim}% floor required for ${targetBelt} Belt.`,
+      severity: 'BLOCKING', title: `Simulation Overall Floor &middot; ${beltForFloors} Belt`,
+      finding: `Simulation overall of ${Math.round(simOverall)}% falls below the ${thresh.sim}% floor required for ${beltForFloors} Belt.`,
       requiredAction: 'Demonstrate correct competency in a supervisor-observed tabletop exercise before advancement to the next assessment level.',
     });
-    floorFails.forEach(k => {
-      const pct = Number(pr.levelScores[k]);
-      const sev = (65 - pct) > 8 ? 'REQUIRED' : 'ADVISORY';
-      conditions.push({ severity: sev, title: `${sev === 'REQUIRED' ? 'Knowledge Gap' : 'Near-Threshold'} — Level ${k} (${LEVEL_LABELS[k] || ''})`,
-        finding: `Level ${k} score of ${Math.round(pct)}% is below the ${KNOWLEDGE_LEVEL_FLOOR}% competency floor${sev === 'REQUIRED' ? ' by more than 8 points' : ''}.`,
-        requiredAction: sev === 'REQUIRED' ? 'Complete targeted re-study and a re-test with a minimum passing score. Document completion and have supervisor sign off.' : 'Acknowledge finding and incorporate into development plan. Does not block advancement.',
+    // Individual simulation responses below the belt's minimum (section 9, per belt).
+    simulation.filter(r => r.aiScore != null && Number(r.aiScore) < thresh.individual).forEach(r => {
+      const q = String(r.question || '');
+      conditions.push({ severity: 'BLOCKING',
+        title: `Individual Response Below Minimum &middot; Level ${r.level}`,
+        finding: `"${q.slice(0, 80)}${q.length > 80 ? '…' : ''}" scored ${Math.round(Number(r.aiScore))} against the ${thresh.individual}-point individual minimum for ${beltForFloors} Belt.`,
+        requiredAction: 'Tabletop walk-through of this scenario with a supervisor; correct handling must be demonstrated and signed off.',
       });
     });
-    nearMisses.forEach(k => { if (!floorFails.includes(k)) conditions.push({
-      severity: 'ADVISORY', title: `Near-Threshold — Level ${k} (${LEVEL_LABELS[k] || ''})`,
-      finding: `Level ${k} is within 5 points of the ${KNOWLEDGE_LEVEL_FLOOR}% competency floor — a borderline development area.`,
-      requiredAction: 'Acknowledge finding and incorporate into development plan. Does not block advancement.',
-    }); });
+    floorFails.forEach(f => conditions.push(_failCond(f)));
+    nearMisses.forEach(n => conditions.push(_nearCond(n)));
   } else if (knowledgeOverall >= thresh.knowledge && !hasDangerousKnowledge && simOverall < thresh.sim) {
     outcome = 'KNOWLEDGE FOUNDATION'; tone = '#f59e0b';
     const gap = thresh.blended - blended;
     classification = gap <= 3 ? 'A' : gap <= 7 ? 'B' : 'C';
     conditions.push({
-      severity: 'REQUIRED', title: `Simulation Floor — ${targetBelt} Belt`,
-      finding: `Simulation overall of ${Math.round(simOverall)}% does not yet meet the ${thresh.sim}% floor required for ${targetBelt} Belt.`,
+      severity: 'REQUIRED', title: `Simulation Floor &middot; ${beltForFloors} Belt`,
+      finding: `Simulation overall of ${Math.round(simOverall)}% does not yet meet the ${thresh.sim}% floor required for ${beltForFloors} Belt.`,
       requiredAction: 'Complete scenario practice targeting the specific levels identified in this report. Re-sit the full assessment when simulation competency is developed.',
     });
-    nearMisses.forEach(k => conditions.push({
-      severity: 'ADVISORY', title: `Near-Threshold — Level ${k} (${LEVEL_LABELS[k] || ''})`,
-      finding: `Level ${k} is within 5 points of the competency floor. Review alongside simulation practice.`,
-      requiredAction: 'Incorporate into development plan alongside simulation remediation.',
-    }));
+    floorFails.forEach(f => conditions.push(_failCond(f)));
+    nearMisses.forEach(n => conditions.push(_nearCond(n)));
   } else {
     outcome = 'NO BELT'; tone = '#ef4444';
     const gap = thresh.blended - blended;
     classification = (hasDangerous && gap > 7) ? 'D' : (hasDangerous || gap > 7) ? 'C' : 'A';
     if (simOverall < thresh.sim) conditions.push({
-      severity: 'BLOCKING', title: `Simulation Floor — ${targetBelt} Belt`,
-      finding: `Simulation overall of ${Math.round(simOverall)}% does not meet the ${thresh.sim}% floor required for ${targetBelt} Belt.`,
+      severity: 'BLOCKING', title: `Simulation Floor &middot; ${beltForFloors} Belt`,
+      finding: `Simulation overall of ${Math.round(simOverall)}% does not meet the ${thresh.sim}% floor required for ${beltForFloors} Belt.`,
       requiredAction: 'Direct remediation of simulation competency gaps is required. Targeted scenario practice with supervisor review must be completed before re-assessment.',
     });
     if (knowledgeOverall < thresh.knowledge) {
       const kg = thresh.knowledge - knowledgeOverall;
       conditions.push({ severity: kg > 8 ? 'REQUIRED' : 'ADVISORY',
-        title: `Knowledge Overall — ${targetBelt} Belt Floor`,
+        title: `Knowledge Overall &middot; ${beltForFloors} Belt Floor`,
         finding: `Knowledge overall of ${Math.round(knowledgeOverall)}% is below the ${thresh.knowledge}% floor.`,
         requiredAction: kg > 8 ? 'Targeted re-study with a re-test achieving a minimum passing score is required.' : 'A documented development plan addressing knowledge gaps is recommended.',
       });
     }
-    floorFails.forEach(k => {
-      const pct = Number(pr.levelScores[k]);
-      conditions.push({ severity: (65 - pct) > 8 ? 'REQUIRED' : 'ADVISORY',
-        title: `${(65 - pct) > 8 ? 'Knowledge Gap' : 'Near-Threshold'} — Level ${k} (${LEVEL_LABELS[k] || ''})`,
-        finding: `Level ${k} of ${Math.round(pct)}% is below the competency floor.`,
-        requiredAction: (65 - pct) > 8 ? 'Structured study with documented supervisor sign-off is required.' : 'A development plan is recommended.',
-      });
-    });
-    nearMisses.forEach(k => { if (!floorFails.includes(k)) conditions.push({
-      severity: 'ADVISORY', title: `Near-Threshold — Level ${k} (${LEVEL_LABELS[k] || ''})`,
-      finding: `Level ${k} is within 5 points of the competency floor.`,
-      requiredAction: 'Incorporate into development plan.',
-    }); });
+    floorFails.forEach(f => conditions.push(_failCond(f)));
+    nearMisses.forEach(n => conditions.push(_nearCond(n)));
   }
 
   const hasSPR = conditions.some(c => c.severity === 'SUPERVISED PRACTICE REQUIRED');
@@ -4489,7 +5056,13 @@ function deriveOutcome(pr) {
     blended: Math.round(blended * 10) / 10,
     knowledgeOverall: Math.round(knowledgeOverall * 10) / 10,
     simOverall: Math.round(simOverall * 10) / 10,
-    thresh, targetBelt, dangerousIds, dangerousKnowledge, dangerousSim,
+    // targetBelt is the belt this assessment was actually measured against. When a candidate
+    // clears nothing it is White, because White is the gate they did not clear, and that is a
+    // real statement rather than the old placeholder. beltIsDetermined says whether a belt was
+    // determined at all, so the header can print an outcome instead of naming a belt nobody
+    // earned; derivedBelt records that the belt came from the scores, not from a stored value.
+    thresh, targetBelt: beltForFloors, beltIsDetermined, derivedBelt: _derivedBelt,
+    dangerousIds, dangerousKnowledge, dangerousSim,
   };
 }
 
@@ -4523,7 +5096,7 @@ function _certBasis(outcome, classification, candidateName, blended, thresh, tar
 }
 
 function buildAssessmentReportHTML(pr, staff, fac) {
-  const { outcome, classification, tone, conditions, timeframe, blended, knowledgeOverall, simOverall, thresh, targetBelt, dangerousIds, dangerousKnowledge, dangerousSim } = deriveOutcome(pr);
+  const { outcome, classification, tone, conditions, timeframe, blended, knowledgeOverall, simOverall, thresh, targetBelt, beltIsDetermined, dangerousIds, dangerousKnowledge, dangerousSim } = deriveOutcome(pr);
   const responses = pr.responses || [];
   const knowledge = responses.filter(r => r.type === 'knowledge');
   const simulation = responses.filter(r => r.type === 'simulation');
@@ -4531,7 +5104,11 @@ function buildAssessmentReportHTML(pr, staff, fac) {
   const fmt1 = n => (Math.round(n * 10) / 10).toFixed(1);
   const submittedDate = pr.submittedAt ? new Date(pr.submittedAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'Month DD, YYYY';
   const genDate = new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
-  const displayBelt = pr.confirmedBelt || null;
+  // A belt is named on the report only when one was actually awarded. It used to be named
+  // only when an assessor had confirmed it, so a correct pending determination printed as a
+  // bare outcome; and separately the thresholds beneath it were White's regardless. Both come
+  // from the same determination now.
+  const displayBelt = pr.confirmedBelt || ((outcome === 'CLEAN' || outcome === 'CONDITIONAL') && beltIsDetermined ? targetBelt : null);
   const nextB = nextBelt(targetBelt) || null;
   const candidateName = pr.staffName || fullName(staff) || 'Candidate';
   const beltColors = { White:'#94a3b8', Yellow:'#c49a20', Green:'#16a34a', Blue:'#2563eb', Brown:'#92400e', Black:'#374151' };
@@ -4572,8 +5149,12 @@ function buildAssessmentReportHTML(pr, staff, fac) {
     const k = String(i), d = kByLevel[k];
     if (!d.total) return `<div class="ar-level-card" style="border-color:#e2e8f0;background:#f8fafc;opacity:.5"><div style="font-weight:700;font-size:9pt">L${i}</div><div style="font-size:7.5pt;color:#94a3b8">${LEVEL_LABELS[k]}</div><div style="font-size:13pt;font-weight:900;color:#94a3b8;margin:6px 0">—</div><div style="font-size:7pt;color:#94a3b8">No data</div></div>`;
     const pct = Math.round(d.pct * 10) / 10;
-    const pass = d.pct >= KNOWLEDGE_LEVEL_FLOOR;
-    return `<div class="ar-level-card ${pass ? 'ar-level-pass' : 'ar-level-fail'}"><div style="font-weight:700;font-size:9pt">L${i}</div><div style="font-size:7.5pt;color:#64748b">${LEVEL_LABELS[k]}</div><div style="font-size:15pt;font-weight:900;color:${pass ? '#16a34a' : '#dc2626'};margin:5px 0">${pct.toFixed(1)}%</div><div style="font-size:7pt;color:#64748b">floor ${KNOWLEDGE_LEVEL_FLOOR}.0%</div><div style="font-weight:700;color:${pass ? '#16a34a' : '#dc2626'};font-size:8pt;margin-top:4px">${pass ? 'PASS' : 'FAIL'}</div><div style="font-size:7.5pt;color:#475569;margin-top:4px">${d.correct}/${d.total} correct</div></div>`;
+    // Null floor = this belt does not gate this level (section 9). Print that, do not print a
+    // pass or a fail: a level nobody was measured on is neither.
+    const floor = sbdKnowledgeFloor(targetBelt, i);
+    if (floor == null) return `<div class="ar-level-card" style="border-color:#e2e8f0;background:#f8fafc"><div style="font-weight:700;font-size:9pt">L${i}</div><div style="font-size:7.5pt;color:#64748b">${LEVEL_LABELS[k]}</div><div style="font-size:15pt;font-weight:900;color:#475569;margin:5px 0">${pct.toFixed(1)}%</div><div style="font-size:7pt;color:#64748b">Not required at ${safe(targetBelt)} Belt</div><div style="font-weight:700;color:#94a3b8;font-size:7pt;margin-top:4px">Counts toward overall</div><div style="font-size:7.5pt;color:#475569;margin-top:4px">${d.correct}/${d.total} correct</div></div>`;
+    const pass = d.pct >= floor;
+    return `<div class="ar-level-card ${pass ? 'ar-level-pass' : 'ar-level-fail'}"><div style="font-weight:700;font-size:9pt">L${i}</div><div style="font-size:7.5pt;color:#64748b">${LEVEL_LABELS[k]}</div><div style="font-size:15pt;font-weight:900;color:${pass ? '#16a34a' : '#dc2626'};margin:5px 0">${pct.toFixed(1)}%</div><div style="font-size:7pt;color:#64748b">floor ${floor.toFixed(1)}%</div><div style="font-weight:700;color:${pass ? '#16a34a' : '#dc2626'};font-size:8pt;margin-top:4px">${pass ? 'PASS' : 'FAIL'}</div><div style="font-size:7.5pt;color:#475569;margin-top:4px">${d.correct}/${d.total} correct</div></div>`;
   }).join('');
 
   // Knowledge incorrects table (page 2)
@@ -4590,24 +5171,45 @@ function buildAssessmentReportHTML(pr, staff, fac) {
     const statusBadge = isDang ? `<span style="background:#7f1d1d;color:#fca5a5;font-size:6.5pt;font-weight:800;padding:3px 6px;border-radius:3px;line-height:1.4;display:inline-block;text-align:center">WRONG<br>DANGEROUS</span>` : `<span style="color:#dc2626;font-weight:700;font-size:8pt">WRONG</span>`;
     return `<tr style="background:${rowBg}"><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid ${sep};color:${txtClr};width:36px;text-align:center;font-weight:700">L${safe(r.level)}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid ${sep};width:110px;vertical-align:top">${statusBadge}</td><td style="padding:6px 10px;font-size:8pt;border-bottom:1px solid ${sep};color:${txtClr}">${safe(r.question)}</td><td style="padding:6px 10px;font-size:8pt;border-bottom:1px solid ${sep};color:${isDang ? '#fca5a5' : '#d97706'}">${safe(r.answer)}</td><td style="padding:6px 10px;font-size:8pt;border-bottom:1px solid ${sep};color:${txtClr}">${safe(r.correctAnswer || '—')}</td></tr>`;
   }).join('');
-  const kDangerousFootnote = kDangerousIds.length ? `<div style="margin-top:8px;padding:10px 14px;background:#450a0a;border-radius:5px;color:#fca5a5;font-size:8pt;line-height:1.6"><div style="font-weight:800;margin-bottom:6px">PATIENT SAFETY FINDINGS — These responses, if acted upon, create direct patient safety risk:</div>${dangerousKnowledge.map(r => `<div style="margin-bottom:6px">"${safe(String(r.question||'').slice(0,80))}${(r.question||'').length>80?'…':''}" — ${safe(_dangerousRiskDesc(r.answer))}</div>`).join('')}</div>` : '';
+  const kDangerousFootnote = kDangerousIds.length ? `<div style="margin-top:8px;padding:10px 14px;background:#450a0a;border-radius:5px;color:#fca5a5;font-size:8pt;line-height:1.6"><div style="font-weight:800;margin-bottom:6px">PATIENT SAFETY FINDINGS — These responses, if acted upon, create direct patient safety risk:</div>${dangerousKnowledge.map(r => `<div style="margin-bottom:6px">"${safe(String(r.question||'').slice(0,80))}${(r.question||'').length>80?'…':''}" — ${safe(_dangerousRiskDesc(r))}</div>`).join('')}</div>` : '';
 
   // Simulation level cards
   const sDangerousIds = dangerousSim.map(r => r.qId || r.id);
   const sLevelCards = [1,2,3,4,5].map(i => {
-    const k = String(i), d = sByLevel[k], floor = SIM_LEVEL_FLOORS[k];
+    const k = String(i), d = sByLevel[k], floor = sbdSimFloor(targetBelt, i);
     if (!d.total) return `<div class="ar-level-card" style="border-color:#e2e8f0;background:#f8fafc;opacity:.5"><div style="font-weight:700;font-size:9pt">L${i}</div><div style="font-size:7.5pt;color:#94a3b8">${LEVEL_LABELS[k]}</div><div style="font-size:13pt;font-weight:900;color:#94a3b8;margin:6px 0">—</div><div style="font-size:7pt;color:#94a3b8">No data</div></div>`;
     const pct = d.pct != null ? Math.round(d.pct * 10) / 10 : null;
+    // Same rule as the knowledge cards: at Green, simulation L4 and L5 carry no floor, and
+    // marking a candidate's score there as a failure is the bug this replaces.
+    if (floor == null) return `<div class="ar-level-card" style="border-color:#e2e8f0;background:#f8fafc"><div style="font-weight:700;font-size:9pt">L${i}</div><div style="font-size:7.5pt;color:#64748b">${LEVEL_LABELS[k]}</div><div style="font-size:15pt;font-weight:900;color:#475569;margin:5px 0">${pct != null ? pct.toFixed(1)+'%' : '—'}</div><div style="font-size:7pt;color:#64748b">Not required at ${safe(targetBelt)} Belt</div><div style="font-weight:700;color:#94a3b8;font-size:7pt;margin-top:4px">Counts toward overall</div><div style="font-size:7pt;color:#64748b;margin-top:4px">${safe(d.scores.join(' '))}</div></div>`;
     const pass = pct != null && pct >= floor;
-    return `<div class="ar-level-card ${pass ? 'ar-level-pass' : 'ar-level-fail'}"><div style="font-weight:700;font-size:9pt">L${i}</div><div style="font-size:7.5pt;color:#64748b">${LEVEL_LABELS[k]}</div><div style="font-size:15pt;font-weight:900;color:${pass ? '#16a34a' : '#dc2626'};margin:5px 0">${pct != null ? pct.toFixed(1)+'%' : '—'}</div><div style="font-size:7pt;color:#64748b">floor ${floor}.0%</div><div style="font-weight:700;color:${pass ? '#16a34a' : '#dc2626'};font-size:8pt;margin-top:4px">${pass ? 'PASS' : 'FAIL'}</div><div style="font-size:7pt;color:#64748b;margin-top:4px">${safe(d.scores.join(' '))}</div></div>`;
+    return `<div class="ar-level-card ${pass ? 'ar-level-pass' : 'ar-level-fail'}"><div style="font-weight:700;font-size:9pt">L${i}</div><div style="font-size:7.5pt;color:#64748b">${LEVEL_LABELS[k]}</div><div style="font-size:15pt;font-weight:900;color:${pass ? '#16a34a' : '#dc2626'};margin:5px 0">${pct != null ? pct.toFixed(1)+'%' : '—'}</div><div style="font-size:7pt;color:#64748b">floor ${floor.toFixed(1)}%</div><div style="font-weight:700;color:${pass ? '#16a34a' : '#dc2626'};font-size:8pt;margin-top:4px">${pass ? 'PASS' : 'FAIL'}</div><div style="font-size:7pt;color:#64748b;margin-top:4px">${safe(d.scores.join(' '))}</div></div>`;
   }).join('');
 
-  const sBelow = simulation.filter(r => r.aiScore != null && r.aiScore < (SIM_LEVEL_FLOORS[String(r.level)] || 65));
+  // Per-level percent summary for the top of the report: level name plus percent only. The floor
+  // and pass/fail stay on the detailed level cards below; this band is the at-a-glance view the
+  // client asked for, styled like the overall tiles.
+  const _gistCard = (i, d) => {
+    const pv = d && d.pct != null ? (Math.round(d.pct * 10) / 10).toFixed(1) + '%' : '—';
+    return `<div style="border:1px solid #e2e8f0;border-radius:6px;padding:9px 6px;text-align:center"><div style="font-size:8.5pt;font-weight:800;color:#0f2340">L${i}</div><div style="font-size:6.5pt;color:#64748b;line-height:1.15">${LEVEL_LABELS[String(i)]}</div><div style="font-size:15pt;font-weight:900;color:#0f2340;margin-top:3px">${pv}</div></div>`;
+  };
+  const levelGistBand = `<div class="ar-section"><div class="ar-section-hdr">LEVEL SCORES AT A GLANCE</div><div class="ar-section-body">
+    <div style="font-size:7.5pt;font-weight:700;color:#64748b;letter-spacing:.05em;margin-bottom:5px">KNOWLEDGE BY LEVEL</div>
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:12px">${[1,2,3,4,5].map(i => _gistCard(i, kByLevel[String(i)])).join('')}</div>
+    <div style="font-size:7.5pt;font-weight:700;color:#64748b;letter-spacing:.05em;margin-bottom:5px">SIMULATION BY LEVEL</div>
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">${[1,2,3,4,5].map(i => _gistCard(i, sByLevel[String(i)])).join('')}</div>
+    <div style="margin-top:11px;padding:8px 12px;background:#eff6ff;border-left:3px solid #2563eb;font-size:8pt;color:#374151;line-height:1.5">The percent for each level is shown above. Every level carries a minimum for the belt being assessed, and the sections below show that minimum next to the result for each one. The overall score carries its own pass mark on top of the level minimums.</div>
+  </div></div>`;
+
+  // Individual responses below the belt's own minimum (section 9), not a flat 65.
+  const sBelow = simulation.filter(r => r.aiScore != null && r.aiScore < thresh.individual);
   const sBelowScores = sBelow.map(r => r.aiScore).sort((a,b) => a-b);
 
   // Simulation response detail rows
   const simDetailRows = simulation.map(r => {
-    const floor = SIM_LEVEL_FLOORS[String(r.level)] || 65;
+    // An individual response is judged against the belt's individual minimum, not against the
+    // level average floor it used to borrow.
+    const floor = thresh.individual;
     const isDang = sDangerousIds.includes(r.qId || r.id);
     const score = r.aiScore != null ? Math.round(r.aiScore) : null;
     const scoreClr = score == null ? '#94a3b8' : score >= floor ? '#16a34a' : score >= floor - 10 ? '#d97706' : '#dc2626';
@@ -4682,16 +5284,27 @@ function buildAssessmentReportHTML(pr, staff, fac) {
     else strengthText = 'The candidate completed the full assessment, establishing a baseline from which the remediation pathway can be structured.';
   }
 
-  // Level score table
+  // Level score table. pr.levelScores is a single blended knowledge-plus-simulation figure per
+  // level. The spec does not gate that number anywhere: it gates knowledge and simulation
+  // separately, per belt, and the cards earlier in this report already show both against their
+  // real floors. This table used to print Pass or Below Threshold against a hardcoded 65, which
+  // put "Level 1 81% Pass" on the same page as a card reading "L1 knowledge 87.5% FAIL against
+  // the 90% floor" and "L1 simulation 66.5% FAIL against 78%". One report, two answers.
+  //
+  // The figures are real and worth showing, so they stay. The verdict does not, because there
+  // is no threshold behind it. Where a level is genuinely gated, the cards say so.
   const levelTable = levelEntries.map(([lvl, pct]) => {
     const p = Math.round(Number(pct));
-    const pass = p >= 65;
-    return `<tr><td style="padding:5px 10px;font-size:9.5pt;border-bottom:1px solid #e2e8f0">Level ${safe(lvl)}</td><td style="padding:5px 10px;font-size:9.5pt;border-bottom:1px solid #e2e8f0">${p}%</td><td style="padding:5px 10px;font-size:9.5pt;border-bottom:1px solid #e2e8f0;color:${pass ? '#16a34a' : '#dc2626'};font-weight:600">${pass ? 'Pass' : 'Below Threshold'}</td></tr>`;
+    const kf = sbdKnowledgeFloor(targetBelt, lvl), sf = sbdSimFloor(targetBelt, lvl);
+    const gated = (kf != null || sf != null)
+      ? `gated at ${targetBelt}${kf != null ? ` &middot; knowledge ${kf}%` : ''}${sf != null ? ` &middot; simulation ${sf}%` : ''}`
+      : `Not required at ${targetBelt} Belt`;
+    return `<tr><td style="padding:5px 10px;font-size:9.5pt;border-bottom:1px solid #e2e8f0">Level ${safe(lvl)}</td><td style="padding:5px 10px;font-size:9.5pt;border-bottom:1px solid #e2e8f0">${p}%</td><td style="padding:5px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;color:#64748b">${gated}</td></tr>`;
   }).join('');
 
   // Next Belt Target table per §8.3 — 3 rows with gap column
   const nextTargetBelt = (outcome === 'CLEAN' || outcome === 'CONDITIONAL') ? (nextB || targetBelt) : targetBelt;
-  const nextThresh = BELT_THRESHOLDS[nextTargetBelt] || thresh;
+  const nextThresh = sbdSpecOveralls(nextTargetBelt) || thresh;
   const gapStr = (current, required) => { const g = required - current; return g > 0 ? `+${Math.round(g * 10) / 10} pts needed` : 'Already meets'; };
   const gapClr = (current, required) => current >= required ? '#16a34a' : '#d97706';
   const nextBeltTable = `<table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden">
@@ -4715,14 +5328,14 @@ function buildAssessmentReportHTML(pr, staff, fac) {
   }).join('');
 
   // Footnote below knowledge table for dangerous knowledge answers per §5.2
-  const knowledgeFootnote = kDangerousIds.length ? `<div style="margin-top:8px;padding:12px 14px;background:#450a0a;border-radius:6px;color:#fca5a5;font-size:8pt;line-height:1.6"><div style="font-weight:800;font-size:8.5pt;margin-bottom:6px">PATIENT SAFETY FINDINGS</div>${dangerousKnowledge.map(r => `<div style="margin-bottom:8px"><span style="font-weight:700">Response to: "${safe(String(r.question || '').slice(0, 70))}${(r.question || '').length > 70 ? '…' : ''}"</span><br>Answer given: "${safe(r.answer)}"<br>Risk: ${safe(_dangerousRiskDesc(r.answer))}</div>`).join('')}</div>` : '';
+  const knowledgeFootnote = kDangerousIds.length ? `<div style="margin-top:8px;padding:12px 14px;background:#450a0a;border-radius:6px;color:#fca5a5;font-size:8pt;line-height:1.6"><div style="font-weight:800;font-size:8.5pt;margin-bottom:6px">PATIENT SAFETY FINDINGS</div>${dangerousKnowledge.map(r => `<div style="margin-bottom:8px"><span style="font-weight:700">Response to: "${safe(String(r.question || '').slice(0, 70))}${(r.question || '').length > 70 ? '…' : ''}"</span><br>Answer given: "${safe(r.answer)}"<br>Risk: ${safe(_dangerousRiskDesc(r))}</div>`).join('')}</div>` : '';
 
   // Simulation rows
   // (sDangerousIds already computed above in this function.)
   const simRows = simulation.map((r, i) => {
     const isDang = sDangerousIds.includes(r.qId || r.id);
     const scoreClr = (r.aiScore || 0) >= 70 ? '#16a34a' : (r.aiScore || 0) >= 50 ? '#d97706' : '#dc2626';
-    return `<tr style="background:${isDang ? '#fef2f2' : i % 2 === 0 ? '#f8fafc' : '#fff'}"><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;vertical-align:top;width:30px">${i + 1}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;vertical-align:top">${safe(r.question)}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;vertical-align:top;white-space:pre-wrap">${safe(r.answer)}${isDang ? `<div style="margin-top:4px;padding:4px 6px;background:#fef2f2;border-left:3px solid #dc2626;font-size:7.5pt;font-weight:700;color:#dc2626">⚠ PATIENT SAFETY CONCERN — ${safe(_dangerousRiskDesc(r.answer))}</div>` : ''}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;vertical-align:top;font-style:italic;color:#475569">${safe(r.aiFeedback || '—')}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;text-align:center;font-weight:700;color:${scoreClr}">${r.aiScore != null ? r.aiScore + '%' : '—'}</td></tr>`;
+    return `<tr style="background:${isDang ? '#fef2f2' : i % 2 === 0 ? '#f8fafc' : '#fff'}"><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;vertical-align:top;width:30px">${i + 1}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;vertical-align:top">${safe(r.question)}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;vertical-align:top;white-space:pre-wrap">${safe(r.answer)}${isDang ? `<div style="margin-top:4px;padding:4px 6px;background:#fef2f2;border-left:3px solid #dc2626;font-size:7.5pt;font-weight:700;color:#dc2626">⚠ PATIENT SAFETY CONCERN — ${safe(_dangerousRiskDesc(r))}</div>` : ''}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;vertical-align:top;font-style:italic;color:#475569">${safe(r.aiFeedback || '—')}</td><td style="padding:6px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;text-align:center;font-weight:700;color:${scoreClr}">${r.aiScore != null ? r.aiScore + '%' : '—'}</td></tr>`;
   }).join('');
 
   const conditionRows = conditions.length
@@ -4745,7 +5358,7 @@ function buildAssessmentReportHTML(pr, staff, fac) {
     <div class="ar-section"><div class="ar-section-hdr">CANDIDATE INFORMATION</div>
       <div class="ar-section-body"><table style="width:100%;border-collapse:collapse">
         <tr><td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;border-right:1px solid #e2e8f0;width:50%"><div style="font-size:7.5pt;color:#94a3b8;margin-bottom:3px">Candidate Name</div><div style="font-weight:700;font-size:10pt">${safe(candidateName)}</div></td>
-        <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;width:50%"><div style="font-size:7.5pt;color:#94a3b8;margin-bottom:3px">Current Title</div><div style="font-weight:700;font-size:10pt">${safe(pr.staffTitle || staff.role || '—')}</div></td></tr>
+        <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;width:50%"><div style="font-size:7.5pt;color:#94a3b8;margin-bottom:3px">Title at Assessment</div><div style="font-weight:700;font-size:10pt">${safe(pr.staffTitle || staff.role || '—')}</div></td></tr>
         <tr><td style="padding:10px 14px;border-right:1px solid #e2e8f0"><div style="font-size:7.5pt;color:#94a3b8;margin-bottom:3px">Facility</div><div style="font-weight:700;font-size:10pt">${safe(fac.name)}</div></td>
         <td style="padding:10px 14px"><div style="font-size:7.5pt;color:#94a3b8;margin-bottom:3px">Report Status</div><div style="font-weight:700;font-size:10pt">${safe(reportStatus)}</div></td></tr>
       </table></div>
@@ -4771,6 +5384,7 @@ function buildAssessmentReportHTML(pr, staff, fac) {
         </div>
       </div>
     </div>
+    ${levelGistBand}
     <div style="margin-bottom:12px;padding:12px 16px;background:#fffbeb;border-left:4px solid #c49a20">
       <div style="font-size:7.5pt;font-weight:700;color:#c49a20;letter-spacing:.08em;margin-bottom:6px">CERTIFICATION BASIS AND CONDITIONS</div>
       <div style="font-size:8.5pt;color:#374151;line-height:1.65">${safe(certBasis)}</div>
@@ -4797,7 +5411,7 @@ function buildAssessmentReportHTML(pr, staff, fac) {
     </div>
     ${kFailed.length ? `<div style="font-size:9.5pt;font-weight:700;color:#0f172a;margin-bottom:7px">Incorrect and Blank Responses</div>
     <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden">
-      <thead><tr style="background:#0f2340"><th style="padding:7px 10px;font-size:8pt;color:#fff;text-align:center;width:36px">Lvl</th><th style="padding:7px 10px;font-size:8pt;color:#fff;text-align:center;width:110px">Status</th><th style="padding:7px 10px;font-size:8pt;color:#fff;text-align:left">Incorrect or Blank Response</th><th style="padding:7px 10px;font-size:8pt;color:#fff;text-align:left">Their Answer</th><th style="padding:7px 10px;font-size:8pt;color:#fff;text-align:left">Correct Answer</th></tr></thead>
+      <thead><tr style="background:#0f2340"><th style="padding:7px 10px;font-size:8pt;background:#0f2340;color:#fff;text-align:center;width:36px">Lvl</th><th style="padding:7px 10px;font-size:8pt;background:#0f2340;color:#fff;text-align:center;width:110px">Status</th><th style="padding:7px 10px;font-size:8pt;background:#0f2340;color:#fff;text-align:left">Incorrect or Blank Response</th><th style="padding:7px 10px;font-size:8pt;background:#0f2340;color:#fff;text-align:left">Their Answer</th><th style="padding:7px 10px;font-size:8pt;background:#0f2340;color:#fff;text-align:left">Correct Answer</th></tr></thead>
       <tbody>${kIncorrectRows}</tbody>
     </table>${kDangerousFootnote}` : `<div style="padding:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;font-size:9pt;color:#16a34a;font-weight:600">All knowledge responses are correct.</div>`}
     ${pageFooter()}
@@ -4821,7 +5435,7 @@ function buildAssessmentReportHTML(pr, staff, fac) {
       </div>
     </div>
     <div style="font-size:9.5pt;font-weight:700;color:#0f172a;margin-bottom:7px">Simulation Response Detail</div>
-    ${simulation.length ? `<table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden"><thead><tr style="background:#0f2340"><th style="padding:7px 10px;font-size:8pt;color:#fff;text-align:center;width:35px">Lvl</th><th style="padding:7px 10px;font-size:8pt;color:#fff;text-align:center;width:50px">Score</th><th style="padding:7px 10px;font-size:8pt;color:#fff;text-align:left">Scenario</th><th style="padding:7px 10px;font-size:8pt;color:#fff;text-align:left">AI Evaluator Notes</th></tr></thead><tbody>${simDetailRows}</tbody></table>` : '<div style="font-size:9pt;color:#94a3b8;font-style:italic">No simulation responses recorded.</div>'}
+    ${simulation.length ? `<table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden"><thead><tr style="background:#0f2340"><th style="padding:7px 10px;font-size:8pt;background:#0f2340;color:#fff;text-align:center;width:35px">Lvl</th><th style="padding:7px 10px;font-size:8pt;background:#0f2340;color:#fff;text-align:center;width:50px">Score</th><th style="padding:7px 10px;font-size:8pt;background:#0f2340;color:#fff;text-align:left">Scenario</th><th style="padding:7px 10px;font-size:8pt;background:#0f2340;color:#fff;text-align:left">AI Evaluator Notes</th></tr></thead><tbody>${simDetailRows}</tbody></table>` : '<div style="font-size:9pt;color:#94a3b8;font-style:italic">No simulation responses recorded.</div>'}
     ${pageFooter()}
   </div>
 
@@ -4836,9 +5450,10 @@ function buildAssessmentReportHTML(pr, staff, fac) {
           <div style="font-size:8.5pt;color:#374151;line-height:1.65">${safe(roleAmplification)}</div>
           <div style="font-size:8pt;color:#64748b;margin-top:6px">Required sign-off: ${safe(signOffRoles.join(' / '))}</div>
         </div>
-        <div style="font-size:9pt;font-weight:700;color:#0f172a;margin-bottom:7px">Level Score Snapshot</div>
+        <div style="font-size:9pt;font-weight:700;color:#0f172a;margin-bottom:2px">Level Score Snapshot</div>
+        <div style="font-size:7.5pt;color:#64748b;margin-bottom:7px">Combined knowledge and simulation per level. Pass and fail are decided per component against the floors shown on the knowledge and simulation pages, not on this combined figure.</div>
         <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden;margin-bottom:14px">
-          <thead><tr style="background:#0f2340"><th style="padding:7px 10px;font-size:8pt;color:#fff;text-align:left">Level</th><th style="padding:7px 10px;font-size:8pt;color:#fff;text-align:left">Score</th><th style="padding:7px 10px;font-size:8pt;color:#fff;text-align:left">Status</th></tr></thead>
+          <thead><tr style="background:#0f2340"><th style="padding:7px 10px;font-size:8pt;background:#0f2340;color:#fff;text-align:left">Level</th><th style="padding:7px 10px;font-size:8pt;background:#0f2340;color:#fff;text-align:left">Combined</th><th style="padding:7px 10px;font-size:8pt;background:#0f2340;color:#fff;text-align:left">Gating at this belt</th></tr></thead>
           <tbody>${levelTable || '<tr><td colspan="3" style="padding:7px 10px;font-size:8.5pt;color:#64748b">No per-level score data recorded.</td></tr>'}</tbody>
         </table>
       </div>
@@ -5004,7 +5619,38 @@ function openPrintWindow(title, bodyHtml){
         <span>Confidential &bull; Generated ${generatedAt}</span>
       </div>
     </div>
-    <script>window.onload=function(){setTimeout(()=>window.print(),400)}<\/script>
+    <script>
+      // Wait until the document can actually be printed, rather than guessing at a delay.
+      // The old version fired 400ms after load, which is before the webfont above has
+      // finished swapping in and before the first paint has settled. Printing that early
+      // hands Chrome a document mid-layout: the preview appears, but Save produces nothing
+      // and the reader has to close it and print the page by hand.
+      //
+      // So: wait for load, then for the fonts, then for two frames, and only then print.
+      (function () {
+        var done = false;
+        function go() {
+          if (done) return;
+          done = true;
+          try { window.focus(); } catch (e) {}
+          window.print();
+        }
+        function whenSettled() {
+          var fonts = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
+          // Resolve either way. A font that never loads must not block the print.
+          fonts.then(paint, paint);
+          // Backstop: a hidden tab throttles or parks requestAnimationFrame, so the frame
+          // wait below can stall indefinitely. Never leave the reader with a report that
+          // opened and then simply never offered to print.
+          setTimeout(go, 2500);
+        }
+        function paint() {
+          requestAnimationFrame(function () { requestAnimationFrame(function () { setTimeout(go, 150); }); });
+        }
+        if (document.readyState === 'complete') whenSettled();
+        else window.addEventListener('load', whenSettled);
+      })();
+    <\/script>
   </body></html>`;
   const w = window.open('','_blank');
   if(w){ w.document.write(html); w.document.close(); }
@@ -5393,9 +6039,87 @@ function sbdYearsCardsHTML(s){
       <div class="stat-val" style="margin-bottom:0;color:var(--gold)">${val(v)}</div>
     </div>`;
   return `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;max-width:420px">
-    ${card('Years in SBD Program', s.sbdYears)}
+    ${card('Years in SPD', s.sbdYears)}
     ${card('Years Certified', s.certYears)}
   </div>`;
+}
+
+// T65: the Dangerous provision as it appears on the profile. The client asked for it to be
+// visible on the account rather than only inside a downloaded PDF, and to stay visible after
+// it is cleared, showing who cleared it and when.
+//
+// Everyone who can see the profile sees this, the person themselves included. A patient-safety
+// provision that the candidate cannot see is not much use to them: the whole point is that a
+// supervisor observes the correct practice and signs it off, and they need to know that is
+// what is outstanding. Only a SIPS admin gets the Clear control.
+function sbdProvisionsHTML(s, context){
+  const all = (s && s.dangerousProvisions) || [];
+  if(!all.length) return '';
+  const open = all.filter(p => !p.cleared_at);
+  const cleared = all.filter(p => p.cleared_at);
+  const canClear = sbdCanClearProvision();
+  const esc = t => Security.sanitize(String(t == null ? '' : t));
+  const when = t => { try { return new Date(t).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); } catch(_){ return ''; } };
+
+  const openRows = open.map((p, i) => `
+    <div style="padding:10px 12px;border-left:3px solid #dc2626;background:#dc26260f;border-radius:0 8px 8px 0;margin-bottom:8px">
+      <div style="font-size:12.5px;font-weight:600;color:var(--txt1);margin-bottom:3px">${esc(p.label) || 'Flagged assessment answer'}</div>
+      <div style="font-size:11.5px;color:var(--txt2);margin-bottom:4px">Answer given: &ldquo;${esc(p.answer) || '(blank)'}&rdquo;</div>
+      <div style="font-size:11px;color:var(--txt3)">Raised ${when(p.flagged_at)}. A supervisor must observe correct practice in this area and sign it off. Written re-study alone does not clear it.</div>
+      ${canClear ? `<button class="btn btn-ok btn-sm" style="margin-top:8px" onclick="clearDangerousProvision('${s.id}', ${all.indexOf(p)}, '${context||''}')">Mark supervised practice complete</button>` : ''}
+    </div>`).join('');
+
+  const clearedRows = cleared.map(p => `
+    <div style="padding:8px 12px;border-left:3px solid var(--ok);background:var(--s1);border-radius:0 8px 8px 0;margin-bottom:6px">
+      <div style="font-size:12px;color:var(--txt2)">${esc(p.label) || 'Flagged assessment answer'}</div>
+      <div style="font-size:11px;color:var(--txt3)">Cleared by ${esc(p.cleared_by_name) || 'an administrator'} on ${when(p.cleared_at)}.</div>
+    </div>`).join('');
+
+  return `<div style="margin-top:12px;max-width:640px">
+    ${open.length ? `<div style="font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#dc2626;margin-bottom:6px">Patient safety provision${open.length>1?'s':''} &middot; open</div>${openRows}
+    <div style="font-size:11px;color:var(--txt3);margin:-2px 0 10px">The belt already held is unaffected. Advancement to the next belt is on hold until this is cleared.</div>` : ''}
+    ${cleared.length ? `<div style="font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--txt3);margin-bottom:6px">Cleared</div>${clearedRows}` : ''}
+  </div>`;
+}
+
+// Clearing is recorded, never deleted: the entry stays on the record with the name and the
+// date of whoever signed it off.
+async function clearDangerousProvision(staffId, index, context){
+  const s = getStaff(staffId);
+  if(!s) { toast('Staff member not found','err'); return; }
+  if(!sbdCanClearProvision()){ toast('Only a master admin or a SIPS admin can clear a patient safety provision.','err'); return; }
+  const list = (s.dangerousProvisions || []).slice();
+  const p = list[index];
+  if(!p){ toast('Provision not found','err'); return; }
+  if(p.cleared_at){ toast('That provision is already cleared.','info'); return; }
+  const who = ST.user || {};
+  if(!confirm(`Confirm that a supervisor has directly observed ${fullName(s)} performing this task correctly and has signed it off.\n\nThis is recorded against your name and cannot be undone.`)) return;
+
+  list[index] = Object.assign({}, p, {
+    cleared_by: who.id || null,
+    cleared_by_name: (who.name || fullName(who) || who.email || 'Administrator'),
+    cleared_at: new Date().toISOString(),
+  });
+  s.dangerousProvisions = list;
+
+  if(IS_LIVE){
+    try {
+      // Single-column PATCH, same pattern as mapStaffPSToBackend: a provision clear must never
+      // carry the rest of a possibly-stale staff record with it.
+      await SB.updateStaff(s.id, mapStaffProvisionsToBackend(s));
+    } catch(e){
+      console.warn('Provision clear sync failed:', e);
+      s.dangerousProvisions = (s.dangerousProvisions || []).slice();
+      s.dangerousProvisions[index] = p;   // put it back; nothing was saved
+      toast('Could not save the clearance. Nothing was changed. Please try again.','err');
+      return;
+    }
+  }
+  try { if(typeof logActivity==='function') logActivity('dangerous_provision_cleared', {
+    staffId: s.id, label: p.label, clearedBy: who.id || null, clearedByName: list[index].cleared_by_name
+  }); } catch(_){}
+  toast(`Provision cleared for ${fullName(s)}. Recorded against ${list[index].cleared_by_name}.`,'ok');
+  if(typeof renderHProfile === 'function') renderHProfile(s.id, context || 'admin');
 }
 
 function beltBadge(belt, staff){
@@ -5639,9 +6363,14 @@ function oipSelect(idx){ oipSelectOverlay(idx); }
 
 
 // ============================================================ DOWNLOAD: LEVEL 1  --  INDIVIDUAL STAFF
-// Profile "SBD Background" (Ignacio 2026-07-23): capture, from the profile tab, how
-// long the staff member has been in the SBD program and how many years certified in
-// SBD. Editor-gated (master/staff/facility admin); targeted staff PATCH (two columns).
+// Profile "SPD Background" (Ignacio 2026-07-23, corrected by him 2026-07-28): capture,
+// from the profile tab, how long the staff member has worked in sterile processing and
+// how many years they have held their certification. It was originally worded as years in
+// the SBD programme, which he corrected: everyone joining is new to SBD, so that number is
+// always zero and tells you nothing. What is worth knowing is the career behind them.
+// The stored columns are still named sbd_program_years / sbd_cert_years; renaming a live
+// column that the prod frontend reads is a breaking contract change for no user-visible
+// gain, so the labels moved and the storage did not. Editor-gated (master/staff/facility admin); targeted staff PATCH (two columns).
 // Shawn 2026-07-25: staff can also set their own two values from My Profile whenever they
 // like (context 'self'). No forced setup step; the fields display only and gate nothing.
 function _sbdBgCanEdit(staffId){
@@ -5650,22 +6379,22 @@ function _sbdBgCanEdit(staffId){
 }
 function openSbdBackgroundModal(staffId, context){
   const s = getStaff(staffId); if(!s){ toast('Staff record not found.','err'); return; }
-  if(!_sbdBgCanEdit(staffId)){ toast('You can only edit your own SBD background.','err'); return; }
+  if(!_sbdBgCanEdit(staffId)){ toast('You can only edit your own background.','err'); return; }
   const self = context === 'self';
   const inp = 'width:100%;padding:9px 11px;background:var(--s2);border:1px solid var(--bdr);border-radius:8px;color:var(--txt1);font-size:14px;box-sizing:border-box';
-  openModal('SBD Background &mdash; '+fullName(s), `
+  openModal('SPD Background: '+fullName(s), `
     <div class="modal-body">
-      <p style="font-size:12.5px;color:var(--txt2);margin:0 0 14px;line-height:1.5">${self?'How long have you been in the SBD program, and how many years have you been certified in SBD? Whole years; leave blank if you are not sure.':'How long has this staff member been in the SBD program, and how many years have they been certified in SBD? Whole years; leave blank if unknown.'}</p>
-      <label style="font-size:12px;color:var(--txt2);display:block;margin-bottom:4px">Years in the SBD program</label>
+      <p style="font-size:12.5px;color:var(--txt2);margin:0 0 14px;line-height:1.5">${self?'How long have you worked in sterile processing, and how many years have you held your certification? Whole years; leave blank if you are not sure.':'How long has this staff member worked in sterile processing, and how many years have they held their certification? Whole years; leave blank if unknown.'}</p>
+      <label style="font-size:12px;color:var(--txt2);display:block;margin-bottom:4px">Years in SPD</label>
       <input id="sbd-years" type="number" min="0" max="60" style="${inp};margin-bottom:14px" value="${s.sbdYears!=null?s.sbdYears:''}" placeholder="e.g. 3">
-      <label style="font-size:12px;color:var(--txt2);display:block;margin-bottom:4px">Years certified in SBD</label>
+      <label style="font-size:12px;color:var(--txt2);display:block;margin-bottom:4px">Years certified</label>
       <input id="sbd-cert" type="number" min="0" max="60" style="${inp}" value="${s.certYears!=null?s.certYears:''}" placeholder="e.g. 2">
     </div>
     <div class="modal-ft"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-gold" onclick="saveSbdBackground('${staffId}','${context}')">Save</button></div>`, 'modal-sm');
 }
 function saveSbdBackground(staffId, context){
   const s = getStaff(staffId); if(!s) return;
-  if(!_sbdBgCanEdit(staffId)){ toast('You can only edit your own SBD background.','err'); return; }
+  if(!_sbdBgCanEdit(staffId)){ toast('You can only edit your own background.','err'); return; }
   const parse = id => { const el = document.getElementById(id); if(!el) return null; const v = String(el.value).trim(); if(v==='') return null; const n = parseInt(v,10); return (isNaN(n)||n<0)?null:Math.min(n,60); };
   s.sbdYears = parse('sbd-years'); s.certYears = parse('sbd-cert');
   if(IS_LIVE && typeof SB!=='undefined' && SB.updateStaff){
@@ -5681,7 +6410,7 @@ function saveSbdBackground(staffId, context){
 function sbdBackgroundSelfCardHTML(s){
   const has = s.sbdYears!=null || s.certYears!=null;
   const line = has
-    ? `${s.sbdYears!=null?s.sbdYears+' yr(s) in the SBD program':''}${(s.sbdYears!=null&&s.certYears!=null)?' &bull; ':''}${s.certYears!=null?s.certYears+' yr(s) certified in SBD':''}`
+    ? `${s.sbdYears!=null?s.sbdYears+' yr(s) in SPD':''}${(s.sbdYears!=null&&s.certYears!=null)?' &bull; ':''}${s.certYears!=null?s.certYears+' yr(s) certified':''}`
     : 'Not set. Add it whenever you like, or leave it blank.';
   return `<div style="background:var(--s2);border:1px solid var(--bdr);border-radius:var(--r);padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
       <div style="flex:1;min-width:0;text-align:left">
@@ -5708,7 +6437,7 @@ function downloadStaffReport(staffId){
   // Gate performance per belt
   const gatesByBelt = beltHistory.map(b=>{
     const hist=(s.history||[]).filter(h=>h.belt===b);
-    const pass=hist.filter(h=>h.res==='pass').length;
+    const pass=hist.filter(h=>isSuccessOutcome(h.res)).length;
     const fail=hist.filter(h=>h.res==='fail').length;
     return {b,pass,fail,total:pass+fail};
   }).filter(x=>x.total>0);
@@ -5731,7 +6460,7 @@ function downloadStaffReport(staffId){
       <div>
         <div class="rpt-brand">SIPS Healthcare Solutions &bull; Sterile By Design</div>
         <div class="rpt-title">${fullName(s)}</div>
-        <div class="rpt-sub">${s.role} &bull; ${getFac(s.fid)?.name||'–'} &bull; Sterile Processing Department<br>Belt: ${s.belt} (${BELT_CERT[s.belt]}) &bull; Since ${s.since || '—'}${(s.sbdYears!=null||s.certYears!=null)?`<br>${s.sbdYears!=null?s.sbdYears+' yr(s) in SBD program':''}${(s.sbdYears!=null&&s.certYears!=null)?' &bull; ':''}${s.certYears!=null?s.certYears+' yr(s) certified in SBD':''}`:''}</div>
+        <div class="rpt-sub">${s.role} &bull; ${getFac(s.fid)?.name||'–'} &bull; Sterile Processing Department<br>Belt: ${s.belt} (${BELT_CERT[s.belt]}) &bull; Since ${s.since || '—'}${(s.sbdYears!=null||s.certYears!=null)?`<br>${s.sbdYears!=null?s.sbdYears+' yr(s) in SPD':''}${(s.sbdYears!=null&&s.certYears!=null)?' &bull; ':''}${s.certYears!=null?s.certYears+' yr(s) certified':''}`:''}</div>
       </div>
       <div class="rpt-grade-box">
         <div class="rpt-grade" style="color:${BELT_CLR_PRINT[s.belt]||'#0f172a'}">${psStars>0?Array(psStars).fill('★').join(''):'–'}</div>
@@ -5801,7 +6530,7 @@ function downloadStaffReport(staffId){
       <td style="color:#64748b">${h.dt}</td>
       <td>${pBelt(h.belt)}</td>
       <td>${h.type}</td>
-      <td><span class="badge ${h.res==='pass'?'badge-green':'badge-err'}">${h.res==='pass'?'Pass':'Fail'}</span></td>
+      <td><span class="badge ${isSuccessOutcome(h.res)?'badge-green':'badge-err'}">${isSuccessOutcome(h.res)?'Pass':'Fail'}</span></td>
     </tr>`).join('')}</tbody></table>`}
   `;
 
@@ -6236,7 +6965,7 @@ async function renderSReport(){
   // Gate performance per belt
   const gatesByBelt = beltHistory.map(b=>{
     const hist = (s.history||[]).filter(h=>h.belt===b);
-    const pass = hist.filter(h=>h.res==='pass').length;
+    const pass = hist.filter(h=>isSuccessOutcome(h.res)).length;
     const fail = hist.filter(h=>h.res==='fail').length;
     return {b, pass, fail, total: pass+fail};
   }).filter(x=>x.total>0);
@@ -6367,7 +7096,7 @@ async function renderSReport(){
           <td style="font-size:11.5px;color:var(--txt3)">${h.dt}</td>
           <td>${beltBadge(h.belt)}</td>
           <td style="font-size:12px">${h.type}</td>
-          <td><span style="font-weight:700;color:${h.res==='pass'?'var(--ok)':'var(--err)'}">${h.res==='pass'?'Pass':'Fail'}</span></td>
+          <td><span style="font-weight:700;color:${isSuccessOutcome(h.res)?'var(--ok)':'var(--err)'}">${isSuccessOutcome(h.res)?'Pass':'Fail'}</span></td>
         </tr>`).join('')}</tbody>
       </table></div>`}
     </div>`;
@@ -7444,6 +8173,11 @@ function renderSDashboard(){
           <div class="prog mt8 mb12" style="height:10px"><div class="prog-fill" style="width:${win.pct||0}%;background:${win.status==='open'?'var(--ok)':'var(--warn)'}"></div></div>
           ${win.status==='open'&&nb?(canRequestAssessment(s.id,s.belt)
             ? `<button class="btn btn-gold" style="width:100%;justify-content:center;margin-top:8px" onclick="openApplyModal('${s.id}')">${ICO.record} Apply for ${nb} Belt Assessment</button>`
+            // T65: when the hold is a patient-safety provision, say so. Sending someone back to
+            // the practice tests for something only a supervisor sign-off can clear wastes their
+            // time and hides what is actually outstanding.
+            : sbdAdvancementBlock(s)
+            ? `<div style="padding:11px 14px;background:rgba(220,38,38,.08);border:1px solid rgba(220,38,38,.3);border-radius:var(--rs);font-size:12px;color:var(--txt2);text-align:left;margin-top:8px;line-height:1.5">${sbdAdvancementBlock(s)}</div>`
             : `<div style="padding:11px 14px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:var(--rs);font-size:12px;color:var(--txt2);text-align:center;margin-top:8px;line-height:1.5">Complete your ${s.belt} Belt Knowledge and Simulation practice tests at 80% or higher to unlock your assessment request.<div style="margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="sNav(document.querySelector('#s-portal .nav-item[data-view=s-study]'),'s-study','Study &amp; Practice')">Go to Study &amp; Practice</button></div></div>`
           ):''}
           ${win.status==='closed'?`<div style="padding:10px;background:var(--err-bg);border:1px solid var(--err-bd);border-radius:var(--rs);font-size:12px;color:var(--err);text-align:center;margin-top:8px">Window closed. Keep training – it reopens automatically.</div>`:''}
@@ -7487,6 +8221,10 @@ function openApplyModal(sid){
   if(!nb){toast('Already at maximum belt level.','info');return;}
   const win=getWindowStatus(s);
   if(win.status!=='open'){toast('Assessment window is not currently open.','err');return;}
+  // T65: an open patient-safety provision holds advancement, and the candidate is told what the
+  // hold actually is rather than being sent back to the practice tests.
+  const hold=sbdAdvancementBlock(s);
+  if(hold){toast(hold,'err');return;}
   // #120 (Ignacio, 2026-07-22): the Study & Practice request path already gates on the current-belt
   // practice tests (canRequestAssessment); this Apply path did not, so a request could be filed with
   // no practice done. Close that same gate here. (Master-admin override is a separate additive flag.)
@@ -7524,6 +8262,8 @@ function submitApply(sid,gate,targetBelt){
   const s=getStaff(sid);
   if(!s)return;
   // #120: defense in depth — never queue a request when the current-belt practice gate isn't met.
+  const hold=sbdAdvancementBlock(s);
+  if(hold){ toast(hold,'err'); return; }
   if(!canRequestAssessment(s.id, s.belt)){ toast('Complete both practice tests at 80% or above before requesting.','err'); return; }
   const gateLabel={c:'Competency',s:'Simulation',o:'Observation'}[gate];
   // T29: this path had no duplicate check, which is how one person ended up with eleven
@@ -8715,9 +9455,24 @@ function savePracticeScore(belt, mode, score, total) {
   if (typeof logActivity === 'function') logActivity('practice_complete', { belt, mode, pct });
 }
 
+// T65: the reason advancement is on hold, or null if it is not. Separate from the practice
+// gate because the two are cleared in completely different ways and a candidate told to go
+// and re-sit a practice test when the actual hold is a supervisor sign-off has been sent to
+// the wrong place.
+function sbdAdvancementBlock(s){
+  if (sbdHasOpenProvision(s)) {
+    return 'An open patient safety provision is on this account. A supervisor must observe correct practice in that area and sign it off before the next belt can be requested. The current belt is unaffected.';
+  }
+  return null;
+}
+
 function canRequestAssessment(staffId, belt) {
   const s = getStaff(staffId || ST.staffId);
   if (!s) return false;
+  // An open patient-safety provision is checked BEFORE the waiver. The #120 override waives
+  // the practice-score gate, which is a scoring judgement; it is not a waiver of a supervisor
+  // sign-off on a safety finding, and must not become one by accident.
+  if (sbdAdvancementBlock(s)) return false;
   // #120 master-admin override: an explicit waiver lets this candidate request regardless of practice.
   if (s.assessmentGateOverride && s.assessmentGateOverride.waived) return true;
   if (!s.practiceScores || !s.practiceScores[belt]) return false;
@@ -8737,6 +9492,8 @@ function requestGateAssessment(belt, type) {
   // Qualification is earned on the CURRENT belt's practice tests; `belt` is the
   // target (next) belt being requested. Validating against `belt` here is what
   // made every request bounce (ASS-F1) — the unlock banner reads current-belt scores.
+  const _hold = sbdAdvancementBlock(s);
+  if (_hold) { toast(_hold, 'err'); return; }
   if (!canRequestAssessment(s.id, s.belt)) {
     toast('Complete both practice tests at 80% or above before requesting.', 'err');
     return;
@@ -9038,21 +9795,16 @@ function renderSStudy() {
 
   // ── SCRIPTS TAB ──────────────────────────────────────────────────
   } else if (tab === 'scripts') {
-    // Extract scripts section from FULL_CURRICULUM_DATA for this belt
-    const beltData = FULL_CURRICULUM_DATA.belts[curBelt] || [];
-    // Find script-related sections
-    const scriptSections = beltData.filter(sec => 
-      /script/i.test(sec.title) || /approved language/i.test(sec.title) || /forbidden language/i.test(sec.title)
-    );
-    const allScriptHTML = scriptSections.length > 0 
-      ? scriptSections.map(sec => `
+    // T92: the section selection lives in scripts-module.js, so this tab and the
+    // standalone assignable Scripts module read the SAME definition of "which
+    // curriculum sections are the scripts" (Standards B6). The scripts stay here.
+    const scriptSections = (typeof scriptSectionsForBelt === 'function') ? scriptSectionsForBelt(curBelt) : [];
+    const allScriptHTML = scriptSections.map(sec => `
           <div style="margin-bottom:20px">
             <div style="font-size:11px;font-weight:700;color:${bColor};letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px">${sec.title}</div>
             <div class="cs-body">${_styleCurriculumHTML(sec.html)}</div>
-          </div>`).join('')
-      : beltData.filter(sec => sec.title.match(/section [45]/i) || /two.*script|script.*belt/i.test(sec.title))
-          .map(sec => `<div style="margin-bottom:20px"><div style="font-size:11px;font-weight:700;color:${bColor};letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px">${sec.title}</div><div class="cs-body">${_styleCurriculumHTML(sec.html)}</div></div>`).join('');
-    
+          </div>`).join('');
+
     tabContent = `
       <div style="background:${bColor}08;border:1px solid ${bColor}20;border-radius:var(--rs);padding:12px 16px;margin-bottom:14px">
         <div style="font-size:12.5px;font-weight:700;color:${bColor};margin-bottom:4px">${curBelt} Belt Scripts: Master These</div>
@@ -9203,7 +9955,7 @@ function renderSHistory(){
     <div class="card">
       <div class="card-hd"><div class="card-ttl">Assessment History</div><span class="pill p-muted">${(s.history||[]).length} records</span></div>
       <div class="card-body">
-        ${s.history&&s.history.length?`<div class="tl">${s.history.slice().reverse().map(h=>`<div class="tl-item"><div class="tl-dot" style="background:${h.res==='pass'?'rgba(34,197,94,.15)':'rgba(239,68,68,.15)'};color:${h.res==='pass'?'var(--ok)':'var(--err)'}">${h.res==='pass'?ICO.check:ICO.x}</div><div><div class="tl-date">${h.dt} &bull; ${beltBadge(h.belt)}</div><div class="tl-txt">${h.type}: <strong style="color:${h.res==='pass'?'var(--ok)':'var(--err)'}">${h.res.charAt(0).toUpperCase()+h.res.slice(1)}</strong></div></div></div>`).join('')}</div>`:'<div style="color:var(--txt3);font-size:12px;text-align:center;padding:20px">No assessment history yet.</div>'}
+        ${s.history&&s.history.length?`<div class="tl">${s.history.slice().reverse().map(h=>`<div class="tl-item"><div class="tl-dot" style="background:${isSuccessOutcome(h.res)?'rgba(34,197,94,.15)':'rgba(239,68,68,.15)'};color:${isSuccessOutcome(h.res)?'var(--ok)':'var(--err)'}">${isSuccessOutcome(h.res)?ICO.check:ICO.x}</div><div><div class="tl-date">${h.dt} &bull; ${beltBadge(h.belt)}</div><div class="tl-txt">${h.type}: <strong style="color:${isSuccessOutcome(h.res)?'var(--ok)':'var(--err)'}">${h.res.charAt(0).toUpperCase()+h.res.slice(1)}</strong></div></div></div>`).join('')}</div>`:'<div style="color:var(--txt3);font-size:12px;text-align:center;padding:20px">No assessment history yet.</div>'}
       </div>
     </div>`;
 }
@@ -9354,7 +10106,7 @@ function renderXFacilityDetail(fid){
   const staffWithVelocity=[...st].map(s=>{
     const proj=generateProjection(s);
     const win=getWindowStatus(s);
-    const passedGates=(s.history||[]).filter(h=>h.res==='pass').length;
+    const passedGates=(s.history||[]).filter(h=>isSuccessOutcome(h.res)).length;
     const totalMonths=Math.max(1,Math.round(daysAt(s.since)/30));
     const velocity=(passedGates/totalMonths).toFixed(1); // gates/month
     return {s,proj,win,velocity:parseFloat(velocity)};
@@ -9669,7 +10421,7 @@ function downloadSystemReport(){
 
 // ============================================================ H DASHBOARD
 function renderHDashboard(){
-  const fid=ST.hFid||'test-a';
+  const fid=ST.hFid;
   const st=staffOf(fid);
   const n=st.length;
   const aboveGreen=st.filter(s=>beltIdx(s.belt)>=2).length;
@@ -9764,7 +10516,7 @@ function renderHDashboard(){
 // ============================================================ H STAFF
 let hBeltFilter='All', hSearch='';
 function renderHStaff(){
-  const fid=ST.hFid||'test-a';
+  const fid=ST.hFid;
   const facAdmin = isFacilityAdmin();
   const st=staffOf(fid).filter(s=>(hBeltFilter==='All'||s.belt===hBeltFilter)&&(fullName(s).toLowerCase().includes(hSearch.toLowerCase())||s.role.toLowerCase().includes(hSearch.toLowerCase())));
   document.getElementById('h-staff').innerHTML=`
@@ -9819,6 +10571,28 @@ function effLeadsFacility(fid, u){ u=u||ST.user; if(!u||fid==null) return false;
 function effIsFacilityLeader(u){ u=u||ST.user; if(!u) return false;
   if(u.role==='educator'||u.role==='hospital'||u.role==='facility_admin') return true;
   var ef=_capsOf(u).educator_facilities; return Array.isArray(ef) && ef.length>0;
+}
+// #77: the facilities an Assessor grant applies to, mirroring educator_facilities. Returns null
+// when no list is set, which the server-side sbd_is_assessor(p_fid) also reads as system wide,
+// so a pre-#74 holder keeps the reach they have today rather than silently losing it.
+function effAssessorFacilities(u){ u=u||ST.user;
+  var af=_capsOf(u).assessor_facilities;
+  return (Array.isArray(af) && af.length) ? af.map(String) : null;
+}
+// #77: whether the assessor reach is scoped by a facility list rather than by an admin role.
+// The four admin roles keep whole-organisation reach through their own RLS branch, so only a
+// capability-granted assessor gets narrowed. Kept separate from effIsAssessor, which answers
+// "an assessor at all" and still drives nav visibility.
+function effAssessorScoped(u){ u=u||ST.user; if(!u) return false;
+  if(u.role==='master_admin'||u.role==='admin'||u.role==='staff_admin'||u.role==='system_admin') return false;
+  return !!_capsOf(u).assessor && !!effAssessorFacilities(u);
+}
+// #77: is the caller an assessor AT this facility. Mirrors sbd_is_assessor(p_fid) so the screen
+// and the policy agree; a null fid denies rather than leaks, matching the SQL.
+function effIsAssessorAt(fid, u){ u=u||ST.user; if(!effIsAssessor(u)) return false;
+  if(!effAssessorScoped(u)) return true;
+  if(fid==null) return false;
+  return effAssessorFacilities(u).indexOf(String(fid))>=0;
 }
 // Resolve context string for profile rendering  --  facility admins get admin-level capabilities
 function hProfileContext(){ return isFacilityAdmin() ? 'admin' : 'h'; }
@@ -9999,8 +10773,8 @@ function renderHProfile(sid,context){
   };
   const track={White:['SBD Mindset & Discipline','PPE Protocol Standards','Decontamination Orientation','Instrument Sorting & Receiving','Manual Cleaning Procedures','Assembly Zone Introduction','Sterility Assurance Principles','Documentation Standards'],Yellow:['Zone 1 Proficiency','Zone 2 Proficiency','Zone 3 Proficiency','Zone 4 Proficiency','Zone 5 Proficiency','Zone Mastery Selection'],Green:['Quality Science Base Training','Zone Mastery 1','Zone Mastery 2','Zone Mastery 3'],Blue:['Leadership Base Training','Leadership Circle Entry','Position 1 - Quality Assurance','Position 2 - Training Coordinator','Position 3 - Shift Lead','Position 4 - Inventory Lead'],Brown:['Operations Engineering Base','HFL Program','OTIS Mastery'],Black:['Mastery Base Training','Director School','SBD Operator Certification','SBD Project Implementation']};
   const trackItems=(track[s.belt]||[]).map((t,i)=>{const done=i<Math.max(curSt.p,2);const cur=i===Math.max(curSt.p,2);return`<div class="track-item" style="display:flex;gap:8px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--bdr)"><div style="width:18px;height:18px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:9px;background:${done?'rgba(34,197,94,.15)':cur?'var(--gold-bg)':'var(--s3)'};color:${done?'var(--ok)':cur?'var(--gold)':'var(--txt3)'};">${done?ICO.check:cur?'&rsaquo;':'&bull;'}</div><div><div style="font-size:12.5px;font-weight:500">${t}</div></div></div>`}).join('');
-  const backBtn=context==='admin'?`<button class="btn btn-ghost btn-sm mb16" onclick="renderAFacility()"><svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M9 3L5 7l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg> Back to Facility</button>`:
-    context==='h'?`<button class="btn btn-ghost btn-sm mb16" onclick="hNav(document.querySelector('[data-view=h-staff]'),'h-staff','Staff Directory')"><svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M9 3L5 7l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg> Back to Staff</button>`:
+  const backBtn=(context==='admin'&&ST.portal==='admin')?`<button class="btn btn-ghost btn-sm mb16" onclick="renderAFacility()"><svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M9 3L5 7l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg> Back to Facility</button>`:
+    (context==='h'||context==='admin')?`<button class="btn btn-ghost btn-sm mb16" onclick="hNav(document.querySelector('[data-view=h-staff]'),'h-staff','Staff Directory')"><svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M9 3L5 7l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg> Back to Staff</button>`:
     ``;
   const html=`${backBtn}
     <div class="prof-banner">
@@ -10020,6 +10794,7 @@ function renderHProfile(sid,context){
         <div style="margin-bottom:8px">${beltBadge(s.belt)} <span style="font-size:12px;color:var(--txt3);margin-left:6px">${BELT_CERT[s.belt]}</span></div>
         <div class="prof-meta"><span class="pmeta"><svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="2" y="3" width="10" height="10" rx="1" stroke="currentColor" stroke-width="1.3"/><path d="M5 1v3M9 1v3M2 7h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>Since ${s.since || '—'}</span><span class="pmeta">${daysAtPhrase(s.since)} at current belt</span>${s.stars>0?`<span class="pmeta tc-gold">${'* '.repeat(s.stars).trim()}</span>`:''}</div>
         ${sbdYearsCardsHTML(s)}
+        ${sbdProvisionsHTML(s, context)}
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         ${context==='admin'?`<button class="btn btn-gold btn-sm" onclick="openRecordModal('${s.id}')">${ICO.record} Record Assessment</button>`:''}
@@ -10030,7 +10805,7 @@ function renderHProfile(sid,context){
         ) : ''}
         ${context==='admin'||context==='h'?`<button class="btn btn-blue btn-sm" onclick="openPromoteModal('${s.id}','${context}')">&#x2B06; Promote</button>`:''}
         <button class="btn btn-ghost btn-sm" onclick="downloadStaffReport('${s.id}')">${ICO.dl} Report</button>
-        ${(ST.user&&['master_admin','staff_admin','facility_admin'].includes(ST.user.role))?`<button class="btn btn-ghost btn-sm" onclick="openSbdBackgroundModal('${s.id}','${context}')" title="Set SBD program tenure and years certified"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg> SBD Background</button>`:''}
+        ${(ST.user&&['master_admin','staff_admin','facility_admin'].includes(ST.user.role))?`<button class="btn btn-ghost btn-sm" onclick="openSbdBackgroundModal('${s.id}','${context}')" title="Set years in sterile processing and years certified"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg> SPD Background</button>`:''}
         ${(ST.user&&ST.user.role==='master_admin')?`<button class="btn btn-ghost btn-sm" onclick="openBeltOverrideModal('${s.id}','${context}')" style="border-color:var(--gold-bd);color:var(--gold)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Override Belt</button>`:''}
         ${(ST.user&&ST.user.role==='master_admin')?(
           (s.assessmentGateOverride && s.assessmentGateOverride.waived)
@@ -10038,7 +10813,7 @@ function renderHProfile(sid,context){
             : `<button class="btn btn-ghost btn-sm" onclick="grantAssessmentOverride('${s.id}','${context}')" style="border-color:var(--gold-bd);color:var(--gold)" title="Let this candidate request an assessment without completing the practice tests"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg> Waive Practice Gate</button>`
         ):''}
         ${(ST.user&&ST.user.role==='master_admin')?`<button class="btn btn-ghost btn-sm" onclick="toggleObserver('${s.id}','${context}')" style="border-color:${s.observer?'#0ea5e9':'var(--bdr)'};color:${s.observer?'#0ea5e9':'var(--txt2)'}" title="${s.observer?'Revoke observer access':'Grant observer access'}"><svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 10s3-5.5 8-5.5S18 10 18 10s-3 5.5-8 5.5S2 10 2 10z"/><circle cx="10" cy="10" r="2.3"/></svg> ${s.observer?'Observer: On':'Make Observer'}</button>`:''}
-        ${(ST.user&&ST.user.role==='master_admin'&&s.observer)?(s.observationPin?`<span class="pill" style="background:#0ea5e91a;color:#0ea5e9;border:1px solid #0ea5e955;font-size:11px;padding:5px 9px;border-radius:8px;font-weight:700;align-self:center">Observer PIN: ${s.observationPin}</span>`:`<button class="btn btn-ghost btn-sm" onclick="generateObserverPin('${s.id}','${context}')" style="border-color:#0ea5e9;color:#0ea5e9">&#128273; Generate PIN</button>`):''}
+        ${(ST.user&&ST.user.role==='master_admin'&&s.observer)?`<button class="btn btn-ghost btn-sm" onclick="generateObserverPin('${s.id}','${context}')" style="border-color:#0ea5e9;color:#0ea5e9" title="${s.observerPinSet?'Show this observer\'s existing PIN':'Generate a reusable observation PIN'}">&#128273; ${s.observerPinSet?'Show PIN':'Generate PIN'}</button>`:''}
         ${context==='admin'&&(ST.user&&ST.user.role==='master_admin')?`<button class="btn btn-err btn-sm" onclick="releaseToFreeAgent('${s.id}')" title="Release staff member to Free Agent Registry" style="margin-left:auto"><svg width="13" height="13" viewBox="0 0 18 18" fill="none"><path d="M12 14H15a1 1 0 001-1V5a1 1 0 00-1-1H12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M9 12l3-3-3-3M12 9H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Release</button>`:''}
       </div>
       ${(ST.user&&ST.user.role==='master_admin'&&typeof prcAccessControlHTML==='function')?`<div style="margin-top:8px">${prcAccessControlHTML(s.id,context)}</div>`:''}
@@ -10070,11 +10845,11 @@ function renderHProfile(sid,context){
     return `<div class="irow" style="${st2==='locked'?(isOverrideAdmin?'':'opacity:.5'):'cursor:pointer'}" ${canClick?`onclick="openPSTrackDetail('${tid}','${s.id}')"`:''}><div class="ilbl" style="font-size:11.5px;flex:1">${t.name}${psOverrideMark(td)}</div><div class="ival" style="display:flex;align-items:center;gap:6px">${statusBadge}${action}</div></div>`;
   }).join('')+'<div class="irow" style="border:none"><div class="ilbl">Promotion Eligible</div><div class="ival">'+( s.promo?'<span class="pill p-gold">Yes</span>':'<span style="color:var(--txt3);font-size:12px">Not yet</span>' )+'</div></div>';
 })()}</div></div>
-        <div class="card"><div class="card-hd"><div class="card-ttl">Assessment History</div></div><div class="card-body"><div class="tl">${s.history.length?s.history.slice().reverse().map(h=>`<div class="tl-item"><div class="tl-dot" style="background:${h.res==='pass'?'rgba(34,197,94,.15)':'rgba(239,68,68,.15)'};color:${h.res==='pass'?'var(--ok)':'var(--err)'}">${h.res==='pass'?ICO.check:ICO.x}</div><div><div class="tl-date">${h.dt} &bull; ${beltBadge(h.belt)}</div><div class="tl-txt">${h.type}: <strong style="color:${h.res==='pass'?'var(--ok)':'var(--err)'}">${h.res.charAt(0).toUpperCase()+h.res.slice(1)}</strong></div></div></div>`).join(''):'<div style="font-size:12px;color:var(--txt3)">No assessment history recorded yet.</div>'}</div></div></div>
+        <div class="card"><div class="card-hd"><div class="card-ttl">Assessment History</div></div><div class="card-body"><div class="tl">${s.history.length?s.history.slice().reverse().map(h=>`<div class="tl-item"><div class="tl-dot" style="background:${isSuccessOutcome(h.res)?'rgba(34,197,94,.15)':'rgba(239,68,68,.15)'};color:${isSuccessOutcome(h.res)?'var(--ok)':'var(--err)'}">${isSuccessOutcome(h.res)?ICO.check:ICO.x}</div><div><div class="tl-date">${h.dt} &bull; ${beltBadge(h.belt)}</div><div class="tl-txt">${h.type}: <strong style="color:${isSuccessOutcome(h.res)?'var(--ok)':'var(--err)'}">${h.res.charAt(0).toUpperCase()+h.res.slice(1)}</strong></div></div></div>`).join(''):'<div style="font-size:12px;color:var(--txt3)">No assessment history recorded yet.</div>'}</div></div></div>
       </div>
     </div>
     <div>${buildOIPLeaderPanel(s, context==='admin')}</div>`;
-  const target=context==='admin'?document.getElementById('a-facility'):document.getElementById('h-profile');
+  const target=(context==='admin'&&ST.portal==='admin')?document.getElementById('a-facility'):document.getElementById('h-profile');
   if(target) target.innerHTML=html;
 }
 
@@ -10190,9 +10965,21 @@ let schTab = 'builder'; // 'builder' | 'attendance' | 'record'
 let schBuilderMonth = new Date().getMonth();
 let schBuilderYear  = new Date().getFullYear();
 
+// Which portal has the schedule/attendance builders mounted. They are shared by the leader
+// portal (h-schedule / h-attendance), the system portal (x-schedule) and, since T58, the admin
+// portal (a-schedule). Every builder onclick routes its re-render back through _refreshHAtt,
+// so the re-render has to follow the mount instead of assuming the leader portal.
+// The old `ST.portal==='x'` / `==='h'` checks here and after every write never fired at all:
+// ST.portal holds 'admin' | 'hospital' | 'system_admin' | 'staff_member' (see enterPortal),
+// not the one-letter prefixes, which is why nothing repainted after a save.
+let schMount = 'h';
+
 // Smart dispatch: re-renders the correct view depending on whether the user
 // is on h-attendance (standalone) or h-schedule (combined tabs)
-function _refreshHAtt(){ if(ST.hView==='h-attendance') renderHAttendance(); else renderHSchedule(); }
+function _refreshHAtt(){
+  if(schMount!=='h') return renderXSchedule();
+  if(ST.hView==='h-attendance') renderHAttendance(); else renderHSchedule();
+}
 
 // Custom shift definitions live in facility_shifts but DB.facilityShifts started as {}
 // and was never filled from the server, so saved shifts never came back. Load them once
@@ -10207,12 +10994,59 @@ function _loadFacilityShiftDefs(fid){
     if(!DB.facilityShifts) DB.facilityShifts = {};
     if(!DB.facilityShifts[fid]) DB.facilityShifts[fid] = {...SHIFT_DEF_DEFAULT};
     rows.forEach(r=>{ const d = mapShiftDefFromBackend(r); DB.facilityShifts[fid][d.id] = d; });
-    if(ST.hView==='h-schedule' && typeof renderHSchedule==='function') renderHSchedule();
+    if(schMount!=='h' || ST.hView==='h-schedule') _refreshHAtt();
   }).catch(e=>{ _shiftDefsLoaded[fid] = false; console.warn('[shifts] definition load failed', e && e.message); });
 }
+
+// QA 2026-07-29, findings 1 and 2. DB.schedule and DB.attendance were only ever appended to
+// by the two staff-portal views (renderSReport, renderSSchedule) and by the local push that
+// follows a leader's own write. Nothing read the facility's stored rows back, so SB.getSchedule
+// had zero callers and every leader/admin screen showed only what was typed in the current
+// session -- empty after any reload, while the rows sat in the database.
+//
+// That is also finding 2's root cause: saveShift, clearShift, execBulkSchedule and
+// importScheduleCSV all locate the row they mean to overwrite with DB.schedule.find(...), so
+// against an empty array they took the create branch and wrote a duplicate. The unique index
+// in 20260731120000 is the backstop; this loader is what makes the lookup find the row.
+//
+// Loaded once per facility-year (the builder and the annual record both navigate by year),
+// merged by id so a row written earlier in the session is replaced rather than doubled.
+//
+// The in-flight promise is what gets cached against the key, so the bulk write paths can await
+// this before deciding update-vs-create instead of racing the fetch they triggered on render.
+const _schedLoaded = {};
+function _mergeRowsById(arr, rows){
+  rows.forEach(r=>{ const i = arr.findIndex(x=>x.id===r.id); if(i>=0) arr[i]=r; else arr.push(r); });
+}
+function _loadFacilitySchedule(fid, year){
+  if(!fid) return Promise.resolve();
+  if(!(typeof IS_LIVE!=='undefined' && IS_LIVE && typeof SB!=='undefined' && SB.getSchedule && SB.getFacilityAttendance)) return Promise.resolve();
+  const nowYear = new Date().getFullYear();
+  // Every tab shows something dated today, so the current year is always needed alongside
+  // whichever year the builder or the record is parked on.
+  return Promise.all([...new Set([nowYear, year || nowYear])].map(y=>{
+    const key = fid + ':' + y;
+    if(_schedLoaded[key]) return _schedLoaded[key];
+    return _schedLoaded[key] = Promise.all([
+      SB.getSchedule(fid, y+'-01-01', y+'-12-31'),
+      SB.getFacilityAttendance(fid, y+'-01-01', y+'-12-31')
+    ]).then(([sch, att])=>{
+      sch = Array.isArray(sch) ? sch : [];
+      att = Array.isArray(att) ? att : [];
+      if(!DB.schedule) DB.schedule = [];
+      if(!DB.attendance) DB.attendance = [];
+      _mergeRowsById(DB.schedule, sch.map(mapScheduleFromBackend));
+      _mergeRowsById(DB.attendance, att.map(mapAttendanceFromBackend));
+      if(!sch.length && !att.length) return;
+      if(schMount!=='h' || ST.hView==='h-schedule' || ST.hView==='h-attendance') _refreshHAtt();
+    }).catch(e=>{ _schedLoaded[key] = false; console.warn('[schedule] facility load failed', e && e.message); });
+  }));
+}
 function renderHSchedule(){
-  const fid = ST.hFid||'test-a';
+  schMount = 'h';
+  const fid = ST.hFid;
   _loadFacilityShiftDefs(fid);
+  _loadFacilitySchedule(fid, schBuilderYear);
   const el = document.getElementById('h-schedule');
   const today = todayStr();
   const shifts = getFacilityShifts(fid);
@@ -10353,17 +11187,33 @@ function openBulkScheduleModal(fid){
     <div class="modal-ft"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-gold" onclick="execBulkSchedule('${fid}')">Fill Schedule</button></div>`,'modal-md');
 }
 
-function execBulkSchedule(fid){
+// QA 2026-07-29, finding 2: the toast used to fire synchronously while the writes were
+// fire-and-forget, so it reported "N shifts assigned" whether or not anything landed. Both
+// bulk paths now wait on their writes and report what actually succeeded.
+async function _settleWrites(writes, label){
+  if(!writes.length) return 0;
+  const results = await Promise.allSettled(writes);
+  const failed = results.filter(r=>r.status==='rejected');
+  if(failed.length) handleSyncError(failed[0].reason, label);
+  return failed.length;
+}
+
+async function execBulkSchedule(fid){
   const start = document.getElementById('qf-start').value;
   const end   = document.getElementById('qf-end').value;
   const count = parseInt(document.getElementById('qf-count').value)||3;
   const shifts = getFacilityShifts(fid);
   const st = staffOf(fid);
   if(!st.length||!start||!end){toast('Missing data.','err');return;}
+  // The overwrite lookup below is only correct once the facility's stored rows are in hand.
+  // Fired on render, but a fast click could beat it -- and a create against an existing
+  // facility/date/shift now hits the unique index (20260731120000) rather than duplicating.
+  await _loadFacilitySchedule(fid);
   const dates = [];
   const d=new Date(start+'T12:00:00');
   while(d.toISOString().slice(0,10)<=end){ dates.push(d.toISOString().slice(0,10)); d.setDate(d.getDate()+1); }
   let filled=0;
+  const writes=[];
   dates.forEach((date,di)=>{
     Object.keys(shifts).forEach((sk,si)=>{
       const chk=document.getElementById('qf-sh-'+sk);
@@ -10377,18 +11227,20 @@ function execBulkSchedule(fid){
         if(!existing.zoneAssignments) existing.zoneAssignments={};
         // T28: an already-populated day only ever changed in memory, while the toast below
         // counted it as filled. The overwrite is now written like any other.
-        if(IS_LIVE) SB.updateSchedule(existing.id, mapScheduleToBackend(existing)).catch(e => handleSyncError(e,'Schedule sync'));
+        if(IS_LIVE) writes.push(SB.updateSchedule(existing.id, mapScheduleToBackend(existing)));
       }
       else {
         const autoSched={id:newRecordId(),fid,date,shift:sk,assignedStaff:assigned,publishedBy:null,notes:'',zoneAssignments:{}};
-        if(IS_LIVE){ SB.createSchedule(mapScheduleToBackend(autoSched)).catch(e => handleSyncError(e,'Schedule sync')); }
+        if(IS_LIVE){ writes.push(SB.createSchedule(mapScheduleToBackend(autoSched))); }
         DB.schedule.push(autoSched);
       }
       filled++;
     });
   });
   closeModal();
-  toast(`Schedule filled: ${filled} shifts assigned across ${dates.length} days.`,'ok');
+  const failed = await _settleWrites(writes, 'Schedule sync');
+  if(failed) toast(`Schedule partly filled: ${filled-failed} of ${filled} shifts saved, ${failed} failed.`,'err');
+  else toast(`Schedule filled: ${filled} shifts assigned across ${dates.length} days.`,'ok');
   renderHSchedule();
 }
 
@@ -10506,7 +11358,7 @@ function saveShiftDef(fid, editId){
     SB.upsertFacilityShiftDef(mapShiftDefToBackend(fid, def)).catch(e => handleSyncError(e,'Shift definition sync'));
   closeModal();
   toast(`Shift "${name}" ${editId?'updated':'created'}.`,'ok');
-  renderHSchedule();
+  _refreshHAtt();
 }
 function deleteShift(fid, shiftId){
   if(!confirm('Delete this shift? Scheduled assignments for this shift will also be removed.')) return;
@@ -10524,7 +11376,7 @@ function deleteShift(fid, shiftId){
     });
   }
   toast('Shift deleted.','ok');
-  renderHSchedule();
+  _refreshHAtt();
 }
 
 function openShiftEditModal(fid, date, shift){
@@ -10694,8 +11546,7 @@ function saveShift(fid, date, shift){
   const def=shifts[shift]||SHIFT_DEF_DEFAULT[shift]||{icon:'',label:shift};
   const zoneCount=Object.keys(zoneAssignments).length;
   toast(`${def.icon} ${def.label} shift saved: ${_seAssigned.length} staff assigned${zoneCount?', '+zoneCount+' zones set':''}.`,'ok');
-  if(ST.portal==='h'||ST.portal==='a'){ if(ST.hView==='h-attendance') renderHAttendance(); else renderHSchedule(); }
-  if(ST.portal==='x') renderXSchedule();
+  _refreshHAtt();
 }
 
 function clearShift(fid,date,shift){
@@ -10771,8 +11622,7 @@ function publishSchedule(fid){
   // The count is what was sent. A rejected write reports itself through handleSyncError
   // rather than being folded into a success message, which is the fault this task fixes.
   toast(`${pending.length} shift${pending.length===1?'':'s'} published. Staff can now see ${pending.length===1?'it':'them'}.`,'ok');
-  if(ST.portal==='h') renderHSchedule();
-  if(ST.portal==='x') renderXSchedule();
+  _refreshHAtt();
 }
 
 
@@ -10905,7 +11755,7 @@ function buildAttendanceTab(fid, shifts){
               <option value="">Select coverage...</option>
               ${avail.map(x=>`<option value="${x.id}">${fullName(x)} – ${x.belt} Belt</option>`).join('')}
             </select>
-            <button class="btn btn-blue btn-sm" onclick="assignCoverage('${fid}','${attDate}','${attShift}',${sid})">Assign +${ATTEND_POINTS.coverage} bonus</button>
+            <button class="btn btn-blue btn-sm" onclick="assignCoverage('${fid}','${attDate}','${attShift}','${sid}')">Assign +${ATTEND_POINTS.coverage} bonus</button>
           </div>`;
         }).join('')}
       </div>
@@ -10958,7 +11808,9 @@ function buildAttendanceRecord(fid){
   let annualTotals={present:0,late:0,absent:0,coverage:0};
 
   // Staff selector
-  const staffSel = `<select class="form-select" style="width:auto;max-width:220px;font-size:12px" onchange="attRecordStaffId=parseInt(this.value);_refreshHAtt()">
+  // staff.id is a uuid, so parseInt made this NaN and the picker snapped back to the first
+  // person every time. Found while wiring this tab into the admin portal (T58).
+  const staffSel = `<select class="form-select" style="width:auto;max-width:220px;font-size:12px" onchange="attRecordStaffId=this.value;_refreshHAtt()">
     ${allSt.sort((a,b)=>beltIdx(b.belt)-beltIdx(a.belt)).map(x=>`<option value="${x.id}" ${x.id===s.id?'selected':''}>${fullName(x)} – ${x.belt}</option>`).join('')}
   </select>`;
 
@@ -11019,7 +11871,7 @@ function buildAttendanceRecord(fid){
         <div style="font-size:13px;font-weight:800;padding:0 4px">${attRecordYear}</div>
         <button class="btn btn-ghost btn-sm" onclick="attRecordYear++;_refreshHAtt()">${attRecordYear+1} ›</button>
       </div>
-      <button class="btn btn-gold btn-sm" onclick="downloadAttendanceRecord('${fid}',${attRecordStaffId},${attRecordYear})">📥 Download</button>
+      <button class="btn btn-gold btn-sm" onclick="downloadAttendanceRecord('${fid}','${attRecordStaffId}',${attRecordYear})">📥 Download</button>
     </div>
 
     <!-- Staff info bar -->
@@ -11145,9 +11997,11 @@ function downloadAttendanceRecord(fid, staffId, year){
 }
 
 function renderHAttendance(){
-  const fid = ST.hFid||'test-a';
+  schMount = 'h';
+  const fid = ST.hFid;
   const el = document.getElementById('h-attendance');
   if(!el) return;
+  _loadFacilitySchedule(fid, attRecordYear);
   const shifts = getFacilityShifts(fid);
 
   // Sub-tabs: Take Attendance | Attendance Record
@@ -11181,11 +12035,12 @@ function markAttend(fid, date, shift, staffId, status){
     DB.attendance.push(att1);
   }
   const s=getStaff(staffId);
-  const pts=status==='present'?'+'+ATTEND_POINTS.present:status==='late'?'+'+ATTEND_POINTS.late:status==='coverage'?'+'+(ATTEND_POINTS.present+ATTEND_POINTS.coverage):''+ATTEND_POINTS.absent;
+  // The old chain tested present/late/coverage and fell through to ATTEND_POINTS.absent for
+  // everything else, so PTO and Excused -- both worth 0 -- announced "-15 pts" (QA finding 3).
+  const ptsVal = status==='coverage' ? ATTEND_POINTS.present+ATTEND_POINTS.coverage : (ATTEND_POINTS[status]||0);
+  const pts = (ptsVal>0?'+':'')+ptsVal;
   toast(`${s?fullName(s):'Staff'} marked <strong>${ATTEND_LABELS[status]}</strong> – ${pts} pts`,'ok');
-  if(ST.portal==='h'){ if(ST.hView==='h-attendance') renderHAttendance(); else renderHSchedule(); }
-  if(ST.portal==='x') renderXSchedule();
-  if(ST.portal==='s') renderSSchedule();
+  _refreshHAtt();
 }
 
 function markAllAttend(fid, date, shift, status){
@@ -11203,8 +12058,7 @@ function markAllAttend(fid, date, shift, status){
     }
   });
   toast(`All ${sch.assignedStaff.length} staff marked <strong>${ATTEND_LABELS[status]}</strong>.`,'ok');
-  if(ST.portal==='h'){ if(ST.hView==='h-attendance') renderHAttendance(); else renderHSchedule(); }
-  if(ST.portal==='x') renderXSchedule();
+  _refreshHAtt();
 }
 
 
@@ -11233,8 +12087,7 @@ function assignCoverage(fid, date, shift, absentId){
   }
   const s=getStaff(covSid);
   toast(`${s?fullName(s):'Staff'} assigned as coverage. <strong>+${ATTEND_POINTS.present+ATTEND_POINTS.coverage} bonus pts</strong> earned.`,'ok');
-  if(ST.portal==='h'){ if(ST.hView==='h-attendance') renderHAttendance(); else renderHSchedule(); }
-  if(ST.portal==='x') renderXSchedule();
+  _refreshHAtt();
 }
 
 
@@ -11425,17 +12278,33 @@ function renderAdminScheduleSection(fid, elId){
 }
 
 
-// ============================================================ X SCHEDULE  --  SYSTEM ADMIN VIEW
+// ============================================================ X SCHEDULE  --  SYSTEM + SIPS ADMIN VIEW
 let xSchFid = null;
 let xSchTab2 = 'overview'; // 'overview'|'builder'|'attendance'|'record'
 
+// The system portal is scoped to one hospital system. The admin portal (T58) is the whole
+// network, narrowed to a staff_admin's assigned facilities -- the same scope renderAFacilities
+// uses, so the picker cannot offer a facility the rest of that portal hides.
+function _schedFacs(){
+  if(schMount!=='a') return systemFacs(ST.curSystemId).filter(f=>f.active!==false);
+  const fids = (ST.user && ST.user.role!=='master_admin' && (ST.user.assignedFids||[]).length) ? ST.user.assignedFids : null;
+  return DB.facilities.filter(f=>f.active!==false && (!fids || fids.includes(f.id)));
+}
+
 function renderXSchedule(){
-  const facs = systemFacs(ST.curSystemId).filter(f=>f.active!==false);
+  const facs = _schedFacs();
   if(!xSchFid||!facs.find(f=>f.id===xSchFid)) xSchFid=facs[0]?.id||null;
-  const el = document.getElementById('x-schedule');
+  const el = document.getElementById(schMount==='a' ? 'a-schedule' : 'x-schedule');
+  if(!el) return;
   if(!xSchFid){el.innerHTML='<div class="empty-state"><div class="empty-ttl">No facilities found</div></div>';return;}
   const fac = getFac(xSchFid);
   const shifts = getFacilityShifts(xSchFid);
+  // Same read-path gap as the leader portal (QA finding 1): these tabs are the leader's
+  // builder/attendance/record against a facility picker, and read the same two arrays.
+  // The shift definitions are the third one: without this the Shifts tab and every shift
+  // column fall back to the defaults and a facility's custom shifts are invisible here.
+  _loadFacilityShiftDefs(xSchFid);
+  _loadFacilitySchedule(xSchFid, xSchTab2==='record' ? attRecordYear : schBuilderYear);
 
   // Tabs
   const tabs=`<div style="display:flex;gap:2px;background:var(--s2);border:1px solid var(--bdr);border-radius:var(--rs);padding:3px;margin-bottom:12px;flex-wrap:wrap">
@@ -11458,6 +12327,9 @@ function renderXSchedule(){
     const today=todayStr();
     const rows=facs.map(f=>{
       const fst=staffOf(f.id);
+      // This row is per-facility, so every facility in the system needs its rows loaded, not
+      // just the one in the picker. One fetch pair per facility, once per session.
+      _loadFacilitySchedule(f.id);
       const todaySch=['AM','PM','NOC'].reduce((a,sh)=>{const s=getSchedule(f.id,today,sh);return a+(s?s.assignedStaff.length:0);},0);
       const todayAtt=(DB.attendance||[]).filter(a=>a.fid===f.id&&a.date===today);
       const p=todayAtt.filter(a=>a.status==='present').length;
@@ -11472,7 +12344,7 @@ function renderXSchedule(){
         <td><button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();xSchFid='${f.id}';xSchTab2='builder';renderXSchedule()">Manage →</button></td>
       </tr>`;
     }).join('');
-    el.innerHTML=tabs+facSel+`<div class="card"><div class="card-hd"><div class="card-ttl">System Schedule Overview: Today</div></div>
+    el.innerHTML=tabs+facSel+`<div class="card"><div class="card-hd"><div class="card-ttl">${schMount==='a'?'Network':'System'} Schedule Overview: Today</div></div>
       <div style="overflow-x:auto"><table class="tbl" style="min-width:380px">
         <thead><tr><th>Facility</th><th>Staff</th><th>On Shift Today</th><th>Attendance</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
@@ -11496,7 +12368,7 @@ function renderXSchedule(){
 
 // ============================================================ H MILESTONES
 function renderHMilestones(){
-  const fid=ST.hFid||'test-a';
+  const fid=ST.hFid;
   const st=staffOf(fid);
   const n=st.length;
   const ms=BELT_ORDER.slice(0,4).flatMap(b=>[50,100].map(tgt=>({belt:b,tgt,cnt:st.filter(s=>beltIdx(s.belt)>=beltIdx(b)).length,n,pct:Math.round(st.filter(s=>beltIdx(s.belt)>=beltIdx(b)).length/n*100)})));
@@ -11599,7 +12471,7 @@ function denyPSCompletion(reqId){
   if(typeof renderHPosSchool==='function') renderHPosSchool();
 }
 function renderHPosSchool(){
-  const fid=ST.hFid||'test-a';
+  const fid=ST.hFid;
   const st=staffOf(fid);
 
   // Build per-track stats
@@ -11746,7 +12618,7 @@ function renderHPosSchool(){
 
 
 function renderHReports(){
-  const fid = ST.hFid||'test-a';
+  const fid = ST.hFid;
   const fac = getFac(fid);
   const st = staffOf(fid);
   const hs = buildHealthScore(fid);
@@ -13024,7 +13896,7 @@ function renderFacIntel(el){
   const priorityOrder={urgent:0,high:1,medium:2,low:3};
   focuses.sort((a,b)=>priorityOrder[a.priority]-priorityOrder[b.priority]);
 
-  const staffWithVelocity=[...st].map(s=>{const proj=generateProjection(s);const win=getWindowStatus(s);const passedGates=(s.history||[]).filter(h=>h.res==='pass').length;const totalMonths=Math.max(1,Math.round(daysAt(s.since)/30));const velocity=(passedGates/totalMonths).toFixed(1);return{s,proj,win,velocity:parseFloat(velocity)};}).sort((a,b)=>b.s.belt===a.s.belt?b.velocity-a.velocity:beltIdx(b.s.belt)-beltIdx(a.s.belt));
+  const staffWithVelocity=[...st].map(s=>{const proj=generateProjection(s);const win=getWindowStatus(s);const passedGates=(s.history||[]).filter(h=>isSuccessOutcome(h.res)).length;const totalMonths=Math.max(1,Math.round(daysAt(s.since)/30));const velocity=(passedGates/totalMonths).toFixed(1);return{s,proj,win,velocity:parseFloat(velocity)};}).sort((a,b)=>b.s.belt===a.s.belt?b.velocity-a.velocity:beltIdx(b.s.belt)-beltIdx(a.s.belt));
 
   const gradeColor=stats.greenPct>=75?'var(--ok)':stats.greenPct>=50?'var(--warn)':'var(--err)';
   const grade=stats.greenPct>=90?'A':stats.greenPct>=75?'B':stats.greenPct>=60?'C+':stats.greenPct>=40?'C':'D';
@@ -13468,20 +14340,32 @@ function toggleObserver(sid, context){
   _accessActionRerender(sid,context);
 }
 
-// Generate a reusable observation PIN for an authorized observer (master-admin only).
-// One-time generation; the same PIN is reused for every observation thereafter.
-// Stored via a targeted single-column write to staff.observation_pin.
-function generateObserverPin(sid, context){
+// Show, or first-time generate, an authorized observer's reusable observation PIN
+// (master-admin only). The same PIN is reused for every observation thereafter — a second
+// click shows the existing one, it never rotates.
+//
+// T37 (S12): the PIN is neither stored on nor read from the staff payload. It lives in
+// sbd_observer_pins, which has RLS on and no policies, so the only way to see one is the
+// master-admin-gated sbd-observer-pin function — which is also what generates it, because
+// a PIN minted in a browser cannot be checked for uniqueness against PINs the browser
+// cannot see, and two observers sharing a PIN makes the identity unresolvable. All the
+// staff payload carries is the observerPinSet flag, which drives this button's label.
+async function generateObserverPin(sid, context){
   const s=getStaff(sid); if(!s) return;
   if(!(ST.user&&ST.user.role==='master_admin')){toast('Only master admins can manage observer PINs.','err');return;}
   if(!s.observer){toast('Grant observer access first, then generate a PIN.','err');return;}
-  if(s.observationPin){toast(`Observer PIN is ${s.observationPin} (PINs are reused, not regenerated).`,'ok');return;}
-  const pin=String(Math.floor(1000+Math.random()*9000)); // 4-digit, reused thereafter
-  s.observationPin=pin;
-  if(IS_LIVE && typeof SB!=='undefined' && SB.updateStaff){
-    SB.updateStaff(sid,{observation_pin:pin}).catch(e=>{ s.observationPin=null; handleSyncError(e,'Observer PIN'); if(typeof renderHProfile==='function') renderHProfile(sid,context); });
+  if(IS_LIVE && typeof SB!=='undefined' && SB.setObserverPin){
+    try {
+      const pin = await SB.setObserverPin(sid);
+      if(!pin){ toast('No observer PIN came back. Try again.','err'); return; }
+      s.observerPinSet = true;
+      toast(`${fullName(s)}'s observer PIN: ${pin} (reused for every observation, not regenerated).`,'ok');
+    } catch(e){ handleSyncError(e,'Observer PIN'); return; }
+  } else {
+    // Local staging only — nothing is persisted and no live PIN is ever shown here.
+    s.observerPinSet = true;
+    toast(`${fullName(s)}'s observer PIN: ${String(Math.floor(1000+Math.random()*9000))} (local only)`,'ok');
   }
-  toast(`${fullName(s)}'s observer PIN: ${pin}`,'ok');
   if(typeof renderHProfile==='function') renderHProfile(sid,context);
 }
 
@@ -13649,7 +14533,7 @@ async function approveGateRequest(qid) {
       item.status = prev.status; item.approvedBy = prev.approvedBy; item.approvedAt = prev.approvedAt;
       toast('Could not save approval — please retry.', 'err');
       if (ST.aView === 'a-progression') renderAProgression();
-      if (ST.aView === 'a-assessments') renderAAssessments();
+      asmRerender();
       return;
     }
   }
@@ -13658,7 +14542,7 @@ async function approveGateRequest(qid) {
   toast(`${fullName(s)}: ${item.type} assessment for ${item.targetBelt} Belt approved.`, 'ok');
   updateProgBadge();
   if (ST.aView === 'a-progression') renderAProgression();
-  if (ST.aView === 'a-assessments') renderAAssessments();
+  asmRerender();
 }
 
 async function denyGateRequest(qid) {
@@ -13690,7 +14574,7 @@ async function denyGateRequest(qid) {
   toast(`${fullName(s)}: ${item.type} request denied. They have been notified.`, 'err');
   updateProgBadge();
   if (ST.aView === 'a-progression') renderAProgression();
-  if (ST.aView === 'a-assessments') renderAAssessments();
+  asmRerender();
 }
 
 function updateProgBadge() {
@@ -13875,7 +14759,7 @@ async function acceptBeltTestGate(r, s, component){
     const combo = btComponentRows(s.id, targetBelt).combined;
     toast(`${fullName(s)}: ${gateType} recorded (${pass ? 'PASS' : 'FAIL'}) for ${targetBelt} Belt.` +
       (combo ? ` Both gates in — recommendation: ${combo.system_suggestion}.` : ''), 'ok');
-    if (ST.aView === 'a-assessments') renderAAssessments();
+    asmRerender();
   } catch (e) {
     if (typeof handleSyncError === 'function') handleSyncError(e, 'Belt gate accept'); else toast('Accept failed: ' + (e.message || e), 'err');
   }
@@ -13909,7 +14793,7 @@ async function acceptBeltTestCombined(r, s){
     r.status = 'ACCEPTED'; r.finalBelt = targetBelt;
     DB.queue = DB.queue.filter(q => !(q.sid === s.id && q.targetBelt === targetBelt && (q.type === 'Competency' || q.type === 'Simulation') && (q.status === 'pass' || q.status === 'fail')));
     toast(`${fullName(s)}: belt test accepted. Competency + Simulation recorded for ${targetBelt} Belt.`, 'ok');
-    if (ST.aView === 'a-assessments') renderAAssessments();
+    asmRerender();
   } catch (e) {
     if (typeof handleSyncError === 'function') handleSyncError(e, 'Belt test accept'); else toast('Accept failed: ' + (e.message || e), 'err');
   }
@@ -13925,7 +14809,7 @@ async function remediateBeltTestResult(id){
     if (IS_LIVE) await SB.updateBeltTestResult(r.id, notes ? { status: 'REMEDIATION_REQUIRED', notes } : { status: 'REMEDIATION_REQUIRED' });
     r.status = 'REMEDIATION_REQUIRED'; if (notes) r.notes = notes;
     toast(`${s ? fullName(s) : 'Candidate'}: marked for remediation.`, 'warn');
-    if (ST.aView === 'a-assessments') renderAAssessments();
+    asmRerender();
   } catch (e) { if (typeof handleSyncError === 'function') handleSyncError(e, 'Belt remediation'); }
 }
 
@@ -13941,6 +14825,8 @@ function renderBeltPinAuthBlock(assignedFids){
     if (st.releasedAt) return false;
     if (assignedFids && !assignedFids.includes(st.fid)) return false;
     if (asmFilter !== 'all' && st.fid !== asmFilter) return false;
+    const acct = _rmUserFor(st.id);
+    if (acct && acct.active === false) return false;
     const nb = nextBelt(st.belt);
     return nb && btEligible(st.id, nb);
   });
@@ -14051,6 +14937,10 @@ function renderBeltTestReviewSection(assignedFids){
 // admin (renderHAssessments). Caller scopes the staff list.
 // ============================================================
 function renderAssessmentAuthBlock(staffList){
+  staffList = staffList.filter(st => {
+    const acct = _rmUserFor(st.id);
+    return !(acct && acct.active === false);
+  });
   if(!staffList.length) return '';
   return `
     <div style="margin-bottom:20px">
@@ -14092,12 +14982,25 @@ function asmSearchInput(el){
   if(fresh){ fresh.focus(); try{ fresh.setSelectionRange(caret,caret); }catch(e){} }
 }
 function renderAAssessments() {
-  const el = document.getElementById('a-assessments');
+  const el = document.getElementById(asmMount + '-assessments');
+  if (!el) return;
   // Scope facilities to assignedFids for staff_admin -- master_admin sees all
   const isMaster = ST.user?.role === 'master_admin';
-  const assignedFids = (!isMaster && ST.user?.assignedFids?.length) ? ST.user.assignedFids : null;
+  let assignedFids = (!isMaster && ST.user?.assignedFids?.length) ? ST.user.assignedFids : null;
+  // #77: a capability-granted assessor is scoped by assessor_facilities, not by assignedFids,
+  // which is an admin-role field they do not carry. Without this the admin filter collapses to
+  // "no filter" for them (assigned_facility_ids is [] on both current holders) and the screen
+  // would show every facility's queue. Mirrors sbd_is_assessor(p_fid) so the screen cannot show
+  // a row the policy would refuse. Admin roles keep their existing scoping untouched.
+  const asrFids = effAssessorScoped() ? effAssessorFacilities() : null;
+  if (asrFids) {
+    assignedFids = assignedFids
+      ? assignedFids.map(String).filter(f => asrFids.indexOf(f) >= 0)
+      : asrFids;
+  }
+  const inScope = (fid) => !assignedFids || assignedFids.map(String).indexOf(String(fid)) >= 0;
   const allFacs = DB.facilities.filter(f =>
-    f.active !== false && (!assignedFids || assignedFids.includes(f.id))
+    f.active !== false && inScope(f.id)
   ).slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''));
 
   // Search by staff name across every block on this page
@@ -14107,12 +15010,12 @@ function renderAAssessments() {
   // Separate staff-requested (pending approval) from admin-managed queue
   const staffRequests = DB.queue.filter(item =>
     item.status === 'pending' && item.requestedAt &&
-    (!assignedFids || assignedFids.includes(item.fid)) &&
+    inScope(item.fid) &&
     (asmFilter === 'all' || item.fid === asmFilter) && nameMatch(item.sid)
   );
   const adminQueue = DB.queue.filter(item =>
     (!item.requestedAt || item.status === 'approved') &&
-    (!assignedFids || assignedFids.includes(item.fid)) &&
+    inScope(item.fid) &&
     (asmFilter === 'all' || item.fid === asmFilter) && nameMatch(item.sid)
   );
 
@@ -14571,7 +15474,7 @@ function renderAProgression() {
       <select class="form-select" style="width:auto;max-width:200px;padding:5px 11px;font-size:12px;height:32px" onchange="progFilter.fid=this.value;renderAProgression()">${facOpts}</select>
       <div class="search-wrap" style="min-width:160px;flex:1;max-width:240px">
         <div class="search-ico"><svg viewBox="0 0 18 18" fill="none" width="14" height="14"><circle cx="7.5" cy="7.5" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M12 12l3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
-        <input class="search-inp" placeholder="Search name or role..." value="${progFilter.q}" oninput="progFilter.q=this.value;renderAProgression()">
+        <input id="adminStaffSearch_renderAProgression" class="search-inp" placeholder="Search name or role..." value="${progFilter.q}" oninput="adminStaffSearchInput(this,'renderAProgression',progFilter)">
       </div>
       <div style="display:flex;gap:4px;overflow-x:auto">${beltChips}</div>
     </div>
@@ -14615,7 +15518,7 @@ function markQueue(qid,result){
   }
   toast(`${name} -- ${item.type}: <strong>${result.toUpperCase()}</strong>. Profile updated.`,result==='pass'?'ok':'err');
   // Re-render current view
-  if(ST.aView==='a-assessments') renderAAssessments();
+  asmRerender();
   if(ST.aView==='a-facility') renderFacTab();
 }
 
@@ -15053,14 +15956,20 @@ async function addStaff(lockedFid){
 
 // ============================================================ MODALS: RECORD ASSESSMENT
 function openRecordModal(sid){
-  // Use hFid as the active facility when called from the hospital portal (facility admin)
-  const activeFid = (ST.portal==='hospital' && ST.hFid) ? ST.hFid : ST.curFid;
+  // #77: a granted assessor recording from the staff portal has neither ST.curFid (admin) nor
+  // the hospital branch, so the facility would resolve to undefined and the staff dropdown would
+  // come back empty. Their scope is assessor_facilities, so drive both from that. A scoped
+  // assessor with exactly one facility gets it locked, matching the facility-admin treatment.
+  const _asrFids = effAssessorScoped() ? effAssessorFacilities() : null;
+  let activeFid = (ST.portal==='hospital' && ST.hFid) ? ST.hFid : ST.curFid;
+  if(_asrFids && (activeFid==null || _asrFids.indexOf(String(activeFid))<0)) activeFid=_asrFids[0];
   // Facility admins record only within their own facility (ASS-F2): the dropdown is
   // replaced by a locked field. The dropdown remains for admin-portal contexts, deduped
   // by name+location label (QA saw the same facility listed twice).
-  const facLocked = ST.portal==='hospital' && !!ST.hFid;
+  const facLocked = (ST.portal==='hospital' && !!ST.hFid) || (!!_asrFids && _asrFids.length===1);
   const _facSeen=new Set();
   const facOpts=DB.facilities.filter(f=>{
+    if(_asrFids && _asrFids.indexOf(String(f.id))<0) return false;
     if(f.active===false&&f.id!==activeFid) return false;
     const k=f.name+'|'+(f.loc||'');
     if(f.id!==activeFid&&_facSeen.has(k)) return false;
@@ -15114,6 +16023,10 @@ function submitAssessment(sid){
   // Facility-portal callers (facility admins) may only record within their own facility.
   // The modal already locks the facility, but guard here against console/DOM bypass too.
   if(ST.portal==='hospital'&&ST.hFid&&s.fid!==ST.hFid){toast('You can only record assessments for staff in your own facility.','err');return;}
+  // #77: same guard for a facility-scoped assessor. The modal already limits the picker, and
+  // sbd_is_assessor(p_fid) is the real lock, but this keeps a console call from reaching an RLS
+  // error mid-write and leaving the optimistic local edit applied.
+  if(effAssessorScoped()&&!effIsAssessorAt(s.fid)){toast('You can only record assessments at the facilities your assessor role covers.','err');return;}
   const type=document.getElementById('ra-type').value;
   const targetBelt=document.getElementById('ra-belt').value;
   const note=document.getElementById('ra-notes')?.value.trim()||'';
@@ -15141,7 +16054,7 @@ function submitAssessment(sid){
   raResult=null;
   toast(`${fullName(s)} | ${type}: <strong>${result==='pass'?'PASS':'FAIL'}</strong>. ${progressMsg}`,result==='pass'?'ok':'err');
   if(ST.aView==='a-facility') renderFacTab();
-  if(ST.aView==='a-assessments') renderAAssessments();
+  asmRerender();
   if(ST.hView==='h-assessments') renderHAssessments();
   if(ST.hView==='h-staff') renderHStaff();
 }
@@ -15727,7 +16640,7 @@ function openFreeAgentFullReport(faId) {
       <td style="font-size:11px">${h.dt || '--'}</td>
       <td>${beltBadge(h.belt)}</td>
       <td style="font-size:11.5px">${h.type}</td>
-      <td><span class="pill ${h.res==='pass'?'p-ok':'p-err'}" style="font-size:10px">${h.res==='pass'?'Pass':'Fail'}</span></td>
+      <td><span class="pill ${isSuccessOutcome(h.res)?'p-ok':'p-err'}" style="font-size:10px">${isSuccessOutcome(h.res)?'Pass':'Fail'}</span></td>
       <td style="font-size:11px;color:var(--txt3)">${h.note?Security.sanitize(h.note):'--'}</td>
     </tr>`).join('');
 
@@ -15806,7 +16719,7 @@ function openFreeAgentFullReport(faId) {
       <div class="card-hd"><div class="card-ttl">Assessment History</div><span class="pill p-muted">${allHistory.length} events</span></div>
       ${allHistory.length ? `<div style="overflow-x:auto"><table class="tbl tbl-static" style="min-width:460px">
         <thead><tr><th>Date</th><th>Belt</th><th>Type</th><th>Result</th><th>Notes</th></tr></thead>
-        <tbody>${gateRows||allHistory.map(h=>`<tr><td style="font-size:11px">${h.dt||'--'}</td><td>${beltBadge(h.belt)}</td><td style="font-size:11.5px">${h.type}</td><td><span class="pill ${h.res==='pass'?'p-ok':'p-err'}" style="font-size:10px">${h.res==='pass'?'Pass':'Fail'}</span></td><td style="font-size:11px;color:var(--txt3)">${h.note?Security.sanitize(h.note):'--'}</td></tr>`).join('')}</tbody>
+        <tbody>${gateRows||allHistory.map(h=>`<tr><td style="font-size:11px">${h.dt||'--'}</td><td>${beltBadge(h.belt)}</td><td style="font-size:11.5px">${h.type}</td><td><span class="pill ${isSuccessOutcome(h.res)?'p-ok':'p-err'}" style="font-size:10px">${isSuccessOutcome(h.res)?'Pass':'Fail'}</span></td><td style="font-size:11px;color:var(--txt3)">${h.note?Security.sanitize(h.note):'--'}</td></tr>`).join('')}</tbody>
       </table></div>` : '<div style="font-size:12px;color:var(--txt3);padding:12px 14px">No assessment history on record.</div>'}
     </div>
 
@@ -15838,7 +16751,7 @@ function downloadFreeAgentReport(faId) {
   const beltHistory = BELT_ORDER.filter(b => beltIdx(b) <= bIdx_val);
   const gatesByBelt = beltHistory.map(b => {
     const bh = (fa.history||[]).filter(h => h.belt === b);
-    const pass = bh.filter(h => h.res==='pass').length;
+    const pass = bh.filter(h => isSuccessOutcome(h.res)).length;
     const fail = bh.filter(h => h.res==='fail').length;
     return {b, pass, fail, total: pass+fail};
   }).filter(x => x.total > 0);
@@ -15914,7 +16827,7 @@ function downloadFreeAgentReport(faId) {
       ['Current Belt', fa.belt, 'Since ' + (fa.since||'–'), bColor],
       ['Points', pts.toLocaleString(), 'SBD Score', '#d97706'],
       ['PS Stars', psStars, psStars===0 ? 'No tracks yet' : psStars===1 ? '1 track complete' : psStars+' tracks complete', '#d97706'],
-      ['Assessments', (fa.history||[]).length, (fa.history||[]).filter(h=>h.res==='pass').length+' passed', '#16a34a'],
+      ['Assessments', (fa.history||[]).length, (fa.history||[]).filter(h=>isSuccessOutcome(h.res)).length+' passed', '#16a34a'],
       ['Facilities', hist.length, hist.length===1 ? '1 placement' : hist.length+' placements', '#2563eb'],
     ])}
 
@@ -15955,7 +16868,7 @@ function downloadFreeAgentReport(faId) {
       <td style="color:#64748b">${h.dt||'–'}</td>
       <td>${pBelt(h.belt)}</td>
       <td>${h.type}</td>
-      <td><span class="badge ${h.res==='pass'?'badge-green':'badge-err'}">${h.res==='pass'?'Pass':'Fail'}</span></td>
+      <td><span class="badge ${isSuccessOutcome(h.res)?'badge-green':'badge-err'}">${isSuccessOutcome(h.res)?'Pass':'Fail'}</span></td>
       <td style="color:#64748b;font-size:7.5pt">${h.note?Security.sanitize(h.note):'–'}</td>
     </tr>`).join('')}</tbody></table>`}
   `;
@@ -16385,7 +17298,7 @@ function openFreeAgentProfile(faId){
       ${hist.length?`<div class="tl">${hist.map(h=>`<div class="tl-item"><div class="tl-dot" style="background:rgba(96,165,250,.15);color:#60a5fa;font-size:9px">&#9679;</div><div><div class="tl-date">${h.from} \u2013 ${h.to}</div><div class="tl-txt">${h.facName}<span style="font-size:11px;color:#64748b;margin-left:6px">${h.loc||''}</span></div></div></div>`).join('')}</div>`:
       '<div style="font-size:12px;color:#64748b">No facility history recorded.</div>'}
       <div class="section-lbl" style="margin-bottom:6px;margin-top:12px">Full Assessment History</div>
-      <div class="tl">${(fa.history||[]).length?(fa.history||[]).slice().reverse().map(h=>`<div class="tl-item"><div class="tl-dot" style="background:${h.res==='pass'?'rgba(34,197,94,.15)':'rgba(239,68,68,.15)'};color:${h.res==='pass'?'#22c55e':'#ef4444'}">${h.res==='pass'?ICO.check:ICO.x}</div><div><div class="tl-date">${h.dt} &bull; ${beltBadge(h.belt)}</div><div class="tl-txt">${h.type} \u2014 <strong style="color:${h.res==='pass'?'#22c55e':'#ef4444'}">${h.res==='pass'?'Pass':'Fail'}</strong>${h.note?' \u2014 '+Security.sanitize(h.note):''}</div></div></div>`).join(''):'<div style="font-size:12px;color:#64748b">No assessment history.</div>'}</div>
+      <div class="tl">${(fa.history||[]).length?(fa.history||[]).slice().reverse().map(h=>`<div class="tl-item"><div class="tl-dot" style="background:${isSuccessOutcome(h.res)?'rgba(34,197,94,.15)':'rgba(239,68,68,.15)'};color:${isSuccessOutcome(h.res)?'#22c55e':'#ef4444'}">${isSuccessOutcome(h.res)?ICO.check:ICO.x}</div><div><div class="tl-date">${h.dt} &bull; ${beltBadge(h.belt)}</div><div class="tl-txt">${h.type} \u2014 <strong style="color:${isSuccessOutcome(h.res)?'#22c55e':'#ef4444'}">${isSuccessOutcome(h.res)?'Pass':'Fail'}</strong>${h.note?' \u2014 '+Security.sanitize(h.note):''}</div></div></div>`).join(''):'<div style="font-size:12px;color:#64748b">No assessment history.</div>'}</div>
       <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--bdr)">
         <div style="font-size:11px;color:var(--txt3);margin-bottom:10px">View this free agent's complete staff report as it would appear on an active site assignment.</div>
         <button class="btn btn-gold" style="width:100%;justify-content:center" onclick="openFreeAgentFullReport('${fa.id}')">View Full Staff Report</button>
@@ -16664,7 +17577,8 @@ function _rmCapBadges(s){
   const out=[ chip(!!s.observer,'Observer','#0ea5e9'),
            chip(prc==='granted',prc==='revoked'?'Preceptor (revoked)':'Preceptor', prc==='revoked'?'#f87171':'#22c55e'),
            chip(!!wv,'Gate waiver','#c49a20') ];
-  if(cap.assessor) out.push(chip(true,'Assessor','#a78bfa'));
+  const asrN=Array.isArray(cap.assessor_facilities)?cap.assessor_facilities.length:0;
+  if(cap.assessor) out.push(chip(true, asrN?'Assessor ×'+asrN:'Assessor (all)','#a78bfa'));
   if(eduN) out.push(chip(true,'Educator ×'+eduN,'#a78bfa'));
   return out.join(' ');
 }
@@ -16682,6 +17596,12 @@ async function rmSetCapability(staffId, mutate){
   mutate(caps);
   if(caps.assessor!==true) delete caps.assessor;
   if(Array.isArray(caps.educator_facilities) && caps.educator_facilities.length===0) delete caps.educator_facilities;
+  // #77: an empty list must not persist. Both the client helper and sbd_is_assessor(p_fid) read
+  // an empty array as system wide, so leaving [] behind would look like a scope that is not one.
+  if(Array.isArray(caps.assessor_facilities) && caps.assessor_facilities.length===0) delete caps.assessor_facilities;
+  // Revoking the grant drops its facility list with it, otherwise a later re-grant would
+  // silently inherit a scope nobody chose in that session.
+  if(caps.assessor!==true) delete caps.assessor_facilities;
   const prev=u.capabilities;
   u.capabilities=caps;
   try{
@@ -16705,6 +17625,31 @@ function rmAddEducatorFac(staffId){
 function rmRemoveEducatorFac(staffId, fid){
   rmSetCapability(staffId, c=>{ if(Array.isArray(c.educator_facilities)) c.educator_facilities=c.educator_facilities.filter(x=>String(x)!==String(fid)); });
 }
+// #77: the Assessor grant's facility list. This is the "grant the role, then choose the
+// facilities it applies to" flow the client described in his 03:37 voice note, and it is the
+// only thing that narrows sbd_is_assessor(p_fid) away from system wide.
+function rmAddAssessorFac(staffId){
+  const sel=document.getElementById('rm-asr-fac-'+staffId); if(!sel||!sel.value) return; const fid=sel.value;
+  rmSetCapability(staffId, c=>{ c.assessor_facilities=Array.isArray(c.assessor_facilities)?c.assessor_facilities:[]; if(c.assessor_facilities.map(String).indexOf(String(fid))<0) c.assessor_facilities.push(fid); });
+}
+function rmRemoveAssessorFac(staffId, fid){
+  rmSetCapability(staffId, c=>{ if(Array.isArray(c.assessor_facilities)) c.assessor_facilities=c.assessor_facilities.filter(x=>String(x)!==String(fid)); });
+}
+// #75 mitigation, shared by both capability pickers. The unfiltered (DB.facilities||[]) list
+// carries inactive rows, test rows and two pairs sharing a display name, so a grant could land
+// on an entry the admin could not tell apart. Mirrors the admin facility switcher's active
+// filter and disambiguates a repeated name with its location, the same way openRecordModal
+// already does. Which of the remaining active rows are real sites is still a client question,
+// so this narrows the hazard without pretending to close it.
+function _rmFacilityOptions(selectedIds){
+  const sel=(selectedIds||[]).map(String);
+  const rows=(DB.facilities||[]).filter(f=>f.active!==false||sel.indexOf(String(f.id))>=0);
+  const byName={}; rows.forEach(f=>{ const k=(f.name||'').toLowerCase(); byName[k]=(byName[k]||0)+1; });
+  return rows.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''))
+    .map(f=>{ const dup=byName[(f.name||'').toLowerCase()]>1;
+      const label=(f.name||'Unnamed')+(dup?(f.loc?', '+f.loc:', '+String(f.id).slice(0,8)):'');
+      return `<option value="${f.id}">${label}</option>`; }).join('');
+}
 
 function _rmPanel(s){
   const u=(DB.users||[]).find(x=>x.sid===s.id);
@@ -16714,6 +17659,7 @@ function _rmPanel(s){
   const wv=s.assessmentGateOverride&&s.assessmentGateOverride.waived;
   const cap=(u&&u.capabilities)||{};
   const eduFacs=Array.isArray(cap.educator_facilities)?cap.educator_facilities:[];
+  const asrFacs=Array.isArray(cap.assessor_facilities)?cap.assessor_facilities:[];
   return `<div class="card">
     <div class="card-hd"><div class="card-ttl">${fullName(s)}</div>
       <button class="btn btn-ghost btn-xs" onclick="ROLEMGMT_SEL=null;renderARoleMgmt()">Close</button></div>
@@ -16741,15 +17687,23 @@ function _rmPanel(s){
             <div><div style="font-size:12.5px;font-weight:600">Assessment practice-gate waiver</div><div style="font-size:11px;color:var(--txt3)">Request an assessment without the practice tests</div></div>
             ${wv?`<button class="btn btn-ghost btn-sm" onclick="clearAssessmentOverride('${s.id}','rolemgmt')">Clear</button>`:`<button class="btn btn-ghost btn-sm" onclick="grantAssessmentOverride('${s.id}','rolemgmt')" style="border-color:var(--gold-bd);color:var(--gold)">Waive</button>`}
           </div>
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--bdr);border-radius:8px;padding:8px 11px">
-            <div><div style="font-size:12.5px;font-weight:600">Assessor rights</div><div style="font-size:11px;color:var(--txt3)">System-wide assessor access (observe + confirm), on top of their role</div></div>
-            <button class="btn btn-ghost btn-sm" onclick="rmToggleAssessor('${s.id}')" style="border-color:${cap.assessor?'#22c55e':'var(--bdr)'};color:${cap.assessor?'#22c55e':'var(--txt2)'}"${u?'':' disabled title="No login account"'}>${cap.assessor?'On':'Grant'}</button>
+          <div style="border:1px solid var(--bdr);border-radius:8px;padding:8px 11px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+              <div><div style="font-size:12.5px;font-weight:600">Assessor rights</div><div style="font-size:11px;color:var(--txt3)">Assessor access (observe + confirm), on top of their role</div></div>
+              <button class="btn btn-ghost btn-sm" onclick="rmToggleAssessor('${s.id}')" style="border-color:${cap.assessor?'#22c55e':'var(--bdr)'};color:${cap.assessor?'#22c55e':'var(--txt2)'}"${u?'':' disabled title="No login account"'}>${cap.assessor?'On':'Grant'}</button>
+            </div>
+            ${cap.assessor?`
+            <div style="border-top:1px solid var(--bdr);margin-top:8px;padding-top:8px">
+              <div style="font-size:11px;color:var(--txt3);margin-bottom:6px">Facilities this assessor role applies to. ${asrFacs.length?'':'<strong style="color:var(--gold)">None chosen, so it currently applies everywhere.</strong>'}</div>
+              <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:7px">${asrFacs.length?asrFacs.map(fid=>{const f=getFac(fid);return `<span class="pill" style="font-size:10px;padding:2px 6px;border:1px solid #a78bfa55;background:#a78bfa1a;color:#a78bfa">${f?f.name:fid} <span style="cursor:pointer;font-weight:800" onclick="rmRemoveAssessorFac('${s.id}','${fid}')">&times;</span></span>`;}).join(''):'<span style="font-size:11px;color:var(--txt3)">Everywhere</span>'}</div>
+              ${u?`<div style="display:flex;gap:6px"><select id="rm-asr-fac-${s.id}" class="form-select" style="flex:1;font-size:12px;padding:5px 8px">${_rmFacilityOptions(asrFacs)}</select><button class="btn btn-ghost btn-sm" onclick="rmAddAssessorFac('${s.id}')">Add</button></div>`:''}
+            </div>`:''}
           </div>
           <div style="border:1px solid var(--bdr);border-radius:8px;padding:8px 11px">
             <div style="font-size:12.5px;font-weight:600">Facility educator</div>
             <div style="font-size:11px;color:var(--txt3);margin:2px 0 7px">Educator/leader access at specific facilities, on top of their role</div>
             <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:7px">${eduFacs.length?eduFacs.map(fid=>{const f=getFac(fid);return `<span class="pill" style="font-size:10px;padding:2px 6px;border:1px solid #22c55e55;background:#22c55e1a;color:#22c55e">${f?f.name:fid} <span style="cursor:pointer;font-weight:800" onclick="rmRemoveEducatorFac('${s.id}','${fid}')">&times;</span></span>`;}).join(''):'<span style="font-size:11px;color:var(--txt3)">None</span>'}</div>
-            ${u?`<div style="display:flex;gap:6px"><select id="rm-edu-fac-${s.id}" class="form-select" style="flex:1;font-size:12px;padding:5px 8px">${(DB.facilities||[]).map(f=>`<option value="${f.id}">${f.name}</option>`).join('')}</select><button class="btn btn-ghost btn-sm" onclick="rmAddEducatorFac('${s.id}')">Add</button></div>`:'<span style="font-size:11px;color:var(--txt3)">No login account to grant to.</span>'}
+            ${u?`<div style="display:flex;gap:6px"><select id="rm-edu-fac-${s.id}" class="form-select" style="flex:1;font-size:12px;padding:5px 8px">${_rmFacilityOptions(eduFacs)}</select><button class="btn btn-ghost btn-sm" onclick="rmAddEducatorFac('${s.id}')">Add</button></div>`:'<span style="font-size:11px;color:var(--txt3)">No login account to grant to.</span>'}
           </div>
         </div>
       </div>
@@ -17307,7 +18261,7 @@ function openEditUserModal(uid){
       <div class="form-group"><label class="form-label">Account Role</label>
         <select class="form-select" id="eu-role" onchange="const v=this.value; document.getElementById('eu-wrap-fac-assigned').style.display=(v==='staff_admin'?'block':'none'); document.getElementById('eu-wrap-fac').style.display=(['facility_admin','hospital','staff_member'].includes(v)?'block':'none'); document.getElementById('eu-wrap-sys').style.display=(v==='system_admin'?'block':'none');">
           <option value="staff_member" ${u.role==='staff_member'?'selected':''}>Staff Member (Tech)</option>
-          <option value="hospital" ${u.role==='hospital'?'selected':''}>Hospital Manager (Read Only)</option>
+          <option value="hospital" ${u.role==='hospital'?'selected':''}>Hospital Manager (Full Facility Access)</option>
           <option value="facility_admin" ${u.role==='facility_admin'?'selected':''}>Facility Admin (Full Facility Access)</option>
           <option value="system_admin" ${u.role==='system_admin'?'selected':''}>System Admin</option>
           <option value="staff_admin" ${u.role==='staff_admin'?'selected':''}>Assessor (SIPS Internal)</option>
@@ -17756,9 +18710,11 @@ function previewScheduleCSV(fid){
   reader.readAsText(file);
 }
 
-function importScheduleCSV(fid){
+async function importScheduleCSV(fid){
   if(!_schedImportRows.length){ toast('No matched rows to import.','err'); return; }
   const shifts=getFacilityShifts(fid);
+  // Same reason as execBulkSchedule: the update-vs-create lookup needs the stored rows first.
+  await _loadFacilitySchedule(fid);
 
   // Group by date+shift
   const grouped={};
@@ -17769,27 +18725,30 @@ function importScheduleCSV(fid){
   });
 
   let imported=0;
+  const writes=[];
   Object.values(grouped).forEach(g=>{
     const existing=DB.schedule.find(s=>s.fid===fid&&s.date===g.date&&s.shift===g.shift);
     if(existing){
       existing.assignedStaff=g.staffIds;
       // T28a: same hole as quick-fill. An import that overlapped an existing day reported
       // success and wrote nothing.
-      if(IS_LIVE) SB.updateSchedule(existing.id, mapScheduleToBackend(existing)).catch(e => handleSyncError(e,'Schedule sync'));
+      if(IS_LIVE) writes.push(SB.updateSchedule(existing.id, mapScheduleToBackend(existing)));
     }
     else {
       const bulkSched={id:newRecordId(),fid,date:g.date,shift:g.shift,assignedStaff:g.staffIds,publishedBy:null,notes:'CSV import',zoneAssignments:{}};
-      if(IS_LIVE){ SB.createSchedule(mapScheduleToBackend(bulkSched)).catch(e => handleSyncError(e,'Schedule sync')); }
+      if(IS_LIVE){ writes.push(SB.createSchedule(mapScheduleToBackend(bulkSched))); }
       DB.schedule.push(bulkSched);
     }
     imported++;
   });
 
   closeModal();
-  toast(`Schedule imported: ${_schedImportRows.length} assignments across ${imported} shifts.`,'ok');
+  const assignments=_schedImportRows.length;
+  const failed = await _settleWrites(writes, 'Schedule sync');
+  if(failed) toast(`Import partly applied: ${imported-failed} of ${imported} shifts saved, ${failed} failed.`,'err');
+  else toast(`Schedule imported: ${assignments} assignments across ${imported} shifts.`,'ok');
   _schedImportRows=[];
-  if(ST.portal==='h'){ if(ST.hView==='h-attendance') renderHAttendance(); else renderHSchedule(); }
-  if(ST.portal==='x') renderXSchedule();
+  _refreshHAtt();
 }
 
 function processBulkUpload(){

@@ -3,8 +3,11 @@
 **Living document.** This is the single record of what has been built and what is left.
 It is not regenerated. It is edited in place.
 
-**Last updated:** 2026-07-27
+**Last updated:** 2026-08-03
 **Audit basis:** 2026-07-25, verified against the live project and the live code.
+**History basis:** 2026-07-31, the complete client conversation from 22 May to 31 July read end
+to end including every attachment. See `docs/DOMAIN_GLOSSARY.md` for the vocabulary this ledger
+uses, and T78 to T87 for what that pass found.
 
 ---
 
@@ -296,7 +299,15 @@ persisted.
     view before writing the migration rather than assumed.
     *Result:* 8 open rows to 6, one per real decision, which is what the T29 goal asked for.
 
-- [ ] **T61** A real candidate has been waiting 12 days on an approved assessment · est 0.25d · **High**
+- [x] ~~**T61** A real candidate has been waiting 12 days on an approved assessment~~
+  `closed 2026-07-27 by the client` · est 0.25d
+  *Ignacio answered directly:* "Jody is good... no worries there". So the 14 day and 12 day
+  waits were not a service failure, and no chasing is needed. Closed as answered rather than
+  as fixed, because nothing was changed.
+  *Kept on the record anyway:* the finding was still worth raising. It was only visible
+  because T29 collapsed eleven copies of the same request; before that the queue was noise.
+  The software half of it stands and moves to T64: the review reminder covers pending
+  requests and not approved-but-unactioned ones, so if a real one does stall, nothing says so.
   Found 2026-07-27 underneath the T29a duplicate. The duplicate was the symptom; this is the
   thing worth acting on.
   Jody Mays at Boston Children's, Shift Supervisor, still on White belt:
@@ -383,7 +394,8 @@ persisted.
     *Done when:* My Profile renders the shared bio card for the signed-in person, the
     operator assessment still starts and displays from within it, and the SBD Background
     editor added in T21 still saves.
-  - [ ] **T35c** Make the years line legible now, ahead of the full redesign · est 0.25d · **committed to the client**
+  - [x] ~~**T35c** Make the years line legible now, ahead of the full redesign~~
+    `done 2026-07-27` · est 0.25d · **was committed to the client**
     Shawn told Ignacio on 2026-07-27, at 2:16 AM in the thread, "I will make it bigger in
     the meantime". That is a commitment and it comes before the rest of T35, which is a
     full day's work and needs the layout built properly.
@@ -418,7 +430,8 @@ persisted.
     both cards in every case, including two "Not set" when nothing is filled. staff_member and
     a signed-out render still hide the block when both values are absent, and still show it
     when either is present.
-    *Not ticked:* the render logic is tested but this has not been looked at in a browser.
+    *Signed off 2026-07-27.* Checked on the live site: the two cards render under the belt
+    badge and read "Not set" where nothing has been entered.
   - [ ] **T35b** Give administrators a profile page at all · est 0.5d
     Found 2026-07-26 while checking the above: an administrator has no profile screen.
     Clicking their own name in the sidebar footer lands on Account and Settings, which is a
@@ -440,8 +453,97 @@ persisted.
   `ovsUnlock` compares the observer PIN client side against `DB.staff`. Observation writes
   are separately gated server side, so this is an identity-of-observer weakness rather
   than an authorisation hole.
+  **Built and merged 2026-08-04 as PR #179, but only half of it reached production. Verified the
+  same evening by making real requests as a real signed-in `staff_member`, not by reading the
+  catalogue.** What holds and what does not:
+
+  * `sbd_observer_pins` exists in production and is correctly closed. Selecting from it as an
+    ordinary authenticated user returns `42501 permission denied for table sbd_observer_pins`.
+    That half worked.
+  * **`staff.observation_pin` still exists, and 4 of 70 rows still hold a value.** The migration
+    that drops it, `20260804130000_t37_drop_staff_observation_pin.sql` line 121, is in the
+    repository and was never applied: `supabase_migrations.schema_migrations` still ends at
+    `20260731130000`, and neither T37 migration has a row.
+  * **The old column is still readable.** Signed in as one `staff_member`, `public.staff` returns
+    7 rows and **1 of them carries a plaintext `observation_pin`**. A second `staff_member`
+    account sees 14 rows and 0 pins, so it depends on which facility you are in rather than on
+    the column being protected. `authenticated` still holds column-level `SELECT` on it.
+
+  So the new door is locked and the old door is still open beside it. **This is the exact pattern
+  this task already exists to correct**, a narrow rule added while the broad one underneath stays,
+  and it is the third time it has happened on this item.
+
+  Not a code change: the repository is already correct. **And as of later the same night the
+  remaining half is scheduled rather than forgotten**: part 1 is applied and verified live, and
+  the `20260804130000` column drop is planned for **2026-08-07** after a two-day observation
+  window, with a re-verification the same day. Until the 7th the old column staying readable is a
+  stated, accepted exposure window rather than an oversight, and this entry is where that is
+  written down.
+
+  **The fix is not RLS, and reaching for RLS would make things worse.** `staff_select` reads:
+
+  ```
+  (id = auth.uid())
+  OR role in (master_admin, staff_admin, system_admin)
+  OR (role in (facility_admin, hospital, staff_member) AND fid = get_user_fid())
+  OR sbd_is_assessor(fid)
+  ```
+
+  A staff member reading every row in their own facility is **correct**; that is the roster, and
+  narrowing it to hide one column would break a feature to patch a data-placement mistake. The
+  problem is not who can read the row, it is that a secret is sitting on a row colleagues are
+  meant to read. Dropping the column is the fix, which is what the migration already does.
+
+  **The two stores hold the same four pins**, measured by comparing them without reading a value
+  out: `old_store = 4`, `new_store = 4`, `identical = 4`.
+
+  **That duplication is deliberate and this entry first said otherwise.** It is a transitional
+  write mirror, `sbd_staff_observation_pin_mirror` on `public.staff` calling
+  `sbd_mirror_observation_pin()`, so that the migration and the frontend deploy cannot fall out
+  of step during a two-part release. Reading the trigger body confirms it: a write to
+  `observation_pin` upserts into `sbd_observer_pins` and sets `observer_pin_set`, and clearing it
+  deletes the row. The earlier reading of this as a mistake was wrong.
+
+  **The rest of part 1 is applied and correct**, verified against production: RLS on, **zero**
+  policies, **zero** grants to `anon` or `authenticated`, two unique indexes, the non-secret
+  `staff.observer_pin_set` flag in step at 4 across both stores, and the `sbd_staff_privilege_guard`
+  trigger in place. `sbd-observer-pin` is deployed ACTIVE v1 and `sbd-observation-unlock` was
+  redeployed to v2.
+
+  **What the mirror does not change** is that the four pins have been sitting in a column
+  colleagues can read. Blast radius by facility, one pin holder in each:
+
+  | staff in the facility | who can read that pin |
+  |---|---|
+  | 5 | 4 others |
+  | 3 | 2 others |
+  | 7 | 6 others |
+  | 18 | 17 others |
+
+  33 staff rows across the four, so **29 people can read a live pin that is not their own**, of
+  whom the ones with an active login can actually run the query.
+
+  **Because of that, dropping the column is not sufficient on its own.** All four pins have been
+  readable for as long as the column has existed and should be regenerated after the drop.
+  Otherwise the fix removes the exposure route and leaves the exposed credential in service. That
+  holds whether the duplication was intentional or not; it is about where the pins have been, not
+  about how they got there.
+
+  **Neither migration has a row in `supabase_migrations.schema_migrations`, and part 1 plainly
+  ran.** So production holds a table, a flag, two triggers and two indexes that the migration
+  history does not know about, while a fresh environment replaying from zero would build them from
+  the file. The two will not stay in agreement. Record both versions when part 2 goes in. This is
+  the same class of problem as the `david_usage_by_app_mtd` fix earlier the same day, which was
+  applied by hand and written back into an already-applied migration; that one was corrected by
+  moving the change into its own dated migration, and the same shape applies here.
+
+  Separate and lower, worth a decision rather than an alarm: the PIN in the new table is stored as
+  written, 4 characters, not hashed. Nothing in the migration or the edge function hashes it. That
+  is defensible now that the table is unreadable over REST, but it should be a stated choice
+  rather than an accident, because it means anyone with database access reads live PINs.
+
   *Goal:* Who observed an assessment is decided by the server, not by the browser.
-  *Done when:* The PIN comparison happens server side; a forged client-side unlock does not produce a valid observation; the normal observer flow is unchanged.
+  *Done when:* The PIN comparison happens server side; a forged client-side unlock does not produce a valid observation; the normal observer flow is unchanged; **`staff.observation_pin` no longer exists in production**; a signed-in staff member reading `public.staff` sees no pin column at all; and the four pins that lived in the readable column are regenerated.
 - [x] ~~**T38** Consolidate Avery onto the work account (issue `D3`)~~
   `closed 2026-07-27, not needed` · est 0.25d
   Client confirmed: SIPS employee, home office, no facility, work address is the real
@@ -668,6 +770,32 @@ persisted.
   *Done when:* A master admin can open a facility's schedule and attendance from the admin
   portal, scoped by the facility switcher already on that screen, and the write rights they
   already hold are reachable from the interface.
+  *Status 2026-08-04:* wired, no new screen and no migration. `a-schedule` is a nav item and a
+  container that mount the existing `renderXSchedule` — the same five tabs (Overview, Builder,
+  Attendance, Record, Shifts) over a facility picker — so there is still one schedule screen,
+  not a copy. The picker is scoped like `renderAFacilities`: every active facility for a master
+  admin, `assignedFids` only for a staff_admin. Both roles already hold the INSERT/UPDATE
+  rights on `sbd_schedule` and `sbd_attendance` and read every facility under
+  `sbd_schedule_select` / `sbd_attendance_select`, so nothing in the database changed.
+  *Four faults found in the shared builders while wiring them, all of which had been
+  unreachable because nobody could open `x-schedule`:*
+
+  | Fault | Effect |
+  |---|---|
+  | `ST.portal==='h'` / `==='x'` after every write | `ST.portal` holds `admin`/`hospital`/`system_admin`/`staff_member`, never the one-letter prefix, so **no portal repainted after saving a shift, publishing, marking attendance or importing a CSV**. Now one `_refreshHAtt()` that follows the mount. |
+  | `_refreshHAtt` hard-coded to the leader portal | Every date, shift, year and staff control inside the shared builders repainted `h-schedule` instead of the screen you were on. |
+  | `attRecordStaffId=parseInt(this.value)` | `staff.id` is a uuid, so the Attendance Record staff picker snapped back to the first person on every change. Same for the unquoted uuid in the Download button and in `assignCoverage(...)`, which made those onclicks a syntax error. |
+  | `renderXSchedule` never called `_loadFacilityShiftDefs` | A facility's custom shifts were invisible outside the leader portal; the Shifts tab showed only the defaults. |
+
+  The first three are leader-portal bugs too, and are fixed for the leader in the same change.
+  *Left alone, deliberately:* `renderFacTab` has a `facSubTab==='schedule'` branch feeding
+  `renderAdminScheduleSection`, a read-only 7-day table. Nothing ever sets `facSubTab` to
+  `'schedule'` and the drill-down's tab list has no Schedule tab, so both are unreachable and
+  neither would satisfy this task (read-only, 7 days, no write path). Not deleted in passing —
+  worth its own line if the duplicate is to go, the way T57 handled the duplicate tables.
+  *Checked:* `node scripts/verify-schedule-hydration.js`, 19 passed, extended with the mount
+  dispatch. Still to do in the interface: open the screen as a master admin at Test Hospital
+  Facility and confirm a saved shift and an attendance mark match the leader's view (T59).
 
 - [ ] **T59** Close out the test leader account when the schedule testing is done · est 0.1d · Medium
   Created 2026-07-26 so that T26, T27, T28 and T28a could be verified in the interface at
@@ -681,7 +809,39 @@ persisted.
   *Done when:* The four schedule tasks are verified and the account is deactivated, along
   with any schedule and attendance rows created purely for the test.
 
-- [ ] **T60** Every signed-in account can read 96 people's passwords in the clear · est 0.5d · **Critical**
+- [ ] **T60** The signup form still writes a plaintext password into the registrations table · est 0.3d · Medium
+  **Downgraded 2026-07-31 from Critical, and retitled. The critical half is closed.** The
+  entry below is the finding as it stood on 26 July and it is kept because the history
+  matters, but read this block first, because the old title described an active breach that
+  no longer exists.
+
+  Measured against production on 2026-07-31:
+
+  | Claim in the 26 July finding | State today |
+  |---|---|
+  | `reg_all_all FOR ALL USING (true)` to `authenticated` | **Gone.** The only SELECT policy is `reg_select`, limited to `master_admin`, `admin`, `staff_admin`, `system_admin` |
+  | 96 rows holding an unhashed password | **Zero.** 101 rows total, 91 approved and 10 denied, none carrying a password |
+  | Every signed-in account can read them | **No.** Four admin roles only, and there is nothing left to read |
+
+  What actually remains is narrower and is the whole of this task now. `ui-views.js:153`
+  still sends `password: pass` in the registration payload, commented *"Included for the
+  Edge Function to create the auth user"*, so a **pending** registration holds a plaintext
+  password until it is approved or denied. There are zero pending rows right now, so nothing
+  is exposed at this moment; the window opens the next time somebody registers, and even
+  then only the four admin roles can see it.
+
+  Worth finishing, and no longer the item that outranks everything else.
+
+  *Goal:* A registration never stores a password in readable form, not even between
+  submission and approval.
+  *Done when:* The signup path stops writing `password` into `registrations`, the auth user
+  is still created on approval, the column is dropped or permanently null, and a fresh
+  registration is checked end to end to confirm no readable password ever lands.
+
+  ---
+
+  *The finding as originally written, 2026-07-26, kept for history:*
+
   Found 2026-07-26, by accident, while registering the test leader account for T59. This is
   the worst thing in the audit and it outranks everything else still open.
 
@@ -763,7 +923,8 @@ persisted.
   password in a table for as long as a request is pending, and nothing here can undo what
   may already have been read.
 
-- [ ] **T62** In-app notice asking the affected people to change their password · est 0.5d · **High**
+- [x] ~~**T62** In-app notice asking the affected people to change their password~~
+  `done 2026-07-27` · est 0.5d · **High**
   Built 2026-07-27. Closes the part of T60 that no migration could: T60 shut the hole and
   cleared the stored copies, but neither undoes what was read while `registrations` was open
   to every signed-in account. Those people still hold that password, and many will have
@@ -802,8 +963,10 @@ persisted.
   *Goal:* Everyone whose password was exposed is told, in the app, and can act on it in two clicks.
   *Done when:* An affected account signing in sees the notice; Later returns it next sign in;
   changing the password stops it permanently; an unaffected account never sees it.
-  *Not ticked:* the behaviour is proven at the database level but has not been clicked
-  through in a browser, the same standing as T26, T27 and T28.
+  *Signed off 2026-07-27.* Checked on the live site: the notice appears after sign in, Later
+  closes it for the session and it returns at the next sign in, Change my password lands on
+  the right field, and it never blocks a sign in. That last one was the condition it was not
+  allowed to fail.
   - [x] ~~**T62a** Cover the people whose password was exposed but who have no account~~
     `done 2026-07-27`
     T62 reaches 64 of the 75 accounts, but 96 people had a password stored. About 32 of them
@@ -825,6 +988,1262 @@ persisted.
     so that account will carry the notice when it is approved. Correct rather than incidental:
     its password sat in the open table for the few minutes before step 1 landed.
 
+- [ ] **T63** Clean up the assessment authorisation queue · est 0.5d · Medium
+  Requested by the client 2026-07-27: "all people from Scrubball SBD can be removed from the
+  auth que (jun 26 date) and let's see where we stand".
+  The queue is `DB.staff.filter(s => s.placementNeeded)`, so removing somebody means setting
+  `placement_needed = false`. It touches no account, which matters given the standing rule
+  that no account is ever deleted.
+
+  **What he asked for is 2 rows. What is actually in there is 24.** Counted 2026-07-27:
+
+  | Facility | In the queue | Note |
+  |---|---|---|
+  | **no facility at all** | **15** | the `--` rows on his screenshot |
+  | Test Hospital Facility | 2 | |
+  | Alta Bates | 2 | |
+  | Mount Sinai | 2 | |
+  | **Scrubball Sbd** | **2** | the facility is switched off |
+  | DEV TEST HP | 1 | the test account made last night |
+
+  Scrubball Sbd is inactive, so removing those two matches the rule already agreed for T31:
+  key on the facility or record being switched off, never on Free Agent membership.
+
+  The 15 with no facility are the real mess and he has not asked for them yet. They are a
+  mix of plain test data (TEST TEST, TEST USER, Test David OG, Shan -, Royond, Darius) and
+  real-looking names (Aaron Law, Andre Westmoreland, Krystal Westmoreland, Stacey Law,
+  Michael Gudejko, David Williams, Darius Love), plus **Regina Randle twice**. Some hold a
+  login. Guessing which is which is exactly how somebody real gets removed by accident.
+
+  *Also worth telling him:* not one of the 24 has a placement review against them. Nobody in
+  this queue has ever sat their placement, so this is not a backlog of half-finished work.
+
+  *Goal:* The authorisation queue lists only people somebody actually intends to assess.
+  *Done when:* The Scrubball pair are out; the no-facility 15 are resolved one way or the
+  other with his answer on the record; no account is deleted; and the remaining list is short
+  enough to read at a glance.
+
+- [ ] **T64** The review reminder ignores approved-but-unactioned requests · est 0.25d · Medium
+  Split out of T61 when the client closed it. The reminder chases `pending` requests only, so
+  a request that is approved and then never assessed is chased by nobody. Jody Mays sat that
+  way for 12 days and it took collapsing eleven duplicates to make it visible.
+  *Goal:* A request that stalls after approval is chased the same way a pending one is.
+  *Done when:* The reminder counts approved requests with no assessment recorded, and one
+  that has sat past the threshold appears in the reminder and on the admin notice.
+
+- [ ] **T65** Placement scoring: one threshold table, no placeholder belts, and the Dangerous provision · est 1d · **High**
+  **Status 2026-07-27: built, merged, live and measured. Open only on the QA sign-off.**
+  Shipped in three parts, each verified on production after merge: T65 (v189), T65a (v190),
+  T65b (v191). 64 automated checks pass in `tools/verify/t65-scoring-check.js`. Williams' row
+  is corrected and his report regenerated. What is left is a live click-through, and the one
+  piece of wording that is waiting on the client (below). Not ticked until both passes are in.
+
+  Raised 2026-07-27 from the client's own reading of David Williams' report, and confirmed
+  against the Scoring Logic Specification v2.0 (Dr. Jake, 12 May 2026).
+
+  **Four defects, all in the same place.** The placement report was carrying its own copies of
+  the spec's numbers instead of reading the one table the platform already has.
+
+  1. **A placeholder printed as a determination.** `deriveOutcome` fell back to `'White'`
+     whenever the review carried no stored belt. Williams had none, so his report came out
+     headed WHITE BELT with White's thresholds, White's floors and a certification basis
+     written against White. The engine had actually placed him at Green.
+  2. **Three copies of the section 9 table.** `SBD_BELT_THRESHOLDS`, `RPT_STANDARDS.belts`
+     and `BELT_THRESHOLDS`, one of them annotated "these MUST match" -- the note you write
+     when nothing enforces it. Section 9 says in as many words not to hardcode these inline.
+     The real table lives in `belt-test-engine.js` as `BELT_TEST_CONFIG` and the belt test
+     already reads it.
+  3. **Flat per-level floors.** Knowledge 80 at every level, simulation 75/70/65/65/65, the
+     same for every belt. The spec gates by belt and gates fewer levels lower down: at Green
+     simulation L4 and L5 are not gated at all. Williams scored 67.5 on both and the report
+     marked them FAIL against floors that do not apply to him.
+  4. **Knowledge overall computed as correct-over-total.** Section 5.2 says the average of
+     the five level scores. The two agreed until L5 dropped to 7 questions when TIR34 was
+     pulled at the client's request. Williams came out 97.4 where the spec gives 97.5. **The
+     client was right and we were wrong**, and his corrected report had the right figure.
+
+  **The Dangerous provision.** The client ruled on 2026-07-28: the belt is issued on the
+  scores, and the dangerous answer becomes a patient-safety provision on the person's
+  account. It does not touch the belt already held; it holds advancement to the next belt
+  until a master admin or a SIPS admin clears it, and the record keeps who cleared it and
+  when. *Who may clear, confirmed 2026-07-27:* `master_admin` and `staff_admin`, the same pair
+  the belt override uses. Facility-side roles are deliberately not on the list, since the
+  provision is a SIPS determination and the facility is not the party that clears it. Until now the
+  flag existed only inside the report, recomputed every time it was opened, so there was
+  nowhere for a provision to live. `staff.dangerous_provisions` gives it one, and the T24
+  guard was extended to it so a candidate cannot clear their own.
+
+  *What the client asked for, and where each part stands, checked against his own words on
+  2026-07-27:* belt issued on the scores, **done**; the item becomes a provision on the
+  account, **done**; visible there and kept after clearing with who and when, **done**;
+  cleared by a master admin or a SIPS admin, **done**; holds the next belt while open, current
+  belt untouched, **done**; displayed in the report, **done**, as condition 1 plus the patient
+  safety findings block. Nothing on his list is outstanding.
+
+  *Goal:* One threshold table, read not copied; a report that never prints a belt nobody
+  earned; and a safety finding that lives on the person rather than inside a PDF.
+  *Done when:* Williams comes out Green Belt Conditional with K 97.5 and blended 83.5, his
+  L4/L5 read "not gated" rather than FAIL, the two scoring engines return the same belt for
+  the same responses, an open provision blocks the next-belt request while leaving the
+  current belt alone, and a master admin clearing one is recorded by name and date.
+
+  **Measured 2026-07-27, 51 checks, all passing** (`scratchpad/t65/harness.js`, run against
+  Williams' stored responses with no DB and no DOM):
+  K overall 97.50 · simulation 62.50 · blended 83.50 · belt Green, derived from the scores
+  with nothing stored · outcome Conditional · simulation floors 78/75/70/none/none · L4 and
+  L5 not failures · knowledge floors 90/85/80/none/none · both engines agree on belt,
+  blended and knowledge overall · a candidate below every threshold is awarded nothing rather
+  than being handed White.
+
+  **One deliberate difference from the fix note.** The note expected three blocking
+  conditions from the individual responses, reading against the old flat 50. That 50 appears
+  nowhere in the spec; section 9 sets the individual minimum per belt and Green's is 72. On
+  Williams that produces 12, not 3. His simulation overall is 62.5 against a 78 floor, so a
+  dozen responses under 72 is what actually happened. Flagged rather than quietly changed.
+
+  **T65a, found while regenerating the report on 2026-07-27.** The report decided what counted
+  as a dangerous answer by matching regular expressions against the text of the answer, not by
+  the flag the question author set. The client's own description is unambiguous: "It is not a
+  wrong answer. It is a specific wrong option that would cause harm if somebody actually did it
+  on the floor. The flag sits on the individual option, not on the question." That is the stored
+  `isDangerous` field, and nothing else.
+
+  Measured across all 49 stored reviews before the change: the patterns fired **19 times across
+  15 reports**, 17 of those on free-text simulation answers, and they agreed with the authored
+  flag **exactly zero times**. The two detectors have never once named the same item.
+
+  On Williams it flagged his answer *"under no circumstances should a visibly soiled instrument
+  skip the full decontamination process"*, which is correct, because `skip.{0,20}decontam`
+  matched it. So the most severe finding the report can make, SUPERVISED PRACTICE REQUIRED, was
+  raised against a candidate for getting it right, while the option he did pick, "Clean to
+  dirty" on workflow direction, went unmentioned.
+
+  The authored flag matches the client's own account of the data to the letter: he said three of
+  the five flagged questions have ever been picked, and the stored flags give exactly three, p6,
+  p32 and p37. Every knowledge response back to April carries the field, so relying on it loses
+  no history. The report and the account provision now share one predicate,
+  `sbdIsDangerousResponse`, so they can never name different items again.
+
+  *Done when:* the report names the option the candidate actually picked, a correct answer can
+  never raise a safety finding, and the report and the provision agree. **Measured: Williams
+  condition 1 is now the workflow-direction question; 64 checks pass.**
+
+  **T65b, two report-rendering defects found while producing the PDF.**
+  1. *The Level Score Snapshot contradicted the rest of the report.* It printed Pass or Below
+     Threshold for each level against a hardcoded 65, applied to `level_scores`, which is a
+     single blended knowledge-plus-simulation figure the spec does not gate anywhere. On the
+     affected candidate that put "Level 1 81% Pass" on the same document as a card reading
+     "L1 knowledge 87.5% FAIL against the 90% floor" and "L1 simulation 66.5% FAIL against
+     78%". One report, two answers. The figures stay because they are real; the verdict goes
+     because there was no threshold behind it, and the column now states which components the
+     belt actually gates at that level.
+  2. *Every dark table header was invisible.* The headers set `color:#fff` inline and left the
+     background to the `<tr>`, but `PRINT_CSS` carries a global `th{background:#f8fafc}` that
+     repaints the cell, so white text landed on a near-white background. Thirteen headers
+     across the report, unreadable in every PDF ever downloaded. Fixed by setting the
+     background on the cells, where the inline rule wins.
+
+  *Williams' row, corrected 2026-07-27 with authorisation:* `tentative_belt` White to Green (the
+  White was the old placeholder), and his p6 provision written to `staff.dangerous_provisions`.
+  Report now reads GREEN BELT Conditional, K 97.5, simulation 62.5 failing the 78 floor by 15.5,
+  L4 and L5 not gated. Nobody else's row was touched.
+
+  *Backlog, not a blocker:* a per-option clinical rationale stored in the question bank next to
+  the flag, so the report can say why that specific option is dangerous rather than quoting the
+  option picked and the correct handling. Our idea, not a client request, and the wording that
+  is there now is accurate without it.
+
+- [ ] **T66** The AI notes revert, and the report disagrees with the interface · est unknown until reproduced · **High**
+  Raised by the client in the recorded meeting of **2026-06-29**, three separate times in one call,
+  which is how much it is bothering him. **Tracked here so it is not lost, not because it is our
+  build.** Half of it was ours and is already closed; the other half belongs to another developer
+  who named the cause in the same call.: *"I'm not sure why the AI notes keep reverting back,
+  keep reverting back, keep reverting back"* and *"now with the UI, the report says one thing,
+  the UI says something else"*.
+
+  **Part of the second half is already fixed and he has not seen it yet.** T65b closed two cases
+  of the report disagreeing with itself: the Level Score Snapshot printed a pass against a
+  threshold that does not exist while the cards beside it printed a fail against the real floor,
+  and the placeholder belt made the whole document report against the wrong belt. Both shipped on
+  2026-07-27 in v191.
+
+  **The reverting is not ours and it is not unexplained.** *Corrected 2026-07-28 after reading
+  the transcript properly the second time.* In the same call another developer gave the cause and
+  claimed it: *"we declared like a universal AI recommendation or AI suggestions that we had, but
+  it got like two paths. So that's on me... we already know that fix."* The blank report pages
+  over the same weekend were attributed separately to a background data-migration tool failing
+  and an upstream model outage.
+
+  So this is not an unowned mystery. It is owned and the cause is stated.
+
+  **The date was in the transcript all along, and the date it is measured against was wrong.**
+  *Added 2026-07-28, corrected the same day once Shawn confirmed the recording is from 29 June and
+  not 28 July.* This entry said
+  what was missing was a date and any confirmation the fix had shipped. The date is there: later
+  in the same call, asked about the wider pipeline, the same developer said *"currently for like
+  today and tomorrow we are working on the AI fix because like we have to have like one AI
+  analysis for all of the side. So we are deploying on that."* The call was **2026-06-29**, so that
+  is **29 and 30 June**, a month before this was written down. A claim of deployment, not evidence
+  of one, which is exactly the distinction the client is complaining about, so it stays a claim.
+
+  *The operational note that followed from the wrong date is withdrawn.* It said another team was
+  deploying into the AI notes area on the same days as our live QA pass, so anything odd there
+  could be set aside. That was only true if the call had been 28 July. The claimed deploy window
+  was **29 and 30 June**, a month before the QA pass, so nothing about it overlaps and there is
+  nothing to set aside. The Sriman brief of 29 July carries the withdrawn version and needs the
+  same correction.
+
+  *What the real date changes, and it is not cosmetic.* The client raised this three times in one
+  call **a month ago**, and the fix was claimed for the very next day. Nobody has confirmed since
+  whether it shipped. So this is not a fresh complaint waiting on a fix that is about to land, it
+  is a month-old complaint with an unverified claim attached, which is the same shape as the thing
+  he is complaining about.
+
+  *Goal:* The client stops seeing notes revert, and knows which of his two complaints was ours
+  and which was not.
+  *Done when:* The two-paths fix is confirmed live with something showing it, the claimed 29 to
+  30 June window having passed a month ago, and the client is told plainly that the report-versus-interface
+  half was ours and went out on 27 July in v191. Nothing here needs building unless that fix does
+  not hold.
+
+- [ ] **T67** The access control must survive the database migration · est 0.5d to prepare · **Parked**
+  Logged 2026-07-28 from the recorded meeting of **2026-06-29**. A schema migration onto a new database was
+  described as *"at least two weeks from now"*, with the current database being backed up and a
+  new one built to a new schema, then the application pointed at it.
+
+  **PARKED 2026-07-28 by Shawn. The premise was never confirmed.**
+
+  This was logged as Critical off a single description in a recorded call, and then written up as
+  though the clock were running. Two things undo that. The call was **2026-06-29**, not 28 July, so
+  "at least two weeks from now" pointed at **13 July**, which is already past. And checked on
+  2026-07-28: **no new project exists**, one organisation and two known projects, so nothing has
+  started in the month since.
+
+  Nobody has confirmed that this migration is still planned, or that it is ours to prepare for.
+  It was an estimate given once, by another developer, in a call a month old. **An estimate that
+  has quietly lapsed is not a deadline, and treating it as one manufactured an urgency nobody
+  asked for.** Parked until somebody says it is real.
+
+  *Nothing is lost by parking it.* `supabase/verify/post_migration_check.sql` is written, merged
+  and verified at 74 of 74 PASS against production. If the migration does surface, the check is
+  ready that day rather than needing to be built. Parking the task does not park the protection.
+
+  *Three details from the transcript, added 2026-07-28, because they change who this goes to and
+  where it lands.* It stays on the **same Supabase account**: *"we just shift the new database to
+  our app and it's still on the same account, nothing else"*. Asked directly whether a new project
+  had been created for it, the answer was **"nope, not yet"**, so as of the call it had not
+  started. And it is **not** going into the PSOP project. That project is the client's own,
+  created for the SOP tool, and he raised it separately as an open question rather than as the
+  migration's destination. Anyone reading "a second project exists" as "the migration has a home"
+  is reading two different conversations as one.
+
+  **Why this outranks almost everything else open.** Access control on this platform is not in
+  the table definitions. It is in 61 row level security policies across 15 tables, 5 guard
+  triggers, and 13 helper functions those policies call. A migration that copies tables and data
+  perfectly can still arrive with every one of those missing, and **nothing will look broken**,
+  because losing a policy opens a table rather than closing it. The screens keep working. That is
+  precisely how the original defects went unnoticed for months.
+
+  What would silently come back: a staff member reading and editing all 49 placement decisions;
+  any signed-in account approving its own gate request; a user setting their own belt, stars,
+  gates, facility or role; 96 people's passwords readable in the clear; a candidate clearing
+  their own patient safety provision.
+
+  *Prepared 2026-07-28:* `supabase/verify/post_migration_check.sql`. It is read-only, creates
+  nothing and takes no locks. It returns PASS or FAIL for each of 50 checks covering RLS state,
+  the helper functions with their security-definer and search_path settings, the four guard
+  triggers, the absence of always-true policies on the nine protected tables, thirteen columns
+  the application depends on, four column types that were silently wrong before, and the
+  plaintext password purge. **Run against production on 2026-07-28: 50 of 50 PASS**, so it is a
+  working test rather than a wish list.
+
+  *Goal:* Whoever performs the migration has the check in hand before it runs, not after.
+  *Done when:* The script has been handed over and acknowledged, and it returns 50 PASS against
+  the new database before the application is pointed at it. Also verify by behaviour afterwards,
+  because a policy can exist and still be wrong: sign in as a staff member and confirm they see
+  only their own record and cannot approve their own gate request.
+
+- [ ] **T68** Every fix ships with proof that it is live · est 0.25d per item, ongoing · **High**
+  The client's standing instruction from the recorded meeting of **2026-06-29**, and he was blunt
+  about the cause: *"I want to make sure that you have actually tested them yourself... vs just
+  the LLM or the AI telling you what's been updated... many times you've shared things have been
+  updated... but the issue won't be live in the actual application, or one is live, it is broken
+  something else."* What he asked for specifically is *"a screen recording... showing that you've
+  tested to make sure that it's live vs the code telling you it's live"*.
+
+  The substance is already covered here: nothing is ticked on one pass, and every merge this week
+  was followed by fetching the production bundle and comparing the version. What is **not**
+  covered is the artefact. He wants to watch it work, not read that it works.
+
+  *Goal:* No item is reported as live without something he can watch.
+  *Done when:* A short screen recording accompanies each item reported complete, showing the
+  change working on the live site, and the EOD links them.
+
+- [ ] **T69** Show which AI model is currently serving · est 0.5d · Medium
+  Requested in the recorded meeting of **2026-06-29**. He asked for *"an arrow that says which model
+  is currently active and being used"*, visible to master admin only, not to every user, and
+  explicitly not full token accounting: *"we don't necessarily have to categorize all of the
+  tokens... but just say if I log in and Anthropic is down, I can see what model is active"*.
+  Context is a fallback discussion: reports came back blank over the weekend, attributed in part
+  to an upstream outage, and he wants to be able to see that state himself rather than ask.
+  *Goal:* A master admin can tell at a glance which model is answering right now.
+  *Done when:* The current model is shown somewhere a master admin already looks, it reflects a
+  fallback having taken over, and no other role sees it.
+  **Corrected 2026-07-28 after reading the transcript: this is not ours to build.** It was
+  logged here as our work off the meeting summary. In the recording it was given to the other
+  developer, bundled with an instruction to investigate the routing layer and report back what
+  is actually possible, and that developer had already said "I have to dig more into that".
+  Two details worth keeping either way, because they narrow the design if it ever does come to
+  us: he named the placement himself, *"in the dashboard or maybe in the command center"*, and
+  the other developer's own answer was *"we can show model, but just for the master admin and
+  not for all the users"*. Tracked, not built.
+
+- [ ] **T71** Nobody has a list of who can reach the three consoles · est 0.5d, then quarterly · **High**
+  Raised 2026-07-28. A teammate turned up holding a Vercel invite nobody sent on purpose. It was
+  removed the same day and nothing was reached, so the incident itself is closed. **The finding is
+  not the invite, it is that we only learned about it because somebody happened to notice.** There
+  is no list of who holds access to GitHub, Supabase or Vercel, so there was nothing to check it
+  against, and there still is not.
+
+  *Checked the same day, so this starts from measured ground rather than zero:*
+
+  | Where | State on 2026-07-28 |
+  |---|---|
+  | Supabase | One organisation, `SIPS`. Two projects, both ours: `mhijaqahbceuahfzezbh` the belt platform, `afwhyrkoxpbpherflzef` PSOP created 4 May. No third project, no unexpected surface. |
+  | GitHub, repo collaborators | Exactly two, `sipshealthcare` as admin and `nayandharshawn` with write. Nothing else. |
+  | Vercel | The stray invite found and removed. No member listing tool available from here, so this line rests on Shawn's check, not on a probe. |
+
+  *One gap worth naming, because a pending invite is invisible.* The GitHub check reads accepted
+  collaborators only. An org-level invite that has been sent and not accepted does not appear
+  anywhere in it. That has to be read off the organisation's own people page.
+
+  **Why this is worth a task rather than a note.** Three reasons, and the third is the one that
+  makes it urgent rather than tidy.
+  1. Console access is not application access. A Supabase project member holds the service role,
+     and the service role bypasses row level security completely. Nothing in
+     `supabase/verify/post_migration_check.sql` can see it, by design, because no SQL can.
+  2. T33 is the security tail with an external review behind it. Who holds access, reviewed on a
+     schedule, is close to the first thing any such review asks for and we cannot answer it today.
+  3. **T67 rebuilds the database.** A migration is exactly the moment access lists get recreated,
+     and a wrong entry made then is invisible afterwards and permanent in practice.
+
+  *Goal:* There is a written list of who holds access to each of the three consoles, it is checked
+  on a schedule rather than by accident, and the new database gets one before the application is
+  pointed at it.
+  *Done when:* The list exists for GitHub including pending invitations, Supabase and Vercel; every
+  entry has a named reason; anything unexplained is removed; and the check is repeated against the
+  new database as part of T67 rather than after it.
+
+- [ ] **T72** Managers and above cannot switch between their own portals · est 0.5d · Medium
+  Asked for by the client on 2026-07-29: *"Managers and above still need a development... so can we
+  create a toggle button at the top of their dashboard to go from staff portal to manager, dir, etc
+  portal"*.
+
+  **This is not T39 and should not be built like it.** T39 is one person looking at somebody else's
+  account, which needs an audit trail and a hard read-only guarantee. This is one person who holds
+  more than one role switching between their own views. Nothing is being impersonated, so none of
+  T39's machinery applies and none of its risk does either.
+
+  *The one thing to get right.* The switch decides which portal renders, and it must not decide what
+  the server will allow. Every role check stays where it is. A person who toggles into the manager
+  view sees exactly what their real grants already permit, and if they hold no manager grant the
+  toggle is not offered at all. Anything else recreates the client-side role flip that has been
+  removed everywhere else on the platform.
+
+  *Answered 2026-07-29 by Shawn:* the toggle is for **master admin and SIPS admin only**. Nobody
+  below that sees it, which keeps the surface small and means the first version cannot widen access
+  for anyone who is not already a SIPS-side account.
+
+  *Still open:* whether the choice persists across sign ins or resets to the primary portal each
+  time. Worth deciding before building rather than after, because persisting it means storing a
+  preference per user and resetting it means storing nothing.
+
+  *Goal:* A person holding more than one role reaches all of their own portals without signing out.
+  *Done when:* Somebody with two roles sees the toggle and moves between portals; somebody with one
+  role never sees it; and a toggled view is proven to grant nothing the account did not already have.
+
+- [x] **T73** A granted assessor whose base role is staff member has no assessor tab · est 0.5d · High
+  Reported by the client on 2026-07-30 at 1:38 AM: *"when role is change to grant assessor access no
+  assessment tab is visible in the update account"*, with *"Kirti Chaudhary was given assessor role
+  but no assessor tab is viewable"* and a screenshot of her staff portal sidebar.
+
+  **The grant was never the problem.** All three granted accounts carry the capability correctly in
+  `sbd_portal_users.capabilities`. What fails is which portal the account lands in. `ui-views.js`
+  `roleMap` maps on `ST.user.role` alone and never reads capabilities, so a granted assessor whose
+  base role is `staff_member` is routed to `s-portal`, and the assessor consoles only ever existed in
+  `a-portal`. Permission held, no door to walk through.
+
+  Measured blast radius on 2026-07-29. Three accounts hold an assessor grant. Avery Henderson is
+  `staff_admin`, routes to the admin portal, and has always worked, which is why nothing looked
+  broken until a staff member was granted it. Kirti Chaudhary and Amy Cooper are both `staff_member`
+  and both blank from the same cause. Their `educator_facilities` grants, four between them, were
+  dead for the same reason.
+
+  **Why the staff portal gets the consoles rather than routing these accounts to the admin portal.**
+  T72 already settled that the portal switcher is master admin and SIPS admin only. Routing a granted
+  staff member into the admin portal would contradict that decision and hand them a surface far wider
+  than the grant. So the two consoles mount inside the portal the person is already in.
+
+  Fixed 2026-07-29. `renderAObservations` and `renderAObservationReviews` turned out to be portal
+  neutral already, with no `ST.curFid`, no facility switcher and no admin role gate, and both already
+  gate writes through the capability-aware `_canWriteObs`. Their only coupling was a hardcoded
+  container id each. Replaced with a shared `ovsMount` container, the same approach the file already
+  uses for the DAVID mount, so the fifteen argument-less re-renders in that section needed no change.
+  `effIsAssessor()` at `ui-views.js:10190` was written for exactly this job and had zero callers since
+  it was added; it now gates the nav and is re-checked inside `renderSView` so a saved view in
+  `sessionStorage` cannot route a plain staff member to a console.
+
+  Frontend only. No schema change, no RLS change, no migration, so it needs the Vercel build to go
+  live and is not live at merge.
+
+  *Goal:* Being granted assessor access produces the assessor screens, whatever the base role is.
+  *Done when:* Kirti and Cooper each see Observations and Observation Reviews and can record and
+  confirm; Henderson is unchanged; a staff member without the grant sees no assessor nav and cannot
+  reach either view by restoring a saved one. Verified against the three live records: the gate
+  returns true for all three granted accounts and false for a plain staff member and a plain manager.
+
+- [ ] **T74** Grantable roles are system wide and need to be per facility · est 3d · High
+  Asked for by the client on 2026-07-30 at 1:33 AM: *"No longer system wide... just by facility like
+  this"*, then widened at 1:35 AM to *"this should be for all role management by facility"*, and
+  prioritised at 1:45 AM: *"We are expanding our team of assessors to handle new hires that we will
+  test... so updating these functions for the assessor should move toward the front of the Que"*.
+
+  **Scope settled by his voice notes of 03:37 the same night**, which named the roles and the flow
+  directly: *"for the assessor, for the facilitator, all of those, we want to be able to give access
+  or grant access by facility... We grant that role and then we [select] the facilities that they are
+  able to apply that role towards."* His worked example: *"for Kirti, we're making her an assessor and
+  then we want to be able to select like Mount Sinai."*
+
+  So the flow he wants is **grant the role first, then choose the facilities it applies to.** That is
+  the order the UI has to follow, not a facility filter bolted onto an existing switch.
+
+  Measured against the code on 2026-07-29, the three roles he named are in three different states:
+
+  | He said | Actual state | Work needed |
+  |---|---|---|
+  | assessor | bare boolean in `capabilities` | full facility scoping |
+  | "facilitator", ie facility educator | `educator_facilities` array, already per facility | none, the pattern to copy |
+  | preceptor | tri-state granted/revoked/default **per person** | full facility scoping |
+
+  Facility educator already does exactly what he is asking for, which means the shape is proven in the
+  codebase and there is a working reference to follow rather than a design to invent.
+
+  **This is not a UI change.** It moves the gate from "is this person an assessor" to "is this person
+  an assessor *here*", touching `sbd_is_assessor` and every policy calling it, plus `_canWriteObs` and
+  `effIsAssessor` on the client. Server side goes live the moment it lands with no build in between,
+  so the migration and the frontend have to agree before either ships. Depends on T75.
+
+  **Blast radius, measured against the live database 2026-07-29.** `sbd_is_assessor()` is zero-arg,
+  `STABLE SECURITY DEFINER`, and reads `role = 'assessor' OR capabilities->>'assessor'`. It is called
+  by **14 policies across 6 tables**:
+
+  | Table | Policies | Facility column | Scoping route |
+  |---|---|---|---|
+  | `observations` | 2 | `fid` | direct |
+  | `observation_remediations` | 3 | `fid` | direct |
+  | `ps_completion_requests` | 2 | `facility_id` | direct |
+  | `sbd_assessment_queue` | 2 | `facility_id` | direct |
+  | `observation_overrides` | 2 | none, `staff_id` only | **needs a join** |
+  | `observation_audits` | 3 | none, `observation_id` only | **needs a join** |
+
+  Two of the six carry no facility of their own, so those five policies can only scope by joining out
+  to reach one, and a join inside a policy runs per row. Those are the expensive ones and the reason
+  this is 3d and not 1d.
+
+  *Approach that avoids a flag day:* add an **overload** `sbd_is_assessor(p_fid)` rather than change
+  the meaning of the zero-arg function underneath all 14 policies at once. The zero-arg version keeps
+  its job of answering "is this person an assessor at all", which is what nav visibility needs and what
+  `effIsAssessor` mirrors on the client. Policies then migrate table by table, each one revertible on
+  its own, instead of one migration that moves every gate simultaneously.
+
+  *Still open, asked 2026-07-30 and not yet answered:* whether Observer and the practice-gate waiver
+  follow the same rule. He did not name either in the voice notes, so they are out of scope until he
+  says otherwise. He replied at 6:43 AM only to the T73 test request, "Will do... I will let you
+  know", and did not address this question, so it stays open.
+
+  *Step 1 written 2026-07-30, not yet applied:*
+  `supabase/migrations/20260730060000_t74_assessor_facility_scope_overload.sql` adds the
+  `sbd_is_assessor(p_fid uuid)` overload and touches nothing else. No policy, column or row
+  changes, so applying it alters no behaviour; reach moves only when a later migration rewrites a
+  policy to pass a facility. An absent or empty `capabilities.assessor_facilities` means system
+  wide, which is what all three current holders have, so the first policy to adopt the overload
+  changes the answer for nobody.
+
+  Correction to the table above: facility educator is not merely a UI convention, it is enforced
+  server side. `sbd_leads_facility_of(uuid)` reads `capabilities->'educator_facilities'` and is
+  reached by 16 policies across 8 tables, including `preceptor_access` and
+  `ps_completion_requests`. Measured 2026-07-30. That makes it a genuine reference implementation
+  for this task rather than only a shape to copy, and it is where the argument type and the
+  SECURITY DEFINER posture of the new overload come from.
+
+  The predicate was verified read-only against production over seven cases: a holder with no list
+  is allowed at any facility, a scoped holder is allowed only inside the list, an empty list reads
+  as system wide, a null facility denies rather than leaks, and a non-holder is denied. The DDL
+  itself has not been executed anywhere, since applying it to production needs an explicit go.
+
+  *Goal:* A granted role applies only at the facilities chosen for it, and the server enforces it.
+  *Done when:* A per-facility assessor can record and confirm at a granted facility, is refused at a
+  non-granted one by RLS and not only by the UI, preceptor access is scoped the same way, and no
+  existing system-wide holder silently loses or gains reach during the migration.
+
+- [ ] **T75** The facility picker used for granting access lists entries nobody can choose safely · est 0.5d · Medium
+  Found on 2026-07-29 while verifying T73, not reported by the client.
+
+  `ui-views.js` builds the Role Management grant dropdown from `(DB.facilities||[])` with no filter.
+  That list is eleven rows and contains two pairs sharing a name, three inactive facilities, three
+  test facilities and one `Free Agent` holding entry. The admin facility switcher in `enterPortal`
+  filters on `f.active!==false`. This dropdown does not.
+
+  **Correction, 2026-07-29.** This entry first recorded Kirti Chaudhary's `educator_facilities` entry
+  pointing at the `Free Agent` id as a misclick off the unfiltered list. That reading was wrong, and it
+  went out to the client before it was checked. His voice note of 03:39 says parking SIPS hires in free
+  agency is deliberate: *"they're coming in through our hiring process and we're putting them in a free
+  agency portal to be able to assess them."* So the grant was him working around a missing concept, not
+  a slip. The missing concept is now T76. The picker problem below stands on its own.
+
+  This blocks T74 rather than merely preceding it. Once roles are scoped per facility, this picker is
+  how real permissions get assigned, and today two entries in it are indistinguishable by name. The
+  duplicate names are the part that cannot be worked around by being careful.
+
+  *Waiting on the client* to say which entries are live sites and which are leftovers, asked on
+  2026-07-30.
+
+  *Goal:* Granting access at a facility means choosing from real, active, distinguishable sites.
+  *Done when:* The picker excludes inactive and non-site entries, no two selectable entries share a
+  display name, and Kirti's `Free Agent` educator grant is either re-pointed at a real site or
+  superseded by T76.
+
+- [ ] **T76** SIPS staff have no home facility, so `Free Agent` is being used as one · est 1.5d · Medium
+  Raised by the client in a voice note on 2026-07-30 at 03:39, explicitly as a request for our
+  recommendation rather than an instruction: *"I guess you got to think through it."*
+
+  His words: *"they're coming in through our hiring process and we're putting them in a free agency
+  portal to be able to assess them. What I think that we need is a home facility, which will be Sips,
+  but we need it so that we can have a place that when we bring on Sips team members, that they are
+  able to function some sort of way."* He names Kirti and Amy as the two currently in that position.
+
+  **The collision.** `Free Agent` is a real facility row and already carries a specific meaning in the
+  platform: `releaseToFreeAgent()` moves somebody there, the Free Agent Registry renders a
+  *"Free Agent since"* date, and the whole surface reads as somebody who left a facility. SIPS's own
+  employees being parked in the same row means one facility id carries two unrelated meanings, and
+  every report that groups by facility silently merges them. Kirti's `facility_id` is the `Free Agent`
+  id today, which is why her account looked wrong while being exactly what he intended.
+
+  *Recommendation given to the client 2026-07-30, not yet accepted:* a real SIPS home facility, kept
+  separate from `Free Agent`. SIPS-employed staff live there permanently, free agency goes back to
+  meaning the assessment holding area only, and the two stop contaminating each other in reporting.
+  Cheaper than a new role type, and it reuses the facility scoping T74 is already building.
+
+  *Open:* whether he also wants a distinct role for SIPS staff, which he floated as *"we will be
+  creating like a new role"*. Worth resisting until the home facility alone is shown to be
+  insufficient, because a new role multiplies every policy in T74.
+
+  *Goal:* SIPS's own staff have a home that is not the free agency holding area.
+  *Done when:* A SIPS home facility exists, Kirti and Amy sit in it rather than `Free Agent`, the Free
+  Agent Registry no longer lists them, and facility-grouped reporting separates the two.
+
+- [ ] **T77** A granted assessor has no Assessment Queue screen, and it cannot be switched on yet · est 0.5d after T74 · High
+  Reported by the client on 2026-07-30 at 6:54 AM while confirming T73, from Kirti's own account:
+  *"There's observation and observation review but no assessment queue."* He is right, and it is the
+  same shape of bug as T73: the permission exists and the door does not.
+
+  `Assessment Queue` is a nav item in the admin portal (`a-assessments`, `index.html:397`) and in the
+  hospital portal (`h-assessments:294`, hidden). There is no `s-assessments` in the staff portal at
+  all. Server side, `sbd_assessment_queue` grants a granted assessor both read and write:
+  `aq_select` is `... OR sbd_is_assessor() OR ...` and `aq_update` is
+  `sbd_get_user_role() = ANY(admin roles) OR sbd_is_assessor()`. So the grant reaches the data and
+  T73 moved only the two observation consoles.
+
+  **Why the one-line fix is refused.** `renderAAssessments()` scopes facilities the admin way:
+
+      const isMaster = ST.user?.role === 'master_admin';
+      const assignedFids = (!isMaster && ST.user?.assignedFids?.length) ? ST.user.assignedFids : null;
+
+  and every filter below it reads `(!assignedFids || assignedFids.includes(...))`. Measured
+  2026-07-30: Kirti Chaudhary and Amy Cooper are both `staff_member` with
+  `assigned_facility_ids = []`, so `assignedFids` resolves to `null` and `null` means **no filter**.
+  The queue holds 57 rows across 8 distinct facilities. Adding the nav item would therefore show
+  either of them the whole organisation's queue plus an org-wide `Record Assessment` button, and
+  hiding it in the UI would fix nothing, because `aq_select` carries no facility restriction for an
+  assessor and the server would return all 57 rows anyway.
+
+  **Depends on T74**, and is the concrete reason T74 goes first. Route chosen by Shawn on
+  2026-07-30: wait for the per-facility gate rather than ship an interim own-facility rule, so this
+  screen arrives already scoped instead of being widened and then narrowed.
+
+  Also found while measuring, unrelated to the client's report: `sbd_portal_users` holds **two**
+  `Avery Henderson` rows, one with a `facility_id` and no `assigned_facility_ids`, the other the
+  reverse. Only one carries the assessor grant. Logged here so it is not rediscovered; it is a data
+  hygiene item, not part of this task.
+
+  *Built 2026-07-30, not yet applied or deployed.* Both halves are written together, because the
+  screen must not land before the policy that limits it.
+
+  - `20260730070000_t77_assessment_queue_facility_scope.sql` rewrites `aq_select` and `aq_update`
+    to call `sbd_is_assessor(facility_id)`. Every other branch is copied verbatim, so the four
+    admin roles, the hospital own-facility branch and the requester's own row do not move.
+  - `capabilities.assessor_facilities`, granted in Role Management next to the Assessor toggle,
+    mirroring `educator_facilities`. Revoking Assessor drops the list with it, and an empty list
+    is never persisted, since both the client helper and the SQL read empty as system wide.
+  - `effAssessorFacilities`, `effAssessorScoped` and `effIsAssessorAt` mirror the SQL client side.
+    `effIsAssessor` is deliberately unchanged: it still answers "an assessor at all" and drives
+    nav visibility, so a scoped assessor still sees the section.
+  - `s-assessments` nav item and container in the staff portal, revealed by the same
+    `effIsAssessor` gate as #73 and re-checked inside `renderSView`.
+  - `renderAAssessments` now resolves its container through `asmMount`, and scopes by
+    `assessor_facilities` for a capability assessor. This was the leak: the function filters on
+    `assignedFids`, an admin-role field, and both holders carry `[]`, so the filter collapsed to
+    no filter. Admin-role scoping is untouched.
+  - The eight `ST.aView === 'a-assessments'` re-render guards became `asmRerender()`, which
+    covers both mounts. Without it the queue went stale in the staff portal after every action.
+  - `openRecordModal` and `submitAssessment` respect the same scope, so recording cannot reach a
+    facility the policy would refuse, including via a console call.
+  - `_rmFacilityOptions` now feeds both capability pickers: active rows only, and a repeated
+    display name is disambiguated by location. Partial T75 mitigation, see that entry.
+
+  *Verified:* seven client-side gate cases against the two live capability shapes, including that
+  a holder with no list is still allowed everywhere and a null facility denies. `node --check`
+  clean. The DDL has not been executed anywhere.
+
+  *Remaining, and it is a decision not code:* nobody has an `assessor_facilities` list yet, so on
+  the day this lands every current holder still reaches everywhere, by design. Kirti and Amy get
+  scoped only once someone picks their facilities in Role Management, which is master-admin only.
+  The client's own example was Kirti at Mount Sinai. Also note Kirti's `facility_id` is the
+  `Free Agent` row today, per T76, so "her own facility" is not yet a meaningful scope.
+
+  *Goal:* A granted assessor can work the assessment queue, and only where the grant applies.
+  *Done when:* The staff portal shows Assessment Queue to a granted assessor and to nobody else, the
+  rows and the facility filter are limited to the assessor's granted facilities, `aq_select` and
+  `aq_update` enforce that limit server side rather than the UI alone, and a plain staff member sees
+  no such screen.
+
+### Found by reading the full client history, 2026-07-31
+
+All ten below come from one pass over the complete client conversation from 22 May to 31 July,
+including every attachment rather than the message text alone. **T78 to T83 are client requests
+that were made, acknowledged in the conversation, and never reached this ledger.** That is the
+finding that matters: six real asks were lost, and most of them were lost because they were said
+one line away from something louder. T84 to T87 were found by us in the same pass.
+
+A companion reference was written at the same time, `docs/DOMAIN_GLOSSARY.md`. It fixes the
+vocabulary these tasks are written in, including the SBD and SPD distinction that T84 turns on.
+
+- [ ] **T78** SIPS admin can attach files and images to a record · est 1d · Medium
+  Asked 2026-07-29 at 11:42 PM: *"For SIPS admin.. can we add a button so we can add files and
+  images… only for sipds admin…"*
+
+  **Corrected 2026-07-31 after re-reading the exchange rather than the summary of it. This task is
+  far more specified than it first looked, because the client answered most of it himself.**
+
+  - **He named the storage.** At 11:43 PM, unprompted: *"Can we use pinecone or supabase?"*
+  - **He designed the retrieval.** At 11:45 PM, after being told stored files would have to be
+    downloaded to open: *"It doesn't need to produce documents to download… we can use the same
+    print feature and we can download from there… is that a possible workflow?"*
+  - **He restated the whole workflow for the record** at 12:18 AM: *"on our end.. it will be us
+    uploading docs and having the print option so we can download.. for clarity"*
+
+  So who uploads, what they upload, and how it comes back are all already decided by him. The only
+  thing left open was ours: *"Let me add this to checklist and see our upload size limit"* and
+  *"And storage"*. That is the entire outstanding commitment.
+
+  **One correction he needs, and it is a real one.** Of the two he named, only Supabase can do
+  this. Pinecone is a vector store; it holds embeddings so David can search meaning, and it cannot
+  hold a PDF or an image as a file. The honest answer is both, in different roles: the file itself
+  in Supabase Storage, and its extracted text indexed in Pinecone so David can answer from the
+  document. That should be said plainly rather than silently building the Supabase half.
+
+  **This is the store as well, not a button on top of one.** Measured 2026-07-31:
+  `rg "storage\.from|\.upload\(|createSignedUrl|getPublicUrl"` over `src/js` returns nothing, and
+  every "storage" reference in `ARCHITECTURE.md` is `localStorage`. The platform has no file
+  storage of any kind today.
+
+  **Narrowed 2026-07-31.** This was written as a pair with T83. The client has since decided he
+  hosts curriculum video himself and sends links, so video is out of scope for this store. What
+  still lands here is documents and images, and possibly the audio, slide decks and infographics
+  if his own library does not cover them. That question is open under T83.
+  *Goal:* A SIPS admin can attach a file or image to the record it belongs to, and get it back out.
+  *Done when:* Upload is present for SIPS admin and absent for every other role, the file is stored
+  outside the record row, retrieval works, and the maximum accepted size is stated in the UI rather
+  than discovered by a failed upload.
+
+- [ ] **T79** A SIPS admin role, and splitting approval from PIN generation · est 1.5d · High
+  Asked 2026-07-30 across two messages, five minutes apart, after being told PIN generation is
+  master admin only. At 7:36 PM: *"We can add pin gen to role management so we can allow approved
+  admin to gen pin… I guess we should create a sips admin role that is a blank role until we
+  update it in role management"*. At 7:41 PM: *"Can we break apart permission to approve
+  assements… Essentially… her (and others like her) we want them to be sips admin and be able to
+  proctor the assessments… so generation (we still need to clean that page up so deactivated
+  accounts aren't still clogging that page up for pin gen)"*.
+  The pattern is the same one behind T74. He is asking for permissions to be composable in Role
+  Management rather than bundled into a base role, and for a new role to start empty rather than
+  inheriting anything.
+  The fourth part of that message, cleaning deactivated accounts off the PIN generation list, has
+  already shipped separately.
+  *Goal:* Approving an assessment and generating a PIN are two grants, not one, and a SIPS admin
+  role exists that starts with nothing until Role Management gives it something.
+  *Done when:* The two permissions can be held independently, a new SIPS admin account can reach
+  nothing until granted, and the grants are enforced server side rather than by hiding controls.
+
+- [ ] **T80** Facility admin cannot reach the facility's observer portal · est 0.5d · High
+  Asked 2026-07-30 at 8:47 PM. A facility admin should be able to see the observer portal for their
+  own facility. This sat one line above the message that carried the word PRIORITY, the blank staff
+  profile, so the priority item took the attention and this was never captured.
+  Same shape as T73 and T77: the role is meant to reach it and the door is not there.
+  *Goal:* A facility admin reaches the observer portal for their own facility and no other.
+  *Done when:* The portal is reachable from the facility admin navigation, scoped to that facility
+  server side, and a facility admin at another site cannot read it.
+
+- [ ] **T81** Preceptor content must match the formatting of the source document · est 1d · Medium
+  Asked 2026-07-23 at 1:07 AM: *"It should look as close to the doc as possible as far as
+  formatting"*, and the reason given was *"Legibility in learning"*. Answered in the conversation
+  with "Adding in our tasks". It was not added.
+  This is a learning-outcome request, not a cosmetic one. The client is saying that reformatted
+  content teaches worse than the document it came from.
+
+  **Not blocked. The source documents have been in hand since 2026-07-28** and were logged as
+  missing until 2026-08-04 purely because nobody opened the archive: *Build spec + full
+  curriculum: SBD Preceptor Certification*, 21 files, 334,892 characters of text and 322 tables.
+  Fifteen learner workbooks across L1 to L3, five sets of certification gate materials split into
+  candidate and assessor copies, a facilitator programme and a developer synopsis.
+
+  That table count is the whole task in one number. The documents are mostly tables, and tables
+  are exactly what a reformat into flat text destroys, which is what the client was complaining
+  about. Unlike T88, nothing here has to be authored; the text exists and only has to survive the
+  trip onto the screen.
+
+  *Goal:* Preceptor material on screen is as close to its source document as the medium allows.
+  *Done when:* Headings, emphasis, lists and tables survive from the source into the rendered view,
+  checked side by side against the document the client supplied.
+
+- [ ] **T82** DAVID OG slash commands · est 3d, after the DAVID separation · Medium
+  Received 2026-07-31 at 2:26 AM as a 13 page specification. Seventeen commands in three tiers:
+  tier 1 `/profile /atrisk /ready /compare /queue /retrain`, tier 2
+  `/benchmark /oip /dangerous /history /facility /network`, tier 3
+  `/observers /freeagents /curriculum /promote /audit`. The document includes a per-command
+  required-certification field and a four phase rollout.
+  Belongs behind `docs/DAVID_OG_EXTRACTION_PLAN.md`, not in front of it. Building seventeen
+  commands into the current DAVID would make the extraction harder, not easier.
+  *Note for whoever picks this up:* the worked examples in that document use real named staff with
+  their belts, scores and at-risk notes. It is not a document to paste into anything.
+  *Goal:* The command set is specified against the extracted DAVID service, with the permission
+  model settled before any command is built.
+  *Done when:* Each command has a stated required role, the tiers are mapped onto the extraction
+  plan's phases, and tier 1 works end to end.
+
+- [ ] **T83** Curriculum media: carry the client's links and render them, correctly gated · est 1d · Medium
+  Raised by him 2026-07-31 at 2:35 AM. He is producing video, audio, slide decks and infographics
+  for every study curriculum, and asked where the content should go and what formats we need. The
+  reply at the time was that we would let him know.
+
+  **He then answered the hosting half himself the same day**, so this stopped being a question we
+  owed him and became a small build. Nobody is blocked on anybody now. What keeps it moving is
+  that he is producing the material already, so the place to put it should exist before the first
+  batch arrives.
+
+  **DECIDED 2026-07-31 by the client, in a voice note, and it makes this task much smaller.**
+  He hosts the video himself and sends us links:
+
+  > *"whatever I decide to host the videos on, I'll just go ahead and upload them, upload the
+  > videos there, and add them, all of them, organized, and then give you all the link and make
+  > sure that it is organized and titled properly for you."*
+
+  He is choosing between a video platform and a media library on a system they already run, and
+  said he would look into it. Either way the output is **links and embed codes**.
+
+  So we are not building video storage, and the transfer cost is not ours. What we build is the
+  place a curriculum item holds a link or an embed and renders it. Formats for video stop
+  mattering to us as well, since the host handles playback.
+
+  **This decouples the task from T78.** The pairing still holds for documents and images, which
+  have no home yet, but video no longer needs the store. Do not scope them as one piece of work.
+
+  **Two things his voice note did not settle. Both are ours to raise, and both are cheaper to
+  answer before he picks a platform than after.**
+  1. **Whether playback needs its own sign in.** If it does, staff hit two logins for one lesson,
+     which is exactly the friction that suppresses completion. If it does not, playback is smooth
+     but anyone holding the link can watch, inside the organisation or outside. This is a
+     content-sensitivity call, not a technical one, and it changes how we gate the embed.
+  2. **Audio, slide decks and infographics.** He spoke only about video. Those still have no home.
+     If his chosen library gives links for them too, we embed them the same way. If not, they fall
+     back to platform storage, which is T78's foundation.
+
+  *Goal:* Curriculum media reaches staff, correctly gated, without us hosting video.
+  *Done when:* A curriculum item can carry a link or embed and render it, the gating matches his
+  answer on sign in, the answer on audio, slides and infographics is recorded here as a dated
+  decision, and one real lesson plays end to end for a staff account.
+
+- [ ] **T84** One heading says SBD where it means SPD · est 0.1d · Low
+  `ui-views.js:6087` renders the heading `SBD BACKGROUND` on the card a staff member sees on their
+  own profile. The line directly beneath it already prints "yr(s) in SPD", so the heading disagrees
+  with its own body. The modal title at `6055` and the admin button at `10483` both already read
+  `SPD Background`, so this one heading is the last survivor of a defect that has already been
+  fixed twice. See `docs/DOMAIN_GLOSSARY.md` section 1.
+  *Goal:* No shipped string says SBD where it means SPD.
+  *Done when:* The heading is corrected, `rg 'SBD ' src/js index.html` is reviewed for others, and
+  `?v=` is bumped.
+
+- [ ] **T84a** The em dash sweep is much larger than it looked · est 0.5d · Low
+  Measured 2026-07-31 with ripgrep, because `grep -P` silently fails on this codepoint in this
+  environment and reported zero:
+  **377 literal em dash characters across 16 files** in `src/js` and `index.html`, and separately
+  **26 `&mdash;` HTML entities across 5 files**. The generated belt assessment report carries
+  fourteen, and that document is kept in a personnel file, which is where it matters most.
+  The two halves are not the same problem and must not be fixed the same way.
+  - The **377 literals** are the sweep. Only user-visible strings matter; a dash inside a comment
+    or a CSS value does not.
+  - The **26 entities** are not currently broken. Every one of them sits inside an `innerHTML`
+    string, where the browser decodes it correctly. They are a latent hazard: the moment such a
+    string is moved to `textContent`, the raw `&mdash;` prints on screen. That is exactly how the
+    `SBD Background &mdash; David Williams` title reached the client on 2026-07-28.
+  *Goal:* User-visible copy carries no em dash, and no entity is left where a `textContent` path
+  can print it raw.
+  *Done when:* The literal count in user-visible strings is zero, each of the 26 entities is either
+  replaced or confirmed to be on an `innerHTML`-only path, the report generator is included, and
+  `?v=` is bumped.
+  *Method note:* use `rg`, not `grep -P`. The `grep -P` form errors with "character code point value
+  in \x{} or \o{} is too large" and returns nothing, which reads as a clean result.
+
+- [ ] **T85** Patient Safety Provision: prove the audit trail, and move the clear into Role Management · est 0.5d · Medium
+  The provision itself was built on 2026-07-28 and matches what the client asked for. Two parts of
+  his instruction have not been verified in code.
+  He said the clear should be *"on the role management platform as a role, that can be toggled on
+  and off"*, and that *"the record of who cleared it, when they cleared it and all that will be on
+  there"*. What is visible in the interface confirms the provision, the hold on advancement and the
+  clear action. It does not confirm either of those two.
+  *Goal:* Clearing a provision is a Role Management grant rather than a hardcoded role check, and
+  clearing writes an attributable, readable record.
+  *Done when:* The grant appears in Role Management and is enforced server side, and a cleared
+  provision displays who cleared it and when, read back from storage rather than from the session.
+
+- [ ] **T86** One placement review candidate shows three different submitted times · est 0.2d · Low
+  Across three client screenshots of the same candidate on 19, 21 and 21 July, the same placement
+  review is labelled submitted at three different times on 18 July: mid-morning, 11:31 AM and
+  10:31 PM. Either that candidate has three separate submissions, or the submitted time is rendered
+  wrongly.
+  It is small, but it sits directly on an open client question: whether a request raised after an
+  approval is a duplicate or a genuine second attempt. That question cannot be answered while the
+  timestamps are not trusted.
+  *Goal:* The submitted time shown on a placement review is the submitted time stored.
+  *Done when:* The rows for that candidate are read from the database, the count is established as
+  one or three, and either the duplicates are explained or the rendering is fixed.
+
+- [ ] **T87** A live API key was shared outside secret storage and needs rotating · est 0.2d · High
+  A third-party API key used by the platform was pasted into a working conversation in plain text
+  rather than being held only in environment configuration. It is still valid.
+  Nothing about the key is recorded in this file or anywhere else in the repository, deliberately.
+  *Goal:* The exposed key no longer works, and its replacement exists only in environment
+  configuration.
+  *Done when:* The key is rotated at the provider, the new value is set in the environment for every
+  deployment that needs it, the dependent feature is confirmed still working, and the old key is
+  confirmed rejected.
+
+- [x] **T88** Foundations content carries the document's structure, not just its words · est 4d · Medium
+  **Done 2026-08-04.** The source documents arrived that evening, the eleven attachments of
+  *Fwd: Foundations Training*, one Word file per module with Module 2 sent twice and both copies
+  byte-identical. All ten were converted and are in `foundations.js?v=17` with
+  `foundations.css?v=5`.
+
+  What is on screen now, per module, taken from the documents rather than summarised:
+
+  | | before | after |
+  |---|---|---|
+  | sections | 70 | **77** |
+  | content | 181 characters per section, average | 219,000 characters total |
+  | tables | 1 | 124 |
+  | callouts | 2 | 86 |
+  | lists | a handful | 209 |
+
+  **Seven sections existed in the curriculum and had never been in the app at all**: 2.9 Common
+  Decontamination Errors, 3.8 Lubrication & Instrument Care, 4.7 Weight Limits & Sterilization
+  Considerations, 4.8 Quality Verification Checkpoints, 5.8 Common Packaging Errors, 6.8
+  Sterilization Failures & Troubleshooting, and 8.8 Other Specialty Items. Two of those are
+  failure-and-error sections, which is the material a technician most needs and the least safe
+  thing to have been missing.
+
+  Section titles now read as the documents write them. The app had abbreviated every one of them,
+  *"1.1 The Mission"* against the document's *"1.1 The Mission: Why Sterile Processing Exists"*.
+
+  **Conversion, and why it is a script rather than hand-authoring.** Each `.docx` is walked in
+  document order and every construct is mapped once: `Heading1` numbered `N.N` opens a section,
+  `Heading2` and `Heading3` become sub-headings, list paragraphs become lists, multi-column tables
+  become tables, and single-cell tables become callouts coloured by the glyph the author put in
+  front of them, a warning triangle red, a lightbulb or target green, a heart or a book or a tick
+  blue. Nothing is summarised and nothing is invented. Checked by taking every unique word in each
+  document and every unique word in the generated HTML: **125 words across all ten modules appear
+  in a document and not on screen, and every one of them is a cover-page or module-title word**,
+  or belongs to the three module-level blocks below.
+
+  Three blocks per module are deliberately **not** carried over: *Knowledge Check*, *Skills
+  Validation* and *Module Summary*. They are module-level, not section-level, and Knowledge Check
+  in particular duplicates the 25-question gate the app already runs, with the answers printed
+  next to the questions. Skills Validation is a sign-off sheet with initials and date columns,
+  which is a records feature and not reading material. Raised as T90 rather than guessed at.
+
+  **The em dashes in the content are the curriculum's own.** 152 of the documents' 252 survive
+  into the sections that were carried over. Normalising them would be editing the client's study
+  material to suit a writing convention that applies to prose we author, so they stay.
+
+  Verified by rendering the real module data through the real `fndFmtBody` and the real stylesheet
+  at 900px and at iPhone width: tables scroll inside their own container and the page itself has
+  **0px of horizontal overflow** at 390px, which matters because the client reads this on a phone.
+
+  ---
+
+  **How it was scoped, kept because the 4d estimate was built on it and the estimate held.**
+  Asked by the client on 2026-08-03 at 8:30 PM, with a recording of the source curriculum
+  document held beside the app: *"Can we update the UI in foundations."* Clarified at 9:21 PM when
+  asked which of two readings he meant: *"The UI should resemble the doc… colors. Sections,
+  separated text, adjusted format."*
+
+  **The presentation half shipped the same night** and is live on `foundations.js?v=15`. Sections
+  now carry a numbered header, the text is split into separated lines, label-and-list content
+  renders as labelled blocks with the items as chips, and the palette follows the document.
+  `fndFmtBody()` reshapes the strings already held; it invents nothing, and all 70 sections were
+  checked to confirm not one word is lost.
+
+  **This task is the half that did not ship, and it is the larger half.** The document has
+  structure the content does not. Section 2.1 alone, read off the client's recording, contains:
+
+  * a **Required PPE table**, three columns wide (PPE ITEM / PURPOSE / KEY POINTS) and six rows
+  * a **Donning Sequence** of six numbered steps, each a titled block with its own body
+  * a **Doffing Sequence** of six numbered steps, each carrying a bullet list inside it
+  * inline procedure markers between steps, *"PERFORM HAND HYGIENE"* and *"PERFORM HAND HYGIENE
+    AGAIN"*
+  * two callout boxes, a tip (*Gloves Over Gown Cuffs*) and a warning (*The Golden Rule of
+    Doffing*)
+
+  Against that, the app holds one sentence for 2.1: *"Required PPE: fluid-resistant gown, face
+  shield or goggles with mask, heavy-duty gloves, shoe covers, hair cover. Donning maximizes
+  protection. Doffing prevents self-contamination with hand hygiene between steps."*
+
+  **No layout change can produce a six-row table from a sentence that has no table in it.** The
+  content has to carry the structure. That is why this is 4d and not an afternoon.
+
+  **The rendering side is already capable, so none of that cost is code.** `sectionContent[i]` is
+  concatenated into an `innerHTML` string at `foundations.js`, so HTML in a content string renders
+  today with no change, and `cs-table` / `cs-para` styling already exists in `src/css/index.css`
+  and is used by the Yellow Belt core study content. The work is authoring, not plumbing.
+
+  **Section 2.1 shipped on 2026-08-03** and is live on `foundations.js?v=16` with
+  `foundations.css?v=4`: the six-row table, six donning steps, six doffing steps with their bullet
+  lists, both hand-hygiene markers and both callouts. It was built from frames pulled from the
+  client's own recording, so it is a worked example of the target rather than a guess at it.
+
+  **Blocked on the source documents for the other 69.** Measured 2026-08-04 across the file:
+  10 modules, 70 sections, 1 section carrying document-shaped content, 69 still holding a plain
+  summary averaging 181 characters (shortest 107, longest 299). Two sentences cannot be laid out
+  into a curriculum section; the words are not there to lay out.
+
+  **Where the documents are not, so nobody searches these again.** Checked 2026-08-04:
+
+  * The WhatsApp export: 71 files. Non-image attachments are the SOP generator page, the DAVID
+    SOP app spec, three Belt Assessment Report PDFs and the DAVID slash-commands PDF. Its links
+    resolve to 29 unique Google file ids, 27 of them our own daily reports; the two the client
+    sent are a 2.7 KB David update note and a 154 KB `SBD Codes js` dump. No curriculum.
+  * Drive: a search by the client's address returns nothing owned, `sharedWithMe` returns 40
+    unrelated files, and a full-text search for `Bowie-Dick`, `Chain of Infection` and
+    `Foundations of Sterile Processing` returns 35 files, all other projects.
+  * Supabase: `david_wiki_pages` and `sources` hold 0 rows.
+  * This repo: no `.docx` or `.pdf` curriculum. `ui-views.js` holds a different curriculum, the
+    belt guides and the Position School tracks, and no Foundations module body.
+  * Pinecone: whatever is in `master-docs` was put there **from this repo**. Both
+    `scripts/seed-david-kb.mjs` and `scripts/ingest-curriculum-to-pinecone.mjs` read
+    `src/js/ui-views.js` and nothing else; a dry run builds 203 documents, 12 question banks,
+    59 placement items, 125 belt guides and 7 Position School tracks. Foundations was never
+    ingested, so the vector store cannot return what it was never given. It is also unreachable
+    from this environment: both `api.pinecone.io` and the index host return a `403` on the
+    egress tunnel.
+
+  So the documents exist only wherever the curriculum author keeps them. Requested from the
+  client on 2026-08-03 and still outstanding.
+
+  Related to T81, which is the same complaint in the preceptor module. Same cause, different
+  content set, so they are tracked separately rather than merged.
+
+  *Goal:* A staff member reading a Foundations section sees what the curriculum author wrote,
+  laid out the way they wrote it.
+  *Done when:* 2.1 renders with its table, its numbered donning and doffing steps, its procedure
+  markers and its callouts; the pattern is applied across the remaining sections as their source
+  documents arrive; and the client confirms a side-by-side against the document.
+
+- [ ] **T89** David's knowledge base is seeded into an index David never reads · est 0.5d · High
+  **Fixed in the repository 2026-08-11, `work/t89-pinecone-index-host` (`bb54168`). Not live yet.**
+  The host is no longer written down anywhere: `david-chat` and both seeding scripts read a
+  `PINECONE_INDEX_HOST` secret, deliberately with no hard-coded fallback, since a silent default is
+  what hid this. `search_wiki_graph` now checks `r.ok`, logs the status and body, and hands the
+  model an error instead of a 404 index-not-found body dressed as search results.
+  `seed-david-kb.mjs` defaults `EMBED_FIELD` to `text`, the field the console reports. Both scripts
+  still dry-run by default and still dry-run clean with no secret set. `grep pinecone.io` over
+  every `.ts`, `.js` and `.mjs` in the repository now returns nothing.
+
+  **What is left is all outside the repository, and the order matters.** Set the secret first —
+  `supabase secrets set PINECONE_INDEX_HOST=https://sbd-knowledge-ai-44928mo.svc.aped-4627-b74a.pinecone.io`
+  — then `supabase functions deploy david-chat`. Deploy first and the tool throws until the secret
+  lands, which is no worse than the silent failure it has had all along but is visible. Then close
+  it out against the two checks the client asked for: a White or Yellow Belt curriculum question
+  whose answer carries content only the 1,418 seeded records hold, and one deliberate wrong host to
+  watch the failure appear in the `david-chat` logs.
+
+  Found on 2026-08-04 while tracing where the Foundations curriculum is stored. Three files name
+  a Pinecone index host and they do not agree:
+
+  * `supabase/functions/david-chat/index.ts:462` searches
+    `sbd-knowledge-ai-8al9o1g.svc.aped-4627-b74a.pinecone.io`
+  * `scripts/seed-david-kb.mjs:29` writes to `sbd-knowledge-ai-44928mo…`
+  * `scripts/ingest-curriculum-to-pinecone.mjs:35` writes to `sbd-knowledge-ai-44928mo…`
+
+  The live edge function reads one index and both seeding scripts fill a different one. Anyone
+  who runs a seed script and then asks David a curriculum question gets an empty answer and no
+  error, because `search_wiki_graph` returns nothing rather than failing. The scripts' own header
+  comments say the host "mirrors the proven call in `david-chat/index.ts`", so the divergence was
+  not intended and one side drifted.
+
+  Both scripts default to a dry run, so no wrong write is known to have happened.
+
+  **Settled 2026-08-04 against the Pinecone control plane.** The account holds three indexes and
+  every one of them carries the project suffix `44928mo`:
+
+  | index | dimension | integrated embed field | model |
+  |---|---|---|---|
+  | `sbd-knowledge-ai` | 1024 | `text` | `multilingual-e5-large` |
+  | `sbd-wiki-graph` | 1024 | `content_md` | `multilingual-e5-large` |
+  | `sbd-knowledge` | 3072 | none | none |
+
+  **There is no `8al9o1g` index.** The scripts are right and the live edge function is the one
+  pointing at a host that does not resolve, which means `search_wiki_graph` has never been able to
+  return anything. It fails silently because the tool handler treats an empty result and a failed
+  call the same way, so David answers from reasoning alone and no error surfaces.
+
+  **A second mismatch sits underneath it.** `seed-david-kb.mjs:31` defaults `EMBED_FIELD` to
+  `chunk_text`, and its own comment says to confirm that against the console before pushing. The
+  console says the field is `text`. Pushing with the default would have written records the index
+  cannot embed.
+
+  **And the index names disagree about intent.** The tool is called `search_wiki_graph`, which
+  points at `sbd-wiki-graph`, but both the edge function and the scripts target `sbd-knowledge-ai`.
+  Three indexes exist and nothing in the repo says which is canonical.
+
+  Do not "fix" this by editing the scripts to match the edge function; the edge function is the
+  wrong side. Decide which index is canonical, correct the edge function, set `EMBED_FIELD` to
+  `text`, and record why in a comment.
+
+  **Record counts, read the same day once the data plane opened.** `sbd-knowledge-ai/master-docs`
+  holds **1,418 vectors**; `sbd-wiki-graph` holds **0**. So the seeding did run, against the index
+  the scripts name, and the live edge function has been pointing away from 1,418 usable records
+  the whole time. It also settles which index is canonical: the one with the data in it, not the
+  one the tool's name suggests.
+
+  Three test queries confirm what is in there, and it is what the scripts put there: White and
+  Yellow Belt curriculum sections, belt knowledge questions with model answers, and QA School
+  material. *"PPE required before entering the decontamination area"* returns a White Belt
+  knowledge question, not a Foundations section. **No Foundations content is in the index**, which
+  is expected, since neither script reads `foundations.js`.
+
+  *Goal:* One index name, in one place, that the edge function and the seeding scripts share.
+  *Done when:* the host and the embed field are read from a single constant or environment
+  variable rather than repeated across three files; the canonical index is named in a comment;
+  and a David curriculum question returns a cited answer instead of an empty one.
+
+- [ ] **T90** Decide where Knowledge Check, Skills Validation and Module Summary belong · est 0.5d · Low
+  Raised 2026-08-04 out of T88. Each of the ten Foundations documents ends with three blocks that
+  are module-level rather than section-level, so the section list has nowhere to put them:
+
+  * **Knowledge Check**, six to eight questions with the answers printed underneath. The app
+    already runs a 25-question gate per module, so showing these would hand a learner answers
+    beside questions on the same screen as an assessment.
+  * **Skills Validation**, a sign-off table with MET / NOT MET / DATE / INITIALS columns and a
+    learner-name block. That is a records feature, not reading material, and it overlaps whatever
+    the observation and assessment flow already records.
+  * **Module Summary**, a key-takeaways callout plus a "What's Next" pointer. This one is purely
+    reading material and is the easy yes.
+
+  All three are converted and sitting in the generated data; nothing has to be re-extracted. The
+  decision is where each goes, not whether it can be rendered.
+
+  *Goal:* Nothing in the source documents is silently dropped, and nothing lands somewhere that
+  weakens an assessment.
+  *Done when:* Module Summary renders at the end of a module, and Knowledge Check and Skills
+  Validation each have a decided home or a written reason for staying out.
+
+### Asked on the 2026-08-03 client call, recorded 2026-08-04
+
+Three asks made on the same call, alongside the Foundations formatting request that became T88.
+The formatting request was the loud one and these three went in unrecorded, which is the failure
+already named above: **an ask next to an urgent one still needs its own row.**
+
+- [ ] **T91** Observation answers must be typed or spoken, never multiple choice · est 1.5d · High
+  His words on the call: *"in the observation module, we wanted no multiple choice. All the
+  answers should be answers that they have to type or speak into the assessment, versus selecting
+  multiple choice in the observations."* Asked again immediately after, to be sure it was scoped
+  to one place: *"In the observations."*
+
+  This is an assessment-integrity request, not a UI preference. A multiple-choice observation
+  answer can be guessed, and an observation is the step that certifies someone is safe to work
+  unsupervised. It is the highest-value item of the three for that reason.
+
+  **Scope it carefully before building.** The request is for the observation module only, and the
+  client said so twice. Belt knowledge gates and placement questions are a different flow and are
+  not covered by this. Check what the observation checklist currently renders before assuming how
+  many question types are involved.
+
+  Speech input is the half with a real cost. T43 already exists for voice dictation on typed
+  answers, so these two overlap and should be scoped together rather than built twice.
+
+  *Goal:* An observation cannot be passed by choosing from a list.
+  *Done when:* Every observation answer is a typed or spoken response, existing observation
+  records still read correctly, and the client confirms against a real observation.
+
+  **Built and merged 2026-08-06 (#180), reviewed 2026-08-07, still open on one thing: the
+  client.** Reading the code changed the shape of the fix — the observation console has no
+  multiple-choice questions at all, it has a 0/1/2/3 and PASS/FAIL rubric the observer taps, and
+  those numbers cannot be removed because `ovsComputeOutcome` derives the outcome from them across
+  all five instrument schemas and every stored record is read back through them. So the score
+  stayed and the evidence became mandatory: a tap alone is no longer an answer. **That is not the
+  literal ask, so it is the client who closes this, against a real observation, not the review.**
+
+  The review's two code findings are fixed (2026-08-07):
+  - The floor was 10 characters, so *"did it fine"* passed. It is now a sentence — 25 characters
+    and 4 words — which also rejects a padded single token. No text check can tell whether an
+    answer is truthful; this only rules out the answers that are obviously not answers.
+  - `observations` write policies called the zero-arg `sbd_is_assessor()`, so a granted assessor
+    could write in **any** facility, and `obs_select_scoped` had no assessor branch at all, so a
+    capability-only assessor could type evidence they could not read back. Migration
+    `20260807120000` adopts the facility-aware `sbd_is_assessor(fid)` on all three policies and
+    gives SELECT the same branch, so read never exceeds write on this table. Behaviour-neutral for
+    writes today (no holder has an `assessor_facilities` list yet, which T74 treats as system
+    wide); it is what makes setting that list actually bite here.
+
+  Not tested, and cannot be from here: the real click-through and device dictation, which need
+  writes on production.
+
+- [x] **T92** Scripts as a separate module that can be assigned on its own · est 2d · Medium
+  **Code-complete 2026-08-06, reviewed 2026-08-07, no migration needed, pending deploy + client
+  confirmation.** Built as a second surface over the same content: `scriptSectionsForBelt()` in
+  the new `src/js/scripts-module.js` selects the script sections out of `FULL_CURRICULUM_DATA.belts`
+  at render time, and the existing Study & Practice Scripts tab now calls that same function,
+  so the scripts are not copied and not moved. Assignment reuses `foundations_assignments`
+  with `module_id='scripts'` — free-text column, unique constraint and the right RLS already
+  there — so this ships with **zero migrations** instead of queueing behind the ones already
+  waiting. `getFoundationsAssignments()` filters that row out, so Foundations still counts 10.
+  Assigned from the Scripts column in the existing Training table; a Scripts tab then appears
+  for that person only; the leader marks it complete (no gates — scripts are spoken language
+  with no question bank).
+
+  The review's two findings are fixed (2026-08-07):
+  - The module offered all six belts. Nowhere else does a staffer read curriculum above their own
+    belt — Study & Practice is hard-locked to `s.belt` with no selector — so this was the one place
+    a White Belt could read the Black Belt scripts. It now offers White through their own belt.
+    Not only their current belt: the ask is about somebody who *passes belts* and needs to refine
+    them, so belts already earned is the line.
+  - `foundations.js` read `SCRIPTS_MODULE_ID` from `scripts-module.js`, which loads after it. The
+    declaration moved to `foundations.js`, so a 404 on the new file can no longer take out every
+    Foundations screen. A `typeof` guard was the wrong fix — it would have made Foundations
+    silently stop filtering the scripts row (10 becomes 11) instead of failing loudly.
+
+  Verified by `node scripts/verify-scripts-module.js` (33 assertions).
+  Design note: `docs/decisions/2026-08-06-t92-scripts-standalone-module.md`, §16B in ARCHITECTURE.
+  His words: *"we want it to still be here, but we also want to have a separate module just for
+  the scripts on the side… it's going to stay here, but also be here."* And the reason, which is
+  the part that matters: *"in the development process, if somebody passes belts but they need to
+  refine their scripts, we want to be able to assign them just that module so they can go back
+  and work over just that part."*
+
+  So this is **not a move, it is a second surface**. The scripts stay where they are inside the
+  belt content, and additionally exist as an assignable module. He asked for the assign screen to
+  look like the one already used: *"it'll have an assigned dashboard like this."* When assigned,
+  it appears as a tab for that person only.
+
+  Closest existing pattern is Position School track assignment, which already does assign, appear
+  for one person, and track completion. Read that before designing a new one.
+
+  *Goal:* A leader can send one person back to the scripts without re-assigning a whole belt.
+  *Done when:* Scripts can be assigned to an individual, appear for that person only, remain in
+  place inside the belt content unchanged, and the assign screen matches the existing pattern.
+
+- [ ] **T93** David chat titles can be edited · est 0.5d · Medium
+  His words: *"in David, if we could update it so that we can edit the title of the chat, the chat
+  history, so that it's easier to reference. If we have to go back to that chat later, we know
+  exactly what that chat was."*
+
+  Answered on the call with *"we already have that in our task list."* It was not in the list.
+  This row is that correction.
+
+  The smallest of the three and the one with the least risk attached. It is a rename on an
+  existing chat record plus an inline edit in the history list. Check how chat history rows are
+  stored and whether the title is currently derived from the first message, because if it is,
+  an edited title has to survive the next message rather than being regenerated.
+
+  Belongs with the David work rather than ahead of it. Read `docs/DAVID_OG_EXTRACTION_PLAN.md`
+  first so the change stays compatible with the extraction.
+
+- [x] **T94** David names the assessment levels instead of inventing topics for them · est 0.25d · High
+  **Done 2026-08-11.** Iggie's screenshot of a Net Intel profile showed L1 to L5 listed as subject
+  areas, with names that appear nowhere in the curriculum. L1 to L5 are cognitive complexity
+  levels, so a profile that reads them as topics tells a leader to assign the wrong training.
+
+  The cause was in the data, not the model. `aiSerializePlacements` sent bare numbers,
+  `L1 89% / L2 90%`, and left the meaning of each level unstated, so the model supplied one. The
+  serializer now sends the level names with the scores and states plainly that these are
+  complexity levels rather than content areas. Fixing the input beats instructing the model not
+  to guess, and it keeps the prompt out of it, which matters while David is queued for extraction.
+
+- [x] **T95** Belt assessment report reads at a glance for a leader · est 1d · High
+  **Done 2026-08-11.** Approved by Iggie on the 10 August call. Display only, no scoring rule
+  was touched.
+
+  A level summary sits at the top of the report, one card per level carrying the level name and
+  the percent only, knowledge and simulation kept separate. His words on the call were *"we don't
+  have to have the floor on there or fail, we'll just have the percent up there."* The floor and
+  the result stay on the detailed sections below, where they were wanted, *"this allows us to
+  understand more finite where they are."*
+
+  The levels a belt did not require used to print as `not gated` with a blank beside them, which
+  read as missing data. Every level is now named, and the detailed rows carry the minimum and the
+  result in words.
+
+  Findings were reworded to read as coaching. Each one names the level, the score, how far it sat
+  from the minimum, and one concrete thing to do. The severity bands are unchanged in strictness.
+
+  Both report renderers carry the same wording and the same summary band. They had drifted, the
+  summary having landed in the card renderer only, which is exactly the failure this row was
+  warned about.
+
+- [x] **T96** Belt scoring follows the SIPS Scoring Specification v1 · est 1d · High
+  **Done 2026-08-11.** SIPS issued the Belt Assessment Scoring Specification v1.0 as the canonical
+  source. The thresholds, the knowledge gate and the 60/40 blend already matched it. The detail
+  underneath did not.
+
+  Component overalls are now the item-weighted mean across every item rather than the mean of the
+  five level means, which only agree while every level holds the same number of questions and L5
+  holds seven. Every level carries a floor, knowledge a flat 80 everywhere and simulation stepping
+  down from the belt's own floor. The individual response minimum is a universal 65 and a response
+  under it is blocking. Severity is graded by how far below the minimum the score landed. Scores
+  are carried at full precision to every comparison and rounded only where printed.
+
+  Two real defects surfaced while doing it. The dynamic belt test selected a belt on the blended
+  score alone, with no knowledge gate, so a candidate whose knowledge sat below a belt's gate could
+  still be placed there; the specification's own test vector four exists to catch this and now
+  passes. And a candidate who cleared the knowledge bar but not the blended threshold was being
+  given a White belt the blended score had not earned, where the specification records Knowledge
+  Foundation, which is not a belt.
+
+  Verified against the specification's reference implementation on all 49 stored placements:
+  identical belt, knowledge, simulation and blended figures on every one.
+
+  *Not done here, and each needs its own decision:* re-running historical placements, which must
+  re-score the responses with the calibrated evaluator first or it strips belts for a scoring
+  fault that was ours; moving the whole determination server side (specification §16); and the
+  versioned constants table.
+
+- [x] **T97** Inactivity logout tightened to fifteen minutes · est 0.25d · Medium
+  **Done 2026-08-11.** Was thirty. The activity listeners already cover pointer, keyboard, touch
+  and scrolling anywhere in the page, so the shorter window closes an unattended session sooner
+  without interrupting somebody who is reading.
+
+  *Goal:* A chat can be found later by what it was about.
+  *Done when:* A chat title can be edited from the history list, the edit persists across
+  sessions, and a later message does not overwrite it.
+
 ### Blocked, not on the critical path
 
 - [ ] **T49** Strip and rotate the PSOP credentials, gate the public page
@@ -835,6 +2254,27 @@ persisted.
   *Blocked on:* T49.
   *Goal:* The SOP tool runs the same David as the belt platform, with usage attributed separately.
   *Done when:* David answers inside PSOP and its usage appears under the SOP tool column, not mixed into the belt platform's.
+  **No longer blocked, and no longer parked. Corrected 2026-07-28 from the transcript.** The
+  client opened this himself in the meeting: *"I want to go ahead and start working on PSOP"*,
+  and he expected the Tuesday and Wednesday straight after the call, which were **2026-06-30 and
+  2026-07-01**, spent understanding it. That was a month ago and it has not started, which makes
+  this a month-old unactioned client request rather than a new one. He is sending the original HTML
+  and a live demo link by email and by chat. Two constraints he stated, both of which shape the
+  reading rather than the build: David does **not** get wired up yet, but the code should be read
+  knowing it has to be, and facilities have to line up across both platforms so an SOP written at
+  a given facility can reference that same facility. T49 still gates the credentials work, but it
+  does not gate reading the code.
+  - [ ] **T50a** Answer the client's own question: one Supabase project or two · est 0.1d
+    He asked it in the meeting and **nobody answered him**: *"I created a separate project in
+    supabase for PSOP, but I don't know if that will be better or coming out of the same project
+    since we'll be leveraging the memory and understanding of the facilities and the user. But
+    I've already created that. If we don't need it, that's fine."*
+    It is not a preference question. Sharing facilities and users across both tools means one
+    project; separate projects means the SOP tool cannot see the facility a person belongs to
+    without a second copy of that data, which is a synchronisation problem nobody has budgeted
+    for. It also interacts with T67: a second live database doubles what a migration has to carry.
+    *Goal:* He has a recommendation with the reason, rather than an unanswered question he raised.
+    *Done when:* The answer is sent, with what each option costs, and the decision is recorded here.
 - [ ] **T51** Black Belt observation checklist content
   *Blocked on:* Dr. Jake.
   *Goal:* The Black Belt observation instrument has real items in it instead of being an empty shell.
@@ -848,7 +2288,131 @@ persisted.
 
 ## Totals
 
-**Updated 2026-07-27, after a working night.** 35 items done, 35 open.
+**Updated 2026-08-04, end of day.** 36 items done, 57 open. One shipped, five opened, and one
+correction to how a fix was recorded.
+
+**T91, T92 and T93 are three client asks from the 3 August call that were never written down.**
+Observation answers typed or spoken with no multiple choice, scripts as a separately assignable
+module, and editable David chat titles. They were made on the same call as the Foundations
+formatting request that became T88, and that request was the loud one. T93 was answered on the
+call with *"we already have that in our task list"*, which was not true. This is the second time
+the same failure has been recorded here, so it is worth stating as a rule rather than an
+observation: **an ask made next to an urgent one still needs its own row, written during the
+call.**
+
+**T88 shipped**, and it is the largest single content change the platform has had. All ten
+Foundations modules now carry their source documents' own words and structure: 77 sections where
+there were 70, 219,000 characters where there were 181 per section, 124 tables where there was 1,
+86 callouts where there were 2. **Seven sections existed in the curriculum and had never been in
+the app at all**, two of them error and failure sections, which is the material a technician most
+needs. It is generated by `scripts/foundations-from-docx.py` and re-runnable, so a corrected
+document from the client is a file swap rather than a rewrite.
+
+**T89 opened**, found while tracing where the curriculum was stored. The live David edge function
+searches a Pinecone index that does not exist, while 1,418 usable records sit in the one both
+seeding scripts name. It fails silently because an empty result and a failed call are handled
+alike, so David answers from reasoning and nothing surfaces. **T90 opened** as the small tail of
+T88: three module-level blocks per document that were deliberately held back.
+
+**T81 was never blocked.** It had been logged as waiting on source documents that had been sitting
+in an uploaded archive since 28 July. That is corrected, and the documents are now in the
+repository.
+
+**The `david_usage_by_app_mtd` fix was recorded wrongly and is now recorded properly.** It was
+applied to production by hand and then written back into a migration that had already run, so an
+environment sitting at that version would never have picked it up. The applied migration is
+restored and the fix moved into its own.
+
+**The lesson worth keeping, because it cost most of a day.** The Foundations documents were
+searched for across the client conversation, Drive, Supabase, Pinecone and this repository and
+reported as not existing anywhere. The preceptor set was in hand the whole time and the client had
+to be asked twice for something already sent. Anything that arrives from the client and is worth
+keeping now goes into `docs/curriculum/`, with a README stating where each set came from and what
+generates what.
+
+**Updated 2026-08-03.** 36 items done, 59 open. T88 added: the client asked on 3 August for the
+Foundations UI to resemble the source curriculum document, and clarified it as *"colors. Sections,
+separated text, adjusted format."* The presentation half shipped the same night and is live on
+`foundations.js?v=15`; it reshapes the strings already held and was checked across all 70 sections
+to confirm no word is lost. T88 is the half that did not ship, which is the larger one: the
+document carries tables, numbered step blocks and callouts that the content itself does not, and
+no layout change produces a six-row table from a sentence with no table in it. Blocked on the
+source documents, of which exactly one has been seen, and only as frames from a phone recording.
+
+`GOAL.md` added the same day, since the after-hours handover convention expects it and it did not
+exist. It is a one-minute view of the three lines of work in front of us; this ledger stays the
+record.
+
+**Updated 2026-07-31.** 36 items done, 58 open. Eleven added, T78 to T87 plus T84a, from one pass over the
+complete client conversation, 22 May to 31 July, attachments included rather than message text
+alone.
+
+**Six of the ten are client requests that were made and never recorded**: T78 file and image
+upload, T79 the SIPS admin role and splitting approval from PIN generation, T80 facility admin
+access to the observer portal, T81 preceptor formatting, T82 the DAVID slash commands, and T83
+the curriculum media question he is still waiting on. T79, T80 and T83 are the ones with a cost
+attached: T79 and T80 are the same permission-composability shape as T74 and T77, and T83 is a
+question he asked us that is blocking work he is doing right now.
+
+The failure mode is worth naming, because it is repeatable. Every one of the six was said in the
+same conversation as something more urgent. T80 sat one line above the word PRIORITY. **An ask
+next to an emergency still needs its own row.**
+
+The other four are ours: T84 copy correctness, T85 proving the Patient Safety Provision audit
+trail and moving its clear into Role Management, T86 an untrusted timestamp on placement reviews,
+T87 a key rotation.
+
+Also written in the same pass: `docs/DOMAIN_GLOSSARY.md`, which records the platform's own
+vocabulary, the belt and gate and window model, the seven Foundations modules, both navigations,
+the metering model and the stated rollout size of 30 leaders then 175 technicians. None of that
+existed anywhere in the repository before; it lived only in screenshots.
+
+**Updated 2026-07-30.** 36 items done, 47 open. T77 added: the client confirmed T73 from Kirti's
+account at 6:54 AM and found the Assessment Queue missing from the staff portal. It is a real gap
+with the same shape as T73, but it is refused as a quick fix, because a granted assessor has no
+facility limit today and both the screen and `aq_select` would expose all 57 queue rows across all 8
+facilities. It waits on T74 by Shawn's decision rather than shipping an interim own-facility rule.
+T74 step 1, the `sbd_is_assessor(p_fid)` overload, is written and applies no behaviour change.
+
+**Updated 2026-07-29 later still.** 36 items done, 46 open. T76 added and two entries corrected after
+transcribing the client's three voice notes of 2026-07-30 03:37 to 03:39, which settled scope that the
+text messages had left open. T74 now covers preceptor access as well as assessor, and records that
+facility educator already works the way he is asking for. T75's claim that Kirti's `Free Agent` grant
+was a misclick is withdrawn: parking SIPS hires in free agency is deliberate, and the real gap is the
+missing SIPS home facility, now T76. That withdrawn claim had already gone to the client.
+
+**Updated 2026-07-29 later.** 36 items done, 45 open. Three entries were added from the client's
+2026-07-30 messages on assessor access: T73 the missing assessor tab, now fixed, T74 assessor scoped
+per facility, and T75 the facility picker that T74 depends on. The client asked at 1:45 AM for the
+assessor work to move to the front of the queue.
+
+**Updated 2026-07-29.** 35 items done, 43 open. Four were logged on 28 July from a recorded
+client meeting of **2026-06-29**, which had not reached this ledger at all in the month since: T66 the reverting AI
+notes, T67 surviving the database migration, T68 proof-by-recording, T69 the model indicator.
+T67 is the one that outranks the rest of the open list.
+
+**Amended later the same day, after reading the meeting transcript in full rather than working
+from the summary.** Four entries were wrong or incomplete and are corrected in place with the
+quote each correction rests on:
+
+- **T69 is not ours.** It was given to the other developer in the call. Tracked, not built.
+- **T66 has its date.** The two-paths fix was claimed as deploying 29 and 30 June. That is a
+  claim of deployment rather than evidence of one, and it is recorded as a claim.
+- **T67 stays on the same Supabase account**, no project for it existed as of the call, and it
+  is **not** going into the PSOP project. Two separate conversations had been read as one.
+- **T50 is not parked.** The client asked for it a month ago, on 29 June, and it has not started.
+  T50a is new: he asked whether PSOP should be one project or two and nobody answered him.
+
+*Recorded, not numbered, because nothing was asked of us:* a third technology acquired from
+another set of developers will be presented alongside the belt platform and the SOP tool. It has
+an older interface and the client expects the other two to look modern beside it. No work was
+requested, so it is not a task, but it is here so it is not a surprise later.
+
+*Also stated in the call and worth holding to:* the client's first priority in his own words is
+reports generating properly with all the notes, the interface suggestions matching what is on the
+report, and both matching the scoring logic. That is T65, now built and live, plus T40. And he
+said he would set deadlines for everything at the following Friday 1 PM meeting, which was
+**2026-07-03** and is long past.
 
 | Group | Open | Items | Est. days |
 |---|---|---|---|
@@ -856,8 +2420,34 @@ persisted.
 | Phase 2 | 9 | T30, T32, T33, T34, T35, T35a, T35b, T36, T37 | 7.50 |
 | Phase 3 | 11 | T39 to T48 | 9.35 |
 | Found during Phase 1 | 6 | T54, T56, T58, T59, T60, T62 | 2.10 |
-| Blocked on somebody else | 4 | T49 to T52 | not counted |
-| **Total, excluding blocked** | **31** | | **21.2** |
+| Raised by the client | 3 | T63, T64, T65 | 1.75 |
+| From the 2026-06-29 meeting | 4 | T66, T67, T68, T69 | 0.75 + unknown |
+| &nbsp;&nbsp;of which tracked only, not ours to build | 2 | T66, T69 | 0 |
+| &nbsp;&nbsp;of which awaiting QA sign-off only | 1 | T65 (built, live, measured) | 0 |
+| Active on the SOP tool | 2 | T50, T50a | 0.10 + unknown |
+| Access review, raised 2026-07-28 | 1 | T71 | 0.50 |
+| Blocked on somebody else | 3 | T49, T51, T52 | not counted |
+| **Total, excluding blocked** | **41** | | **24.3 + unknown** |
+
+*Note on these totals, since they do not reconcile and did not before this edit either.* 41 open
+minus 3 blocked is 38, not 40, because the group rows double-count a few items that sit in more
+than one grouping. The existing convention was kept rather than silently re-deriving it, so the
+movement is readable against the previous version. Worth rebuilding properly in one pass rather
+than nudging it each time, but that is a separate job and not this one.
+
+**Waiting on a live QA pass, not on building:** T26, T27, T28, T28a and now T65. All five are
+written, merged and running on production with measurements recorded here. What they need is
+somebody working through them in a browser and saying whether it behaved.
+
+**Nothing on T65 is waiting on the client.** Corrected 2026-07-27: an earlier note here said
+the report wording was blocked on him. It is not. Everything he actually asked for is built
+and live: the belt is issued on the scores, the item becomes a provision on the account, the
+provision is visible there, it is cleared only by a master admin or a SIPS admin with the name
+and date kept, it holds the next belt while it is open, and it is displayed in the report as
+condition 1 with a patient safety findings block. The only outstanding piece was a per-option
+clinical rationale in the question bank, which is our own idea and which he never asked for.
+It is a refinement of wording that already works, so it goes to the backlog rather than being
+called a blocker.
 
 The five Phase 1 items are not really 2.25 days of building. The code for T26, T27, T28 and
 T28a is written, merged and live; what is left is somebody pressing the buttons in a browser

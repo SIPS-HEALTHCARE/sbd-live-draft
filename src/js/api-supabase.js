@@ -333,6 +333,13 @@ const SB = {
   getObservations(){ return sbFetch('/rest/v1/observations?select=*&order=created_at.desc'); },
   insertObservation(data){ return sbFetch('/rest/v1/observations', { method:'POST', body:data }); },
   updateObservation(id, data){ return sbFetch(`/rest/v1/observations?id=eq.${id}`, { method:'PATCH', body:data }); },
+  // T37: two-PIN check moved server-side. Observer PINs live in sbd_observer_pins (RLS on,
+  // no policies), so no browser can read one — both calls below go through a service-role
+  // function, and the staff payload carries only the observer_pin_set flag.
+  unlockObservation(observationId, observerPin, candidatePin){ return sbFetch('/functions/v1/sbd-observation-unlock', { method:'POST', body:{ observation_id:observationId, observer_pin:observerPin, candidate_pin:candidatePin } }); },
+  // Master-admin only, enforced in the function. Returns the observer's existing PIN, or
+  // mints one on first call; it never rotates an existing PIN.
+  setObserverPin(staffId){ return sbFetch('/functions/v1/sbd-observer-pin', { method:'POST', body:{ action:'get_or_create', staff_id:staffId } }).then(r => r && r.pin); },
   // ── Hospital Systems ──
   getHospitalSystems(){ return sbFetch('/rest/v1/hospital_systems?select=id,name,active,created_at&order=name.asc'); },
   createHospitalSystem(data){ return sbFetch('/rest/v1/hospital_systems?select=id,name,active,created_at', { method:'POST', body:data }); },
@@ -369,6 +376,9 @@ const SB = {
   deleteFacilityShiftDef(fid, shiftId){ return sbFetch(`/rest/v1/facility_shifts?fid=eq.${encodeURIComponent(fid)}&shift_id=eq.${encodeURIComponent(shiftId)}`, { method:'DELETE' }); },
   // ── Attendance ──
   getAttendance(fid, date){ return sbFetch(`/rest/v1/sbd_attendance?facility_id=eq.${encodeURIComponent(fid)}&date=eq.${date}&select=*`); },
+  // The leader attendance record is a whole year for every staff member at once, so the
+  // single-date getAttendance above cannot serve it. Mirrors getSchedule's range shape.
+  getFacilityAttendance(fid, startDate, endDate){ return sbFetch(`/rest/v1/sbd_attendance?facility_id=eq.${encodeURIComponent(fid)}&date=gte.${startDate}&date=lte.${endDate}&select=*&order=date.asc`); },
   getStaffAttendance(staffId){ return sbFetch(`/rest/v1/sbd_attendance?staff_id=eq.${staffId}&select=*&order=date.desc`); },
   recordAttendance(data){ return sbFetch('/rest/v1/sbd_attendance', { method:'POST', body:data }); },
   updateAttendance(id, data){ return sbFetch(`/rest/v1/sbd_attendance?id=eq.${id}`, { method:'PATCH', body:data }); },
@@ -576,7 +586,10 @@ function mapStaffFromBackend(row){
     cur: { c: row.cur_comp || null, s: row.cur_sim || null, o: row.cur_obs || null },
     nxt: { c: row.nxt_comp || null, s: row.nxt_sim || null, o: row.nxt_obs || null },
     observer: row.observer || false,
-    observationPin: row.observation_pin || null,
+    // T37: the PIN itself is never sent to a browser (it lives in sbd_observer_pins).
+    // This flag is all the interface needs to render "PIN set" / "Generate PIN"; the value
+    // is fetched on demand, master-admin only, via SB.getObserverPin/setObserverPin.
+    observerPinSet: row.observer_pin_set || false,
     ps: {
       enrolled: row.ps_enrolled || false,
       done: row.ps_done || false,
@@ -593,6 +606,9 @@ function mapStaffFromBackend(row){
     placementAcknowledged: row.placement_acknowledged || false,
     windowOverride: row.window_override || null,
     assessmentGateOverride: row.assessment_gate_override || null,
+    // T65: patient-safety provisions raised by a dangerous assessment answer. Array of
+    // entries; an entry with clearedAt null is still open and gates advancement.
+    dangerousProvisions: row.dangerous_provisions || [],
   };
 }
 
@@ -619,7 +635,8 @@ function mapStaffToBackend(staff){
     history: staff.history || null,
     practice_scores: staff.practiceScores || null,
     window_override: staff.windowOverride || null,
-    assessment_gate_override: staff.assessmentGateOverride || null
+    assessment_gate_override: staff.assessmentGateOverride || null,
+    dangerous_provisions: staff.dangerousProvisions || null
   };
   if(staff.cur){
     obj.cur_comp = staff.cur.c || null;
@@ -652,11 +669,23 @@ function mapStaffPSToBackend(staff){
   };
 }
 
+// T65: the provision column on its own. Clearing a provision is an administrator action on
+// one field, and it must not ride along with a whole-record write -- a full staff PATCH from a
+// stale in-memory copy is how progress gates and history have been erased before.
+function mapStaffProvisionsToBackend(staff){
+  return { dangerous_provisions: (staff && staff.dangerousProvisions) || null };
+}
+
 function mapFacilityFromBackend(row){
   if(!row) return null;
   return {
     id: row.id,
-    name: typeof titleCase === 'function' ? titleCase(row.name) : row.name,
+    // The stored name is authoritative and is shown verbatim. It used to be title-cased on
+    // every read, which lowercased the whole string first and then capitalised after every
+    // word boundary, so an apostrophe or an acronym came out wrong: "Nemours Children's
+    // Hospital, DE" printed as "Nemours Children'S Hospital, De" on a formal certification
+    // record. Casing belongs at the point the name is entered, not on the way out.
+    name: row.name,
     loc: row.loc,
     dept: row.dept,
     contact: row.contact,
@@ -877,6 +906,7 @@ function mapObservationFromBackend(row){
     checklistVersion:row.checklist_version || 1,
     status:          row.status || 'draft',
     itemScores:      row.item_scores || {},
+    itemNotes:       row.item_notes || {},   // T91: typed/dictated evidence, keyed by item id
     stopWork:        row.stop_work || null,
     totalPoints:     row.total_points,
     outcome:         row.outcome || null,

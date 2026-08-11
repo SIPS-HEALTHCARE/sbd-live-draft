@@ -2002,7 +2002,33 @@ window.onload = function(){
 
   // Note: Session restoration is handled exclusively by restoreSessionOnLoad on DOMContentLoaded to avoid duplicate race conditions.
 
-  // Set up inactivity auto-logout (2 minutes) — suppressed during onboarding tour
+  // Inactivity auto-logout, suppressed during the onboarding tour.
+  //
+  // Client report, 2026-08-03: "if we can refine the time out to log out of the
+  // application, sometimes even when we're in there and we're reading, and David,
+  // or scrolling, it doesn't recognize the mouse movement or the engagement with
+  // the app, so it'll log out."
+  //
+  // He was describing two separate faults, not one.
+  //
+  // 1. Two minutes is far too short for a platform people read and study on.
+  //    Raised to fifteen. Thirty was tried first, but on a shared clinical
+  //    workstation thirty idle minutes is too long to leave a session open, and to
+  //    the client it read as "the logout is not working" because it never fired
+  //    inside a normal sitting. Fifteen logs an unattended station out on a sensible
+  //    security window while, with fault 2 below fixed, never interrupting someone
+  //    who is actually reading or scrolling.
+  //
+  // 2. The activity listeners missed most real engagement, which is why it fired
+  //    even while someone was clearly using it:
+  //      - scroll does not bubble, so a listener on window never saw scrolling
+  //        inside the content panes, the David chat or any modal, which is where
+  //        nearly all reading happens. Now bound in the capture phase so it sees
+  //        scrolling anywhere in the page.
+  //      - there were no touch listeners at all, so on a phone the only things
+  //        that counted were a tap or a keystroke. Reading on mobile logged you
+  //        out on a timer regardless of what you were doing.
+  const INACTIVITY_MS = 15 * 60 * 1000;
   let inactivityTimer;
   const onboardingActive = () => {
     // Tour engine running, or the welcome/tour overlays are visible on screen
@@ -2016,18 +2042,25 @@ window.onload = function(){
     // Only auto-logout if we have an active session
     if (localStorage.getItem('sbd_session') && typeof logout === 'function') {
       inactivityTimer = setTimeout(() => {
-        // Never log out mid-tour — reschedule and re-check after another interval
+        // Never log out mid-tour, reschedule and re-check after another interval
         if (onboardingActive()) { resetInactivityTimer(); return; }
-        console.log('User inactive for 2 minutes. Auto-logging out.');
+        console.log('User inactive for ' + (INACTIVITY_MS / 60000) + ' minutes. Auto-logging out.');
         logout();
-      }, 120000); // 2 minutes
+      }, INACTIVITY_MS);
     }
   };
 
-  window.addEventListener('mousemove', resetInactivityTimer);
-  window.addEventListener('keydown', resetInactivityTimer);
-  window.addEventListener('scroll', resetInactivityTimer);
-  window.addEventListener('click', resetInactivityTimer);
+  // Pointer and keyboard, on window.
+  ['mousemove','keydown','click','wheel','pointerdown'].forEach(function(ev){
+    window.addEventListener(ev, resetInactivityTimer, {passive:true});
+  });
+  // Touch, so a phone counts as engaged while somebody reads on it.
+  ['touchstart','touchmove'].forEach(function(ev){
+    window.addEventListener(ev, resetInactivityTimer, {passive:true});
+  });
+  // Scroll in the capture phase. Scroll events do not bubble, so a plain window
+  // listener never sees scrolling inside a content pane, the David chat or a modal.
+  document.addEventListener('scroll', resetInactivityTimer, {capture:true, passive:true});
   resetInactivityTimer();
 
   console.log('SBD Platform initialized in Live Mode.');

@@ -1,6 +1,6 @@
 # Observer Module (OVS) — Completion Scope (#58)
 
-**Status:** scoping only — needs Shawn's go before any build. **Drafted:** 2026-07-13, grounded in a read of the current OVS code (`src/js/ui-views.js`, `src/js/api-supabase.js`, `src/js/auth-init.js`) and the observations RLS migration `20260703140000_observations_facility_scoping_rls.sql`.
+**Status:** scoping only — needs Shawn's go before any build. **Drafted:** 2026-07-13, grounded in a read of the current OVS code (`src/js/ui-views.js`, `src/js/api-supabase.js`, `src/js/auth-init.js`) and the observations RLS migration `20260703233921_observations_facility_scoping_rls.sql`.
 **Build sequencing (unchanged):** after #50/#54 QA results land, and any RLS change follows the same one-owner migration discipline as #55.
 
 ## TL;DR — the plan's framing was stale; here's the corrected scope
@@ -9,7 +9,7 @@ The worklist (and the code comment at `ui-views.js:388-389`) says the **candidat
 
 ## Already built (do not rebuild)
 
-- **Observer identity:** `staff.observer` (bool) + `staff.observation_pin` (reusable 4-digit); granted/generated master-admin-only (`ui-views.js:12828-12855`).
+- **Observer identity:** `staff.observer` (bool) + a reusable 4-digit PIN; granted/generated master-admin-only (`ui-views.js:12828-12855`). **Updated by T37 (2026-08-04):** the PIN moved off `staff.observation_pin` into `public.sbd_observer_pins` (RLS on, no policies — service role only), because a column on `staff` shipped every observer's PIN to any role that can read a staff row. It is now generated and read by the master-admin-only `sbd-observer-pin` function; `staff.observer_pin_set` (bool) is all the browser gets.
 - **Request/PIN flow:** candidate requests an observation (`requestObservation` `:2870`), a per-request `handshake.candidate_pin` is generated and shown to the candidate (`:7052`); wired from the Apply modal (`:7118`, `:8340`).
 - **Two-PIN capture:** observer PIN + candidate PIN unlock scoring (`ovsUnlock` `:3044`); scoring, stop-work, save/resume, submit all work; submit records the observer as `assessor_id/assessor_name` and stamps the handshake.
 - **Facility-scoped admin console:** `renderAObservations` (`:2908`) filters the queue by status + facility; `staff_admin` limited to `assignedFids`; system-wide admins get a facility dropdown. Review console `renderAObservationReviews` (`:3283`) + confirm/return gate writes exist.
@@ -38,7 +38,7 @@ The worklist (and the code comment at `ui-views.js:388-389`) says the **candidat
 ## Risks / things to confirm before building
 
 - **Untracked base schema.** The `observations` (and sibling) `CREATE TABLE` DDL is not in this repo's migrations — only the RLS migration alters them. Confirm the canonical schema source before any backend change (`fid`, `staff_id`, `handshake`, `assessor_id/name`, `review_status`, etc.).
-- **PIN mapper asymmetry.** `mapStaffToBackend` maps `observer` but not `observation_pin` (`api-supabase.js:598`); the PIN is only written via the single-column PATCH in `generateObserverPin`. Any new staff-write path must not clobber it (DATA SAFETY: spread existing fields).
+- ~~**PIN mapper asymmetry.**~~ Resolved by T37: the PIN is no longer a `staff` column at all, so no staff-write path can clobber it. It is written only by the `sbd-observer-pin` function, into `sbd_observer_pins`.
 - **Stale comment.** `ui-views.js:388-389` claims the request/PIN flow is unbuilt; correct the comment when this ships to avoid future confusion.
 
 ## Out of scope for #58

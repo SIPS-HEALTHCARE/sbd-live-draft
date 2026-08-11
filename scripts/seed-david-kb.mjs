@@ -9,11 +9,12 @@
 // SAFETY: defaults to DRY-RUN (prints what it would upsert; no network). Pushing to prod Pinecone
 // is an explicit, user-run action (per CLAUDE.md I never automate prod writes):
 //     node scripts/seed-david-kb.mjs                 # dry run: extract + build + print samples
-//     PINECONE_API_KEY=xxx node scripts/seed-david-kb.mjs --push   # actually upsert
+//     PINECONE_API_KEY=xxx PINECONE_INDEX_HOST=https://… node scripts/seed-david-kb.mjs --push
 //
-// CONFIRM BEFORE --push: EMBED_FIELD must match the index's integrated-embedding field_map
-// (check the Pinecone console; common values are 'chunk_text' or 'text'). The host/namespace
-// below mirror the proven search call in supabase/functions/david-chat/index.ts.
+// The index host is NOT hard-coded here (T89): it comes from PINECONE_INDEX_HOST, the same secret
+// supabase/functions/david-chat reads, so the seeder and the search can never point at different
+// indexes again. EMBED_FIELD defaults to 'text', which is the field_map of the canonical
+// `sbd-knowledge-ai` index (confirmed in the Pinecone console 2026-08-04).
 //
 // Directive 9 (copyright): we seed ONLY SBD's own materials (curriculum, question banks, learner
 // guide — SBD IP, quotable). No verbatim external-standard (AAMI/JC/etc.) text is introduced here;
@@ -26,9 +27,10 @@ import { dirname, join } from 'node:path';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const UI_VIEWS = join(__dirname, '..', 'src', 'js', 'ui-views.js');
 
-const PINECONE_HOST = 'https://sbd-knowledge-ai-44928mo.svc.aped-4627-b74a.pinecone.io';
+// T89: one shared source of truth with supabase/functions/david-chat (PINECONE_INDEX_HOST secret).
+const PINECONE_HOST = process.env.PINECONE_INDEX_HOST;
 const NAMESPACE = 'master-docs';
-const EMBED_FIELD = process.env.EMBED_FIELD || 'chunk_text'; // must match the index field_map
+const EMBED_FIELD = process.env.EMBED_FIELD || 'text'; // confirmed against the index field_map 2026-08-04
 const BATCH = 90;
 const PUSH = process.argv.includes('--push');
 
@@ -141,6 +143,7 @@ function buildDocs(src) {
 async function pushBatch(records) {
   const key = process.env.PINECONE_API_KEY;
   if (!key) throw new Error('PINECONE_API_KEY not set — cannot --push.');
+  if (!PINECONE_HOST) throw new Error('PINECONE_INDEX_HOST not set — cannot --push.');
   // Integrated-embedding upsert: NDJSON, one record per line; the EMBED_FIELD text is embedded server-side.
   const ndjson = records.map(r => JSON.stringify({ _id: r.id, [EMBED_FIELD]: r.text, ...r.meta })).join('\n');
   const res = await fetch(`${PINECONE_HOST}/records/namespaces/${NAMESPACE}/upsert`, {
@@ -163,7 +166,7 @@ async function main() {
 
   if (!PUSH) {
     console.log(`\nDRY RUN — nothing was sent. Verify EMBED_FIELD='${EMBED_FIELD}' matches the index field_map,`);
-    console.log(`then run:  PINECONE_API_KEY=*** node scripts/seed-david-kb.mjs --push\n`);
+    console.log(`then run:  PINECONE_API_KEY=*** PINECONE_INDEX_HOST=*** node scripts/seed-david-kb.mjs --push\n`);
     return;
   }
   console.log(`\nPushing to Pinecone ${NAMESPACE} (field '${EMBED_FIELD}') in batches of ${BATCH}…`);
