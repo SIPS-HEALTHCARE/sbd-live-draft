@@ -459,11 +459,25 @@ At the absolute end of every response, output 3 likely follow-ups in a <chips> b
                             await writer.write(encoder.encode(`data: ${JSON.stringify({ text: `\n\n> Searching knowledge base...\n\n` })}\n\n`));
                             const pineconeKey = Deno.env.get('PINECONE_API_KEY');
                             if (!pineconeKey) throw new Error("PINECONE_API_KEY missing.");
-                            const r = await fetch('https://sbd-knowledge-ai-8al9o1g.svc.aped-4627-b74a.pinecone.io/records/namespaces/master-docs/search', {
+                            // T89: the host lives in one secret that this function and the seed
+                            // scripts both read, so they cannot drift onto different indexes again.
+                            // Canonical index is `sbd-knowledge-ai`, namespace `master-docs`,
+                            // integrated embed field `text` (`sbd-wiki-graph` is empty despite the
+                            // tool's historical name). Set PINECONE_INDEX_HOST to its full origin.
+                            const pineconeHost = Deno.env.get('PINECONE_INDEX_HOST');
+                            if (!pineconeHost) throw new Error("PINECONE_INDEX_HOST missing.");
+                            const r = await fetch(`${pineconeHost.replace(/\/+$/, '')}/records/namespaces/master-docs/search`, {
                                 method: 'POST',
                                 headers: { 'Api-Key': pineconeKey, 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ query: { inputs: { text: parsedArgs.query }, top_k: 5 } })
                             });
+                            if (!r.ok) {
+                                // Without this the error body was handed to the model as if it were
+                                // search results, and David answered from general knowledge instead.
+                                const body = await r.text();
+                                console.error(`[DAVID] Pinecone search failed ${r.status}: ${body.slice(0, 500)}`);
+                                throw new Error(`Knowledge base search failed (${r.status}).`);
+                            }
                             toolResult = JSON.stringify(await r.json());
                         }
                     } else {

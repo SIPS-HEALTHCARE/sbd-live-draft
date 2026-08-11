@@ -16,10 +16,11 @@
  *
  *   node scripts/ingest-curriculum-to-pinecone.mjs            # dry run (safe)
  *   node scripts/ingest-curriculum-to-pinecone.mjs --dry      # same, explicit
- *   PINECONE_API_KEY=xxx node scripts/ingest-curriculum-to-pinecone.mjs --commit
+ *   PINECONE_API_KEY=xxx PINECONE_INDEX_HOST=https://… node scripts/ingest-curriculum-to-pinecone.mjs --commit
  *
- * The Pinecone host + namespace + record shape mirror the proven calls in
- * supabase/functions/david-chat/index.ts (search_wiki_graph / upsert_wiki_page).
+ * The index host comes from PINECONE_INDEX_HOST — the same secret
+ * supabase/functions/david-chat reads — so ingestion and search cannot drift onto
+ * different indexes (T89). Namespace + record shape mirror search_wiki_graph.
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -31,8 +32,8 @@ const REPO_ROOT = join(__dirname, '..');
 const SOURCE_FILE = join(REPO_ROOT, 'src/js/ui-views.js');
 const PREVIEW_FILE = join(__dirname, 'curriculum-ingest-preview.json');
 
-// --- Pinecone target (matches david-chat/index.ts) ---
-const PINECONE_HOST = 'https://sbd-knowledge-ai-44928mo.svc.aped-4627-b74a.pinecone.io';
+// --- Pinecone target: one shared secret with david-chat/index.ts (T89) ---
+const PINECONE_HOST = (process.env.PINECONE_INDEX_HOST || '').replace(/\/+$/, '');
 const NAMESPACE = 'master-docs';
 const UPSERT_URL = `${PINECONE_HOST}/records/namespaces/${NAMESPACE}/upsert`;
 
@@ -212,7 +213,7 @@ async function main() {
   console.log(`Records (chunks): ${records.length}`);
   console.log(`Total text chars: ${totalChars.toLocaleString()}`);
   console.log('By curriculum:', byLabel);
-  console.log(`Target: ${UPSERT_URL}`);
+  console.log(`Target: ${PINECONE_HOST ? UPSERT_URL : '(PINECONE_INDEX_HOST unset)'}`);
 
   if (!COMMIT) {
     writeFileSync(PREVIEW_FILE, JSON.stringify(records, null, 2));
@@ -225,6 +226,10 @@ async function main() {
   const apiKey = process.env.PINECONE_API_KEY;
   if (!apiKey) {
     console.error('\n--commit set but PINECONE_API_KEY is missing. Aborting.');
+    process.exit(1);
+  }
+  if (!PINECONE_HOST) {
+    console.error('\n--commit set but PINECONE_INDEX_HOST is missing. Aborting.');
     process.exit(1);
   }
 
