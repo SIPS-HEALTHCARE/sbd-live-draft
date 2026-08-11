@@ -5164,6 +5164,21 @@ function buildAssessmentReportHTML(pr, staff, fac) {
     return `<div class="ar-level-card ${pass ? 'ar-level-pass' : 'ar-level-fail'}"><div style="font-weight:700;font-size:9pt">L${i}</div><div style="font-size:7.5pt;color:#64748b">${LEVEL_LABELS[k]}</div><div style="font-size:15pt;font-weight:900;color:${pass ? '#16a34a' : '#dc2626'};margin:5px 0">${pct != null ? pct.toFixed(1)+'%' : '—'}</div><div style="font-size:7pt;color:#64748b">floor ${floor.toFixed(1)}%</div><div style="font-weight:700;color:${pass ? '#16a34a' : '#dc2626'};font-size:8pt;margin-top:4px">${pass ? 'PASS' : 'FAIL'}</div><div style="font-size:7pt;color:#64748b;margin-top:4px">${safe(d.scores.join(' '))}</div></div>`;
   }).join('');
 
+  // Per-level percent summary for the top of the report: level name plus percent only. The floor
+  // and pass/fail stay on the detailed level cards below; this band is the at-a-glance view the
+  // client asked for, styled like the overall tiles.
+  const _gistCard = (i, d) => {
+    const pv = d && d.pct != null ? (Math.round(d.pct * 10) / 10).toFixed(1) + '%' : '—';
+    return `<div style="border:1px solid #e2e8f0;border-radius:6px;padding:9px 6px;text-align:center"><div style="font-size:8.5pt;font-weight:800;color:#0f2340">L${i}</div><div style="font-size:6.5pt;color:#64748b;line-height:1.15">${LEVEL_LABELS[String(i)]}</div><div style="font-size:15pt;font-weight:900;color:#0f2340;margin-top:3px">${pv}</div></div>`;
+  };
+  const levelGistBand = `<div class="ar-section"><div class="ar-section-hdr">LEVEL SCORES AT A GLANCE</div><div class="ar-section-body">
+    <div style="font-size:7.5pt;font-weight:700;color:#64748b;letter-spacing:.05em;margin-bottom:5px">KNOWLEDGE BY LEVEL</div>
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:12px">${[1,2,3,4,5].map(i => _gistCard(i, kByLevel[String(i)])).join('')}</div>
+    <div style="font-size:7.5pt;font-weight:700;color:#64748b;letter-spacing:.05em;margin-bottom:5px">SIMULATION BY LEVEL</div>
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">${[1,2,3,4,5].map(i => _gistCard(i, sByLevel[String(i)])).join('')}</div>
+    <div style="margin-top:11px;padding:8px 12px;background:#eff6ff;border-left:3px solid #2563eb;font-size:8pt;color:#374151;line-height:1.5">The percent for each level is shown above. A belt sets its own minimum only at the levels it gates; the levels it does not gate still count toward the overall score, which carries its own pass mark.</div>
+  </div></div>`;
+
   // Individual responses below the belt's own minimum (section 9), not a flat 65.
   const sBelow = simulation.filter(r => r.aiScore != null && r.aiScore < thresh.individual);
   const sBelowScores = sBelow.map(r => r.aiScore).sort((a,b) => a-b);
@@ -5347,6 +5362,7 @@ function buildAssessmentReportHTML(pr, staff, fac) {
         </div>
       </div>
     </div>
+    ${levelGistBand}
     <div style="margin-bottom:12px;padding:12px 16px;background:#fffbeb;border-left:4px solid #c49a20">
       <div style="font-size:7.5pt;font-weight:700;color:#c49a20;letter-spacing:.08em;margin-bottom:6px">CERTIFICATION BASIS AND CONDITIONS</div>
       <div style="font-size:8.5pt;color:#374151;line-height:1.65">${safe(certBasis)}</div>
