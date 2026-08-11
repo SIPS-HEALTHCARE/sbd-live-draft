@@ -4381,7 +4381,7 @@ function downloadAssessmentReport(prId){
     <div>${hdr(2)}
       ${sect('KNOWLEDGE COMPONENT')}
       <table style="${tbl}"><tr style="background:#f7f4ef"><th style="padding:5px;border:1px solid #e2e8f0">Level</th><th style="padding:5px;border:1px solid #e2e8f0">Score</th><th style="padding:5px;border:1px solid #e2e8f0">Floor</th><th style="padding:5px;border:1px solid #e2e8f0">Result</th><th style="padding:5px;border:1px solid #e2e8f0">Correct</th></tr>
-        ${m.kLevels.map(k=>`<tr><td style="padding:5px;border:1px solid #e2e8f0;font-weight:700">L${k.level}</td><td style="padding:5px;border:1px solid #e2e8f0">${k.pct??'--'}%</td><td style="padding:5px;border:1px solid #e2e8f0">${k.floor==null?'not gated':k.floor+'%'}</td><td style="padding:5px;border:1px solid #e2e8f0">${k.floor==null?'--':pf(k.pass)}</td><td style="padding:5px;border:1px solid #e2e8f0">${k.correct}/${k.of}</td></tr>`).join('')}
+        ${m.kLevels.map(k=>`<tr><td style="padding:5px;border:1px solid #e2e8f0;font-weight:700">L${k.level} ${LEVEL_LABELS[String(k.level)]||''}</td><td style="padding:5px;border:1px solid #e2e8f0">${k.pct??'--'}%</td><td style="padding:5px;border:1px solid #e2e8f0">${k.floor==null?'Not required at '+m.belt+' Belt':k.floor+'%'}</td><td style="padding:5px;border:1px solid #e2e8f0">${k.floor==null?'<span style="color:#64748b">Counts toward overall</span>':pf(k.pass)}</td><td style="padding:5px;border:1px solid #e2e8f0">${k.correct}/${k.of}</td></tr>`).join('')}
       </table>
       <div style="margin:8px 0;font-size:9pt"><b>KNOWLEDGE OVERALL: ${m.kOverall}%</b> &nbsp; ${m.belt} Belt floor: ${m.th.k}% | ${m.kOverall>=m.th.k?'PASS':'FAIL by '+(Math.round((m.th.k-m.kOverall)*10)/10)+' pts'}</div>
       ${sect('INCORRECT AND BLANK RESPONSES')}
@@ -4391,7 +4391,7 @@ function downloadAssessmentReport(prId){
     <div>${hdr(3)}
       ${sect('SIMULATION COMPONENT')}
       <table style="${tbl}"><tr style="background:#f7f4ef"><th style="padding:5px;border:1px solid #e2e8f0">Level</th><th style="padding:5px;border:1px solid #e2e8f0">Score</th><th style="padding:5px;border:1px solid #e2e8f0">Floor</th><th style="padding:5px;border:1px solid #e2e8f0">Result</th><th style="padding:5px;border:1px solid #e2e8f0">Responses</th></tr>
-        ${m.simLevels.map(sv=>`<tr><td style="padding:5px;border:1px solid #e2e8f0;font-weight:700">L${sv.level}</td><td style="padding:5px;border:1px solid #e2e8f0">${sv.pct??'--'}%</td><td style="padding:5px;border:1px solid #e2e8f0">${sv.floor==null?'not gated':sv.floor+'%'}</td><td style="padding:5px;border:1px solid #e2e8f0">${sv.floor==null?'--':pf(sv.pass)}</td><td style="padding:5px;border:1px solid #e2e8f0">${sv.scores.join(' ')}</td></tr>`).join('')}
+        ${m.simLevels.map(sv=>`<tr><td style="padding:5px;border:1px solid #e2e8f0;font-weight:700">L${sv.level} ${LEVEL_LABELS[String(sv.level)]||''}</td><td style="padding:5px;border:1px solid #e2e8f0">${sv.pct??'--'}%</td><td style="padding:5px;border:1px solid #e2e8f0">${sv.floor==null?'Not required at '+m.belt+' Belt':sv.floor+'%'}</td><td style="padding:5px;border:1px solid #e2e8f0">${sv.floor==null?'<span style="color:#64748b">Counts toward overall</span>':pf(sv.pass)}</td><td style="padding:5px;border:1px solid #e2e8f0">${sv.scores.join(' ')}</td></tr>`).join('')}
       </table>
       <div style="margin:8px 0;font-size:9pt"><b>SIMULATION OVERALL: ${m.simOverall}%</b> &nbsp; ${m.belt} Belt floor: ${m.th.sim}% | ${m.simOverall>=m.th.sim?'PASS':'FAIL by '+(Math.round((m.th.sim-m.simOverall)*10)/10)+' pts'}</div>
       ${sect('SIMULATION RESPONSE DETAIL')}
@@ -5130,7 +5130,7 @@ function buildAssessmentReportHTML(pr, staff, fac) {
     // Null floor = this belt does not gate this level (section 9). Print that, do not print a
     // pass or a fail: a level nobody was measured on is neither.
     const floor = sbdKnowledgeFloor(targetBelt, i);
-    if (floor == null) return `<div class="ar-level-card" style="border-color:#e2e8f0;background:#f8fafc"><div style="font-weight:700;font-size:9pt">L${i}</div><div style="font-size:7.5pt;color:#64748b">${LEVEL_LABELS[k]}</div><div style="font-size:15pt;font-weight:900;color:#475569;margin:5px 0">${pct.toFixed(1)}%</div><div style="font-size:7pt;color:#64748b">not gated at ${safe(targetBelt)}</div><div style="font-weight:700;color:#94a3b8;font-size:8pt;margin-top:4px">&mdash;</div><div style="font-size:7.5pt;color:#475569;margin-top:4px">${d.correct}/${d.total} correct</div></div>`;
+    if (floor == null) return `<div class="ar-level-card" style="border-color:#e2e8f0;background:#f8fafc"><div style="font-weight:700;font-size:9pt">L${i}</div><div style="font-size:7.5pt;color:#64748b">${LEVEL_LABELS[k]}</div><div style="font-size:15pt;font-weight:900;color:#475569;margin:5px 0">${pct.toFixed(1)}%</div><div style="font-size:7pt;color:#64748b">Not required at ${safe(targetBelt)} Belt</div><div style="font-weight:700;color:#94a3b8;font-size:7pt;margin-top:4px">Counts toward overall</div><div style="font-size:7.5pt;color:#475569;margin-top:4px">${d.correct}/${d.total} correct</div></div>`;
     const pass = d.pct >= floor;
     return `<div class="ar-level-card ${pass ? 'ar-level-pass' : 'ar-level-fail'}"><div style="font-weight:700;font-size:9pt">L${i}</div><div style="font-size:7.5pt;color:#64748b">${LEVEL_LABELS[k]}</div><div style="font-size:15pt;font-weight:900;color:${pass ? '#16a34a' : '#dc2626'};margin:5px 0">${pct.toFixed(1)}%</div><div style="font-size:7pt;color:#64748b">floor ${floor.toFixed(1)}%</div><div style="font-weight:700;color:${pass ? '#16a34a' : '#dc2626'};font-size:8pt;margin-top:4px">${pass ? 'PASS' : 'FAIL'}</div><div style="font-size:7.5pt;color:#475569;margin-top:4px">${d.correct}/${d.total} correct</div></div>`;
   }).join('');
@@ -5159,7 +5159,7 @@ function buildAssessmentReportHTML(pr, staff, fac) {
     const pct = d.pct != null ? Math.round(d.pct * 10) / 10 : null;
     // Same rule as the knowledge cards: at Green, simulation L4 and L5 carry no floor, and
     // marking a candidate's score there as a failure is the bug this replaces.
-    if (floor == null) return `<div class="ar-level-card" style="border-color:#e2e8f0;background:#f8fafc"><div style="font-weight:700;font-size:9pt">L${i}</div><div style="font-size:7.5pt;color:#64748b">${LEVEL_LABELS[k]}</div><div style="font-size:15pt;font-weight:900;color:#475569;margin:5px 0">${pct != null ? pct.toFixed(1)+'%' : '—'}</div><div style="font-size:7pt;color:#64748b">not gated at ${safe(targetBelt)}</div><div style="font-weight:700;color:#94a3b8;font-size:8pt;margin-top:4px">&mdash;</div><div style="font-size:7pt;color:#64748b;margin-top:4px">${safe(d.scores.join(' '))}</div></div>`;
+    if (floor == null) return `<div class="ar-level-card" style="border-color:#e2e8f0;background:#f8fafc"><div style="font-weight:700;font-size:9pt">L${i}</div><div style="font-size:7.5pt;color:#64748b">${LEVEL_LABELS[k]}</div><div style="font-size:15pt;font-weight:900;color:#475569;margin:5px 0">${pct != null ? pct.toFixed(1)+'%' : '—'}</div><div style="font-size:7pt;color:#64748b">Not required at ${safe(targetBelt)} Belt</div><div style="font-weight:700;color:#94a3b8;font-size:7pt;margin-top:4px">Counts toward overall</div><div style="font-size:7pt;color:#64748b;margin-top:4px">${safe(d.scores.join(' '))}</div></div>`;
     const pass = pct != null && pct >= floor;
     return `<div class="ar-level-card ${pass ? 'ar-level-pass' : 'ar-level-fail'}"><div style="font-weight:700;font-size:9pt">L${i}</div><div style="font-size:7.5pt;color:#64748b">${LEVEL_LABELS[k]}</div><div style="font-size:15pt;font-weight:900;color:${pass ? '#16a34a' : '#dc2626'};margin:5px 0">${pct != null ? pct.toFixed(1)+'%' : '—'}</div><div style="font-size:7pt;color:#64748b">floor ${floor.toFixed(1)}%</div><div style="font-weight:700;color:${pass ? '#16a34a' : '#dc2626'};font-size:8pt;margin-top:4px">${pass ? 'PASS' : 'FAIL'}</div><div style="font-size:7pt;color:#64748b;margin-top:4px">${safe(d.scores.join(' '))}</div></div>`;
   }).join('');
@@ -5261,7 +5261,7 @@ function buildAssessmentReportHTML(pr, staff, fac) {
     const kf = sbdKnowledgeFloor(targetBelt, lvl), sf = sbdSimFloor(targetBelt, lvl);
     const gated = (kf != null || sf != null)
       ? `gated at ${targetBelt}${kf != null ? ` &middot; knowledge ${kf}%` : ''}${sf != null ? ` &middot; simulation ${sf}%` : ''}`
-      : `not gated at ${targetBelt} Belt`;
+      : `Not required at ${targetBelt} Belt`;
     return `<tr><td style="padding:5px 10px;font-size:9.5pt;border-bottom:1px solid #e2e8f0">Level ${safe(lvl)}</td><td style="padding:5px 10px;font-size:9.5pt;border-bottom:1px solid #e2e8f0">${p}%</td><td style="padding:5px 10px;font-size:8.5pt;border-bottom:1px solid #e2e8f0;color:#64748b">${gated}</td></tr>`;
   }).join('');
 
