@@ -2098,6 +2098,70 @@ already named above: **an ask next to an urgent one still needs its own row.**
   Belongs with the David work rather than ahead of it. Read `docs/DAVID_OG_EXTRACTION_PLAN.md`
   first so the change stays compatible with the extraction.
 
+- [x] **T94** David names the assessment levels instead of inventing topics for them · est 0.25d · High
+  **Done 2026-08-11.** Iggie's screenshot of a Net Intel profile showed L1 to L5 listed as subject
+  areas, with names that appear nowhere in the curriculum. L1 to L5 are cognitive complexity
+  levels, so a profile that reads them as topics tells a leader to assign the wrong training.
+
+  The cause was in the data, not the model. `aiSerializePlacements` sent bare numbers,
+  `L1 89% / L2 90%`, and left the meaning of each level unstated, so the model supplied one. The
+  serializer now sends the level names with the scores and states plainly that these are
+  complexity levels rather than content areas. Fixing the input beats instructing the model not
+  to guess, and it keeps the prompt out of it, which matters while David is queued for extraction.
+
+- [x] **T95** Belt assessment report reads at a glance for a leader · est 1d · High
+  **Done 2026-08-11.** Approved by Iggie on the 10 August call. Display only, no scoring rule
+  was touched.
+
+  A level summary sits at the top of the report, one card per level carrying the level name and
+  the percent only, knowledge and simulation kept separate. His words on the call were *"we don't
+  have to have the floor on there or fail, we'll just have the percent up there."* The floor and
+  the result stay on the detailed sections below, where they were wanted, *"this allows us to
+  understand more finite where they are."*
+
+  The levels a belt did not require used to print as `not gated` with a blank beside them, which
+  read as missing data. Every level is now named, and the detailed rows carry the minimum and the
+  result in words.
+
+  Findings were reworded to read as coaching. Each one names the level, the score, how far it sat
+  from the minimum, and one concrete thing to do. The severity bands are unchanged in strictness.
+
+  Both report renderers carry the same wording and the same summary band. They had drifted, the
+  summary having landed in the card renderer only, which is exactly the failure this row was
+  warned about.
+
+- [x] **T96** Belt scoring follows the SIPS Scoring Specification v1 · est 1d · High
+  **Done 2026-08-11.** SIPS issued the Belt Assessment Scoring Specification v1.0 as the canonical
+  source. The thresholds, the knowledge gate and the 60/40 blend already matched it. The detail
+  underneath did not.
+
+  Component overalls are now the item-weighted mean across every item rather than the mean of the
+  five level means, which only agree while every level holds the same number of questions and L5
+  holds seven. Every level carries a floor, knowledge a flat 80 everywhere and simulation stepping
+  down from the belt's own floor. The individual response minimum is a universal 65 and a response
+  under it is blocking. Severity is graded by how far below the minimum the score landed. Scores
+  are carried at full precision to every comparison and rounded only where printed.
+
+  Two real defects surfaced while doing it. The dynamic belt test selected a belt on the blended
+  score alone, with no knowledge gate, so a candidate whose knowledge sat below a belt's gate could
+  still be placed there; the specification's own test vector four exists to catch this and now
+  passes. And a candidate who cleared the knowledge bar but not the blended threshold was being
+  given a White belt the blended score had not earned, where the specification records Knowledge
+  Foundation, which is not a belt.
+
+  Verified against the specification's reference implementation on all 49 stored placements:
+  identical belt, knowledge, simulation and blended figures on every one.
+
+  *Not done here, and each needs its own decision:* re-running historical placements, which must
+  re-score the responses with the calibrated evaluator first or it strips belts for a scoring
+  fault that was ours; moving the whole determination server side (specification §16); and the
+  versioned constants table.
+
+- [x] **T97** Inactivity logout tightened to fifteen minutes · est 0.25d · Medium
+  **Done 2026-08-11.** Was thirty. The activity listeners already cover pointer, keyboard, touch
+  and scrolling anywhere in the page, so the shorter window closes an unattended session sooner
+  without interrupting somebody who is reading.
+
   *Goal:* A chat can be found later by what it was about.
   *Done when:* A chat title can be edited from the history list, the edit persists across
   sessions, and a later message does not overwrite it.

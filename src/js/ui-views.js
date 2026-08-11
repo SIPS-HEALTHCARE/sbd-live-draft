@@ -4382,6 +4382,12 @@ function downloadAssessmentReport(prId){
         <td style="padding:10px;border:1px solid #e2e8f0;text-align:center;width:34%"><div style="font-size:7.5pt;color:#64748b;font-weight:700">FINAL DETERMINATION</div><div style="font-size:9.5pt;font-weight:700;margin-top:4px">${m.determination}</div></td>
         <td style="padding:10px;border:1px solid #e2e8f0;text-align:center"><div style="font-size:7.5pt;color:#64748b;font-weight:700">BLENDED SCORE</div><div style="font-size:15pt;font-weight:800;color:#0d1b35">${m.blended}%</div><div style="font-size:7.5pt;color:#64748b">K ${m.kOverall}% | Sim ${m.simOverall}%</div></td>
       </tr></table>
+      ${sect('LEVEL SCORES AT A GLANCE')}
+      <div style="font-size:7.5pt;font-weight:700;color:#64748b;letter-spacing:.05em;margin-bottom:3px">KNOWLEDGE BY LEVEL</div>
+      <table style="${tbl}"><tr>${m.kLevels.map(k=>`<td style="padding:8px 4px;border:1px solid #e2e8f0;text-align:center;width:20%"><div style="font-size:8.5pt;font-weight:800;color:#0d1b35">L${k.level}</div><div style="font-size:6.5pt;color:#64748b;line-height:1.15">${LEVEL_LABELS[String(k.level)]||''}</div><div style="font-size:14pt;font-weight:800;color:#0d1b35;margin-top:2px">${k.pct==null?'--':k.pct+'%'}</div></td>`).join('')}</tr></table>
+      <div style="font-size:7.5pt;font-weight:700;color:#64748b;letter-spacing:.05em;margin:8px 0 3px">SIMULATION BY LEVEL</div>
+      <table style="${tbl}"><tr>${m.simLevels.map(sv=>`<td style="padding:8px 4px;border:1px solid #e2e8f0;text-align:center;width:20%"><div style="font-size:8.5pt;font-weight:800;color:#0d1b35">L${sv.level}</div><div style="font-size:6.5pt;color:#64748b;line-height:1.15">${LEVEL_LABELS[String(sv.level)]||''}</div><div style="font-size:14pt;font-weight:800;color:#0d1b35;margin-top:2px">${sv.pct==null?'--':sv.pct+'%'}</div></td>`).join('')}</tr></table>
+      <div style="margin-top:8px;padding:7px 10px;background:#eff6ff;border-left:3px solid #2563eb;font-size:8pt;color:#374151;line-height:1.5">The percent for each level is shown above. Every level carries a minimum for the belt being assessed, and the sections below show that minimum next to the result for each one. The overall score carries its own pass mark on top of the level minimums.</div>
       ${sect('CERTIFICATION BASIS AND CONDITIONS')}
       <div style="font-size:8.5pt">${basis}</div>
       <div style="page-break-after:always"></div></div>
@@ -4896,7 +4902,7 @@ function deriveOutcome(pr) {
   const beltIsDetermined = !!targetBelt;
   const beltForFloors = targetBelt || 'White';
   const thresh = sbdSpecOveralls(beltForFloors) || { blended: 0, sim: 0, knowledge: 0, k: 0, individual: 0 };
-  const sevCfg = (sbdSpecConfig() || {}).severity || { knowledgeRequiredMargin: 8, simRequiredMargin: 5, watchMargin: 5 };
+  const sevCfg = (sbdSpecConfig() || {}).severity || { blockingGap: 5, requiredGap: 2, watchMargin: 5 };
 
   // Per-level pass/fail against the section 9 floors for that belt, computed from the stored
   // responses. This used to read pr.levelScores -- a single blended knowledge-plus-simulation
@@ -4915,34 +4921,43 @@ function deriveOutcome(pr) {
   for (let i = 1; i <= 5; i++) {
     const kf = sbdKnowledgeFloor(beltForFloors, i);
     if (kf != null && _kPct[i] != null) {
-      if (_kPct[i] < kf) floorFails.push({ level: i, kind: 'knowledge', pct: _kPct[i], floor: kf, margin: sevCfg.knowledgeRequiredMargin });
+      if (_kPct[i] < kf) floorFails.push({ level: i, kind: 'knowledge', pct: _kPct[i], floor: kf });
       else if (_kPct[i] < kf + sevCfg.watchMargin) nearMisses.push({ level: i, kind: 'knowledge', pct: _kPct[i], floor: kf });
     }
     const sf = sbdSimFloor(beltForFloors, i);
     if (sf != null && _sPct[i] != null) {
-      if (_sPct[i] < sf) floorFails.push({ level: i, kind: 'simulation', pct: _sPct[i], floor: sf, margin: sevCfg.simRequiredMargin });
+      if (_sPct[i] < sf) floorFails.push({ level: i, kind: 'simulation', pct: _sPct[i], floor: sf });
       else if (_sPct[i] < sf + sevCfg.watchMargin) nearMisses.push({ level: i, kind: 'simulation', pct: _sPct[i], floor: sf });
     }
   }
+  // Findings read as coaching, not as a verdict. Every one names the level, the number, the
+  // distance to the minimum, and one concrete thing to do, and it ends with a path rather than
+  // a wall. The severity bands themselves are unchanged in strictness: they are graded by the
+  // size of the miss (Scoring Specification v1.0 §10.2), so a half-point miss and a
+  // twenty-point miss no longer read the same.
+  const _sevForGap = (gap) => gap > sevCfg.blockingGap ? 'BLOCKING'
+                            : gap >= sevCfg.requiredGap ? 'REQUIRED'
+                            : 'ADVISORY';
+  const _devPlan = 'Carry this into the development plan. It does not hold up advancement.';
   const _failCond = (f) => {
-    const short = f.floor - f.pct;
-    const sev = short > f.margin ? 'REQUIRED' : 'ADVISORY';
+    const short = Math.round((f.floor - f.pct) * 10) / 10;
+    const sev = _sevForGap(f.floor - f.pct);
     return {
       severity: sev,
-      title: `${sev === 'REQUIRED' ? 'Competency Gap' : 'Near-Threshold'} &middot; Level ${f.level} ${f.kind} (${LEVEL_LABELS[String(f.level)] || ''})`,
-      finding: `Level ${f.level} ${f.kind} scored ${Math.round(f.pct)}%, below the ${f.floor}% floor required at ${beltForFloors} Belt${sev === 'REQUIRED' ? ` by more than ${f.margin} points` : ''}.`,
-      requiredAction: sev === 'REQUIRED'
-        ? (f.kind === 'knowledge'
-            ? 'Complete targeted re-study and a re-test at or above the floor. Document completion and have a supervisor sign off.'
-            : 'Complete scenario practice in this level with supervisor review, then re-assessment of this simulation level.')
-        : 'Acknowledge finding and incorporate into the development plan. Does not block advancement.',
+      title: `Level ${f.level} ${f.kind} &middot; ${LEVEL_LABELS[String(f.level)] || ''}`,
+      finding: `Level ${f.level} ${f.kind} came in at ${Math.round(f.pct)}%, ${short} points under the ${f.floor}% minimum for ${beltForFloors} Belt.`,
+      requiredAction: sev === 'ADVISORY'
+        ? _devPlan
+        : (f.kind === 'knowledge'
+            ? `Re-study this level and sit the knowledge check again at ${f.floor}% or above.`
+            : `Work through scenario practice at this level with a reviewer, then re-sit this simulation level.`),
     };
   };
   const _nearCond = (n) => ({
     severity: 'ADVISORY',
-    title: `Near-Threshold &middot; Level ${n.level} ${n.kind} (${LEVEL_LABELS[String(n.level)] || ''})`,
-    finding: `Level ${n.level} ${n.kind} passed at ${Math.round(n.pct)}%, within ${sevCfg.watchMargin} points of the ${n.floor}% floor for ${beltForFloors} Belt.`,
-    requiredAction: 'Acknowledge finding and incorporate into the development plan. Does not block advancement.',
+    title: `Level ${n.level} ${n.kind} &middot; ${LEVEL_LABELS[String(n.level)] || ''} (close to the minimum)`,
+    finding: `Level ${n.level} ${n.kind} cleared at ${Math.round(n.pct)}%, within ${sevCfg.watchMargin} points of the ${n.floor}% minimum for ${beltForFloors} Belt.`,
+    requiredAction: _devPlan,
   });
 
   let outcome, classification, tone;
@@ -5183,7 +5198,7 @@ function buildAssessmentReportHTML(pr, staff, fac) {
     <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:12px">${[1,2,3,4,5].map(i => _gistCard(i, kByLevel[String(i)])).join('')}</div>
     <div style="font-size:7.5pt;font-weight:700;color:#64748b;letter-spacing:.05em;margin-bottom:5px">SIMULATION BY LEVEL</div>
     <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">${[1,2,3,4,5].map(i => _gistCard(i, sByLevel[String(i)])).join('')}</div>
-    <div style="margin-top:11px;padding:8px 12px;background:#eff6ff;border-left:3px solid #2563eb;font-size:8pt;color:#374151;line-height:1.5">The percent for each level is shown above. A belt sets its own minimum only at the levels it gates; the levels it does not gate still count toward the overall score, which carries its own pass mark.</div>
+    <div style="margin-top:11px;padding:8px 12px;background:#eff6ff;border-left:3px solid #2563eb;font-size:8pt;color:#374151;line-height:1.5">The percent for each level is shown above. Every level carries a minimum for the belt being assessed, and the sections below show that minimum next to the result for each one. The overall score carries its own pass mark on top of the level minimums.</div>
   </div></div>`;
 
   // Individual responses below the belt's own minimum (section 9), not a flat 65.

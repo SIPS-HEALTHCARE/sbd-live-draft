@@ -2024,7 +2024,11 @@ window.onload = function(){
   //      - there were no touch listeners at all, so on a phone the only things
   //        that counted were a tap or a keystroke. Reading on mobile logged you
   //        out on a timer regardless of what you were doing.
-  const INACTIVITY_MS = 30 * 60 * 1000;
+  // 15 minutes, tightened from 30 as part of the security review. The activity
+  // listeners below cover pointer, keyboard, touch and scrolling anywhere in the
+  // page, so a shorter window closes an unattended session sooner without
+  // interrupting somebody who is actually reading.
+  const INACTIVITY_MS = 15 * 60 * 1000;
   let inactivityTimer;
   const onboardingActive = () => {
     // Tour engine running, or the welcome/tour overlays are visible on screen
