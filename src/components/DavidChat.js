@@ -1460,6 +1460,12 @@ class DavidChat {
         `;
     }
 
+    // Error text comes from the server/exception and lands in innerHTML (and, once saved,
+    // is replayed through marked on every reopen) — escape it like the chat titles.
+    escapeHtml(s) {
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
     // If aggressive content-stripping (thinking / sql / json / chips) removed everything,
     // never show a blank bubble: fall back to the reply with only <thinking> removed,
     // or a clear placeholder if the model truly produced no visible answer.
@@ -2118,7 +2124,7 @@ class DavidChat {
                                     this.renderQuotaNotice(msgDiv, json.meta.quota);
                                 } else if (json.error) {
                                     streamError = json.error;
-                                    contentTarget.innerHTML += `<span style="color:var(--err)">Error: ${json.error}</span>`;
+                                    contentTarget.innerHTML += `<span style="color:var(--err)">Error: ${this.escapeHtml(json.error)}</span>`;
                                 }
                             } catch (e) {}
                         }
@@ -2132,10 +2138,12 @@ class DavidChat {
             } finally {
                 buffer += decoder.decode();
 
-                // A failed turn must show (and save) the real error, not the empty-answer
-                // placeholder — reopening the chat replays whatever gets pushed here.
-                if (!fullContent.trim() && streamError) {
-                    fullContent = `⚠️ **Error:** ${streamError}`;
+                // A failed turn must show (and save) the real error — appended to any
+                // partial answer, never replaced by it. Reopening the chat replays
+                // whatever gets pushed here, so escape before it enters the pipeline.
+                if (streamError) {
+                    const errLine = `⚠️ **Error:** ${this.escapeHtml(streamError)}`;
+                    fullContent = fullContent.trim() ? `${fullContent}\n\n${errLine}` : errLine;
                 }
 
                 // Final UI Update
@@ -2199,7 +2207,7 @@ class DavidChat {
             }
 
         } catch (e) {
-            contentTarget.innerHTML = `<span style="color:var(--err)">Error: ${e.message}</span>`;
+            contentTarget.innerHTML = `<span style="color:var(--err)">Error: ${this.escapeHtml(e.message)}</span>`;
             console.error('[DAVID] Error:', e);
         } finally {
             this.isThinking = false;
