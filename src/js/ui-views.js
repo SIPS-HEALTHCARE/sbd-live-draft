@@ -5619,7 +5619,38 @@ function openPrintWindow(title, bodyHtml){
         <span>Confidential &bull; Generated ${generatedAt}</span>
       </div>
     </div>
-    <script>window.onload=function(){setTimeout(()=>window.print(),400)}<\/script>
+    <script>
+      // Wait until the document can actually be printed, rather than guessing at a delay.
+      // The old version fired 400ms after load, which is before the webfont above has
+      // finished swapping in and before the first paint has settled. Printing that early
+      // hands Chrome a document mid-layout: the preview appears, but Save produces nothing
+      // and the reader has to close it and print the page by hand.
+      //
+      // So: wait for load, then for the fonts, then for two frames, and only then print.
+      (function () {
+        var done = false;
+        function go() {
+          if (done) return;
+          done = true;
+          try { window.focus(); } catch (e) {}
+          window.print();
+        }
+        function whenSettled() {
+          var fonts = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
+          // Resolve either way. A font that never loads must not block the print.
+          fonts.then(paint, paint);
+          // Backstop: a hidden tab throttles or parks requestAnimationFrame, so the frame
+          // wait below can stall indefinitely. Never leave the reader with a report that
+          // opened and then simply never offered to print.
+          setTimeout(go, 2500);
+        }
+        function paint() {
+          requestAnimationFrame(function () { requestAnimationFrame(function () { setTimeout(go, 150); }); });
+        }
+        if (document.readyState === 'complete') whenSettled();
+        else window.addEventListener('load', whenSettled);
+      })();
+    <\/script>
   </body></html>`;
   const w = window.open('','_blank');
   if(w){ w.document.write(html); w.document.close(); }
