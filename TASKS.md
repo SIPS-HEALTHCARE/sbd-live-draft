@@ -2298,8 +2298,11 @@ already named above: **an ask next to an urgent one still needs its own row.**
   The three scoreboard tabs, one on each surface, are open to every role. Asked plainly on
   2026-08-11 whether he wanted it hidden from everyone except SIPS or only so that one facility
   cannot see another facility's staff, the client answered *"Everyone but sips master admin"*.
-  Built and held rather than shipped, because the same item also sits on the team's board and two
-  people fixing one thing is how T77 went wrong. Whoever ships it should also correct the app's
+  *Owner: the team, confirmed 2026-08-12.* Built and held here rather than shipped, because the
+  same item sits on the team's board and two people fixing one thing is how T77 went wrong. The
+  built version is kept as a patch alongside this ledger in case it is useful; it gates the three
+  tabs in `enterPortal`, which is the one entry point all three surfaces pass through. Whoever
+  ships it should also correct the app's
   own role documentation, which currently tells users a staff member login gives them "the
   system-wide scoreboard" and describes the staff portal as "personal dashboard and scoreboard
   only". Hiding the tab is not an authorisation boundary; the ranking data stays readable to
