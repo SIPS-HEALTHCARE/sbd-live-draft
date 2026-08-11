@@ -680,7 +680,12 @@ function mapFacilityFromBackend(row){
   if(!row) return null;
   return {
     id: row.id,
-    name: typeof titleCase === 'function' ? titleCase(row.name) : row.name,
+    // The stored name is authoritative and is shown verbatim. It used to be title-cased on
+    // every read, which lowercased the whole string first and then capitalised after every
+    // word boundary, so an apostrophe or an acronym came out wrong: "Nemours Children's
+    // Hospital, DE" printed as "Nemours Children'S Hospital, De" on a formal certification
+    // record. Casing belongs at the point the name is entered, not on the way out.
+    name: row.name,
     loc: row.loc,
     dept: row.dept,
     contact: row.contact,
