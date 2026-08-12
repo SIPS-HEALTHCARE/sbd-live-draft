@@ -341,10 +341,26 @@ function markPasswordNoticeDone(){
   }
 }
 
+// ── Scoreboard lockdown (Ignacio, WhatsApp 2026-08-10 + 2026-08-11: "Everyone but sips
+// master admin") ────────────────────────────────────────────────────────────────────────
+// The three scoreboard nav items ship display:none in index.html; only a master_admin
+// session reveals them. Gated on the session role, not the portal, so a master admin
+// still sees it after using the portal switcher (T72).
+function scoreboardAllowed(u){ u=u||ST.user; return !!u && u.role==='master_admin'; }
+
+function applyScoreboardNavGate(u){
+  ['s-scoreboard','h-scoreboard','a-scoreboard'].forEach(v=>{
+    const n=document.querySelector('.nav-item[data-view="'+v+'"]');
+    if(n) n.style.display = scoreboardAllowed(u) ? 'flex' : 'none';
+  });
+}
+
 function enterPortal(type){
   document.getElementById('login').classList.add('hidden');
   ST.portal=type;
   const u=ST.user;
+  // One call covers all three portals — the nav items are static markup.
+  applyScoreboardNavGate(u);
   // Deferred inside, so it lands on a painted screen and survives the early returns below.
   maybeShowPasswordNotice();
 
@@ -367,6 +383,7 @@ function enterPortal(type){
     // Restore saved view or default to dashboard
     let _sv='s-dashboard',_st='My Dashboard';
     try{const v=JSON.parse(sessionStorage.getItem('sbd_demo_view')||'{}');if(v.view&&v.view.startsWith('s-')){_sv=v.view;_st=v.title||_st;}}catch(e){}
+    if(_sv==='s-scoreboard'&&!scoreboardAllowed(u)){_sv='s-dashboard';_st='My Dashboard';}
     const _sEl=document.querySelector('#s-portal .nav-item[data-view="'+_sv+'"]');
     if(_sEl) _sEl.classList.add('active'); else document.querySelector('#s-portal .nav-item[data-view="s-dashboard"]').classList.add('active');
     document.getElementById('s-topbar-title').textContent=_st;
@@ -439,6 +456,7 @@ function enterPortal(type){
     document.querySelectorAll('#h-portal .nav-item').forEach(n=>n.classList.remove('active'));
     let _hv='h-dashboard',_ht='Department Dashboard';
     try{const v=JSON.parse(sessionStorage.getItem('sbd_demo_view')||'{}');if(v.view&&v.view.startsWith('h-')){_hv=v.view;_ht=v.title||_ht;}}catch(e){}
+    if(_hv==='h-scoreboard'&&!scoreboardAllowed(u)){_hv='h-dashboard';_ht='Department Dashboard';}
     const _hEl=document.querySelector('#h-portal .nav-item[data-view="'+_hv+'"]');
     if(_hEl) _hEl.classList.add('active'); else document.querySelector('#h-portal .nav-item[data-view="h-dashboard"]').classList.add('active');
     document.getElementById('h-topbar-title').textContent=_ht;
@@ -502,6 +520,9 @@ function enterPortal(type){
       _at = document.querySelector('#a-portal .nav-item[data-view="'+possibleView+'"]').textContent.trim() || _at;
     } else if(v.view&&v.view.startsWith('a-')){_av=v.view;_at=v.title||_at;}
   }catch(e){}
+  // A /scoreboard deep link or a saved view would otherwise set the topbar title for a
+  // view the dispatcher then refuses to render.
+  if(_av==='a-scoreboard'&&!scoreboardAllowed(u)){_av='a-overview';_at='Network Overview';}
   const _aEl=document.querySelector('#a-portal .nav-item[data-view="'+_av+'"]');
   if(_aEl) _aEl.classList.add('active'); else document.querySelector('#a-portal .nav-item[data-view="a-overview"]').classList.add('active');
   document.getElementById('a-topbar-title').textContent=_at;
@@ -581,6 +602,9 @@ function renderSView(view){
     toast('RBAC Guard: Unauthorized access to Staff Portal', 'err');
     return;
   }
+  // Scoreboard lockdown: re-checked here, not just at nav visibility, because a saved
+  // sessionStorage view can route straight to a view id.
+  if(view==='s-scoreboard' && !scoreboardAllowed()){ toast('The scoreboard is unavailable while it is being updated.','warn'); view='s-dashboard'; }
   ['s-dashboard','s-belt','s-window','s-scoreboard','s-posschool','s-report','s-oip','s-schedule','s-history','s-study','s-foundations','s-instruments','s-scripts','s-preceptor','s-observations','s-observationreviews','s-assessments','s-guide','s-settings','s-david'].forEach(v=>{
     const el=document.getElementById(v);
     if(el){el.classList.add('hidden');el.classList.remove('fade-in');}
@@ -675,6 +699,7 @@ function renderHView(view){
     toast('RBAC Guard: Unauthorized access to Facility Portal', 'err');
     return;
   }
+  if(view==='h-scoreboard' && !scoreboardAllowed()){ toast('The scoreboard is unavailable while it is being updated.','warn'); view='h-dashboard'; }
   ['h-dashboard','h-staff','h-profile','h-milestones','h-posschool','h-training','h-instruments','h-checklists','h-preceptor','h-scoreboard','h-schedule','h-attendance','h-reports','h-assessments','h-progression','h-guide','h-settings','h-david'].forEach(v=>{
     const el=document.getElementById(v);
     if(el){ el.classList.add('hidden'); el.classList.remove('fade-in'); }
@@ -718,6 +743,7 @@ function renderAView(view){
     toast('RBAC Guard: Unauthorized access to Network Portal', 'err');
     return;
   }
+  if(view==='a-scoreboard' && !scoreboardAllowed()){ toast('The scoreboard is unavailable while it is being updated.','warn'); view='a-overview'; }
   ['a-overview','a-leaderboard','a-allstaff','a-scoreboard','a-facilities','a-facility','a-schedule','a-registrations','a-assessments','a-progression','a-foundations','a-instruments','a-preceptor','a-upload','a-reports','a-david','a-daviddashboard','a-adminusers','a-rolemgmt','a-promoqueue','a-freeagents','a-placementreviews','a-observations','a-observationreviews','a-guide','a-settings','a-systems','a-systems-dashboard'].forEach(v=>{
     const el=document.getElementById(v);
     if(el){ el.classList.add('hidden'); el.classList.remove('fade-in'); }
