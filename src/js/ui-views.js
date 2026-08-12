@@ -4185,6 +4185,7 @@ function renderAPlacementReviews(){
               <div>
                 <div style="font-size:11px;color:#64748b;margin-bottom:6px">Confirm Belt Placement</div>
                 <select id="pr-belt-${pr.id}" style="background:#0e1328;border:1px solid rgba(255,255,255,.1);border-radius:6px;padding:8px 12px;color:#e2e8f0;font-size:13px;font-family:'Poppins',sans-serif">
+                  <option value="None" ${!pr.tentativeBelt?'selected':''}>No Belt (Remediation)</option>
                   ${['White','Yellow','Green','Blue','Brown','Black'].map(b=>`<option value="${b}" ${(pr.tentativeBelt===b)?'selected':''}>${b} Belt</option>`).join('')}
                 </select>
               </div>
@@ -4198,7 +4199,7 @@ function renderAPlacementReviews(){
           <div style="margin-top:16px;padding:12px 14px;background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.2);border-radius:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
             <div style="color:#22c55e;font-size:18px">&#10003;</div>
             <div style="flex:1;min-width:0">
-              <div style="font-size:12px;font-weight:700;color:#22c55e">Placement Confirmed — ${pr.confirmedBelt} Belt</div>
+              <div style="font-size:12px;font-weight:700;color:#22c55e">Placement Confirmed — ${pr.confirmedBelt ? pr.confirmedBelt+' Belt' : 'No Belt (Remediation)'}</div>
               ${pr.assessorNote ? `<div style="font-size:11.5px;color:#86efac;margin-top:3px">Note: ${pr.assessorNote}</div>` : ''}
             </div>
             <button onclick="generateAssessmentReport('${pr.id}')" style="background:rgba(196,154,32,.12);border:1px solid rgba(196,154,32,.3);border-radius:7px;padding:7px 14px;font-size:11.5px;font-weight:600;color:#c49a20;cursor:pointer;font-family:'Poppins',sans-serif;white-space:nowrap;display:flex;align-items:center;gap:6px"><svg width="12" height="12" viewBox="0 0 18 18" fill="none"><path d="M9 3v8m0 0l-3-3m3 3l3-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 13v1.5a1 1 0 001 1h10a1 1 0 001-1V13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>Download Report</button>
@@ -4576,30 +4577,42 @@ function confirmPlacement(prId){
   const noteEl = document.getElementById('pr-note-'+prId);
   if(!beltEl) return;
   const chosenBelt = beltEl.value;
+  const noBelt = chosenBelt === 'None';
   const note = noteEl ? noteEl.value.trim() : '';
 
-  pr.confirmedBelt = chosenBelt;
+  // A No Belt approval records the decision but awards nothing. confirmed_belt stays null on
+  // the review: both report renderers (rptComputeModel / deriveOutcome) read a stored
+  // confirmedBelt as an assessor-override AWARD, and the engine already prints the correct
+  // "No Belt Issued" determination on its own. The decision itself lives in status /
+  // confirmed_by / confirmed_at / the note / the staff history entry.
+  pr.confirmedBelt = noBelt ? null : chosenBelt;
   pr.assessorNote = note;
-  pr.status = chosenBelt === pr.tentativeBelt ? 'confirmed' : 'adjusted';
+  pr.status = (noBelt ? !pr.tentativeBelt : chosenBelt === pr.tentativeBelt) ? 'confirmed' : 'adjusted';
   pr.confirmedAt = new Date().toISOString().split('T')[0];
   pr.confirmedBy = ST.user ? ST.user.name : 'Assessor';
 
   // Update staff record
   const s = getStaff(pr.staffId);
   if(s){
-    s.belt = chosenBelt;
-    s.since = new Date().toISOString().split('T')[0];
+    s.belt = noBelt ? 'None' : chosenBelt;
     s.placementNeeded = false;
-    // Placed = certified at that belt. Grandfather the current-belt gates so the
-    // assessment window opens; otherwise getWindowStatus() locks the next-belt climb.
-    s.cur = {c:'pass', s:'pass', o:'pass'};
+    if(!noBelt){
+      s.since = new Date().toISOString().split('T')[0];
+      // Placed = certified at that belt. Grandfather the current-belt gates so the
+      // assessment window opens; otherwise getWindowStatus() locks the next-belt climb.
+      s.cur = {c:'pass', s:'pass', o:'pass'};
+    }
+    // No Belt: nothing was certified, so no earn date and no grandfathered gates. The person
+    // stays unbelted on the remediation path and earns White through the normal gate climb.
     if(!s.history) s.history = [];
     s.history.unshift({
       dt: pr.confirmedAt,
       type: 'Placement',
-      belt: chosenBelt,
+      belt: noBelt ? 'None' : chosenBelt,
       res: 'confirmed',
-      note: note || `Starting placement confirmed at ${chosenBelt} Belt by ${pr.confirmedBy}.`
+      note: note || (noBelt
+        ? `Placement decision: No Belt, confirmed by ${pr.confirmedBy}. Placed on the remediation path.`
+        : `Starting placement confirmed at ${chosenBelt} Belt by ${pr.confirmedBy}.`)
     });
   }
 
@@ -4608,24 +4621,27 @@ function confirmPlacement(prId){
       method:'PATCH',
       body: {
         status: pr.status,
-        confirmed_belt: chosenBelt,
+        confirmed_belt: pr.confirmedBelt,
         assessor_note: note,
         confirmed_at: pr.confirmedAt,
         confirmed_by: pr.confirmedBy
       }
     }).catch(e => handleSyncError(e, 'Placement confirm sync'));
     if(s){
+      const staffBody = {belt: s.belt, placement_needed: false, history: s.history};
+      if(!noBelt) Object.assign(staffBody, {since: s.since, cur_comp:'pass', cur_sim:'pass', cur_obs:'pass'});
       sbFetch(`/rest/v1/staff?id=eq.${s.id}`, {
         method:'PATCH',
-        body: {belt: chosenBelt, since: s.since, placement_needed: false, history: s.history,
-               cur_comp:'pass', cur_sim:'pass', cur_obs:'pass'}
+        body: staffBody
       }).catch(e => handleSyncError(e, 'Staff update sync'));
     }
   } else {
     /* saveDemoData() removed */
   }
   updatePlacementBadge();
-  toast('Placement confirmed: ' + cleanName(pr.staffName) + ' placed at ' + chosenBelt + ' Belt.', 'ok');
+  toast(noBelt
+    ? 'Decision recorded: ' + cleanName(pr.staffName) + ' approved at No Belt (remediation path).'
+    : 'Placement confirmed: ' + cleanName(pr.staffName) + ' placed at ' + chosenBelt + ' Belt.', 'ok');
   renderAPlacementReviews();
 }
 
@@ -6267,17 +6283,18 @@ async function clearDangerousProvision(staffId, index, context){
 }
 
 function beltBadge(belt, staff){
+  const lbl = belt==='None' ? 'No Belt' : belt;
   if(staff){
     const s = (typeof staff === 'object') ? staff : getStaff(staff);
     if(s){
       const starCount = getPSStarsAtBelt(s, s.belt===belt ? belt : belt);
       if(starCount > 0){
         const stars = Array(starCount).fill('<span style="color:var(--gold);font-size:9px;line-height:1">&#9733;</span>').join('');
-        return `<span class="bb bb-${belt}" style="gap:3px">${stars}<span class="bb-dot" style="background:${BELT_CLR[belt]}"></span>${belt}</span>`;
+        return `<span class="bb bb-${belt}" style="gap:3px">${stars}<span class="bb-dot" style="background:${BELT_CLR[belt]}"></span>${lbl}</span>`;
       }
     }
   }
-  return `<span class="bb bb-${belt}"><span class="bb-dot" style="background:${BELT_CLR[belt]}"></span>${belt}</span>`;
+  return `<span class="bb bb-${belt}"><span class="bb-dot" style="background:${BELT_CLR[belt]}"></span>${lbl}</span>`;
 }
 
 // beltBadge with stars for the staff member's current belt
@@ -8180,7 +8197,7 @@ function renderSDashboard(){
     `<div style="background:#052e16;border:1px solid #16a34a;border-radius:var(--r);padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
       <div style="width:36px;height:36px;background:#166534;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px">&#10003;</div>
       <div style="flex:1">
-        <div style="font-size:13px;font-weight:700;color:#22c55e">Starting Point Confirmed: ${existingPR.confirmedBelt||s.belt} Belt</div>
+        <div style="font-size:13px;font-weight:700;color:#22c55e">Starting Point Confirmed: ${existingPR.confirmedBelt ? existingPR.confirmedBelt+' Belt' : s.belt==='None' ? 'No Belt — Remediation Path' : s.belt+' Belt'}</div>
         <div style="font-size:11.5px;color:#86efac;margin-top:2px">Your assessor has reviewed your responses and confirmed your placement. Welcome to the SIPS Belt Intelligence Program.</div>
       </div>
       <button onclick="acknowledgePlacement('${s.id}')" style="background:#166534;border:1px solid #22c55e;border-radius:6px;padding:6px 14px;font-size:11.5px;font-weight:700;color:#22c55e;cursor:pointer;white-space:nowrap;font-family:'Poppins',sans-serif;flex-shrink:0">Acknowledge</button>
@@ -8503,7 +8520,7 @@ function renderSScoreboard(){
     <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">
       <div class="stat-card"><div class="stat-accent" style="background:var(--gold)"></div><div class="stat-lbl">My Rank</div><div class="stat-val" style="color:var(--gold)">#${myRank}</div><div class="stat-sub">of ${sorted.length} system-wide</div></div>
       <div class="stat-card"><div class="stat-accent" style="background:var(--blue)"></div><div class="stat-lbl">My Points</div><div class="stat-val" style="color:var(--blue)">${s?calcPoints(s).toLocaleString():'--'}</div><div class="stat-sub">Belt + gates + attend + stars</div></div>
-      <div class="stat-card"><div class="stat-accent" style="background:${s?BELT_CLR[s.belt]:'var(--txt3)'}"></div><div class="stat-lbl">My Belt</div><div class="stat-val" style="color:${s?BELT_CLR[s.belt]:'var(--txt3)'};font-size:20px;padding-top:6px">${s?s.belt:'--'}</div><div class="stat-sub">${s?BELT_CERT[s.belt]:'--'}</div></div>
+      <div class="stat-card"><div class="stat-accent" style="background:${s?BELT_CLR[s.belt]:'var(--txt3)'}"></div><div class="stat-lbl">My Belt</div><div class="stat-val" style="color:${s?BELT_CLR[s.belt]:'var(--txt3)'};font-size:20px;padding-top:6px">${s?(s.belt==='None'?'No Belt':s.belt):'--'}</div><div class="stat-sub">${s?BELT_CERT[s.belt]:'--'}</div></div>
     </div>
     <div class="card">
       <div class="card-hd"><div class="card-ttl">System-Wide Leaderboard</div><span class="pill p-muted">${sorted.length} staff</span></div>
