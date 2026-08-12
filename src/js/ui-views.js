@@ -737,11 +737,12 @@ function renderHView(view){
     return;
   }
   if(view==='h-scoreboard' && !scoreboardAllowed()){ toast('The scoreboard is unavailable while it is being updated.','warn'); view='h-dashboard'; }
-  ['h-dashboard','h-staff','h-profile','h-milestones','h-posschool','h-training','h-instruments','h-checklists','h-preceptor','h-scoreboard','h-schedule','h-attendance','h-reports','h-assessments','h-progression','h-guide','h-settings','h-david'].forEach(v=>{
+  ['h-dashboard','h-staff','h-profile','h-milestones','h-posschool','h-training','h-instruments','h-checklists','h-preceptor','h-scoreboard','h-schedule','h-attendance','h-reports','h-assessments','h-progression','h-observations','h-observationreviews','h-guide','h-settings','h-david'].forEach(v=>{
     const el=document.getElementById(v);
     if(el){ el.classList.add('hidden'); el.classList.remove('fade-in'); }
   });
   ST.hView=view;
+  ovsMount='h';   // T-obs: the same two consoles render into the leader portal from here (#73 pattern)
   if(typeof logActivity==='function') logActivity('view',{view});
   const el=document.getElementById(view);
   if(el){ el.classList.remove('hidden'); void el.offsetWidth; el.classList.add('fade-in'); }
@@ -749,8 +750,20 @@ function renderHView(view){
   const _facAdminLbl=document.getElementById('h-nav-fadmin-lbl');
   const _facAdminNav=document.getElementById('h-nav-assessments');
   const _showFacAdmin=isFacilityAdmin();
-  if(_facAdminLbl) _facAdminLbl.style.display=_showFacAdmin?'block':'none';
   if(_facAdminNav) _facAdminNav.style.display=_showFacAdmin?'flex':'none';
+  // Client ask (2026-07-30): the observation consoles were reachable from the admin portal and
+  // from the staff portal for a granted assessor (#73), but a facility admin lives in this portal
+  // and had no door at all. Same mount, not a copy. A plain facility admin gets the read-only
+  // console (_canWriteObs excludes the role); one who also holds the Assessor capability can
+  // conduct and confirm, exactly as they can from the other two portals. Facility scope is
+  // enforced server-side by obs_select_scoped -> sbd_obs_facility_scope(fid); the filter inside
+  // the render functions matches it so the counts agree with the rows.
+  const _showObs=_showFacAdmin||effIsAssessor();
+  ['h-nav-observations','h-nav-observationreviews'].forEach(id=>{
+    const n=document.getElementById(id);
+    if(n) n.style.display=_showObs?'flex':'none';
+  });
+  if(_facAdminLbl) _facAdminLbl.style.display=(_showFacAdmin||_showObs)?'block':'none';
   const fns={
     'h-dashboard':()=>renderHDashboard(),
     'h-staff':()=>renderHStaff(),
@@ -766,6 +779,10 @@ function renderHView(view){
     'h-reports':()=>renderHReports(),
     'h-assessments':()=>renderHAssessments(),
     'h-progression':()=>renderHProgression(),
+    // Re-checked here, not only at nav visibility: a saved sessionStorage view routes
+    // straight to a view id (same reason the s-portal entries re-check).
+    'h-observations':()=>{ if(_showObs) renderAObservations(); else toast('Facility admin or assessor access required.','err'); },
+    'h-observationreviews':()=>{ if(_showObs) renderAObservationReviews(); else toast('Facility admin or assessor access required.','err'); },
     'h-guide':()=>renderGuideView('h'),
     'h-settings':renderSettingsView,
     'h-david':()=>renderDavidView('h-david'),
@@ -3465,6 +3482,10 @@ function renderAObservations(){
     scopeFacs = scopeFacs.filter(f => u.assignedFids.includes(f.id));
     pool = pool.filter(o => u.assignedFids.includes(o.fid));
   }
+  // Leader portal: one facility, mirroring sbd_obs_facility_scope's facility tier. RLS already
+  // returns nothing else; this keeps the counts honest if the arrays were hydrated wider.
+  if(u && (u.role === 'facility_admin' || u.role === 'hospital') && u.fid)
+    pool = pool.filter(o => String(o.fid) === String(u.fid));
   const obsFac = ST._obsFacFilter || 'all';
   if(isSystemWide && obsFac !== 'all') pool = pool.filter(o => o.fid === obsFac);
 
@@ -3476,6 +3497,8 @@ function renderAObservations(){
   let observerList = (DB.staff || []).filter(s => s.observer);
   if(u && u.role === 'staff_admin' && u.assignedFids && u.assignedFids.length)
     observerList = observerList.filter(s => u.assignedFids.includes(s.fid));
+  if(u && (u.role === 'facility_admin' || u.role === 'hospital') && u.fid)
+    observerList = observerList.filter(s => String(s.fid) === String(u.fid));
   if(isSystemWide && obsFac !== 'all') observerList = observerList.filter(s => s.fid === obsFac);
   const observers = observerList.length;
 
@@ -3960,6 +3983,8 @@ function renderAObservationReviews(){
   let pool = (DB.observations || []).filter(o => o.status === 'submitted' || o.status === 'reviewed');
   if(u && u.role === 'staff_admin' && u.assignedFids && u.assignedFids.length)
     pool = pool.filter(o => u.assignedFids.includes(o.fid));
+  if(u && (u.role === 'facility_admin' || u.role === 'hospital') && u.fid)
+    pool = pool.filter(o => String(o.fid) === String(u.fid));
   // Facility filter + candidate search (mirrors Placement Reviews).
   const facIds = [...new Set(pool.map(o => o.fid).filter(Boolean))];
   const view = pool.filter(o =>
