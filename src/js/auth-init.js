@@ -564,20 +564,22 @@ function onboardingLaunchTourFromReminder(){
   tourStart();
 }
 
+// A step whose nav target is missing or hidden belongs to a tab this user does not have
+// (several nav items are conditionally shown: Observations, Scripts, the Scoreboard).
+// Spotlighting an invisible element would land the highlight at 0,0, and listing it in
+// the Guide would advertise a tab that is not there. Both callers filter through here.
+function tourStepVisible(st, portalEl){
+  if(!st.target || !st.target.includes('data-view')) return true;
+  const el = portalEl ? portalEl.querySelector(st.target) : null;
+  return !!(el && el.offsetParent !== null);
+}
+
 // ── Tour Engine ──
 function tourStart(fromStep){
   const role = getTourRole();
   const prefix = getPortalPrefix();
-  // Drop steps whose nav target is missing or hidden (several nav items are
-  // conditionally shown, e.g. Observations is display:none until an admin
-  // portal reveals it). Spotlighting an invisible element would land the
-  // highlight at 0,0; filtering keeps the tour honest for the current user.
   const portalEl = document.getElementById(prefix + '-portal');
-  OB.steps = (TOUR_STEPS[role] || []).filter(st => {
-    if(!st.target || !st.target.includes('data-view')) return true;
-    const el = portalEl ? portalEl.querySelector(st.target) : null;
-    return !!(el && el.offsetParent !== null);
-  });
+  OB.steps = (TOUR_STEPS[role] || []).filter(st => tourStepVisible(st, portalEl));
   OB.portalPrefix = prefix;
   OB.step = fromStep || 0;
   OB.tourRunning = true;
@@ -918,7 +920,9 @@ function renderGuideView(prefix){
   const el = document.getElementById(prefix+'-guide');
   if(!el) return;
   const role = getTourRole();
-  const steps = TOUR_STEPS[role] || [];
+  // Same visibility filter the tour uses, so the Guide never lists a hidden tab.
+  const _guidePortalEl = document.getElementById(prefix + '-portal');
+  const steps = (TOUR_STEPS[role] || []).filter(st => tourStepVisible(st, _guidePortalEl));
   const u = ST.user;
   const ob = u ? getOnboardingState(u.authUid || u.id) : null;
 
