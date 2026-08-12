@@ -3,15 +3,20 @@
 // Live case (Sharon Greene-Golden, review 02cac3d4): an assessor override moved her Blue to
 // Brown, but the report re-judged the award purely from scores, and her blended 85.9 against
 // Brown's 87 printed BELT AWARDED NONE. The fix: a review with status 'adjusted' prints the
-// adjusted belt as awarded, attributed as an assessor override, while every score, floor and
-// condition still grades against that belt unchanged.
+// adjusted belt as awarded while every score, floor and condition still grades against that belt
+// unchanged.
+//
+// 2026-08-12 (Iggie): the override must not appear ON the report. An overridden belt prints
+// exactly like a normally awarded one — no "ASSESSOR OVERRIDE" label, no attribution line, no
+// override in the report status. The attribution stays in the record and in the model
+// (m.override), which the internal views read.
 //
 // This harness slices the real functions out of ui-views.js (no DB, no DOM, no writes) and:
 //   1. proves the override case awards the adjusted belt with attribution,
 //   2. proves the score-derived outcome/conditions are NOT changed by the override,
 //   3. proves non-adjusted reviews produce output identical to the pre-change model
 //      (pass the pre-change ui-views.js as argv[2]; without it those checks are skipped),
-//   4. smoke-tests both report renderers for the override wording.
+//   4. smoke-tests both report renderers for the ABSENCE of override wording.
 const fs = require('fs');
 const path = require('path');
 const REPO = path.resolve(__dirname, '..');
@@ -134,7 +139,7 @@ ok(m.outcome !== 'CLEAN' && m.outcome !== 'CONDITIONAL', 'score-derived outcome 
 ok(m.beltAwarded === 'Brown', 'BELT AWARDED prints Brown, not NONE');
 ok(m.overrideAward === true, 'award is marked as standing on the override');
 ok(m.override && m.override.by === 'J. Jacobs' && m.override.at === '2026-08-08', 'attribution carries who and when');
-ok(m.determination === `BROWN BELT -- Assessor Override (${[m.nSup && m.nSup + ' supervised-practice', m.nBlock && m.nBlock + ' blocking', m.nReq && m.nReq + ' required', m.nAdv && m.nAdv + ' advisory'].filter(Boolean).join(', ') || 'no conditions'})`, 'determination names the belt and the override');
+ok(m.determination === `BROWN BELT -- Conditional (${[m.nSup && m.nSup + ' supervised-practice', m.nBlock && m.nBlock + ' blocking', m.nReq && m.nReq + ' required', m.nAdv && m.nAdv + ' advisory'].filter(Boolean).join(', ') || 'no conditions'})`, 'determination reads like a normal conditional award: ' + m.determination);
 ok(m.nextBelt === 'Black', 'next-belt target follows the awarded belt (Black)');
 ok(m.conditions.length > 0, 'development conditions still present (' + m.conditions.length + ')');
 
@@ -170,26 +175,32 @@ if (oldPath && fs.existsSync(oldPath)) {
   console.log('\n5. (skipped — pass the pre-change ui-views.js as argv[2] to diff old vs new)');
 }
 
-console.log('\n6. Renderer smoke tests');
+console.log('\n6. Renderer smoke tests — the award prints, the override does not');
+// Any of these strings on a report is the regression: they are what a leader or client would read.
+const OV_WORDS = [/override/i, /assessor adjustment/i, /J\. Jacobs/, /Assessor Error Correction/];
+const noOverrideWording = html => OV_WORDS.filter(re => re.test(html)).map(String);
+
 const R = buildRenderers(path.join(REPO, 'src/js/ui-views.js'));
 const htmlA = R.renderA(overriddenPR);
 ok(!!htmlA, 'renderer A (review-card Report button) produced a document');
 ok(htmlA.includes('BROWN'), 'A: prints BROWN as the awarded belt');
-ok(htmlA.includes('ASSESSOR OVERRIDE'), 'A: award labelled ASSESSOR OVERRIDE');
-ok(htmlA.includes('Override recorded by J. Jacobs on 2026-08-08'), 'A: attribution line present');
 ok(!htmlA.includes('>NONE<'), 'A: BELT AWARDED no longer NONE');
+ok(htmlA.includes('CONDITIONAL'), 'A: award labelled like a normal conditional award');
+ok(noOverrideWording(htmlA).length === 0, 'A: no override wording on the report — ' + (noOverrideWording(htmlA).join(', ') || 'clean'));
 const htmlA2 = R.renderA(confirmedPR);
-ok(htmlA2.includes('>NONE<') && !htmlA2.includes('ASSESSOR OVERRIDE'), 'A: confirmed twin unchanged (NONE, no override wording)');
+ok(htmlA2.includes('>NONE<'), 'A: confirmed twin unchanged (NONE)');
 
 const staffStub = { first: 'Sharon', last: 'Test', role: 'Technician' };
 const facStub = { name: 'Test Facility' };
 const htmlB = R.renderB(overriddenPR, staffStub, facStub);
-ok(htmlB.includes('ASSESSOR OVERRIDE'), 'B: award labelled ASSESSOR OVERRIDE');
-ok(htmlB.includes('Override recorded by J. Jacobs on 2026-08-08'), 'B: attribution line present');
-ok(htmlB.includes('BROWN BELT, Assessor Override'), 'B: report status names the override');
+ok(htmlB.includes('BROWN BELT, Conditional'), 'B: report status reads like a normal conditional award');
+ok(!htmlB.includes('No belt is in effect'), 'B: eligibility text does not contradict the award');
 ok(!htmlB.includes('White Belt assessment (regardless of level assessed)'), 'B: no White re-assess line on an overridden award');
+ok(noOverrideWording(htmlB).length === 0, 'B: no override wording on the report — ' + (noOverrideWording(htmlB).join(', ') || 'clean'));
 const htmlB2 = R.renderB(confirmedPR, staffStub, facStub);
-ok(!htmlB2.includes('ASSESSOR OVERRIDE') && !htmlB2.includes('Override recorded by'), 'B: confirmed twin carries no override wording');
+ok(noOverrideWording(htmlB2).length === 0, 'B: confirmed twin carries no override wording either');
+// The record behind the report keeps the attribution.
+ok(m.override.by === 'J. Jacobs' && m.override.at === '2026-08-08' && m.override.note.startsWith('Assessor Error Correction'), 'attribution still lives in the model, off the report');
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
