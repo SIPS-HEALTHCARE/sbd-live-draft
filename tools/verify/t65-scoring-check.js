@@ -7,58 +7,7 @@
 // boundaries, so there is no way to exercise them except in a browser with a live session,
 // and the defects it guards against (a placeholder belt printed as a determination, a floor
 // table drifting out of step with the spec) are exactly the kind that look fine on screen.
-const fs = require('fs');
-const path = require('path');
-const REPO = path.resolve(__dirname, '..', '..');
-
-const src = fs.readFileSync(path.join(REPO, 'src/js/ui-views.js'), 'utf8').split('\n');
-const grab = (from, to) => src.slice(from - 1, to).join('\n');   // 1-indexed, inclusive
-
-// belt-test-engine.js is an IIFE bound to globalThis, and dual-exports for Node.
-require(path.join(REPO, 'src/js/belt-test-engine.js'));
-const BELT_TEST_CONFIG = globalThis.BELT_TEST_CONFIG;
-if (!BELT_TEST_CONFIG) throw new Error('BELT_TEST_CONFIG not exported from belt-test-engine.js');
-
-// Slice by anchor rather than by line number: this file is edited constantly and hardcoded
-// line ranges silently pick up the wrong code.
-function block(startsWith) {
-  const i = src.findIndex(l => l.startsWith(startsWith));
-  if (i < 0) throw new Error('anchor not found: ' + startsWith);
-  for (let j = i; j < src.length; j++) {
-    if (['}', '};', ']', '];'].includes(src[j])) return src.slice(i, j + 1).join('\n');
-  }
-  throw new Error('no closing brace for: ' + startsWith);
-}
-
-const slices = [
-  'const SBD_BELT_ORDER',
-  'function sbdSpecConfig(',
-  'function sbdBeltThresholds(',
-  'function sbdSpecFloors(',
-  'function sbdBuildProvisions(',
-  'function sbdOpenProvisions(',
-  'function sbdHasOpenProvision(',
-  'function sbdSpecOveralls(',
-  'function sbdKnowledgeOverall(',
-  'function sbdSuggestBelt(',
-  'const RPT_STANDARDS',
-  'function rptComputeModel(',
-  'const LEVEL_LABELS',
-  'function sbdKnowledgeFloor(',
-  'function sbdSimFloor(',
-  'function sbdIsDangerousResponse(',
-  'function _dangerousRiskDesc(',
-  'function detectDangerousAnswers(',
-  'function deriveOutcome(',
-  'function sbdAdvancementBlock(',
-].map(a => a.startsWith('const ') ? block(a) : block(a)).join('\n\n');
-
-const mod = new Function('BELT_TEST_CONFIG', 'window', slices + `
-  return { sbdKnowledgeOverall, sbdSuggestBelt, sbdBeltThresholds, sbdSpecFloors,
-           sbdSpecOveralls, sbdKnowledgeFloor, sbdSimFloor, rptComputeModel, deriveOutcome,
-           sbdBuildProvisions, sbdOpenProvisions, sbdHasOpenProvision, sbdAdvancementBlock,
-           sbdIsDangerousResponse, detectDangerousAnswers, _dangerousRiskDesc };
-`)(BELT_TEST_CONFIG, undefined);
+const mod = require('./scoring-module')();
 
 // ---------------------------------------------------------------- Williams' stored responses
 // Knowledge: L1 8 questions / 7 correct, L2-L4 8/8, L5 7/7. The L1 miss is the p6 dangerous one.
