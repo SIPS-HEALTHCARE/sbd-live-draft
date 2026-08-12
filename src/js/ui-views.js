@@ -11002,7 +11002,7 @@ function renderHProfile(sid,context){
     <div class="prof-banner">
       <div class="prof-av">${userInitials(s)}</div>
       <div style="flex:1">
-        <div class="prof-name">${fullName(s)}${s.observer?` <span style="font-size:10px;font-weight:600;color:#0ea5e9;background:#0ea5e91a;border:1px solid #0ea5e955;padding:2px 7px;border-radius:8px;vertical-align:middle;margin-left:6px">&#128065; Observer</span>`:''}</div>
+        <div class="prof-name">${fullName(s)}${acctStatusPill((DB.users||[]).find(u=>u.sid===s.id))}${s.observer?` <span style="font-size:10px;font-weight:600;color:#0ea5e9;background:#0ea5e91a;border:1px solid #0ea5e955;padding:2px 7px;border-radius:8px;vertical-align:middle;margin-left:6px">&#128065; Observer</span>`:''}</div>
         <div class="prof-role">
           ${s.role} &bull; 
           ${(()=>{
@@ -11036,6 +11036,7 @@ function renderHProfile(sid,context){
         ):''}
         ${(ST.user&&ST.user.role==='master_admin')?`<button class="btn btn-ghost btn-sm" onclick="toggleObserver('${s.id}','${context}')" style="border-color:${s.observer?'#0ea5e9':'var(--bdr)'};color:${s.observer?'#0ea5e9':'var(--txt2)'}" title="${s.observer?'Revoke observer access':'Grant observer access'}"><svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 10s3-5.5 8-5.5S18 10 18 10s-3 5.5-8 5.5S2 10 2 10z"/><circle cx="10" cy="10" r="2.3"/></svg> ${s.observer?'Observer: On':'Make Observer'}</button>`:''}
         ${(ST.user&&ST.user.role==='master_admin'&&s.observer)?`<button class="btn btn-ghost btn-sm" onclick="generateObserverPin('${s.id}','${context}')" style="border-color:#0ea5e9;color:#0ea5e9" title="${s.observerPinSet?'Show this observer\'s existing PIN':'Generate a reusable observation PIN'}">&#128273; ${s.observerPinSet?'Show PIN':'Generate PIN'}</button>`:''}
+        ${profileAcctToggleBtn(s, context)}
         ${context==='admin'&&(ST.user&&ST.user.role==='master_admin')?`<button class="btn btn-err btn-sm" onclick="releaseToFreeAgent('${s.id}')" title="Release staff member to Free Agent Registry" style="margin-left:auto"><svg width="13" height="13" viewBox="0 0 18 18" fill="none"><path d="M12 14H15a1 1 0 001-1V5a1 1 0 00-1-1H12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M9 12l3-3-3-3M12 9H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Release</button>`:''}
         ${(ST.user&&ST.user.role==='master_admin'&&typeof prcAccessControlHTML==='function')?`<div style="flex-basis:100%;display:flex;justify-content:flex-end;margin-top:2px">${prcAccessControlHTML(s.id,context)}</div>`:''}
       </div>
@@ -18429,8 +18430,11 @@ async function executeSetAccountActive(uid, makeActive, rerender){
     u.active=makeActive;
     closeModal();
     toast(`${u.name}'s account has been ${makeActive?'reactivated':'deactivated'}.`, makeActive?'ok':'warn');
-    const fn = (typeof window!=='undefined' && typeof window[rerender]==='function') ? window[rerender] : renderAAdminUsers;
-    fn();
+    // rerender may carry pipe-separated args ('renderHProfile|<sid>|<context>') so
+    // the profile variant can land back on the profile instead of the users list.
+    const parts=String(rerender||'').split('|');
+    const fn = (typeof window!=='undefined' && typeof window[parts[0]]==='function') ? window[parts[0]] : renderAAdminUsers;
+    fn(...parts.slice(1));
   }catch(e){
     u.active=prev;
     toast('Account update failed: '+e.message,'err');
@@ -18450,6 +18454,22 @@ function faAcctToggleBtn(fa){
   return acct.active===false
     ? `<button class="btn btn-ok btn-sm" onclick="confirmSetAccountActive('${acct.id}',true,'renderAFreeAgents')">${ICO.check} Reactivate Login</button>`
     : `<button class="btn btn-sm" style="border:1px solid #f59e0b;color:#f59e0b;background:transparent" onclick="confirmSetAccountActive('${acct.id}',false,'renderAFreeAgents')">Deactivate Login</button>`;
+}
+
+// Staff profile variant: resolve the staff record to their portal account (users
+// link to staff via u.sid) and reuse the shared confirm flow, rerendering back to
+// the profile. Hidden when no login exists, for protected accounts, and for self —
+// same rules as the Admin Users and Free Agent buttons.
+function profileAcctToggleBtn(s, context){
+  if(!(ST.user && ST.user.role==='master_admin')) return '';
+  if(!s) return '';
+  const acct=(DB.users||[]).find(u=>u.sid===s.id);
+  if(!acct || acct.protected) return '';
+  if(acct.id===ST.user.id) return '';
+  const rr=`renderHProfile|${s.id}|${context}`;
+  return acct.active===false
+    ? `<button class="btn btn-ok btn-sm" onclick="confirmSetAccountActive('${acct.id}',true,'${rr}')">${ICO.check} Reactivate Login</button>`
+    : `<button class="btn btn-sm" style="border:1px solid #f59e0b;color:#f59e0b;background:transparent" onclick="confirmSetAccountActive('${acct.id}',false,'${rr}')">Deactivate Login</button>`;
 }
 
 function confirmRemoveUser(uid){
