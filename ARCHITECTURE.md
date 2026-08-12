@@ -189,6 +189,7 @@ Every table uses RLS. Access is controlled via JWT claims:
 - `hospital` / `facility_admin` → scoped to their `facility_id`
 - `system_admin` → scoped to facilities in their `system_id`
 - `staff_member` → scoped to their own `staff_id`
+- `sips_admin` → **matches no role branch anywhere.** Reach comes only from `capabilities` (§8A).
 
 ---
 
@@ -202,6 +203,38 @@ Every table uses RLS. Access is controlled via JWT claims:
 | `facility_admin` | Hospital (h-) | Same as hospital + assessment queue + staff progression. |
 | `system_admin` | System (x-) | Multi-facility view for a hospital system. |
 | `staff_member` | Staff (s-) | Personal dashboard, belt progress, OIP, study materials. |
+| `sips_admin` | Admin (a-) | **Nothing by role (T79).** Starts empty; reaches only what Role Management grants. See §8A. |
+
+### 8A. Stackable grants (#73, T74/T77, T79)
+
+`sbd_portal_users.capabilities` (jsonb) carries **role-independent** grants, set only by a master
+admin through `sbd_set_user_capabilities` (SECURITY DEFINER, guarded by the T53 privilege trigger)
+and edited in Role Management (`renderARoleMgmt`, `ui-views.js`).
+
+| Key | Grants | Server gate |
+|---|---|---|
+| `assessor` (+ `assessor_facilities`) | Assessor reach: observations, F&I, queue reads | `sbd_is_assessor()` / `sbd_is_assessor(uuid)` |
+| `educator_facilities` | Educator/leader access at named facilities | `sbd_leads_facility_of(uuid)` |
+| `issue_pin` (+ `issue_pin_facilities`) | **T79:** generate an assessment PIN (proctor) | `sbd_can_issue_pin(uuid)`; `sbd-assessor-pin` `generate_pin` |
+| `approve_assessment` (+ `approve_assessment_facilities`) | **T79:** approve/deny an assessment request **and** record its outcome | `sbd_can_approve_assessment(uuid)`; `aq_select`/`aq_update`; `sbd-record-assessment` |
+
+**Convention for every facility list:** absent or empty means **system wide**. Revoking a grant
+drops its list with it, so a re-grant cannot inherit a scope nobody chose.
+
+**T79 reads are shared, writes are not.** `staff_select` admits *either* grant (a grant that can
+write but not read is half-shipped — RLS returns fewer rows silently and the candidate list just
+looks empty). `aq_update`, `sbd-assessor-pin` and `sbd-record-assessment` admit exactly one each.
+
+> **⚠️ T79 independence invariant.** `issue_pin` and `approve_assessment` must never be ORed
+> together in a **write** gate — that silently restores the bundle the client asked to break.
+> `node scripts/verify-t79-assessment-grants.js` asserts this by reading the shipped SQL
+> and edge-function code; `supabase/verify/t79_assessment_grants_check.sql` asserts it against a
+> live database. The reason a fresh `sips_admin` reaches nothing is that the string appears in
+> **zero** policies and **zero** server allow-lists — not because buttons are hidden.
+>
+> The pre-T79 role allow-lists are kept as an OR branch, so `staff_admin` / `educator` /
+> `preceptor` still hold both permissions. Narrowing them is a separate, sequenced task.
+> Design note: `docs/decisions/2026-08-12-t79-sips-admin-role-and-split-assessment-grants.md`.
 
 ---
 
