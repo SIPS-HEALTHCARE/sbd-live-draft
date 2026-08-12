@@ -21,6 +21,32 @@ const LOCKOUT_WINDOW_MINUTES = 10;     // sliding window the failures are counte
 const LOCKOUT_DURATION_MINUTES = 15;   // how long the lock holds after the last failure
 const ASSESSOR_ROLES = ['master_admin', 'staff_admin', 'system_admin', 'admin', 'master', 'educator', 'preceptor'];
 
+// ── T79: PIN generation is its own grant, independent of approving an assessment ──
+// Before T79 the only door was ASSESSOR_ROLES above, so a role in that list carried BOTH
+// permissions and neither could be held alone. capabilities.issue_pin is the second door and
+// the only one a 'sips_admin' account has: that role string appears in no allow-list here and
+// in no RLS policy, which is what makes a fresh SIPS admin reach nothing until granted.
+// The role list is kept as an OR branch, so no current holder loses PIN generation.
+// Both helpers mirror public.sbd_can_issue_pin(uuid) / the pre-T79 scope rule exactly — if one
+// side changes, change both, or the screen and the server will disagree.
+
+/** The pre-T79 role path. Empty assigned_facility_ids means every facility, as it always has. */
+function rolePathCoversFacility(role: string, assignedFids: string[] | null, fid: string | null): boolean {
+    if (!ASSESSOR_ROLES.includes(role)) return false;
+    if (role === 'master_admin') return true;
+    const list = assignedFids || [];
+    return list.length === 0 || list.includes(fid as string);
+}
+
+/** The T79 grant path. Mirrors sbd_can_issue_pin(uuid): absent/empty list = system wide, null fid denies. */
+function pinGrantCoversFacility(caps: any, fid: string | null): boolean {
+    if (!caps || caps.issue_pin !== true) return false;
+    const list = caps.issue_pin_facilities;
+    if (!Array.isArray(list) || list.length === 0) return true;
+    if (fid == null) return false;
+    return list.map(String).includes(String(fid));
+}
+
 /**
  * Generate a cryptographically random 6-digit PIN.
  * Rejects sequential (123456) and repeated (111111) patterns.
@@ -82,15 +108,20 @@ serve(async (req) => {
             const { staff_id, assessment_type = 'placement' } = body;
             if (!staff_id) throw new Error('staff_id is required');
 
-            // 1. Verify caller is an assessor
+            // 1. Verify the caller may generate PINs at all — by role (pre-T79) or by the
+            //    standalone T79 grant. Facility scope for whichever door they came through is
+            //    checked at step 3, once the staff member's facility is known. Deliberately
+            //    gated here, before any lookup, so an unauthorized caller cannot use the
+            //    "Staff member not found" branch below as an existence oracle.
             const { data: assessor } = await supabaseAdmin
                 .from('sbd_portal_users')
-                .select('id, role, name, assigned_facility_ids')
+                .select('id, role, name, assigned_facility_ids, capabilities')
                 .eq('auth_uid', user.id)
                 .single();
 
-            if (!assessor || !ASSESSOR_ROLES.includes(assessor.role)) {
-                throw new Error('Unauthorized: Only assessors can generate authorization PINs.');
+            const assessorCaps = (assessor && assessor.capabilities) || {};
+            if (!assessor || (!ASSESSOR_ROLES.includes(assessor.role) && assessorCaps.issue_pin !== true)) {
+                throw new Error('Unauthorized: you do not have permission to generate authorization PINs.');
             }
 
             // 2. Look up the staff member's facility
@@ -102,10 +133,13 @@ serve(async (req) => {
 
             if (!staffRow) throw new Error('Staff member not found.');
 
-            // 3. Verify facility match (assessor must be assigned to staff's facility)
-            const assessorFids = assessor.assigned_facility_ids || [];
-            const isMaster = assessor.role === 'master_admin';
-            if (!isMaster && assessorFids.length > 0 && !assessorFids.includes(staffRow.fid)) {
+            // 3. Verify facility match. Either door is enough on its own: the pre-T79 role path
+            //    (assigned_facility_ids, empty = everywhere) or the T79 issue_pin grant
+            //    (issue_pin_facilities, absent/empty = everywhere). A role holder therefore keeps
+            //    exactly the reach they had, and a grant-only caller gets only the facilities the
+            //    grant names.
+            if (!rolePathCoversFacility(assessor.role, assessor.assigned_facility_ids, staffRow.fid)
+                && !pinGrantCoversFacility(assessorCaps, staffRow.fid)) {
                 throw new Error('Unauthorized: You are not assigned to this staff member\'s facility.');
             }
 

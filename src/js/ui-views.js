@@ -104,10 +104,13 @@ async function doLogin(preAuthSession=null){
     errEl.style.display='none';
     
     const roleMap={
-      'master_admin':'admin','staff_admin':'admin',
+      'master_admin':'admin','staff_admin':'admin','sips_admin':'admin',
       'hospital':'hospital','facility_admin':'hospital',
       'system_admin':'system_admin','staff_member':'staff_member'
     };
+    // T79: sips_admin is mapped explicitly. Without an entry it fell to the `||'hospital'`
+    // default, and the hospital branch of enterPortal immediately reads u.fid — a SIPS admin has
+    // no facility, so an unmapped role produced a broken screen rather than an empty one.
     enterPortal(roleMap[ST.user.role]||'hospital');
   } catch(e) {
     errEl.textContent = e.message || 'Invalid email or password. Please try again.';
@@ -503,10 +506,36 @@ function enterPortal(type){
   const pendingCnt=DB.pendingRegs.filter(r=>r.status==='pending').length;
   const nb=document.getElementById('reg-nb');
   if(nb){nb.textContent=pendingCnt;nb.style.display=pendingCnt>0?'inline-block':'none';}
+  // ── T79: a SIPS admin starts empty ────────────────────────────────────────────────────────
+  // Every block above reveals its nav item to any non-master admin, so instead of threading
+  // `&& !isSips` through fifteen assignments this hides the whole admin nav for a sips_admin and
+  // re-reveals only what its grants cover, plus Settings and the Guide.
+  //
+  // COSMETIC ONLY, and the ordering matters: this runs last so it overrides the blocks above.
+  // The reason a fresh SIPS admin actually reaches nothing is that the string 'sips_admin'
+  // appears in no RLS policy and in no edge-function allow-list — see the T79 migration. If this
+  // block were deleted the account would see nav items whose data the server still refuses.
+  const isSips = !!u && u.role==='sips_admin';
+  if(isSips){
+    document.getElementById('a-sb-role-label').textContent='SIPS Admin';
+    document.getElementById('a-topbar-pill').textContent='SIPS Admin';
+    const _sipsViews=['a-settings','a-guide'];
+    if(effHasAnyAssessmentGrant(u)) _sipsViews.push('a-assessments','a-progression');
+    document.querySelectorAll('#a-portal .nav-item').forEach(n=>{
+      n.style.display = _sipsViews.indexOf(n.getAttribute('data-view'))>=0 ? 'flex' : 'none';
+    });
+    document.querySelectorAll('#a-portal .nav-lbl').forEach(l=>{ l.style.display='none'; });
+  }
   const sel=document.getElementById('fac-switcher-sel');
-  // For staff_admin, only show assigned facilities
+  // For staff_admin, only show assigned facilities. T79: a sips_admin has no assignedFids, so it
+  // is scoped by the union of its two grant facility lists instead. Both lists absent or empty
+  // means the grants are system wide (the sbd_can_* semantic), and then every facility is right.
+  const _sipsFids = isSips
+    ? [].concat(_capsOf(u).issue_pin_facilities||[], _capsOf(u).approve_assessment_facilities||[]).map(String)
+    : [];
   const hasFilter=(u.assignedFids||[]).length>0;
-  const facList=(isMaster?DB.facilities:(hasFilter?DB.facilities.filter(f=>u.assignedFids.includes(f.id)):DB.facilities)).filter(f=>f.active!==false);
+  let facList=(isMaster?DB.facilities:(hasFilter?DB.facilities.filter(f=>u.assignedFids.includes(f.id)):DB.facilities)).filter(f=>f.active!==false);
+  if(_sipsFids.length) facList=facList.filter(f=>_sipsFids.indexOf(String(f.id))>=0);
   if(sel) sel.innerHTML=facList.map(f=>`<option value="${f.id}">${f.name}</option>`).join('');
   ST.curFid=facList[0]?.id||'test-a';
   document.querySelectorAll('#a-portal .nav-item').forEach(n=>n.classList.remove('active'));
@@ -523,6 +552,14 @@ function enterPortal(type){
   // A /scoreboard deep link or a saved view would otherwise set the topbar title for a
   // view the dispatcher then refuses to render.
   if(_av==='a-scoreboard'&&!scoreboardAllowed(u)){_av='a-overview';_at='Network Overview';}
+  // T79: same reason for a sips_admin — a-overview is the default and a deep link or a saved
+  // view can name anything, and renderAView will bounce both. Clamp here so the title matches
+  // what actually renders.
+  if(isSips){
+    const _sipsOK=effHasAnyAssessmentGrant(u)?['a-assessments','a-progression','a-settings','a-guide']:['a-settings','a-guide'];
+    if(_sipsOK.indexOf(_av)<0){ _av=_sipsOK[0];
+      _at=_av==='a-assessments'?'Assessment Queue':'Account &amp; Settings'; }
+  }
   const _aEl=document.querySelector('#a-portal .nav-item[data-view="'+_av+'"]');
   if(_aEl) _aEl.classList.add('active'); else document.querySelector('#a-portal .nav-item[data-view="a-overview"]').classList.add('active');
   document.getElementById('a-topbar-title').textContent=_at;
@@ -738,10 +775,22 @@ function renderHView(view){
 
 function renderAView(view){
   if(!ST.user) return logout();
-  const allowed = ['master_admin','staff_admin','system_admin'];
+  const allowed = ['master_admin','staff_admin','system_admin','sips_admin'];
   if(!allowed.includes(ST.user.role) && !allowed.includes(ST.portal)) {
     toast('RBAC Guard: Unauthorized access to Network Portal', 'err');
     return;
+  }
+  // T79: sips_admin is in the list above only so it can reach Settings and whatever its grants
+  // cover — it holds nothing by role. This is the single door every admin view routes through, so
+  // it is the one place the clamp belongs rather than one check per render function. Second line
+  // behind the nav gate, not the enforcement: every other view here is RLS-denied for this role.
+  if(ST.user.role==='sips_admin'){
+    const ok=['a-settings','a-guide'];
+    if(effHasAnyAssessmentGrant()) ok.push('a-assessments','a-progression');
+    if(ok.indexOf(view)<0){
+      toast('That screen is not part of your access. A master admin can grant access in Role Management.','warn');
+      view='a-settings';
+    }
   }
   if(view==='a-scoreboard' && !scoreboardAllowed()){ toast('The scoreboard is unavailable while it is being updated.','warn'); view='a-overview'; }
   ['a-overview','a-leaderboard','a-allstaff','a-scoreboard','a-facilities','a-facility','a-schedule','a-registrations','a-assessments','a-progression','a-foundations','a-instruments','a-preceptor','a-upload','a-reports','a-david','a-daviddashboard','a-adminusers','a-rolemgmt','a-promoqueue','a-freeagents','a-placementreviews','a-observations','a-observationreviews','a-guide','a-settings','a-systems','a-systems-dashboard'].forEach(v=>{
@@ -1906,6 +1955,13 @@ async function submitPinGate(staffId, assessmentType){
 function showGeneratePinModal(staffId, assessmentType='placement'){
   const s = getStaff(staffId);
   if(!s){toast('Staff member not found.','err');return;}
+  // T79: every PIN caller routes through here — the two admin auth blocks and the preceptor
+  // button (preceptor.js) — so this is the one guard that covers all of them. Generating a PIN is
+  // its own grant now; holding the approve grant alone does not carry it.
+  if(!effCanIssuePin(s.fid)){
+    toast('Generating assessment PINs is a separate grant from approving assessments. A master admin can grant it in Role Management.','err');
+    return;
+  }
   openModal('Generate Authorization PIN',`
     <div class="modal-body" style="text-align:center">
       <div style="font-size:13px;color:var(--txt2);margin-bottom:16px;line-height:1.6">
@@ -10652,6 +10708,67 @@ function effIsAssessorAt(fid, u){ u=u||ST.user; if(!effIsAssessor(u)) return fal
   if(fid==null) return false;
   return effAssessorFacilities(u).indexOf(String(fid))>=0;
 }
+
+// ── T79: PIN generation and assessment approval as two independent grants ────────────────
+// The client asked on 2026-07-30 to "break apart permission to approve assements" from
+// generating a PIN, because a SIPS admin should be able to proctor without approving.
+//
+// These two are the ONLY place the client-side answer is computed, and each mirrors exactly one
+// SQL function so the screen and the server agree:
+//   effCanIssuePin(fid)           <->  public.sbd_can_issue_pin(uuid)  + sbd-assessor-pin's role path
+//   effCanApproveAssessment(fid)  <->  public.sbd_can_approve_assessment(uuid) + aq_update's role branch
+// Change one side and you must change the other, or a button appears that the server refuses.
+//
+// These gate BUTTONS ONLY. Enforcement is the migration and the two edge functions; a caller
+// with curl and a session token gets the same answer with the UI removed entirely.
+function _t79GrantAt(u, key, fid){
+  var c=_capsOf(u); if(c[key]!==true) return false;
+  var list=c[key+'_facilities'];
+  if(!Array.isArray(list) || !list.length) return true;   // absent/empty = everywhere, mirrors the SQL
+  if(fid==null) return false;                             // null fid denies, mirrors the SQL
+  return list.map(String).indexOf(String(fid))>=0;
+}
+// The pre-T79 role bundle, kept as an OR branch so no live holder lost either permission when T79
+// shipped. The two halves do NOT share a role rule, and conflating them was a real bug: the server
+// treats a system_admin as network-wide for recording an outcome (sbd-record-assessment's
+// unscopedRoles) but scopes it by assigned_facility_ids for generating a PIN (sbd-assessor-pin has
+// no such short-circuit). One shared helper made the client WIDER than the server there, which
+// shows a button the server then refuses. Each of these mirrors exactly one server allow-list, and
+// where two server paths disagree the stricter one wins — a hidden button that would have worked is
+// a nuisance, a visible button that errors mid-action is the bug this codebase keeps hitting.
+// 'sips_admin' is deliberately in neither list.
+// PIN path — mirrors sbd-assessor-pin's generate_pin gate line for line: ASSESSOR_ROLES,
+// master_admin bypasses the facility check, everyone else is bounded by assigned_facility_ids where
+// an empty list means everywhere. That function has NO facility_id branch, so neither does this.
+var T79_PIN_ROLES=['master_admin','staff_admin','system_admin','admin','master','educator','preceptor'];
+function _t79PinRoleAt(u, fid){
+  if(T79_PIN_ROLES.indexOf(u.role)<0) return false;
+  if(u.role==='master_admin') return true;
+  var af=Array.isArray(u.assignedFids)?u.assignedFids:[];
+  return !af.length || af.map(String).indexOf(String(fid))>=0;
+}
+// Approve path — mirrors sbd-record-assessment's three-way scope check, which is the STRICTER of
+// the two approve paths (aq_update additionally gives staff_admin whole-table reach; this
+// deliberately does not follow it, so the button is never wider than the narrowest server gate).
+// Note the third branch: for the facility-bound roles an empty assigned list does NOT mean
+// everywhere — the server does not treat it that way, and only staff_admin gets that rule.
+var T79_APPROVE_ROLES=['master_admin','staff_admin','system_admin','admin','master','educator','preceptor','facility_admin'];
+function _t79ApproveRoleAt(u, fid){
+  if(T79_APPROVE_ROLES.indexOf(u.role)<0) return false;
+  if(u.role==='master_admin'||u.role==='system_admin'||u.role==='admin'||u.role==='master') return true;
+  var af=(Array.isArray(u.assignedFids)?u.assignedFids:[]).map(String);
+  if(u.role==='staff_admin') return !af.length || af.indexOf(String(fid))>=0;
+  if(u.fid!=null && fid!=null && String(u.fid)===String(fid)) return true;
+  return af.indexOf(String(fid))>=0;
+}
+function effCanIssuePin(fid, u){ u=u||ST.user; if(!u) return false;
+  return _t79PinRoleAt(u,fid) || _t79GrantAt(u,'issue_pin',fid); }
+function effCanApproveAssessment(fid, u){ u=u||ST.user; if(!u) return false;
+  return _t79ApproveRoleAt(u,fid) || _t79GrantAt(u,'approve_assessment',fid); }
+// True if either grant is held anywhere — drives nav visibility for a sips_admin, whose portal
+// is otherwise empty. Not an authorisation answer: always ask the *At form before a write.
+function effHasAnyAssessmentGrant(u){ u=u||ST.user; if(!u) return false;
+  var c=_capsOf(u); return c.issue_pin===true || c.approve_assessment===true; }
 // Resolve context string for profile rendering  --  facility admins get admin-level capabilities
 function hProfileContext(){ return isFacilityAdmin() ? 'admin' : 'h'; }
 
@@ -14567,9 +14684,19 @@ let asmFilter='all';
 // GATE ASSESSMENT APPROVAL SYSTEM
 // ============================================================
 
+// T79: the approve/deny guard lives in these two handlers rather than only at the buttons,
+// because they are the two functions every caller routes through. Without it a PIN-only grant
+// would reach an RLS refusal mid-action (aq_update) instead of a sentence it can act on.
+function _t79GateApprove(item) {
+  if (effCanApproveAssessment(item && item.fid)) return true;
+  toast('Approving assessments is a separate grant from generating PINs. A master admin can grant it in Role Management.', 'err');
+  return false;
+}
+
 async function approveGateRequest(qid) {
   const item = DB.queue.find(q => q.id === qid);
   if (!item) return;
+  if (!_t79GateApprove(item)) return;
   const s = getStaff(item.sid);
   if (!s) return;
   if (!confirm(`Approve ${fullName(s)}'s ${item.type} assessment request for ${item.targetBelt} Belt? This confirms the assessment is scheduled.`)) return;
@@ -14606,6 +14733,7 @@ async function approveGateRequest(qid) {
 async function denyGateRequest(qid) {
   const item = DB.queue.find(q => q.id === qid);
   if (!item) return;
+  if (!_t79GateApprove(item)) return;   // T79: deny is the same aq_update write as approve
   const s = getStaff(item.sid);
   if (!s) return;
   const reason = prompt(`Reason for denying ${fullName(s)}'s ${item.type} request (optional):`);
@@ -14885,6 +15013,9 @@ function renderBeltPinAuthBlock(assignedFids){
     if (asmFilter !== 'all' && st.fid !== asmFilter) return false;
     const acct = _rmUserFor(st.id);
     if (acct && acct.active === false) return false;
+    // T79: same PIN-grant filter as renderAssessmentAuthBlock — belt PINs go through the same
+    // sbd-assessor-pin generate_pin path, so the same grant governs both.
+    if (!effCanIssuePin(st.fid)) return false;
     const nb = nextBelt(st.belt);
     return nb && btEligible(st.id, nb);
   });
@@ -14997,7 +15128,11 @@ function renderBeltTestReviewSection(assignedFids){
 function renderAssessmentAuthBlock(staffList){
   staffList = staffList.filter(st => {
     const acct = _rmUserFor(st.id);
-    return !(acct && acct.active === false);
+    if (acct && acct.active === false) return false;
+    // T79: hide rows this caller cannot issue a PIN for, so a facility-scoped grant does not
+    // offer a button sbd-assessor-pin will refuse. Filtering the row (not disabling the button)
+    // also empties the whole block for a caller with no PIN grant at all.
+    return effCanIssuePin(st.fid);
   });
   if(!staffList.length) return '';
   return `
@@ -15144,8 +15279,10 @@ function renderAAssessments() {
                   <td style="font-size:11px;color:var(--txt3)">${item.date || '--'}</td>
                   <td>
                     <div style="display:flex;gap:5px;flex-wrap:wrap">
+                      ${effCanApproveAssessment(item.fid) ? `
                       <button class="btn btn-ok btn-xs" onclick="approveGateRequest('${item.id}')">${ICO.check} Approve</button>
-                      <button class="btn btn-err btn-xs" onclick="denyGateRequest('${item.id}')">${ICO.x} Deny</button>
+                      <button class="btn btn-err btn-xs" onclick="denyGateRequest('${item.id}')">${ICO.x} Deny</button>` :
+                      `<span style="font-size:11px;color:var(--txt3)">View only</span>`}
                     </div>
                   </td>
                 </tr>`;
@@ -15316,8 +15453,10 @@ function renderAProgression() {
               </div>
             </div>
             <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap">
+              ${effCanApproveAssessment(req.fid||s.fid) ? `
               <button class="btn btn-ok btn-sm" onclick="approveGateRequest('${req.id}')">Approve</button>
-              <button class="btn btn-err btn-sm" onclick="denyGateRequest('${req.id}')">Deny</button>
+              <button class="btn btn-err btn-sm" onclick="denyGateRequest('${req.id}')">Deny</button>` :
+              `<span style="font-size:11px;color:var(--txt3)">View only</span>`}
             </div>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">
@@ -17612,16 +17751,45 @@ async function executeReleaseToFA(staffId){
 // existing write paths (syncUserClaims for role, toggleObserver/prcSetAccess/assessment waiver
 // for capabilities); those handlers re-render this console when invoked with context 'rolemgmt'.
 let ROLEMGMT_SEL = null;
-const ROLE_LABELS = {master_admin:'Master Admin',staff_admin:'Assessor',system_admin:'System Admin',hospital:'Hospital Manager',facility_admin:'Facility Admin',staff_member:'Staff Member'};
+// T79: sips_admin is listed here for display only. It carries no permissions of its own — see the
+// T79 migration; the string appears in no RLS policy and no edge-function allow-list.
+const ROLE_LABELS = {master_admin:'Master Admin',staff_admin:'Assessor',sips_admin:'SIPS Admin (grants only)',system_admin:'System Admin',hospital:'Hospital Manager',facility_admin:'Facility Admin',staff_member:'Staff Member'};
 
-function _rmPeople(){
-  const q=(PAGE_Q.rolemgmt||'').trim().toLowerCase();
-  let list=(DB.staff||[]).map(s=>{
+// T79: this list was built from DB.staff alone, so a portal user with no staff record never
+// appeared in it. That is exactly a fresh SIPS admin — sbd-sync-user-claims only creates a staff
+// row when the role is 'staff_member' — which meant the console that is supposed to grant the
+// account something could not find the account. Staff-less users are now synthesised into the
+// list, keyed on u.sid (mapUserFromBackend falls back to auth_uid, so it is always set and
+// _rmUserFor resolves them unchanged).
+function _rmAllPeople(){
+  const list=(DB.staff||[]).map(s=>{
     const fac=(typeof getFac==='function')?getFac(s.fid):null;
     const sys=fac&&fac.systemId&&typeof getSystem==='function'?getSystem(fac.systemId):null;
     const u=(DB.users||[]).find(x=>x.sid===s.id);
     return { s, fac, sys, u, role:(u&&u.role)||s.role||'staff_member', email:(u&&u.email)||'' };
   });
+  const staffIds={}; (DB.staff||[]).forEach(s=>{ staffIds[String(s.id)]=true; });
+  (DB.users||[]).forEach(u=>{
+    if(!u.sid || staffIds[String(u.sid)]) return;
+    const parts=String(u.name||u.email||'').trim().split(/\s+/);
+    const fac=(typeof getFac==='function')?getFac(u.fid):null;
+    const sys=fac&&fac.systemId&&typeof getSystem==='function'?getSystem(fac.systemId):null;
+    list.push({
+      // _noStaff marks the three staff-record capabilities (Observer, Preceptor, gate waiver) as
+      // inapplicable — they live on the staff row this person does not have.
+      s:{ id:u.sid, first:parts[0]||'', last:parts.slice(1).join(' ')||'', fid:u.fid, _noStaff:true },
+      fac, sys, u, role:u.role||'staff_member', email:u.email||''
+    });
+  });
+  return list;
+}
+function _rmPersonById(id){
+  const p=_rmAllPeople().find(x=>String(x.s.id)===String(id));
+  return p?p.s:null;
+}
+function _rmPeople(){
+  const q=(PAGE_Q.rolemgmt||'').trim().toLowerCase();
+  let list=_rmAllPeople();
   if(q) list=list.filter(p=>[fullName(p.s),p.email,p.fac?p.fac.name:'',p.sys?p.sys.name:'',ROLE_LABELS[p.role]||p.role].join(' ').toLowerCase().includes(q));
   return list.sort((a,b)=>fullName(a.s).localeCompare(fullName(b.s)));
 }
@@ -17632,18 +17800,28 @@ function _rmCapBadges(s){
   const cap=((DB.users||[]).find(x=>x.sid===s.id)||{}).capabilities||{};
   const eduN=Array.isArray(cap.educator_facilities)?cap.educator_facilities.length:0;
   const chip=(on,txt,col)=>`<span class="pill" style="font-size:10px;padding:2px 7px;border:1px solid ${on?col+'55':'var(--bdr)'};background:${on?col+'1a':'transparent'};color:${on?col:'var(--txt3)'}">${txt}</span>`;
-  const out=[ chip(!!s.observer,'Observer','#0ea5e9'),
+  // T79: the first three live on the staff record, so a portal-only account has none of them to
+  // show; listing them as "off" would imply they could be turned on here.
+  const out=_rmHasStaffRow(s)?[ chip(!!s.observer,'Observer','#0ea5e9'),
            chip(prc==='granted',prc==='revoked'?'Preceptor (revoked)':'Preceptor', prc==='revoked'?'#f87171':'#22c55e'),
-           chip(!!wv,'Gate waiver','#c49a20') ];
+           chip(!!wv,'Gate waiver','#c49a20') ]:[];
   const asrN=Array.isArray(cap.assessor_facilities)?cap.assessor_facilities.length:0;
   if(cap.assessor) out.push(chip(true, asrN?'Assessor ×'+asrN:'Assessor (all)','#a78bfa'));
   if(eduN) out.push(chip(true,'Educator ×'+eduN,'#a78bfa'));
+  // T79: the two independently-held grants. Shown separately, and only when held, so the list
+  // makes it visible at a glance that one can exist without the other.
+  const pinN=Array.isArray(cap.issue_pin_facilities)?cap.issue_pin_facilities.length:0;
+  const aprN=Array.isArray(cap.approve_assessment_facilities)?cap.approve_assessment_facilities.length:0;
+  if(cap.issue_pin) out.push(chip(true, pinN?'PIN gen ×'+pinN:'PIN gen (all)','#38bdf8'));
+  if(cap.approve_assessment) out.push(chip(true, aprN?'Approve ×'+aprN:'Approve (all)','#f59e0b'));
   return out.join(' ');
 }
 
 function selectRoleMgmt(sid){ ROLEMGMT_SEL=sid; renderARoleMgmt(); }
 
 function _rmUserFor(staffId){ return (DB.users||[]).find(u=>u.sid===staffId) || null; }
+// T79: staff-record capability rows are meaningless for an account with no staff row.
+function _rmHasStaffRow(s){ return !(s && s._noStaff); }
 // #73 v1.1: master-admin capability write. Reads the person's current capabilities, applies a
 // mutation, and persists via the role-checked RPC (SB.setUserCapabilities). Optimistic with rollback.
 async function rmSetCapability(staffId, mutate){
@@ -17652,30 +17830,52 @@ async function rmSetCapability(staffId, mutate){
   if(!u || !u.authUid){ toast('This person has no login account to grant capabilities to.','err'); return; }
   const caps = JSON.parse(JSON.stringify(u.capabilities||{}));
   mutate(caps);
-  if(caps.assessor!==true) delete caps.assessor;
   if(Array.isArray(caps.educator_facilities) && caps.educator_facilities.length===0) delete caps.educator_facilities;
   // #77: an empty list must not persist. Both the client helper and sbd_is_assessor(p_fid) read
   // an empty array as system wide, so leaving [] behind would look like a scope that is not one.
-  if(Array.isArray(caps.assessor_facilities) && caps.assessor_facilities.length===0) delete caps.assessor_facilities;
-  // Revoking the grant drops its facility list with it, otherwise a later re-grant would
-  // silently inherit a scope nobody chose in that session.
-  if(caps.assessor!==true) delete caps.assessor_facilities;
+  // Revoking a grant drops its facility list with it, otherwise a later re-grant would silently
+  // inherit a scope nobody chose in that session.
+  // T79: the same two rules now cover three grants (assessor, issue_pin, approve_assessment) and
+  // sbd_can_issue_pin / sbd_can_approve_assessment read an empty list as system wide exactly as
+  // sbd_is_assessor(p_fid) does, so one loop is correct for all three.
+  ['assessor','issue_pin','approve_assessment'].forEach(function(k){
+    if(caps[k]!==true){ delete caps[k]; delete caps[k+'_facilities']; }
+    else if(Array.isArray(caps[k+'_facilities']) && caps[k+'_facilities'].length===0) delete caps[k+'_facilities'];
+  });
   const prev=u.capabilities;
   u.capabilities=caps;
   try{
     if(IS_LIVE && typeof SB!=='undefined' && SB.setUserCapabilities) await SB.setUserCapabilities(u.authUid, caps);
     if(typeof logActivity==='function') logActivity('capability_change', {staffId, capabilities:caps});
-    toast('Capabilities updated for '+fullName(getStaff(staffId)||{first:'',last:''})+'.','ok');
+    // T79: _rmPersonById, not getStaff — a staff-less SIPS admin has no staff row to name.
+    toast('Capabilities updated for '+fullName(_rmPersonById(staffId)||{first:'',last:''})+'.','ok');
   }catch(e){
     u.capabilities=prev;
     if(typeof handleSyncError==='function') handleSyncError(e,'Capability update'); else toast('Could not save — please retry.','err');
   }
   renderARoleMgmt();
 }
-function rmToggleAssessor(staffId){
-  const u=_rmUserFor(staffId); const cur=!!(u&&u.capabilities&&u.capabilities.assessor);
-  rmSetCapability(staffId, c=>{ if(cur) delete c.assessor; else c.assessor=true; });
+// T79: one set of handlers for every boolean-plus-facility-list grant. Before T79 these existed
+// once for `assessor`; two more grants would have meant three copies of the same three functions
+// (B6), so the shape is written once and the key is a parameter.
+function rmToggleGrant(staffId, key){
+  const u=_rmUserFor(staffId); const cur=!!(u&&u.capabilities&&u.capabilities[key]===true);
+  rmSetCapability(staffId, c=>{ if(cur) delete c[key]; else c[key]=true; });
 }
+function rmAddGrantFac(staffId, key){
+  const sel=document.getElementById('rm-'+key+'-fac-'+staffId); if(!sel||!sel.value) return; const fid=sel.value;
+  rmSetCapability(staffId, c=>{
+    const list=Array.isArray(c[key+'_facilities'])?c[key+'_facilities']:[];
+    if(list.map(String).indexOf(String(fid))<0) list.push(fid);
+    c[key+'_facilities']=list;
+  });
+}
+function rmRemoveGrantFac(staffId, key, fid){
+  rmSetCapability(staffId, c=>{
+    if(Array.isArray(c[key+'_facilities'])) c[key+'_facilities']=c[key+'_facilities'].filter(x=>String(x)!==String(fid));
+  });
+}
+function rmToggleAssessor(staffId){ rmToggleGrant(staffId,'assessor'); }
 function rmAddEducatorFac(staffId){
   const sel=document.getElementById('rm-edu-fac-'+staffId); if(!sel||!sel.value) return; const fid=sel.value;
   rmSetCapability(staffId, c=>{ c.educator_facilities=Array.isArray(c.educator_facilities)?c.educator_facilities:[]; if(c.educator_facilities.map(String).indexOf(String(fid))<0) c.educator_facilities.push(fid); });
@@ -17686,13 +17886,8 @@ function rmRemoveEducatorFac(staffId, fid){
 // #77: the Assessor grant's facility list. This is the "grant the role, then choose the
 // facilities it applies to" flow the client described in his 03:37 voice note, and it is the
 // only thing that narrows sbd_is_assessor(p_fid) away from system wide.
-function rmAddAssessorFac(staffId){
-  const sel=document.getElementById('rm-asr-fac-'+staffId); if(!sel||!sel.value) return; const fid=sel.value;
-  rmSetCapability(staffId, c=>{ c.assessor_facilities=Array.isArray(c.assessor_facilities)?c.assessor_facilities:[]; if(c.assessor_facilities.map(String).indexOf(String(fid))<0) c.assessor_facilities.push(fid); });
-}
-function rmRemoveAssessorFac(staffId, fid){
-  rmSetCapability(staffId, c=>{ if(Array.isArray(c.assessor_facilities)) c.assessor_facilities=c.assessor_facilities.filter(x=>String(x)!==String(fid)); });
-}
+function rmAddAssessorFac(staffId){ rmAddGrantFac(staffId,'assessor'); }
+function rmRemoveAssessorFac(staffId, fid){ rmRemoveGrantFac(staffId,'assessor',fid); }
 // #75 mitigation, shared by both capability pickers. The unfiltered (DB.facilities||[]) list
 // carries inactive rows, test rows and two pairs sharing a display name, so a grant could land
 // on an entry the admin could not tell apart. Mirrors the admin facility switcher's active
@@ -17709,6 +17904,27 @@ function _rmFacilityOptions(selectedIds){
       return `<option value="${f.id}">${label}</option>`; }).join('');
 }
 
+// T79: one renderer for a boolean grant plus its optional facility list. This was the Assessor
+// row's bespoke markup; two more grants would have made three near-identical copies, so it takes
+// the capability key as a parameter. The select id it emits (`rm-<key>-fac-<sid>`) is the id
+// rmAddGrantFac reads — change one and you must change the other.
+function _rmGrantRowHTML(s, u, cap, key, title, desc, col){
+  const on = cap[key]===true;
+  const facs = Array.isArray(cap[key+'_facilities']) ? cap[key+'_facilities'] : [];
+  return `<div style="border:1px solid var(--bdr);border-radius:8px;padding:8px 11px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+      <div><div style="font-size:12.5px;font-weight:600">${title}</div><div style="font-size:11px;color:var(--txt3)">${desc}</div></div>
+      <button class="btn btn-ghost btn-sm" onclick="rmToggleGrant('${s.id}','${key}')" style="border-color:${on?col:'var(--bdr)'};color:${on?col:'var(--txt2)'}"${u?'':' disabled title="No login account"'}>${on?'On':'Grant'}</button>
+    </div>
+    ${on?`
+    <div style="border-top:1px solid var(--bdr);margin-top:8px;padding-top:8px">
+      <div style="font-size:11px;color:var(--txt3);margin-bottom:6px">Facilities this grant applies to. ${facs.length?'':'<strong style="color:var(--gold)">None chosen, so it currently applies everywhere.</strong>'}</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:7px">${facs.length?facs.map(fid=>{const f=getFac(fid);return `<span class="pill" style="font-size:10px;padding:2px 6px;border:1px solid ${col}55;background:${col}1a;color:${col}">${f?f.name:fid} <span style="cursor:pointer;font-weight:800" onclick="rmRemoveGrantFac('${s.id}','${key}','${fid}')">&times;</span></span>`;}).join(''):'<span style="font-size:11px;color:var(--txt3)">Everywhere</span>'}</div>
+      ${u?`<div style="display:flex;gap:6px"><select id="rm-${key}-fac-${s.id}" class="form-select" style="flex:1;font-size:12px;padding:5px 8px">${_rmFacilityOptions(facs)}</select><button class="btn btn-ghost btn-sm" onclick="rmAddGrantFac('${s.id}','${key}')">Add</button></div>`:''}
+    </div>`:''}
+  </div>`;
+}
+
 function _rmPanel(s){
   const u=(DB.users||[]).find(x=>x.sid===s.id);
   const fac=(typeof getFac==='function')?getFac(s.fid):null;
@@ -17717,12 +17933,11 @@ function _rmPanel(s){
   const wv=s.assessmentGateOverride&&s.assessmentGateOverride.waived;
   const cap=(u&&u.capabilities)||{};
   const eduFacs=Array.isArray(cap.educator_facilities)?cap.educator_facilities:[];
-  const asrFacs=Array.isArray(cap.assessor_facilities)?cap.assessor_facilities:[];
   return `<div class="card">
     <div class="card-hd"><div class="card-ttl">${fullName(s)}</div>
       <button class="btn btn-ghost btn-xs" onclick="ROLEMGMT_SEL=null;renderARoleMgmt()">Close</button></div>
     <div class="card-body" style="display:flex;flex-direction:column;gap:14px">
-      <div style="font-size:11.5px;color:var(--txt3)">${fac?fac.name:'No facility'}${sys?' &middot; '+sys.name:''} &middot; ${s.belt} Belt</div>
+      <div style="font-size:11.5px;color:var(--txt3)">${fac?fac.name:'No facility'}${sys?' &middot; '+sys.name:''}${_rmHasStaffRow(s)?' &middot; '+s.belt+' Belt':' &middot; Portal account, no staff record'}</div>
       <div>
         <div style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Account Role</div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -17733,6 +17948,7 @@ function _rmPanel(s){
       <div>
         <div style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Access &amp; capabilities (independent of role)</div>
         <div style="display:flex;flex-direction:column;gap:8px">
+          ${_rmHasStaffRow(s)?`
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--bdr);border-radius:8px;padding:8px 11px">
             <div><div style="font-size:12.5px;font-weight:600">Observer</div><div style="font-size:11px;color:var(--txt3)">Can conduct observations</div></div>
             <button class="btn btn-ghost btn-sm" onclick="toggleObserver('${s.id}','rolemgmt')" style="border-color:${s.observer?'#0ea5e9':'var(--bdr)'};color:${s.observer?'#0ea5e9':'var(--txt2)'}">${s.observer?'On':'Grant'}</button>
@@ -17744,19 +17960,11 @@ function _rmPanel(s){
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--bdr);border-radius:8px;padding:8px 11px">
             <div><div style="font-size:12.5px;font-weight:600">Assessment practice-gate waiver</div><div style="font-size:11px;color:var(--txt3)">Request an assessment without the practice tests</div></div>
             ${wv?`<button class="btn btn-ghost btn-sm" onclick="clearAssessmentOverride('${s.id}','rolemgmt')">Clear</button>`:`<button class="btn btn-ghost btn-sm" onclick="grantAssessmentOverride('${s.id}','rolemgmt')" style="border-color:var(--gold-bd);color:var(--gold)">Waive</button>`}
-          </div>
-          <div style="border:1px solid var(--bdr);border-radius:8px;padding:8px 11px">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-              <div><div style="font-size:12.5px;font-weight:600">Assessor rights</div><div style="font-size:11px;color:var(--txt3)">Assessor access (observe + confirm), on top of their role</div></div>
-              <button class="btn btn-ghost btn-sm" onclick="rmToggleAssessor('${s.id}')" style="border-color:${cap.assessor?'#22c55e':'var(--bdr)'};color:${cap.assessor?'#22c55e':'var(--txt2)'}"${u?'':' disabled title="No login account"'}>${cap.assessor?'On':'Grant'}</button>
-            </div>
-            ${cap.assessor?`
-            <div style="border-top:1px solid var(--bdr);margin-top:8px;padding-top:8px">
-              <div style="font-size:11px;color:var(--txt3);margin-bottom:6px">Facilities this assessor role applies to. ${asrFacs.length?'':'<strong style="color:var(--gold)">None chosen, so it currently applies everywhere.</strong>'}</div>
-              <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:7px">${asrFacs.length?asrFacs.map(fid=>{const f=getFac(fid);return `<span class="pill" style="font-size:10px;padding:2px 6px;border:1px solid #a78bfa55;background:#a78bfa1a;color:#a78bfa">${f?f.name:fid} <span style="cursor:pointer;font-weight:800" onclick="rmRemoveAssessorFac('${s.id}','${fid}')">&times;</span></span>`;}).join(''):'<span style="font-size:11px;color:var(--txt3)">Everywhere</span>'}</div>
-              ${u?`<div style="display:flex;gap:6px"><select id="rm-asr-fac-${s.id}" class="form-select" style="flex:1;font-size:12px;padding:5px 8px">${_rmFacilityOptions(asrFacs)}</select><button class="btn btn-ghost btn-sm" onclick="rmAddAssessorFac('${s.id}')">Add</button></div>`:''}
-            </div>`:''}
-          </div>
+          </div>`:`
+          <div style="font-size:11px;color:var(--txt3);border:1px dashed var(--bdr);border-radius:8px;padding:8px 11px">Observer, Preceptor access and the practice-gate waiver live on a staff record, which this account does not have. The grants below are on the login account and apply.</div>`}
+          ${_rmGrantRowHTML(s,u,cap,'assessor','Assessor rights','Assessor access (observe + confirm), on top of their role','#a78bfa')}
+          ${_rmGrantRowHTML(s,u,cap,'issue_pin','Generate assessment PINs','Proctor: issue the one-time PIN that starts an assessment. Does not include approving one.','#38bdf8')}
+          ${_rmGrantRowHTML(s,u,cap,'approve_assessment','Approve assessments','Approve or deny an assessment request, and record its outcome. Does not include generating PINs.','#f59e0b')}
           <div style="border:1px solid var(--bdr);border-radius:8px;padding:8px 11px">
             <div style="font-size:12.5px;font-weight:600">Facility educator</div>
             <div style="font-size:11px;color:var(--txt3);margin:2px 0 7px">Educator/leader access at specific facilities, on top of their role</div>
@@ -17794,7 +18002,8 @@ function renderARoleMgmt(){
   const el=document.getElementById('a-rolemgmt'); if(!el) return;
   if(!(ST.user&&ST.user.role==='master_admin')){ el.innerHTML='<div class="empty-state"><div class="empty-ttl">Master Admin only</div></div>'; return; }
   const people=_rmPeople();
-  const sel=ROLEMGMT_SEL?getStaff(ROLEMGMT_SEL):null;
+  // T79: _rmPersonById, not getStaff — the selection may be a portal account with no staff row.
+  const sel=ROLEMGMT_SEL?_rmPersonById(ROLEMGMT_SEL):null;
   el.innerHTML=`
     <div class="card mb12">
       <div class="card-hd" style="gap:10px;flex-wrap:wrap"><div class="card-ttl">Role &amp; Access Management</div>
@@ -17832,7 +18041,9 @@ function renderAAdminUsers(){
   ];
   const uTerm = PAGE_Q.users.trim().toLowerCase();
   const uHit = u => !uTerm || (u.name||'').toLowerCase().includes(uTerm) || (u.email||'').toLowerCase().includes(uTerm);
-  const sipsAdmins    = DB.users.filter(u=>(u.role==='master_admin'||u.role==='staff_admin')&&!u.email.match(/jjacobs|izambrano|dpayne/i)&&uHit(u));
+  // T79: sips_admin included, or a created SIPS admin account would be invisible in every group
+  // on this screen and could not be found again to edit.
+  const sipsAdmins    = DB.users.filter(u=>(u.role==='master_admin'||u.role==='staff_admin'||u.role==='sips_admin')&&!u.email.match(/jjacobs|izambrano|dpayne/i)&&uHit(u));
   const sysUsers      = DB.users.filter(u=>u.role==='system_admin'&&uHit(u));
   const facAdminUsers = DB.users.filter(u=>u.role==='facility_admin'&&uHit(u));
   const hospUsers     = DB.users.filter(u=>u.role==='hospital'&&uHit(u));
@@ -18323,6 +18534,7 @@ function openEditUserModal(uid){
           <option value="facility_admin" ${u.role==='facility_admin'?'selected':''}>Facility Admin (Full Facility Access)</option>
           <option value="system_admin" ${u.role==='system_admin'?'selected':''}>System Admin</option>
           <option value="staff_admin" ${u.role==='staff_admin'?'selected':''}>Assessor (SIPS Internal)</option>
+          <option value="sips_admin" ${u.role==='sips_admin'?'selected':''}>SIPS Admin (starts empty — grant in Role Management)</option>
           <option value="master_admin" ${u.role==='master_admin'?'selected':''}>Master Admin (SIPS Level)</option>
         </select>
       </div>
@@ -18409,7 +18621,7 @@ function openAddUserModal(type){
     sips: {
       title:'Add SIPS Admin / Assessor',
       roleLabel:'Admin Level',
-      roleOpts:`<option value="staff_admin">Staff Admin / Assessor (assigned facilities only)</option><option value="master_admin">Master Admin (full platform access)</option>`,
+      roleOpts:`<option value="staff_admin">Staff Admin / Assessor (assigned facilities only)</option><option value="sips_admin">SIPS Admin (starts empty &mdash; grant in Role Management)</option><option value="master_admin">Master Admin (full platform access)</option>`,
       extra: `
         <div class="form-group"><label class="form-label">Assign Facilities <span style="color:#64748b;font-weight:400">(for Assessors)</span></label>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px">

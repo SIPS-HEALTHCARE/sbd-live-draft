@@ -1685,6 +1685,41 @@ vocabulary these tasks are written in, including the SBD and SPD distinction tha
   *Done when:* The two permissions can be held independently, a new SIPS admin account can reach
   nothing until granted, and the grants are enforced server side rather than by hiding controls.
 
+  **Code-complete 2026-08-12, pending user apply + deploy.** Design note
+  `docs/decisions/2026-08-12-t79-sips-admin-role-and-split-assessment-grants.md`.
+  Two capability keys on the existing `capabilities` jsonb — `issue_pin` and
+  `approve_assessment`, each with an optional facility list following the T74/T77 pattern — plus
+  the `sips_admin` role string. **Additive only:** the pre-T79 role allow-lists are kept as an OR
+  branch, so nobody's live reach moves on the day it applies and independence is demonstrable on
+  any account outside those lists, which is the SIPS admin the client described.
+  Deploy order: apply `20260812120000_t79_split_assessment_grants.sql` → deploy
+  `sbd-assessor-pin` **and** `sbd-record-assessment` → then the frontend (`ui-views.js?v=212`).
+  The migration alone splits nothing; both edge functions carry half the gate.
+  Verify: `node scripts/verify-t79-assessment-grants.js` (33 assertions) before deploy, then
+  `supabase/verify/t79_assessment_grants_check.sql` against the live database after.
+  Found and fixed on the way: `staff_select` admitted a capability *assessor* but not either new
+  grant, so a PIN-only SIPS admin could call `generate_pin` and still see an empty candidate list
+  (RLS fails silently by returning fewer rows) — reads are now shared by both grants while the
+  writes stay split; Role Management was built from `DB.staff` alone, so a SIPS admin (no staff
+  row) never appeared in the console meant to grant it anything; and `renderAAdminUsers` had no
+  group for the new role, so a created account could not be found again.
+  **Not done, deliberately:** `staff_admin` / `educator` / `preceptor` still hold both
+  permissions. See T79a.
+
+- [ ] **T79a** Narrow the assessment role allow-lists onto the T79 grants · est 1d · Medium
+  Split out of T79 on 2026-08-12. T79 made approving and PIN-generating independently *grantable*,
+  but kept `ASSESSOR_ROLES` (sbd-assessor-pin), `allowedRoles` (sbd-record-assessment) and the
+  four-role branch in `aq_select`/`aq_update` as an OR, so anyone holding `staff_admin`,
+  `educator` or `preceptor` still gets both at once. That is the remaining half of "break apart
+  permission to approve assements".
+  This is a live-permission narrowing, which is why it was not bundled: the 2026-07-30 staff-list
+  outage came from exactly that shape of change applied without a per-account backfill. Every
+  current holder must be granted explicitly first, then the lists come out one at a time.
+  *Goal:* A role no longer carries either permission implicitly; every holder holds it as a grant.
+  *Done when:* Each live holder has been backfilled with the grants they had, the role branches are
+  removed from both edge functions and both queue policies, and a signed-in `staff_admin` with no
+  grants is refused both actions.
+
 - [ ] **T80** Facility admin cannot reach the facility's observer portal · est 0.5d · High
   Asked 2026-07-30 at 8:47 PM. A facility admin should be able to see the observer portal for their
   own facility. This sat one line above the message that carried the word PRIORITY, the blank staff
