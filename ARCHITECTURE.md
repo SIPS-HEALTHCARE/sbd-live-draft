@@ -200,7 +200,7 @@ Every table uses RLS. Access is controlled via JWT claims:
 | `master_admin` | Admin (a-) | Everything. DAVID AI. Command Center. User management. |
 | `staff_admin` | Admin (a-) | Subset of facilities (via `assigned_fids`). Assessments, staff management. |
 | `hospital` | Hospital (h-) | Single facility dashboard, staff directory, milestones, reports. |
-| `facility_admin` | Hospital (h-) | Same as hospital + assessment queue + staff progression. |
+| `facility_admin` | Hospital (h-) | Same as hospital + assessment queue + staff progression + the observation consoles (read-only unless also granted `assessor`). |
 | `system_admin` | System (x-) | Multi-facility view for a hospital system. |
 | `staff_member` | Staff (s-) | Personal dashboard, belt progress, OIP, study materials. |
 | `sips_admin` | Admin (a-) | **Nothing by role (T79).** Starts empty; reaches only what Role Management grants. See §8A. |
@@ -617,6 +617,7 @@ JS files use `?v=N` query params (e.g., `ui-views.js?v=40`). **Bump version afte
 | Placement assessment | `ui-views.js` | 1234–1700 |
 | OIP quiz | `ui-views.js` | 1950–2070 |
 | Assessment queue | `ui-views.js` | 10103–10535 |
+| Observation consoles (one pair, three mounts: `ovsMount` = `a`/`s`/`h`) | `ui-views.js` | 3450+, 3955+ |
 | Staff progression | `ui-views.js` | 10217–10505 |
 | Registration approvals | `ui-views.js` | 11141–11430 |
 | Free agents | `ui-views.js` | 11958–12366 |
