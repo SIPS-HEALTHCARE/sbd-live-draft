@@ -36,10 +36,17 @@ const ICO = {
 
 // ============================================================ DATA
 const BELT_ORDER = ['White','Yellow','Green','Blue','Brown','Black'];
-const BELT_CLR = {White:'#cbd5e1',Yellow:'#eab308',Green:'#22c55e',Blue:'#60a5fa',Brown:'#c2772a',Black:'#8b929e'};
-const BELT_BG  = {White:'#cbd5e118',Yellow:'#eab30815',Green:'#22c55e12',Blue:'#60a5fa12',Brown:'#c2772a15',Black:'#8b929e12'};
-const BELT_CERT= {White:'Certified Operator I',Yellow:'Certified Operator II',Green:'Certified Operator III',Blue:'Certified Operator IV',Brown:'Certified Operator V',Black:'Master Operator'};
-const BELT_VAL = {White:1,Yellow:2,Green:3,Blue:4,Brown:5,Black:6};
+// 'None' is the unbelted state (placement approved at No Belt — remediation path). It is
+// deliberately NOT in BELT_ORDER: beltIdx('None') = -1 makes nextBelt() = White and
+// calcPoints() award nothing, which is exactly the semantics of an unbelted person.
+// It still needs entries here or belt averages go NaN and cert labels print undefined.
+// ponytail: beltBadge() and the placement-flow views label 'None' as "No Belt", but raw
+// `${s.belt} Belt` template strings elsewhere read "None Belt"; if that grates, the upgrade
+// path is a beltLabel() helper swapped into those templates, not more sentinel values.
+const BELT_CLR = {None:'#94a3b8',White:'#cbd5e1',Yellow:'#eab308',Green:'#22c55e',Blue:'#60a5fa',Brown:'#c2772a',Black:'#8b929e'};
+const BELT_BG  = {None:'#94a3b812',White:'#cbd5e118',Yellow:'#eab30815',Green:'#22c55e12',Blue:'#60a5fa12',Brown:'#c2772a15',Black:'#8b929e12'};
+const BELT_CERT= {None:'Not Yet Certified',White:'Certified Operator I',Yellow:'Certified Operator II',Green:'Certified Operator III',Blue:'Certified Operator IV',Brown:'Certified Operator V',Black:'Master Operator'};
+const BELT_VAL = {None:0,White:1,Yellow:2,Green:3,Blue:4,Brown:5,Black:6};
 
 // ── ASSESSMENT WINDOWS (weeks open / weeks closed per belt transition) ──────
 // After earning a belt the staff member has WINDOW_OPEN weeks to apply.

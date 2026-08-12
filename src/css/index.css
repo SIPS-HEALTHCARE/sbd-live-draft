@@ -152,6 +152,7 @@ body{background:var(--bg);color:var(--txt);-webkit-text-size-adjust:100%}
 /* ── BELT BADGE ── */
 .bb{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap}
 .bb-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.bb-None{background:rgba(148,163,184,.06);color:#94a3b8;border:1px dashed rgba(148,163,184,.35)}
 .bb-White{background:rgba(203,213,225,.08);color:var(--blt-w);border:1px solid rgba(203,213,225,.2)}
 .bb-Yellow{background:rgba(234,179,8,.09);color:var(--blt-y);border:1px solid rgba(234,179,8,.25)}
 .bb-Green{background:rgba(34,197,94,.08);color:var(--blt-g);border:1px solid rgba(34,197,94,.25)}
@@ -524,6 +525,7 @@ body{background:var(--bg);color:var(--txt);-webkit-text-size-adjust:100%}
 #sbd-root .tbl td { color:#dde3f0 !important; }
 
 /* ── Belt Badges ── */
+#sbd-root .bb-None { color:#94a3b8 !important; }
 #sbd-root .bb-White { color:#cbd5e1 !important; }
 #sbd-root .bb-Yellow { color:#eab308 !important; }
 #sbd-root .bb-Green { color:#22c55e !important; }
