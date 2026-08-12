@@ -108,6 +108,27 @@ serve(async (req) => {
       });
     }
 
+    // ── T33 admin MFA guard ─────────────────────────────────────────────────
+    // Admin-tier JWTs must be aal2 (password + verified TOTP). Mirrors
+    // public.sbd_mfa_satisfied() (migration 20260812130000); inlined because the
+    // deploy pipeline cannot resolve ../_shared imports (#47).
+    // scripts/verify-t33-security-tail.js asserts every copy agrees.
+    const MFA_ADMIN_ROLES = ['master_admin', 'staff_admin', 'admin', 'master', 'sips_admin', 'system_admin'];
+    const jwtAal = (t: string): string => {
+      try { return JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).aal || 'aal1'; }
+      catch (_e) { return 'aal1'; }
+    };
+    const mfaDenied = (role: string | null | undefined, t: string): boolean =>
+      MFA_ADMIN_ROLES.includes(String(role || '')) && jwtAal(t) !== 'aal2';
+    if (mfaDenied(callerProfile.role, jwt)) {
+      return new Response(JSON.stringify({
+        error: 'MFA required: administrator sessions must complete two-factor verification.'
+      }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     const { data: target, error: targetErr } = await supabaseAdmin
       .from('sbd_portal_users')
       .select('id, auth_uid, email, name, role')
