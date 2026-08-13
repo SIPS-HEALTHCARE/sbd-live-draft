@@ -132,7 +132,14 @@ async function rescore(reviews, score, cache) {
 
 function buildSheet(mod, rescored) {
   const rows = rescored.map(({ pr, responses }) => {
-    const held = pr.confirmedBelt || pr.tentativeBelt || null;
+    // A belt somebody HOLDS is one an assessor confirmed. `tentative_belt` is what the engine
+    // proposed at submission, and a proposal awaiting a decision is not an award. Reading the
+    // two as one thing put a person who had never been given a belt onto a client-facing list
+    // of belts being taken away, which is close to the worst thing this sheet can say. It also
+    // understated the real finding: on the comparison set only 3 of 14 hold an awarded belt,
+    // and none of the three move, which is a stronger result than the merged reading produced.
+    const held = pr.confirmedBelt || null;
+    const suggested = pr.confirmedBelt ? null : (pr.tentativeBelt || null);
     const before = engineDetermination(mod, pr, pr.responses || []);   // corrected engine, OLD scores
     const after = engineDetermination(mod, pr, responses);             // corrected engine, calibrated scores
     // Thin evidence. A placement whose simulations were largely left blank produces a
@@ -142,7 +149,7 @@ function buildSheet(mod, rescored) {
     const blank = sims.filter(r => !String(r.answer || '').trim()).length;
     return {
       name: pr.staffName || pr.staffId, fid: pr.fid, submitted: String(pr.submittedAt || '').slice(0, 10),
-      status: pr.status, held, before, after, sims: sims.length, blank,
+      status: pr.status, held, suggested, before, after, sims: sims.length, blank,
       changes: !!held && after.belt !== held,
       strippedByNaiveRerun: !!held && before.belt !== held,
       rescuedByCalibration: !!held && before.belt !== held && after.belt === held,
@@ -152,15 +159,19 @@ function buildSheet(mod, rescored) {
   const changed = rows.filter(r => r.changes);
   const naive = rows.filter(r => r.strippedByNaiveRerun);
   const rescued = rows.filter(r => r.rescuedByCalibration);
-  // A row can only "change" against a belt that is on record. Rows with none fall out of every
-  // count above, and on the narrow comparison run that is most of the sheet: of the 14 rows the
-  // client asked about, 9 carry no belt. Splitting on status would not find them, because 5 of
-  // those 9 are already marked confirmed and still have neither belt column set. So split on
-  // what the comparison actually needs, which is whether there is a belt to compare against.
+  // Only an awarded belt can "change". Everyone else falls out of the counts above, and on the
+  // narrow comparison run that is most of the sheet: of the 14 rows the client asked about,
+  // 11 hold no awarded belt. Splitting on status would not find them, because most are already
+  // marked confirmed. So split three ways, on what a reader actually has to act on:
+  //   decided   an assessor has ruled, with no belt awarded. Nothing to revisit.
+  //   waiting   nobody has ruled yet. The re-score is not what is holding it up, a decision is.
   const awarded = rows.filter(r => r.held);
-  const unawarded = rows.filter(r => !r.held);
+  const decided = rows.filter(r => !r.held && r.status !== 'pending');
+  const waiting = rows.filter(r => !r.held && r.status === 'pending');
   const thin = rows.filter(r => r.blank > 0);
   const fmt = n => (n == null ? 'n/a' : n.toFixed(1));
+  const move = r => `simulation ${fmt(r.before.sim)} to ${fmt(r.after.sim)}, `
+    + `blended ${fmt(r.before.blended)} to ${fmt(r.after.blended)}`;
 
   const md = [
     '# T101, placement re-score, for SIPS sign-off',
@@ -172,38 +183,52 @@ function buildSheet(mod, rescored) {
     '',
     '## The count',
     '',
-    unawarded.length
-      ? `- ${awarded.length} of ${rows.length} carry a belt on record, so only those can show a change.`
-        + ` The other ${unawarded.length} carry none, so for them the re-scored result is the determination itself,`
-        + ' not a change to one. They are listed separately below.'
-      : `- All ${rows.length} carry a belt on record, so every row here is a comparison against one.`,
-    `- **${changed.length} of the ${awarded.length} with a belt ${changed.length === 1 ? 'holds' : 'hold'} one that the re-scored determination does not reproduce.**${changed.length ? ' Named below.' : ''}`,
-    `- ${naive.length} would have lost a belt to a re-run on the OLD scores. That is the outcome this task exists to prevent.`,
-    `- ${rescued.length} of those ${rescued.length === 1 ? 'is' : 'are'} restored by re-scoring alone; those answers were always good enough.`,
+    `- ${awarded.length} of ${rows.length} hold a belt that was awarded, so only those can show a change.`,
+    `- **${changed.length ? `${changed.length} of the ${awarded.length} awarded belts ${changed.length === 1 ? 'does' : 'do'} not survive the re-score.` : `None of the ${awarded.length} changes. Each one re-scores to exactly what it already holds.`}**`,
+    ...(decided.length ? [`- ${decided.length} were already decided with no belt awarded. The re-score agrees with`
+      + ' every one of those decisions, so none of them needs revisiting.'] : []),
+    ...(waiting.length ? [`- ${waiting.length} ${waiting.length === 1 ? 'has' : 'have'} never been decided and`
+      + ` ${waiting.length === 1 ? 'is' : 'are'} still waiting. Listed separately below.`] : []),
+    `- ${naive.length} would have lost an awarded belt to a re-run on the OLD scores. That is the outcome this task exists to prevent.`,
     ...(thin.length ? ['', '**Read these with care.** The simulation evidence is incomplete, so the determination rests on'
       + ' fewer answers than usual. Blank answers are skipped, not marked wrong, on both sides of the comparison.',
-      ...thin.map(r => `- ${r.name}: ${r.blank} of ${r.sims} simulation answers left blank.`)] : []),
+      ...thin.map(r => `- ${r.name}: ${r.blank} of ${r.sims} simulation answers left blank, so the result rests on ${r.sims - r.blank}.`)] : []),
     '',
-    changed.length ? '## Belts that change. Each needs the client\'s decision before anything is published\n' : '## No belt changes among those holding one. Nothing to publish.\n',
-    ...changed.map(r => `- **${r.name}**, holds ${r.held}, re-scored determination is ${label(r.after)} `
-      + `(simulation ${fmt(r.before.sim)} → ${fmt(r.after.sim)}, blended ${fmt(r.before.blended)} → ${fmt(r.after.blended)})`),
-    ...(unawarded.length ? ['', '## No belt on record. The re-score is the determination, not a change\n',
-      ...unawarded.map(r => `- **${r.name}** (${r.status}), re-scored determination is ${label(r.after)} `
-        + `(simulation ${fmt(r.before.sim)} → ${fmt(r.after.sim)}, blended ${fmt(r.before.blended)} → ${fmt(r.after.blended)})`)] : []),
+    changed.length ? '## Awarded belts that change. Each needs a decision before anything is published\n'
+                   : '## The awarded belts. None of them change\n',
+    ...awarded.map(r => `- **${r.name}**, holds ${r.held}, re-scored determination is ${label(r.after)} (${move(r)})`),
+    ...(decided.length ? ['', '## Already decided, no belt awarded. The re-score agrees with each decision\n',
+      ...decided.map(r => `- **${r.name}**, decision on record is no belt, re-scored determination is ${label(r.after)} (${move(r)})`)] : []),
+    ...(waiting.length ? ['', '## Still waiting on a decision\n',
+      '',
+      'Where a suggestion is shown, it is what the engine proposed at submission, not a belt that was',
+      'awarded. The old scores and the corrected scores give the same answer, so the re-scoring is not',
+      'what is holding these up. They need a decision.',
+      '',
+      ...waiting.map(r => `- **${r.name}**, pending since ${r.submitted}`
+        + `${r.suggested ? `, suggested ${r.suggested} by the earlier engine` : ''}`
+        + `, re-scored determination is ${label(r.after)} (${move(r)})`)] : []),
     '',
     '## Every placement',
     '',
-    '| Name | Facility | Submitted | Status | Holds | Re-run on old scores | Re-scored determination | Sim | Blended |',
+    'A belt shown as awarded is one an assessor confirmed. Where the column reads None, the engine may',
+    'still have suggested a belt at submission. A suggestion is a proposal awaiting a decision, not a',
+    'belt the person holds.',
+    '',
+    '| Name | Facility | Submitted | Status | Belt awarded | Re-run on old scores | Re-scored determination | Simulation | Blended |',
     '|---|---|---|---|---|---|---|---|---|',
-    ...rows.map(r => `| ${r.name} | ${r.fid} | ${r.submitted} | ${r.status} | ${r.held || 'none'} | ${label(r.before)} | ${label(r.after)}`
-      + ` | ${fmt(r.before.sim)} → ${fmt(r.after.sim)} | ${fmt(r.before.blended)} → ${fmt(r.after.blended)} |`),
+    ...rows.map(r => `| ${r.name} | ${r.fid} | ${r.submitted} | ${r.status} `
+      + `| ${r.held || (r.suggested ? `None, ${r.suggested} suggested` : 'None')} | ${label(r.before)} | ${label(r.after)}`
+      + ` | ${fmt(r.before.sim)} to ${fmt(r.after.sim)} | ${fmt(r.before.blended)} to ${fmt(r.after.blended)} |`),
     '',
     '## Sign-off',
     '',
-    '- [ ] Iggie has reviewed the belts that change, above.',
-    '- [ ] Every person whose belt changes has been told by the client before it is published.',
-    ...(unawarded.length ? [`- [ ] Iggie has reviewed the ${unawarded.length} determination(s) for people with no belt on record.`] : []),
-    ...(thin.length ? [`- [ ] Iggie has decided what to do about the ${thin.length} placement(s) with incomplete simulation evidence.`] : []),
+    changed.length
+      ? '- [ ] Every awarded belt that changes has been reviewed, and the person told before it is published.'
+      : `- [ ] Confirmed that the ${awarded.length} awarded belt(s) are unchanged and need no action.`,
+    ...(decided.length ? [`- [ ] Confirmed that the ${decided.length} already decided need no revisiting.`] : []),
+    ...waiting.map(r => `- [ ] ${r.name}, pending since ${r.submitted}, has been decided.`),
+    ...thin.map(r => `- [ ] ${r.name}'s result has been reviewed against their incomplete evidence.`),
     '',
   ].join('\n');
   return { md, rows, changed };
@@ -259,15 +284,29 @@ async function selftest() {
     confirmedBelt: null, tentativeBelt: null };
   const confirmedNoBelt = { ...pr, id: 'pr-confirmed-nobelt', staffName: 'Confirmed No Belt', status: 'confirmed',
     confirmedBelt: null, tentativeBelt: null };
+  // The one that matters most: a suggestion the engine made at submission that nobody ever
+  // actioned. Counting it as an award put a person onto a client-facing list of belts being
+  // taken away when they had never been given one.
+  const suggestedOnly = { ...pr, id: 'pr-suggested', staffName: 'Suggested Only', status: 'pending',
+    confirmedBelt: null, tentativeBelt: 'White' };
   const thinPr = { ...pr, id: 'pr-thin', staffName: 'Thin Evidence', status: 'pending',
     confirmedBelt: null, tentativeBelt: null,
     responses: pr.responses.map((r, i) => (r.type === 'simulation' && i % 2 ? { ...r, answer: '   ' } : r)) };
-  const mixed = buildSheet(mod, await rescore([pr, noBelt, confirmedNoBelt, thinPr],
+  const mixed = buildSheet(mod, await rescore([pr, noBelt, confirmedNoBelt, suggestedOnly, thinPr],
     async () => ({ score: 78, feedback: 'calibrated' }), {}));
-  assert.strictEqual(mixed.rows.filter(r => r.held).length, 1, 'only the fixture with a belt on record is awarded');
-  assert.strictEqual(mixed.rows.filter(r => !r.held).length, 3, 'both no-belt shapes must be counted, pending and confirmed');
-  assert.ok(mixed.md.includes('## No belt on record'), 'the no-belt section must appear in the sheet');
-  ['Pending Person', 'Confirmed No Belt'].forEach(n =>
+  assert.strictEqual(mixed.rows.filter(r => r.held).length, 1, 'only the confirmed fixture holds an awarded belt');
+  assert.strictEqual(mixed.rows.filter(r => !r.held).length, 4, 'every no-award shape must be counted');
+  const sug = mixed.rows.find(r => r.name === 'Suggested Only');
+  assert.strictEqual(sug.held, null, 'a tentative belt is a suggestion, never an award');
+  assert.strictEqual(sug.suggested, 'White', 'the suggestion must still be carried, so the sheet can say what it was');
+  assert.strictEqual(sug.changes, false, 'a suggestion nobody actioned cannot be a belt that changes');
+  assert.ok(!mixed.changed.some(r => r.name === 'Suggested Only'),
+    'a suggestion must never reach the client-facing list of belts that change');
+  assert.ok(mixed.md.includes('suggested White by the earlier engine'),
+    'the sheet must name the suggestion as a suggestion');
+  assert.ok(mixed.md.includes('## Still waiting on a decision'), 'undecided rows need their own section');
+  assert.ok(mixed.md.includes('## Already decided, no belt awarded'), 'decided-no-belt rows need their own section');
+  ['Pending Person', 'Confirmed No Belt', 'Suggested Only'].forEach(n =>
     assert.ok(mixed.md.includes(`**${n}**`), `${n} must be named in the sheet, not dropped from every count`));
   assert.ok(mixed.md.includes('Read these with care'), 'incomplete simulation evidence must be flagged');
   assert.ok(/Thin Evidence: \d+ of \d+ simulation answers left blank/.test(mixed.md), 'the blank count must be stated');
