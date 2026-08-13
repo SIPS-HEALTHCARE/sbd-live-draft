@@ -4570,7 +4570,7 @@ function downloadAssessmentReport(prId){
   if(typeof SB!=='undefined' && SB.logReportDownload) SB.logReportDownload('assessment_report', pr.id).catch?.(()=>{});
 }
 
-function confirmPlacement(prId){
+async function confirmPlacement(prId){
   const pr = (DB.placementReviews||[]).find(r=>r.id===prId);
   if(!pr) return;
   const beltEl = document.getElementById('pr-belt-'+prId);
@@ -4585,58 +4585,64 @@ function confirmPlacement(prId){
   // confirmedBelt as an assessor-override AWARD, and the engine already prints the correct
   // "No Belt Issued" determination on its own. The decision itself lives in status /
   // confirmed_by / confirmed_at / the note / the staff history entry.
-  pr.confirmedBelt = noBelt ? null : chosenBelt;
-  pr.assessorNote = note;
-  pr.status = (noBelt ? !pr.tentativeBelt : chosenBelt === pr.tentativeBelt) ? 'confirmed' : 'adjusted';
-  pr.confirmedAt = new Date().toISOString().split('T')[0];
-  pr.confirmedBy = ST.user ? ST.user.name : 'Assessor';
+  const confirmedBelt = noBelt ? null : chosenBelt;
+  const status = (noBelt ? !pr.tentativeBelt : chosenBelt === pr.tentativeBelt) ? 'confirmed' : 'adjusted';
+  const confirmedAt = new Date().toISOString().split('T')[0];
+  const confirmedBy = ST.user ? ST.user.name : 'Assessor';
 
-  // Update staff record
   const s = getStaff(pr.staffId);
+  // No Belt: nothing was certified, so no earn date and no grandfathered gates. The person
+  // stays unbelted on the remediation path and earns White through the normal gate climb.
+  // A normal placement grandfathers the current-belt gates so the assessment window opens;
+  // otherwise getWindowStatus() locks the next-belt climb.
+  const histEntry = s ? {
+    dt: confirmedAt,
+    type: 'Placement',
+    belt: noBelt ? 'None' : chosenBelt,
+    res: 'confirmed',
+    note: note || (noBelt
+      ? `Placement decision: No Belt, confirmed by ${confirmedBy}. Placed on the remediation path.`
+      : `Starting placement confirmed at ${chosenBelt} Belt by ${confirmedBy}.`)
+  } : null;
+
+  // Both writes must land before anything is presented as recorded. The staff PATCH goes
+  // first — it is the constraint-prone one — and a failure of either leaves the review
+  // pending on screen instead of committing a half-written approval (T106 incident: the
+  // review PATCH used to commit while the staff PATCH silently failed 23514).
+  if(IS_LIVE){
+    try{
+      if(s){
+        const staffBody = {belt: noBelt ? 'None' : chosenBelt, placement_needed: false,
+                           history: [histEntry, ...(s.history||[])]};
+        if(!noBelt) Object.assign(staffBody, {since: confirmedAt, cur_comp:'pass', cur_sim:'pass', cur_obs:'pass'});
+        await sbFetch(`/rest/v1/staff?id=eq.${s.id}`, {method:'PATCH', body: staffBody});
+      }
+      await sbFetch(`/rest/v1/placement_reviews?id=eq.${pr.id}`, {
+        method:'PATCH',
+        body: {status, confirmed_belt: confirmedBelt, assessor_note: note,
+               confirmed_at: confirmedAt, confirmed_by: confirmedBy}
+      });
+    }catch(e){
+      handleSyncError(e, 'Placement confirm sync');
+      toast('Decision NOT recorded for ' + cleanName(pr.staffName) + ' — the review is still pending. Please retry.', 'err');
+      return;
+    }
+  }
+
+  pr.confirmedBelt = confirmedBelt;
+  pr.assessorNote = note;
+  pr.status = status;
+  pr.confirmedAt = confirmedAt;
+  pr.confirmedBy = confirmedBy;
   if(s){
     s.belt = noBelt ? 'None' : chosenBelt;
     s.placementNeeded = false;
     if(!noBelt){
-      s.since = new Date().toISOString().split('T')[0];
-      // Placed = certified at that belt. Grandfather the current-belt gates so the
-      // assessment window opens; otherwise getWindowStatus() locks the next-belt climb.
+      s.since = confirmedAt;
       s.cur = {c:'pass', s:'pass', o:'pass'};
     }
-    // No Belt: nothing was certified, so no earn date and no grandfathered gates. The person
-    // stays unbelted on the remediation path and earns White through the normal gate climb.
     if(!s.history) s.history = [];
-    s.history.unshift({
-      dt: pr.confirmedAt,
-      type: 'Placement',
-      belt: noBelt ? 'None' : chosenBelt,
-      res: 'confirmed',
-      note: note || (noBelt
-        ? `Placement decision: No Belt, confirmed by ${pr.confirmedBy}. Placed on the remediation path.`
-        : `Starting placement confirmed at ${chosenBelt} Belt by ${pr.confirmedBy}.`)
-    });
-  }
-
-  if(IS_LIVE){
-    sbFetch(`/rest/v1/placement_reviews?id=eq.${pr.id}`, {
-      method:'PATCH',
-      body: {
-        status: pr.status,
-        confirmed_belt: pr.confirmedBelt,
-        assessor_note: note,
-        confirmed_at: pr.confirmedAt,
-        confirmed_by: pr.confirmedBy
-      }
-    }).catch(e => handleSyncError(e, 'Placement confirm sync'));
-    if(s){
-      const staffBody = {belt: s.belt, placement_needed: false, history: s.history};
-      if(!noBelt) Object.assign(staffBody, {since: s.since, cur_comp:'pass', cur_sim:'pass', cur_obs:'pass'});
-      sbFetch(`/rest/v1/staff?id=eq.${s.id}`, {
-        method:'PATCH',
-        body: staffBody
-      }).catch(e => handleSyncError(e, 'Staff update sync'));
-    }
-  } else {
-    /* saveDemoData() removed */
+    s.history.unshift(histEntry);
   }
   updatePlacementBadge();
   toast(noBelt
