@@ -279,8 +279,14 @@ async function selftest() {
   console.log('selftest: OK');
 }
 
+// The sheet builder is the part worth reusing from elsewhere: when the grading has to be
+// driven by something other than this script's own HTTP layer (a network-restricted box, a
+// re-run off cached scores), the alternative must still produce the sheet through THIS code.
+// A second sheet builder is how a report and a card came to disagree before.
+module.exports = { buildSheet, engineDetermination, rescore, label, loadScoringModule };
+
 // ── main ─────────────────────────────────────────────────────────────────────────────────
-(async () => {
+if (require.main === module) (async () => {
   fs.mkdirSync(OUT, { recursive: true });
   if (has('--selftest')) return selftest();
 
