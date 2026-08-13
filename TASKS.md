@@ -3,7 +3,7 @@
 **Living document.** This is the single record of what has been built and what is left.
 It is not regenerated. It is edited in place.
 
-**Last updated:** 2026-08-03
+**Last updated:** 2026-08-13
 **Audit basis:** 2026-07-25, verified against the live project and the live code.
 **History basis:** 2026-07-31, the complete client conversation from 22 May to 31 July read end
 to end including every attachment. See `docs/DOMAIN_GLOSSARY.md` for the vocabulary this ledger
@@ -199,7 +199,14 @@ persisted.
     *Known effect:* `getFreeAgents()` runs during hydration for every signed-in user, so staff
     and leaders now receive an empty list instead of 12 rows. That is a filtered read, not an
     error, and nothing on their screens consumes it.
-- [ ] **T26** Make Publish to Staff actually publish (issue `B1`) · est 1.0d · **High**
+- [x] **T26** Make Publish to Staff actually publish (issue `B1`) · est 1.0d · **High**
+  **Done, verified 2026-08-13 against the live database.** `publishSchedule` at
+  `ui-views.js:11839` stamps `publishedBy`, and new shifts are created with it null
+  (`:11462`, `:11766`), so nothing reads as published until somebody presses the button.
+  Live: `sbd_schedule` now holds a row and that row carries `published_by`, where the table
+  had never accepted a write when this was opened. The read side is enforced in the database
+  rather than only in the UI: `sbd_schedule_select` lets a `staff_member` see a row only when
+  `published_by IS NOT NULL`, read back out of production today.
   The button's entire handler is
   `closeModal();toast('Schedule published. Staff can now view their shifts.','ok')`.
   It changes nothing. `sbd_schedule` already has a `published_by` column, so this is an
@@ -221,7 +228,15 @@ persisted.
   which is a product decision as much as a code change.
   *Goal:* A manager who presses Publish actually publishes, and staff see the published schedule. The button never again claims something it did not do.
   *Done when:* `published_by` is set on the affected `sbd_schedule` rows after pressing Publish; a staff account sees the shifts; nothing is visible to staff before Publish is pressed.
-- [ ] **T27** Persist attendance edits (issue `B2`) · est 0.5d · **High**
+- [x] **T27** Persist attendance edits (issue `B2`) · est 0.5d · **High**
+  **Done, verified 2026-08-13.** All three paths call `SB.updateAttendance` on an existing
+  record instead of mutating local state and returning: `ui-views.js:12259`, `:12281` and
+  `:12303`, and `updateAttendance` PATCHes the row (`api-supabase.js:384`). Live:
+  `sbd_attendance` holds a row where it held none, so the mapper fault that stopped every
+  write is gone. One limit worth stating rather than glossing: `sbd_attendance` carries no
+  `updated_at`, so an edit surviving cannot be proved from timestamps here. The click-through
+  evidence is the client's own record, which puts this live on 26 July and confirmed in the
+  31 July sign-off.
   `markAttend`, `markAllAttend` and `assignCoverage` persist only when creating a record.
   On an existing record they mutate local state and return. `SB.updateAttendance` is
   defined at `api-supabase.js:374` and called from nowhere. First mark saves; every
@@ -239,7 +254,11 @@ persisted.
   1 row as the leader. Not yet clicked through in a browser.
   *Goal:* Correcting somebody's attendance sticks. Present changed to absent survives a reload.
   *Done when:* Mark a person present, change to absent, reload, and the record still reads absent; the same for the mark-all and coverage paths; `SB.updateAttendance` appears in the call path.
-- [ ] **T28** Persist quick-fill schedule overwrites (issue `B3`) · est 0.25d · Medium
+- [x] **T28** Persist quick-fill schedule overwrites (issue `B3`) · est 0.25d · Medium
+  **Done, verified 2026-08-13.** Quick fill and CSV import both call `SB.updateSchedule` on a
+  day that already has a row (`ui-views.js:11459`, `:19078`), and the silent catches on both
+  paths are `handleSyncError` now, so a rejected write says so. Proven at the database level
+  when it was built, and the client's record puts it live on 31 July with the uniqueness rule.
   `ui-views.js:10259`. New rows save, but for a date and shift that already exists only
   local state changes, while the toast reports the full count as assigned.
   *Corrected 2026-07-26 by T55:* "new rows save" was wrong. No schedule row has ever saved.
@@ -357,7 +376,13 @@ persisted.
   which is the case the rule was written to protect.
   *Left alone on purpose:* six further orphan reviews exist, already marked confirmed or
   adjusted. They are in nobody's queue, and rewriting closed history would serve nothing.
-- [ ] **T32** Remove the cross-facility read leak (issue `S6`) · est 0.5d
+- [x] **T32** Remove the cross-facility read leak (issue `S6`) · est 0.5d
+  **Done, verified 2026-08-13 by reading the policies back out of production.** No
+  `auth_read_all` policy exists on any of the three tables. What stands in their place:
+  `sbd_schedule_select` and `sbd_attendance_select` allow the four admin roles, a facility
+  match for `hospital` and `facility_admin`, and the person's own row; `sbd_promotions` reads
+  through `hospital_reads_facility_promotions`, which is `facility_id = sbd_get_user_facility()`.
+  Nothing on these three tables is readable across facilities any more.
   `sbd_schedule`, `sbd_attendance` and `sbd_promotions` each carry an `auth_read_all`
   SELECT policy `USING (true)`. Writes on all three are correctly scoped; reads are not.
   *Goal:* Schedule, attendance and promotion records are readable only within the facility they belong to.
@@ -450,7 +475,13 @@ persisted.
   Requested 2026-07-26.
   *Goal:* A staff member finds things in the sidebar as quickly as an admin does.
   *Done when:* Staff sidebar entries are grouped into sections mirroring the admin panel; every existing view is still reachable; tour steps still resolve.
-- [ ] **T37** Move the observer PIN check server side (issue `S12`) · est 0.5d
+- [x] **T37** Move the observer PIN check server side (issue `S12`) · est 0.5d
+  **Done, verified 2026-08-13 in production.** The half that was missing has landed.
+  `staff.observation_pin` no longer exists as a column, so the 4 rows that still held a value
+  are gone with it, and `sbd_observer_pins` exists holding 6 rows.
+  One thing to know rather than to fix here: the drop is not recorded in
+  `supabase_migrations.schema_migrations`, which still ends at `20260807120000` even though
+  later migrations are demonstrably applied. Tracked separately as T111.
   `ovsUnlock` compares the observer PIN client side against `DB.staff`. Observation writes
   are separately gated server side, so this is an identity-of-observer weakness rather
   than an authorisation hole.
@@ -1032,7 +1063,12 @@ persisted.
   *Done when:* The reminder counts approved requests with no assessment recorded, and one
   that has sat past the threshold appears in the reminder and on the admin notice.
 
-- [ ] **T65** Placement scoring: one threshold table, no placeholder belts, and the Dangerous provision · est 1d · **High**
+- [x] **T65** Placement scoring: one threshold table, no placeholder belts, and the Dangerous provision · est 1d · **High**
+  **Done, verified 2026-08-13. Both passes are in.** The build was measured on production when
+  it shipped (v189, v190, v191, with 64 checks passing in `tools/verify/t65-scoring-check.js`).
+  The two things that held the box open have since closed: the scoring was rebuilt onto the
+  Scoring Specification v1 under T96, and the client signed the reports off on 11 and 12 August,
+  with the last wording change, the assessor override line, taken off under T100.
   **Status 2026-07-27: built, merged, live and measured. Open only on the QA sign-off.**
   Shipped in three parts, each verified on production after merge: T65 (v189), T65a (v190),
   T65b (v191). 64 automated checks pass in `tools/verify/t65-scoring-check.js`. Williams' row
@@ -1404,6 +1440,12 @@ persisted.
   returns true for all three granted accounts and false for a plain staff member and a plain manager.
 
 - [ ] **T74** Grantable roles are system wide and need to be per facility · est 3d · High
+  **Half live, checked 2026-08-13. Staying open.** The assessor half is in production:
+  `sbd_portal_users.assigned_facility_ids` holds the per-facility grant, and the UI reads it
+  through `effAssessorScoped()` and `effIsAssessorAt(fid, u)` (`ui-views.js:10759`). What was
+  asked for was all of role management by facility, not the assessor alone, so every other
+  role still resolves system wide. The client's own reading agrees, recording this as the
+  assessor half live on 30 July.
   Asked for by the client on 2026-07-30 at 1:33 AM: *"No longer system wide... just by facility like
   this"*, then widened at 1:35 AM to *"this should be for all role management by facility"*, and
   prioritised at 1:45 AM: *"We are expanding our team of assessors to handle new hires that we will
@@ -1543,7 +1585,11 @@ persisted.
   *Done when:* A SIPS home facility exists, Kirti and Amy sit in it rather than `Free Agent`, the Free
   Agent Registry no longer lists them, and facility-grouped reporting separates the two.
 
-- [ ] **T77** A granted assessor has no Assessment Queue screen, and it cannot be switched on yet · est 0.5d after T74 · High
+- [x] **T77** A granted assessor has no Assessment Queue screen, and it cannot be switched on yet · est 0.5d after T74 · High
+  **Done, verified 2026-08-13 in the shipped code.** The staff portal has an Assessment Queue.
+  `s-assessments` is a nav item and a view (`index.html:581` and `:636`), it is in the view list
+  at `ui-views.js:645`, and it is gated at `:677` on `effIsAssessor()` before rendering. When
+  this was opened there was no `s-assessments` in the staff portal at all.
   Reported by the client on 2026-07-30 at 6:54 AM while confirming T73, from Kirti's own account:
   *"There's observation and observation review but no assessment queue."* He is right, and it is the
   same shape of bug as T73: the permission exists and the door does not.
@@ -2391,6 +2437,25 @@ already named above: **an ask next to an urgent one still needs its own row.**
   right order. A comparison over a handful of recent records, read side by side, before anyone
   decides what to do with the older ones.
 
+  **That narrow pass is done, 2026-08-13, and it came back clean.** 14 placements, everything
+  submitted on 11 and 12 August plus everything still pending. 268 simulation responses re-graded
+  through the deployed evaluator; 12 were left blank and are skipped; 547 knowledge answers were
+  never AI-scored and are untouched. **Nothing moves.** All 14 land on the same determination on
+  the calibrated scores as on the stored ones, the largest single move being Lindsay Holovachuk at
+  50.1 to 53.2, and ten of the fourteen moving by under a point. So for this set the calibration
+  question is closed and no report needs republishing. Confirmed after the run that
+  `placement_reviews` was untouched and that no usage rows were written.
+  Of the 14, three hold an awarded belt and none of the three changes; ten were already decided
+  with no belt awarded and the re-score agrees with every one of those decisions; one, Jake
+  Jacobs, has been waiting since 20 June and needs a decision rather than a re-score.
+  **Two faults in the sheet were caught before it went to the client, both ours.** The builder
+  read `tentative_belt` as if it were an award, which put two people who had never been given a
+  belt onto a client-facing list of belts being taken away, and the largest score move was
+  reported from the wrong row. Fixed in `scripts/rescore-placements.js` with a test that a
+  suggestion can never reach the changed list.
+  **What is still open here is the historical re-run**, which is the part that carries the risk,
+  and it stays parked on the client's decision.
+
   *Goal:* Historical placements reflect the corrected engine without anyone losing a belt to a
   scoring fault that was ours.
   *Done when:* The responses are re-scored with the calibrated evaluator, the belts are
@@ -2451,6 +2516,79 @@ already named above: **an ask next to an urgent one still needs its own row.**
   being able to switch the login off is the control. Deactivate and reactivate now sit on the
   staff profile banner.
 
+- [ ] **T92a** Scripts as a standalone module that gets assigned to a named person · est 1.5d · **High**
+  Asked for in the client's daily brief of 2026-08-13, Priority 2. The content is already in the
+  platform, 70 scripts on record, each carrying its script number, name, belt level, primary
+  function, approved language, forbidden phrases and patient safety rationale. What it has no way
+  to do is land in a named person's hands. His words: *"Assigned deliberately, one person at a
+  time, the same way a Foundations or Instruments module is assigned today."* Explicitly not
+  bundled inside another track, and explicitly not pushed to everyone at a belt level.
+  His own read, which he asked to be checked rather than assumed: Foundations and Instruments
+  already assign per staff member and already carry an assignment type and trigger, so Scripts
+  may be able to ride that pattern with no new architecture. If it cannot, he wants the reason
+  before any code is written, and he will move the date.
+  *Proposed by the client:* approach confirmed Mon 17 Aug, live Fri 21 Aug.
+  *Goal:* A leader can assign the Scripts module to one named person, the same way Foundations is assigned.
+  *Done when:* Scripts appears as an assignable module, an assignment to one person is visible to that person and to nobody else, and no belt level triggers it automatically.
+
+- [ ] **T108** Endoscopy modules, assignable to named people from the first release · est 3d · **High**
+  Asked for in the daily brief of 2026-08-13, Priority 3. Endoscopy is not a belt requirement and
+  not a facility-wide rollout, because not everyone in a department works endoscopy. The modules
+  have to land only on the people a leader deliberately assigns them to, and the client is
+  explicit that this must be true in the first release rather than added afterwards.
+  The wider point he is making, and the reason this one matters beyond itself: the platform is
+  moving from content triggered by belt to a mix of content triggered by belt and content assigned
+  by a leader. He would rather that distinction were built cleanly here than worked around later.
+  **He owns the content.** He has asked for the module list, the gate structure and an exact
+  statement of what content is needed and in what format, and will get it back from Dr. Jake
+  himself. The earlier that request goes to him, the harder he can guarantee it.
+  *Proposed by the client:* module list, gates and content request to him Mon 17 Aug, live Fri 28 Aug.
+  *Goal:* Endoscopy modules exist and reach only the people a leader assigns them to.
+  *Done when:* A leader assigns an endoscopy module to one named person, that person sees it, nobody else at their belt level does, and no facility-wide or belt-driven trigger exists for it.
+
+- [ ] **T109** Manually added staff default to White, which is a decision nobody made · est 1d · **High**
+  Asked for in the daily brief of 2026-08-13, Priority 4. Adding someone by hand offers White Belt
+  and nothing else, so White stands in for a placement that has not happened.
+  His numbers, and they are the reason this is not cosmetic: 56 of 92 staff sit at White and 28 of
+  those are still flagged as needing placement, so roughly half the White population has not been
+  assessed at White. Checked here 2026-08-13 and the picture has already moved: the roster is 97
+  staff and 17 now carry `belt = 'None'`, because T106 made that value legal and the existing
+  records were backfilled. So the data side is lighter than it looks, and the remaining work is the interface
+  plus the records already sitting in the wrong state.
+  **He wants the write-up before the change.** What an unassessed state touches: belt progress,
+  the reports, the assessment queue, and how the records already at White get handled.
+  This is the same fault as the report's old White placeholder, and it is the last instance the
+  client can see of the standard he is asking us to adopt: never print a default where a decision
+  belongs.
+  *Proposed by the client:* impact write-up Mon 17 Aug, live Wed 26 Aug.
+  *Goal:* Adding someone by hand records that they have not been assessed, rather than certifying them at White.
+  *Done when:* Manual add offers an unassessed state and defaults to it, the existing wrongly-White records are resolved deliberately, and belt progress, reports and the assessment queue all read an unassessed person correctly.
+
+- [ ] **T110** Answer whether the assessment module's privileged functions are publicly reachable · est 0.25d · **Critical**
+  Asked in the daily brief of 2026-08-13, Priority 5, and it is a question before it is a request.
+  His scan found privileged functions in the assessment module that appear callable without
+  signing in, some taking the acting administrator's identity as a parameter rather than reading
+  it from the login. His question is deliberately narrow: *"is that module reachable in production
+  today?"*
+  **The answer decides the order of the whole next day.** If it is not reachable, it schedules
+  normally with everything else. If it is, he wants it looked at first thing, ahead of the rest of
+  his list. So this is answered before anything else on that list is started.
+  *Proposed by the client:* answer Fri 14 Aug.
+  *Goal:* We know, and he knows, whether those functions can be called by someone who is not signed in.
+  *Done when:* Each privileged function in the assessment module has been called from an unauthenticated client against production and the result recorded, and the answer has gone to him with the evidence.
+
+- [ ] **T111** Production schema is ahead of the migration record · est 0.5d · Medium
+  Found here 2026-08-13 while verifying T37. `supabase_migrations.schema_migrations` ends at
+  `20260807120000`, but changes dated after it are demonstrably applied: `staff.observation_pin`
+  is dropped, the T79 grant split is live, and `staff.belt = 'None'` is accepted with 17 rows
+  carrying it. So the repository's migration files are not the record of what production runs.
+  Why it matters rather than being tidy-up: every future verification that reads
+  `schema_migrations` to decide whether something shipped will give the wrong answer, and this
+  ledger has already been wrong once for exactly that reason. It also means a rebuild from
+  migrations would not reproduce production.
+  *Goal:* The migration record matches what production actually runs.
+  *Done when:* Every applied change after `20260807120000` is represented in `schema_migrations`, and a fresh apply of the repository's migrations reproduces the live schema.
+
 ### Blocked, not on the critical path
 
 - [ ] **T49** Strip and rotate the PSOP credentials, gate the public page
@@ -2495,7 +2633,32 @@ already named above: **an ask next to an urgent one still needs its own row.**
 
 ## Totals
 
-**Updated 2026-08-12, second pass.** 52 items done, 56 open.
+**Updated 2026-08-13.** 63 items done, 60 open.
+
+**Eight statuses corrected against the live system, not against memory.** The client's daily brief
+of 13 August listed twelve items his own EOD record showed as shipped while the board still read
+them as open. Each was checked here before the box moved rather than taken from his list. Seven
+hold and are now ticked: T26 publish to staff, T27 attendance edits, T28 quick-fill overwrites,
+T32 the cross-facility read leak, T37 the observer PIN moved server side, T65 placement scoring,
+and T77 the assessor's Assessment Queue screen. The evidence is written into each entry, and where
+it could not be proved from the database it says so instead of implying it could. The eighth, T74,
+does **not** hold as done: the assessor half is live and every other role still resolves system
+wide, so it stays open with the half recorded. T60 stays open too, which matches the client's own
+reading of it.
+
+**Five opened from the same brief, T92a and T108 to T111**: Scripts as a module assigned to a
+named person, endoscopy modules assignable from the first release, the manual-add default that
+certifies people at White without an assessment, the narrow security question of whether the
+assessment module's privileged functions are publicly reachable, and one found here while
+verifying T37, that production's schema is ahead of its migration record.
+
+**T110 is the one that reorders the rest.** It is a question, not a build, and the client has said
+plainly that if the answer is yes it goes first thing ahead of his whole list. It is answered
+before anything else on that list is started.
+
+**T101's narrow comparison ran on 13 August and nothing moves.** Details in the entry. The
+historical re-run, which is the part that carries the risk, is still parked on the client's
+decision.
 
 **Six more shipped the same day**, all by the team and all verified here against the live code
 before being ticked: T99 the scoreboard restricted to the SIPS master admin, T100 the override
