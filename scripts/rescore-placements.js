@@ -16,6 +16,7 @@
  *   SB_SERVICE_KEY=<service role key> node scripts/rescore-placements.js
  *   node scripts/rescore-placements.js --selftest      # no key, no network
  *   node scripts/rescore-placements.js --limit 3       # cheap trial over 3 placements
+ *   ... --pending --since 2026-08-11                   # the client's narrow first pass
  *
  * Env: SB_SERVICE_KEY (required)   RESCORE_PACE_MS (default 6500 — see the rate limit note)
  *
@@ -237,8 +238,21 @@ async function selftest() {
   const url = apiUrl(), key = serviceKey();
   const mod = loadScoringModule();
   const raw = await sb('/rest/v1/placement_reviews?select=*&order=submitted_at.asc', key, url);
+
+  // Selection. The client asked for a narrow first pass before anyone decides about the older
+  // records: "rerun the ones from today and the ones still pending for comparison so we can
+  // decide from there". --limit alone could not express that, because it takes the OLDEST N.
+  //   --pending        only reviews nobody has confirmed yet
+  //   --since <date>   submitted on or after this date, e.g. --since 2026-08-11
+  //   --limit N        first N of whatever the above leaves, oldest first (unchanged)
+  // With none of them, the whole set is re-scored, which is the full T101 run.
+  const since = argVal('--since');
+  const pendingOnly = has('--pending');
+  let selected = raw;
+  if (pendingOnly) selected = selected.filter(r => (r.status || '').toLowerCase() === 'pending');
+  if (since) selected = selected.filter(r => (r.submitted_at || '') >= since);
   const limit = Number(argVal('--limit') || 0);
-  const reviews = (limit ? raw.slice(0, limit) : raw).map(row => ({
+  const reviews = (limit ? selected.slice(0, limit) : selected).map(row => ({
     id: row.id, staffId: row.staff_id, fid: row.fid, staffName: row.staff_name, staffTitle: row.staff_title,
     status: row.status, tentativeBelt: row.tentative_belt, confirmedBelt: row.confirmed_belt,
     responses: row.responses || [], submittedAt: row.submitted_at,
