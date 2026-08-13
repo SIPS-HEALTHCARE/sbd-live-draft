@@ -16,7 +16,8 @@
  *   SB_SERVICE_KEY=<service role key> node scripts/rescore-placements.js
  *   node scripts/rescore-placements.js --selftest      # no key, no network
  *   node scripts/rescore-placements.js --limit 3       # cheap trial over 3 placements
- *   ... --pending --since 2026-08-11                   # the client's narrow first pass
+ *   ... --since 2026-08-11 --status pending            # today's, plus anything still pending
+ *   ... --since 2026-08-11 --status pending --list     # print that selection, grade nothing
  *
  * Env: SB_SERVICE_KEY (required)   RESCORE_PACE_MS (default 6500 — see the rate limit note)
  *
@@ -242,21 +243,41 @@ async function selftest() {
   // Selection. The client asked for a narrow first pass before anyone decides about the older
   // records: "rerun the ones from today and the ones still pending for comparison so we can
   // decide from there". --limit alone could not express that, because it takes the OLDEST N.
-  //   --pending        only reviews nobody has confirmed yet
-  //   --since <date>   submitted on or after this date, e.g. --since 2026-08-11
-  //   --limit N        first N of whatever the above leaves, oldest first (unchanged)
+  //   --since <date>     submitted on or after this date, e.g. --since 2026-08-11
+  //   --status a,b       any of these statuses, e.g. --status pending
+  //   --ids a,b          exactly these reviews, and nothing else
+  //   --limit N          first N of whatever the above leaves, oldest first (unchanged)
   // With none of them, the whole set is re-scored, which is the full T101 run.
+  //
+  // --since and --status are OR, not AND, and that is the whole point rather than a detail.
+  // "Today's and the ones still pending" is two sets: the oldest pending review is from June,
+  // so requiring both conditions drops it, which is the one row most in need of a second look.
   const since = argVal('--since');
-  const pendingOnly = has('--pending');
+  const statuses = (argVal('--status') || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  const ids = (argVal('--ids') || '').split(',').map(s => s.trim()).filter(Boolean);
   let selected = raw;
-  if (pendingOnly) selected = selected.filter(r => (r.status || '').toLowerCase() === 'pending');
-  if (since) selected = selected.filter(r => (r.submitted_at || '') >= since);
+  if (ids.length) {
+    selected = raw.filter(r => ids.includes(r.id));
+  } else if (since || statuses.length) {
+    selected = raw.filter(r =>
+      (since && (r.submitted_at || '') >= since) ||
+      (statuses.length && statuses.includes((r.status || '').toLowerCase())));
+  }
   const limit = Number(argVal('--limit') || 0);
   const reviews = (limit ? selected.slice(0, limit) : selected).map(row => ({
     id: row.id, staffId: row.staff_id, fid: row.fid, staffName: row.staff_name, staffTitle: row.staff_title,
     status: row.status, tentativeBelt: row.tentative_belt, confirmedBelt: row.confirmed_belt,
     responses: row.responses || [], submittedAt: row.submitted_at,
   }));
+  // A mis-scoped run is half an hour of billed grading before anyone notices. --list prints the
+  // selection and grades nothing, so the set can be checked for free first.
+  if (has('--list')) {
+    reviews.forEach(r => console.log(
+      `${String(r.submittedAt).slice(0, 10)}  ${String(r.status || '').padEnd(10)}  ${r.staffName}`));
+    console.log(`${reviews.length} placements selected, 0 graded`);
+    return;
+  }
+
   console.error(`${reviews.length} placements, pacing ${PACE_MS}ms between grades`);
 
   const cache = fs.existsSync(CACHE_FILE) ? JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8')) : {};
