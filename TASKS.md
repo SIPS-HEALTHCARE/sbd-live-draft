@@ -1924,6 +1924,33 @@ vocabulary these tasks are written in, including the SBD and SPD distinction tha
   deployment that needs it, the dependent feature is confirmed still working, and the old key is
   confirmed rejected.
 
+  **The rotation order, and what it can break. Read from the code 2026-08-13.**
+  Whoever holds the provider console runs this; the console is the only part that cannot be done
+  from the repository.
+
+  What the key touches, which is narrower than it sounds. It is read at
+  `supabase/functions/david-chat/index.ts:460`, together with the index host at `:467`, and both
+  are read with `Deno.env.get()` **per request** inside the handler rather than at module load.
+  The only caller is the `search_wiki_graph` tool at `:454`. So a bad rotation costs David his
+  curriculum search. Chat, assessments and everything else are untouched.
+
+  It also fails loudly rather than quietly: the code throws `PINECONE_API_KEY missing.` when the
+  variable is absent, and the provider answers a dead key with a 401. There is no path here where
+  David silently starts answering without the knowledge base.
+
+  The order matters, and it is the old key staying alive that makes it safe:
+
+  1. Create the new key at the provider. **Leave the old one active.**
+  2. Set the new value in the deployment environment.
+  3. Redeploy `david-chat`.
+  4. Ask David a curriculum question, one that forces `search_wiki_graph` rather than a general
+     answer. A real answer means the new key works.
+  5. Only then delete the old key at the provider.
+
+  If step 4 fails, nothing has been lost: the old key is still live, so putting the old value back
+  and redeploying restores the previous state. Deleting first is what turns a bad rotation into an
+  outage.
+
 - [x] **T88** Foundations content carries the document's structure, not just its words · est 4d · Medium
   **Done 2026-08-04.** The source documents arrived that evening, the eleven attachments of
   *Fwd: Foundations Training*, one Word file per module with Module 2 sent twice and both copies
@@ -2527,6 +2554,15 @@ already named above: **an ask next to an urgent one still needs its own row.**
   already assign per staff member and already carry an assignment type and trigger, so Scripts
   may be able to ride that pattern with no new architecture. If it cannot, he wants the reason
   before any code is written, and he will move the date.
+  **Approach confirmed 2026-08-13, checked against the live database rather than assumed.** His read
+  was right. The assignment pattern already exists three times over, in the same shape each time:
+  `foundations_assignments` (132 rows), `instrument_assignments` (95) and `preceptor_assignments`
+  (15), each carrying `staff_id, module_id, assigned_by, type, trigger, assigned_date, status,
+  facility_id`, with the first two also carrying `assignment_type` and `trigger_event`.
+  `aip_scripts` holds all 70 scripts and every one is active. The only thing missing is
+  `script_assignments`, which does not exist. So Scripts rides the existing pattern, a fourth table
+  of the same shape plus the surface to assign from. No new architecture, which is the fast path he
+  hoped for.
   *Proposed by the client:* approach confirmed Mon 17 Aug, live Fri 21 Aug.
   *Goal:* A leader can assign the Scripts module to one named person, the same way Foundations is assigned.
   *Done when:* Scripts appears as an assignable module, an assignment to one person is visible to that person and to nobody else, and no belt level triggers it automatically.
@@ -2574,6 +2610,9 @@ already named above: **an ask next to an urgent one still needs its own row.**
   normally with everything else. If it is, he wants it looked at first thing, ahead of the rest of
   his list. So this is answered before anything else on that list is started.
   *Proposed by the client:* answer Fri 14 Aug.
+  **This one reorders the rest, so it is not just another dated item.** The client's words are that
+  if the answer is yes he wants it looked at first thing, ahead of his whole list. So the answer is
+  found before anything else on that list is started, and the answer goes to him either way.
   *Goal:* We know, and he knows, whether those functions can be called by someone who is not signed in.
   *Done when:* Each privileged function in the assessment module has been called from an unauthenticated client against production and the result recorded, and the answer has gone to him with the evidence.
 
