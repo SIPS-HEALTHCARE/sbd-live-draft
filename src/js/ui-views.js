@@ -4584,7 +4584,7 @@ function downloadAssessmentReport(prId){
   if(typeof SB!=='undefined' && SB.logReportDownload) SB.logReportDownload('assessment_report', pr.id).catch?.(()=>{});
 }
 
-function confirmPlacement(prId){
+async function confirmPlacement(prId){
   const pr = (DB.placementReviews||[]).find(r=>r.id===prId);
   if(!pr) return;
   const beltEl = document.getElementById('pr-belt-'+prId);
@@ -4599,58 +4599,64 @@ function confirmPlacement(prId){
   // confirmedBelt as an assessor-override AWARD, and the engine already prints the correct
   // "No Belt Issued" determination on its own. The decision itself lives in status /
   // confirmed_by / confirmed_at / the note / the staff history entry.
-  pr.confirmedBelt = noBelt ? null : chosenBelt;
-  pr.assessorNote = note;
-  pr.status = (noBelt ? !pr.tentativeBelt : chosenBelt === pr.tentativeBelt) ? 'confirmed' : 'adjusted';
-  pr.confirmedAt = new Date().toISOString().split('T')[0];
-  pr.confirmedBy = ST.user ? ST.user.name : 'Assessor';
+  const confirmedBelt = noBelt ? null : chosenBelt;
+  const status = (noBelt ? !pr.tentativeBelt : chosenBelt === pr.tentativeBelt) ? 'confirmed' : 'adjusted';
+  const confirmedAt = new Date().toISOString().split('T')[0];
+  const confirmedBy = ST.user ? ST.user.name : 'Assessor';
 
-  // Update staff record
   const s = getStaff(pr.staffId);
+  // No Belt: nothing was certified, so no earn date and no grandfathered gates. The person
+  // stays unbelted on the remediation path and earns White through the normal gate climb.
+  // A normal placement grandfathers the current-belt gates so the assessment window opens;
+  // otherwise getWindowStatus() locks the next-belt climb.
+  const histEntry = s ? {
+    dt: confirmedAt,
+    type: 'Placement',
+    belt: noBelt ? 'None' : chosenBelt,
+    res: 'confirmed',
+    note: note || (noBelt
+      ? `Placement decision: No Belt, confirmed by ${confirmedBy}. Placed on the remediation path.`
+      : `Starting placement confirmed at ${chosenBelt} Belt by ${confirmedBy}.`)
+  } : null;
+
+  // Both writes must land before anything is presented as recorded. The staff PATCH goes
+  // first — it is the constraint-prone one — and a failure of either leaves the review
+  // pending on screen instead of committing a half-written approval (T106 incident: the
+  // review PATCH used to commit while the staff PATCH silently failed 23514).
+  if(IS_LIVE){
+    try{
+      if(s){
+        const staffBody = {belt: noBelt ? 'None' : chosenBelt, placement_needed: false,
+                           history: [histEntry, ...(s.history||[])]};
+        if(!noBelt) Object.assign(staffBody, {since: confirmedAt, cur_comp:'pass', cur_sim:'pass', cur_obs:'pass'});
+        await sbFetch(`/rest/v1/staff?id=eq.${s.id}`, {method:'PATCH', body: staffBody});
+      }
+      await sbFetch(`/rest/v1/placement_reviews?id=eq.${pr.id}`, {
+        method:'PATCH',
+        body: {status, confirmed_belt: confirmedBelt, assessor_note: note,
+               confirmed_at: confirmedAt, confirmed_by: confirmedBy}
+      });
+    }catch(e){
+      handleSyncError(e, 'Placement confirm sync');
+      toast('Decision NOT recorded for ' + cleanName(pr.staffName) + ' — the review is still pending. Please retry.', 'err');
+      return;
+    }
+  }
+
+  pr.confirmedBelt = confirmedBelt;
+  pr.assessorNote = note;
+  pr.status = status;
+  pr.confirmedAt = confirmedAt;
+  pr.confirmedBy = confirmedBy;
   if(s){
     s.belt = noBelt ? 'None' : chosenBelt;
     s.placementNeeded = false;
     if(!noBelt){
-      s.since = new Date().toISOString().split('T')[0];
-      // Placed = certified at that belt. Grandfather the current-belt gates so the
-      // assessment window opens; otherwise getWindowStatus() locks the next-belt climb.
+      s.since = confirmedAt;
       s.cur = {c:'pass', s:'pass', o:'pass'};
     }
-    // No Belt: nothing was certified, so no earn date and no grandfathered gates. The person
-    // stays unbelted on the remediation path and earns White through the normal gate climb.
     if(!s.history) s.history = [];
-    s.history.unshift({
-      dt: pr.confirmedAt,
-      type: 'Placement',
-      belt: noBelt ? 'None' : chosenBelt,
-      res: 'confirmed',
-      note: note || (noBelt
-        ? `Placement decision: No Belt, confirmed by ${pr.confirmedBy}. Placed on the remediation path.`
-        : `Starting placement confirmed at ${chosenBelt} Belt by ${pr.confirmedBy}.`)
-    });
-  }
-
-  if(IS_LIVE){
-    sbFetch(`/rest/v1/placement_reviews?id=eq.${pr.id}`, {
-      method:'PATCH',
-      body: {
-        status: pr.status,
-        confirmed_belt: pr.confirmedBelt,
-        assessor_note: note,
-        confirmed_at: pr.confirmedAt,
-        confirmed_by: pr.confirmedBy
-      }
-    }).catch(e => handleSyncError(e, 'Placement confirm sync'));
-    if(s){
-      const staffBody = {belt: s.belt, placement_needed: false, history: s.history};
-      if(!noBelt) Object.assign(staffBody, {since: s.since, cur_comp:'pass', cur_sim:'pass', cur_obs:'pass'});
-      sbFetch(`/rest/v1/staff?id=eq.${s.id}`, {
-        method:'PATCH',
-        body: staffBody
-      }).catch(e => handleSyncError(e, 'Staff update sync'));
-    }
-  } else {
-    /* saveDemoData() removed */
+    s.history.unshift(histEntry);
   }
   updatePlacementBadge();
   toast(noBelt
@@ -11016,7 +11022,7 @@ function renderHProfile(sid,context){
     <div class="prof-banner">
       <div class="prof-av">${userInitials(s)}</div>
       <div style="flex:1">
-        <div class="prof-name">${fullName(s)}${s.observer?` <span style="font-size:10px;font-weight:600;color:#0ea5e9;background:#0ea5e91a;border:1px solid #0ea5e955;padding:2px 7px;border-radius:8px;vertical-align:middle;margin-left:6px">&#128065; Observer</span>`:''}</div>
+        <div class="prof-name">${fullName(s)}${acctStatusPill((DB.users||[]).find(u=>u.sid===s.id))}${s.observer?` <span style="font-size:10px;font-weight:600;color:#0ea5e9;background:#0ea5e91a;border:1px solid #0ea5e955;padding:2px 7px;border-radius:8px;vertical-align:middle;margin-left:6px">&#128065; Observer</span>`:''}</div>
         <div class="prof-role">
           ${s.role} &bull; 
           ${(()=>{
@@ -11050,6 +11056,7 @@ function renderHProfile(sid,context){
         ):''}
         ${(ST.user&&ST.user.role==='master_admin')?`<button class="btn btn-ghost btn-sm" onclick="toggleObserver('${s.id}','${context}')" style="border-color:${s.observer?'#0ea5e9':'var(--bdr)'};color:${s.observer?'#0ea5e9':'var(--txt2)'}" title="${s.observer?'Revoke observer access':'Grant observer access'}"><svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 10s3-5.5 8-5.5S18 10 18 10s-3 5.5-8 5.5S2 10 2 10z"/><circle cx="10" cy="10" r="2.3"/></svg> ${s.observer?'Observer: On':'Make Observer'}</button>`:''}
         ${(ST.user&&ST.user.role==='master_admin'&&s.observer)?`<button class="btn btn-ghost btn-sm" onclick="generateObserverPin('${s.id}','${context}')" style="border-color:#0ea5e9;color:#0ea5e9" title="${s.observerPinSet?'Show this observer\'s existing PIN':'Generate a reusable observation PIN'}">&#128273; ${s.observerPinSet?'Show PIN':'Generate PIN'}</button>`:''}
+        ${profileAcctToggleBtn(s, context)}
         ${context==='admin'&&(ST.user&&ST.user.role==='master_admin')?`<button class="btn btn-err btn-sm" onclick="releaseToFreeAgent('${s.id}')" title="Release staff member to Free Agent Registry" style="margin-left:auto"><svg width="13" height="13" viewBox="0 0 18 18" fill="none"><path d="M12 14H15a1 1 0 001-1V5a1 1 0 00-1-1H12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M9 12l3-3-3-3M12 9H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Release</button>`:''}
         ${(ST.user&&ST.user.role==='master_admin'&&typeof prcAccessControlHTML==='function')?`<div style="flex-basis:100%;display:flex;justify-content:flex-end;margin-top:2px">${prcAccessControlHTML(s.id,context)}</div>`:''}
       </div>
@@ -18443,8 +18450,11 @@ async function executeSetAccountActive(uid, makeActive, rerender){
     u.active=makeActive;
     closeModal();
     toast(`${u.name}'s account has been ${makeActive?'reactivated':'deactivated'}.`, makeActive?'ok':'warn');
-    const fn = (typeof window!=='undefined' && typeof window[rerender]==='function') ? window[rerender] : renderAAdminUsers;
-    fn();
+    // rerender may carry pipe-separated args ('renderHProfile|<sid>|<context>') so
+    // the profile variant can land back on the profile instead of the users list.
+    const parts=String(rerender||'').split('|');
+    const fn = (typeof window!=='undefined' && typeof window[parts[0]]==='function') ? window[parts[0]] : renderAAdminUsers;
+    fn(...parts.slice(1));
   }catch(e){
     u.active=prev;
     toast('Account update failed: '+e.message,'err');
@@ -18464,6 +18474,22 @@ function faAcctToggleBtn(fa){
   return acct.active===false
     ? `<button class="btn btn-ok btn-sm" onclick="confirmSetAccountActive('${acct.id}',true,'renderAFreeAgents')">${ICO.check} Reactivate Login</button>`
     : `<button class="btn btn-sm" style="border:1px solid #f59e0b;color:#f59e0b;background:transparent" onclick="confirmSetAccountActive('${acct.id}',false,'renderAFreeAgents')">Deactivate Login</button>`;
+}
+
+// Staff profile variant: resolve the staff record to their portal account (users
+// link to staff via u.sid) and reuse the shared confirm flow, rerendering back to
+// the profile. Hidden when no login exists, for protected accounts, and for self —
+// same rules as the Admin Users and Free Agent buttons.
+function profileAcctToggleBtn(s, context){
+  if(!(ST.user && ST.user.role==='master_admin')) return '';
+  if(!s) return '';
+  const acct=(DB.users||[]).find(u=>u.sid===s.id);
+  if(!acct || acct.protected) return '';
+  if(acct.id===ST.user.id) return '';
+  const rr=`renderHProfile|${s.id}|${context}`;
+  return acct.active===false
+    ? `<button class="btn btn-ok btn-sm" onclick="confirmSetAccountActive('${acct.id}',true,'${rr}')">${ICO.check} Reactivate Login</button>`
+    : `<button class="btn btn-sm" style="border:1px solid #f59e0b;color:#f59e0b;background:transparent" onclick="confirmSetAccountActive('${acct.id}',false,'${rr}')">Deactivate Login</button>`;
 }
 
 function confirmRemoveUser(uid){

@@ -1676,7 +1676,10 @@ vocabulary these tasks are written in, including the SBD and SPD distinction tha
   outside the record row, retrieval works, and the maximum accepted size is stated in the UI rather
   than discovered by a failed upload.
 
-- [ ] **T79** A SIPS admin role, and splitting approval from PIN generation · est 1.5d · High
+- [x] **T79** A SIPS admin role, and splitting approval from PIN generation · est 1.5d · High
+  **Done 2026-08-12** by the team, shipped as PR #194. Approving an assessment and generating a
+  PIN are separate grants now, and the new SIPS admin role starts empty until Role Management
+  gives it something.
   Asked 2026-07-30 across two messages, five minutes apart, after being told PIN generation is
   master admin only. At 7:36 PM: *"We can add pin gen to role management so we can allow approved
   admin to gen pin… I guess we should create a sips admin role that is a blank role until we
@@ -1729,7 +1732,9 @@ vocabulary these tasks are written in, including the SBD and SPD distinction tha
   removed from both edge functions and both queue policies, and a signed-in `staff_admin` with no
   grants is refused both actions.
 
-- [ ] **T80** Facility admin cannot reach the facility's observer portal · est 0.5d · High
+- [x] **T80** Facility admin cannot reach the facility's observer portal · est 0.5d · High
+  **Done 2026-08-12** by the team, shipped as PR #195. A facility admin reaches the observation
+  consoles from the leader portal, read only unless they also hold assessor.
   Asked 2026-07-30 at 8:47 PM. A facility admin should be able to see the observer portal for their
   own facility. This sat one line above the message that carried the word PRIORITY, the blank staff
   profile, so the priority item took the attention and this was never captured.
@@ -2338,7 +2343,11 @@ already named above: **an ask next to an urgent one still needs its own row.**
 
 ### Raised on the 2026-08-11 client chat
 
-- [ ] **T99** The scoreboard is visible to everyone · est 0.25d · Medium
+- [x] **T99** The scoreboard is visible to everyone · est 0.25d · Medium
+  **Done 2026-08-12** by the team, shipped as PR #192. Gated on `scoreboardAllowed()`, which
+  passes only a master admin, and the three nav items now ship hidden in `index.html` rather
+  than being hidden after load. Saved views and deep links to a scoreboard fall back safely,
+  which the held patch here did not cover.
   The three scoreboard tabs, one on each surface, are open to every role. Asked plainly on
   2026-08-11 whether he wanted it hidden from everyone except SIPS or only so that one facility
   cannot see another facility's staff, the client answered *"Everyone but sips master admin"*.
@@ -2356,7 +2365,10 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Done when:* The tab is absent for every other role on all three surfaces, the two documentation
   lines match, and a master admin still sees it.
 
-- [ ] **T100** The assessor override wording comes off the report · est 0.25d · **High**
+- [x] **T100** The assessor override wording comes off the report · est 0.25d · **High**
+  **Done 2026-08-12** by the team, the wording came off in PR #195. The label, the attribution
+  line and the certification-basis sentence are all gone: an overridden belt now prints exactly
+  like a normal award. The award itself, which is what T98 restored, is untouched.
   *Owner: the team.* Raised by the client on 2026-08-11 after reviewing Sharon Greene-Golden's
   report: *"This is good. The only thing we needed to look without the assessor override being in
   the interfacing on the report, everything else looks good."* T98 put the override on the report
@@ -2377,6 +2389,17 @@ already named above: **an ask next to an urgent one still needs its own row.**
   itself records as marking real responses 30 to 40 points low. The responses have to be re-scored
   with the calibrated evaluator first, and only then can the belt logic be re-applied. The original
   record is kept either way; a re-run writes a new result against the same submission.
+  **The tool is written, 2026-08-12, PR #193** (`scripts/rescore-placements.js`). Checked here
+  before trusting it: its only POST is to the evaluator, it reads `placement_reviews` with a
+  plain select, and everything it writes goes to local files. It does not touch the database.
+  Its own tests assert the thing that matters, that a naive re-run strips a belt and that
+  re-scoring first restores it. What remains is running it and having SIPS read the sheet.
+
+  **The client asked for a narrower first pass on 2026-08-12:** *"Can we rerun the ones from
+  today and the ones still pending for comparison so we can decide from there."* That is the
+  right order. A comparison over a handful of recent records, read side by side, before anyone
+  decides what to do with the older ones.
+
   *Goal:* Historical placements reflect the corrected engine without anyone losing a belt to a
   scoring fault that was ours.
   *Done when:* The responses are re-scored with the calibrated evaluator, the belts are
@@ -2422,6 +2445,21 @@ already named above: **an ask next to an urgent one still needs its own row.**
   AI cost at that volume is estimated from real usage, and anything that breaks first is written
   down with a fix.
 
+- [x] **T106** A No Belt result could not be approved without certifying the person White · est 0.25d · **High**
+  **Done 2026-08-12** by the team, shipped as PR #197. Raised by the client the same day:
+  *"The system is setting some people have No Belt which is great, but in order to approve them,
+  the system makes us choose min white belt. We should be able to approve them at no belt too as
+  they will be in remediation."* It was blocking three people he needed to review. A No Belt
+  approval now records the decision and awards nothing, with `confirmed_belt` left null rather
+  than quietly certifying a belt nobody earned.
+
+- [x] **T107** Deactivating a login only worked for free agents · est 0.5d · **High**
+  **Done 2026-08-12** by the team, shipped as PR #198. The client asked for it from the staff
+  profile for everyone, and named it a security matter rather than a convenience: people take an
+  assessment before their department is onboarded, and until there is somewhere to hold them,
+  being able to switch the login off is the control. Deactivate and reactivate now sit on the
+  staff profile banner.
+
 ### Blocked, not on the critical path
 
 - [ ] **T49** Strip and rotate the PSOP credentials, gate the public page
@@ -2466,8 +2504,22 @@ already named above: **an ask next to an urgent one still needs its own row.**
 
 ## Totals
 
-**Updated 2026-08-12.** 46 items done, 59 open. Since the 4 August count: ten shipped, seven
-opened, and five entries that were finished but had never been ticked.
+**Updated 2026-08-12, second pass.** 52 items done, 56 open.
+
+**Six more shipped the same day**, all by the team and all verified here against the live code
+before being ticked: T99 the scoreboard restricted to the SIPS master admin, T100 the override
+wording off the report, T79 the SIPS admin role with approval split from PIN generation, T80 the
+facility admin's door into the observation consoles, and two the client raised that morning and
+had back by evening, T106 approving a No Belt result without certifying the person White and T107
+deactivating a login from any staff profile rather than only a free agent's.
+
+**T101 has a tool now** and does not have a decision. `scripts/rescore-placements.js` re-grades
+stored responses through the calibrated evaluator and writes nothing to the database; checked
+here rather than taken on trust. The client asked for a narrow first pass, today's assessments
+and the pending ones, compared side by side before anyone decides about the older records.
+
+**Earlier the same day:** ten shipped, seven opened, and five entries that were finished but had
+never been ticked.
 
 **Ten shipped.** T88 Foundations content, T92 scripts as their own module, T30 the read-only
 checklist for facility leaders, T91 typed or spoken observation evidence, T93 renaming a David
