@@ -392,6 +392,15 @@ persisted.
   the data interface.
   *Goal:* The compliance one-pager can be signed off without an open item against it.
   *Done when:* Multi-factor is enforced on admin sign-in; the retention policy is written and stored; per-role interface restrictions are applied and read back.
+  *Code-complete 2026-08-12, pending user deploy.* TOTP MFA flow (`src/js/mfa.js`, gated in
+  `doLogin` before hydration); retention policy at `docs/DATA_RETENTION_POLICY.md`; server
+  enforcement = restrictive `sbd_mfa_gate` RLS on all belt tables + the same aal2 predicate
+  inlined in 15 role-gated edge functions (migration `20260812130000`). **Deploy order is
+  STRICT — frontend, then the 15 edge fns, then the migration; applied first, the migration
+  blanks every admin screen.** Design note
+  `docs/decisions/2026-08-12-t33-admin-mfa-retention-interface-gate.md`; static harness
+  `node scripts/verify-t33-security-tail.js` (green); live read-back + real-session
+  procedure `supabase/verify/t33_mfa_gate_check.sql`.
 - [ ] **T34** Review the `SECURITY DEFINER` execute grants (issue `S11`) · est 1.0d
   55 such functions are executable by `authenticated` and 53 by `anon`. None has been
   reviewed for whether that grant is intended. Revoke the ones that are not.

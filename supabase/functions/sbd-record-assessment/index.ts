@@ -44,6 +44,24 @@ serve(async (req) => {
             throw new Error(`Unauthorized role (${profile?.role || 'none'}). Cannot record assessments.`);
         }
 
+        // ── T33 admin MFA guard ─────────────────────────────────────────────────
+        // Admin-tier JWTs must be aal2 (password + verified TOTP). Mirrors
+        // public.sbd_mfa_satisfied() (migration 20260812130000); inlined because the
+        // deploy pipeline cannot resolve ../_shared imports (#47).
+        // scripts/verify-t33-security-tail.js asserts every copy agrees.
+        const MFA_ADMIN_ROLES = ['master_admin', 'staff_admin', 'admin', 'master', 'sips_admin', 'system_admin'];
+        const jwtAal = (t: string): string => {
+            try { return JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).aal || 'aal1'; }
+            catch (_e) { return 'aal1'; }
+        };
+        const mfaDenied = (role: string | null | undefined, t: string): boolean =>
+            MFA_ADMIN_ROLES.includes(String(role || '')) && jwtAal(t) !== 'aal2';
+        if (mfaDenied(profile.role, jwt)) {
+            const err: any = new Error('MFA required: administrator sessions must complete two-factor verification.');
+            err.status = 403;
+            throw err;
+        }
+
         // Resolve the staff member's facility from the DATABASE, never from the client
         // payload — a forged staff.fid would otherwise defeat the scope check (ASS-F2).
         const { data: staffRow, error: staffFetchError } = await supabaseAdmin.from('staff').select('id, fid').eq('id', staff.id).single();
