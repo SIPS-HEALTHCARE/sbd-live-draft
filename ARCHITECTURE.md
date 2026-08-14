@@ -255,7 +255,7 @@ Located in `supabase/functions/`. Each is a Deno serverless function.
 | `sbd-assign-free-agent` | Assign a free agent to a new facility | `executeFreeAgentAssign()` |
 | `bulk-upload-staff` | CSV bulk staff import | `processBulkUpload()` |
 | `sbd-emails` / `sbd-send-emails` | Email notifications | Various triggers |
-| `sbd-assessment-notifications` | Notify on assessment events | Assessment flows |
+| `sbd-assessment-notifications` | 🗑️ **RETIRED (2026-08-14)** — was deployed with `verify_jwt=false` and no auth check in code, so anyone could queue fake "assessment approved" emails and probe staff ids (200 vs 404). No caller existed: no DB trigger/webhook, no frontend reference (approval mail goes through `sbd-emails`). Kept in repo as an inert reference: the handler now returns 410 unconditionally, so an accidental redeploy cannot reopen the hole. Run `supabase functions delete sbd-assessment-notifications` to undeploy the live copy. | Zero callers — retired |
 | `david-grade-assessment` | 🗑️ **RETIRED (#61)** — was an orphaned AIP open-ended grader duplicating `sbd-score-assessment`. Removed from repo; delete the deployed function from the Supabase dashboard to fully undeploy. | Zero callers — retired |
 | `sbd-matrix-seeder` | 🗑️ **RETIRED (#61)** — was a policy hazard that seeded fake auth users/facilities (`test-sbd.com`, hardcoded password) and remained deployed with `verify_jwt=false`. Removed from repo + local `scripts/seed-30-agents.js`. **Deployed function must still be deleted from the Supabase dashboard to fully undeploy.** | Zero callers — retired |
 

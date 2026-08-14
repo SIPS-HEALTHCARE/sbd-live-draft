@@ -1,3 +1,19 @@
+// ============================================================================
+// 🗑️ RETIRED 2026-08-14 — DO NOT DEPLOY
+//
+// The deployed copy of this function was deleted from Supabase because it was
+// publicly callable: verify_jwt=false at the gateway and no auth check in this
+// code, so an anonymous caller could queue fake "assessment approved" emails
+// on the service role and probe which staff_ids exist (200 vs 404).
+// Ref: Sips Project/AssessmentNotify-Public-2026-08-14/ · ledger card T110.
+//
+// Nothing calls it: no DB trigger/webhook, no frontend reference. Approval
+// emails go through sbd-emails (api-supabase.js notifyPlacementEvent).
+//
+// The file is kept for reference only. The guard below makes an accidental
+// redeploy inert. If this path is ever genuinely needed again, it must ship
+// with a shared-secret header check (webhooks cannot carry a user JWT).
+// ============================================================================
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.6";
 
@@ -8,6 +24,13 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
+    // RETIRED — see header. Refuse all traffic so an accidental redeploy
+    // cannot reopen the unauthenticated email-queue hole.
+    return new Response(JSON.stringify({ error: 'Gone. This function was retired 2026-08-14.' }), {
+        status: 410,
+        headers: { 'Content-Type': 'application/json' }
+    });
+
     // Handle CORS preflight requests
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders });
