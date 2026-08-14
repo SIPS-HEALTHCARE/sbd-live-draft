@@ -89,9 +89,12 @@ def classify(task):
     if task['done']:
         d = done_date(body)
         return 'Shipped + verified', 'Done', (f'Live {d[2]} {MONTHS[d[1] - 1]}' if d else 'Live')
-    owner = re.search(r'\*Owner: the team[^*]*\*', body)
+    # The ledger marks work that belongs to someone else's queue rather than this one. The
+    # marker used to name who; it does not any more, because the client asked to read this
+    # ledger directly and who is holding a task is not his business, only that it is held.
+    owner = re.search(r'\*Owner: assigned elsewhere[^*]*\*', body)
     if owner:
-        return 'In progress', 'In progress', 'With the team'
+        return 'In progress', 'In progress', 'Assigned, in progress'
     blocked = re.search(r'\*Blocked on:\*\s*([^\n.]{0,50})', body)
     if blocked:
         return 'Blocked', 'Waiting on ' + blocked.group(1).strip().rstrip('.'), 'Waiting on a decision'
