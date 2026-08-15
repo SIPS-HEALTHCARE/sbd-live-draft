@@ -2665,24 +2665,45 @@ already named above: **an ask next to an urgent one still needs its own row.**
   the assessment was submitted **19 minutes after it closed**. She did not skip 34 questions, she
   ran out of time on them.
 
-  **Third, it is not only her.** Reading every session with a stored progress record, the split is
-  clean and it is not subtle:
+  **Third, it is not only her, though the shape needs stating carefully.** An earlier draft of this
+  entry said everyone who finished inside the window had exactly four unanswered. That is wrong and
+  was withdrawn on re-checking: the worst incomplete attempt in the whole set, 41 unanswered,
+  finished 89 minutes *inside* its window and its session is marked `closed_no_person`, which is an
+  abandoned sitting rather than a timed-out one. There is also no dose response, the correlation
+  between minutes late and questions unanswered is -0.002, effectively zero.
 
-  * Everyone who finished **before** expiry has exactly **4** unanswered, about thirty people. That
-    is the normal baseline.
-  * Everyone who finished **at or after** expiry has a large number unanswered. Nelly Kyeremaa 39
-    on 12 August at 34 minutes over, Nikkia Warfield 34 at 19 minutes over, Rose Diaby 23, Danise
-    Sanders 15, Kevin Mckenzie 10 at 80 minutes over.
+  What does hold, across 80 sessions with a stored progress record, is the association:
 
-  Those unanswered questions are then counted as wrong, which is arithmetically right for a skip
-  and wrong for a cut-off. Nikkia's knowledge reads 33.3%, 13 right out of 39 asked, when she was
-  only given the chance to reach 25 of them.
+  * Finished **inside** the window: 62 people, **1** left more than four unanswered.
+  * Finished **at or past** the window: 17 people, **9** left more than four unanswered.
 
-  **Fourth, and this one needs to reach the client, because it corrects something already sent.**
-  Nelly Kyeremaa **retook the assessment on 14 August and completed all of it**: 0 blank, 33 of 39
-  knowledge correct, 84.6%, status confirmed. Her 12 August attempt, the one reported to the client
-  on 13 August as resting on 8 simulation answers, is superseded. The note that went out about her
-  was true when written and is not true now.
+  So running to the end of the window is not a reliable predictor of how much is missing, but it is
+  where almost all of the badly incomplete attempts are. Those unanswered questions are then
+  counted as wrong, which is arithmetically right for a skip and wrong for a cut-off. Nikkia's
+  knowledge reads 33.3%, 13 right out of 39 asked, when she reached only 25 of them.
+
+  **Fourth, and this one needs to reach the client, because it bears on something already sent.**
+  There are **two staff records** under the name Nelly Kyeremaa, and they are different ids:
+  `42cd738d` created 12 August and `e3573447` created 14 August. Same facility, same role of SPD
+  Technician I, and two portal accounts carrying the same name with a work address and a personal
+  one. Neither portal account has ever logged in and both are inactive, so both sittings were run
+  through an assessor session rather than a candidate login.
+
+  Each record holds one placement. The 12 August one is the attempt the window cut short, 27
+  knowledge and 12 simulation blank, 10 of 39 correct, marked `adjusted` and decided by J. Jacobs
+  on 13 August. The 14 August one is **complete**: nothing blank, 33 of 39 correct, simulation
+  average 54.9, confirmed by J. Jacobs the same day.
+
+  **What cannot be claimed from the data is that this is one person who retook it.** It looks like a
+  duplicate record for the same human, which is what the matching name, facility, role and email
+  local part suggest, and it is the same shape as the duplicate that caused the Williams confusion.
+  But two people can share a name, and only SIPS can settle which it is. It has to be asked rather
+  than assumed, because the answer decides whether a completed assessment supersedes a cut-short
+  one or whether two different people each have one result.
+
+  Either way the note sent to the client on 13 August, that this result rested on 8 simulation
+  answers, describes the 12 August record and should not be read as the current picture without
+  that question being settled first.
 
   *Also found, smaller, same area.* A skipped knowledge question stores the literal string
   `'No answer'` (`ui-views.js:2642`, `sbd-force-submit-placement/index.ts:199`) while a skipped
