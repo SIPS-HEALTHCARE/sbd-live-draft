@@ -2534,6 +2534,15 @@ already named above: **an ask next to an urgent one still needs its own row.**
   rather than written by hand, so it stays true as this file is maintained.
 
 - [ ] **T105** Load capacity for the onboarding wave · est 1d · **High**
+  **Reported complete 2026-08-14, and deliberately NOT ticked.** The report is that the run was
+  done. There is no load-test script in this repository, no stored result, and nothing that a
+  second person could re-run to get the same number, so there is nothing here to attack in a
+  second pass. The rule this file works by is that a claim is not a verification, so it stays
+  open until the evidence exists rather than being ticked on the strength of the report.
+  **It also matters more this week, not less.** In the three days to 2026-08-15 the roster went
+  from 92 staff to 105 and stored placements from 71 to 85. The wave this task was opened for is
+  arriving now.
+  *Done when:* the run is reproducible from something in this repository, its result is recorded here, and the number has been shown to the client.
   One hospital system alone is close to 200 people, and the client has said several more have
   agreed. Nothing has measured what the platform does under that, and the AI-backed paths carry a
   per-question cost as well as a latency question. This is the load half of the concern he raised
@@ -2616,7 +2625,21 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Goal:* Adding someone by hand records that they have not been assessed, rather than certifying them at White.
   *Done when:* Manual add offers an unassessed state and defaults to it, the existing wrongly-White records are resolved deliberately, and belt progress, reports and the assessment queue all read an unassessed person correctly.
 
-- [ ] **T110** Answer whether the assessment module's privileged functions are publicly reachable · est 0.25d · **Critical**
+- [x] **T110** Answer whether the assessment module's privileged functions are publicly reachable · est 0.25d · **Critical**
+  **Answered 2026-08-14, and the answer was yes. Closed the same day, shipped as PR #200.**
+  Every privileged function in the assessment module was called from an unauthenticated client
+  against production. One answered: `sbd-assessment-notifications`, which ran with `verify_jwt`
+  off at the gateway and carried no check of its own in the code. What that allowed was queuing a
+  fake assessment-approved email on the service role, and distinguishing a real staff id from a
+  made-up one by the response it gave back.
+
+  Nothing called it: no database trigger, no webhook, no reference in the front end. Approval
+  email goes through `sbd-emails` and is untouched.
+
+  **Verified here 2026-08-15 rather than taken from the merge.** The deployed function list for
+  the project no longer contains `sbd-assessment-notifications`, so the live copy really is gone
+  rather than merely patched. The file stays in the repository as an inert reference with an
+  unconditional 410 at the top of the handler, so an accidental redeploy cannot reopen it.
   Asked in the daily brief of 2026-08-13, Priority 5, and it is a question before it is a request.
   His scan found privileged functions in the assessment module that appear callable without
   signing in, some taking the acting administrator's identity as a parameter rather than reading
@@ -2759,7 +2782,27 @@ already named above: **an ask next to an urgent one still needs its own row.**
 
 ## Totals
 
-**Updated 2026-08-13.** 63 items done, 60 open.
+**Updated 2026-08-15.** 64 items done, 60 open.
+
+**T110 was answered on 14 August and the answer was yes.** One function in the assessment module,
+`sbd-assessment-notifications`, was reachable in production without signing in. It is closed, and
+the closure was checked here against the deployed function list rather than against the merge:
+the function is no longer deployed at all. The client set the rule that a yes reorders his list,
+and it did.
+
+**T105 is reported complete and is deliberately not ticked.** A report is not a verification.
+There is no load-test script in this repository and no stored result, so a second pass has nothing
+to attack. It stays open until there is something reproducible. That matters more this week than
+last: the roster went from 92 to 105 and stored placements from 71 to 85 in three days.
+
+**T112 is open and two of its claims were withdrawn before they reached the client.** The client
+asked why one candidate's answers were missing. They are missing from her submission rather than
+from our storage, which was established by comparing what she typed against what her record holds,
+in both directions. The cause is that her window expired and the assessment submitted 19 minutes
+after it closed, and the questions she never reached are counted as wrong answers. What did not
+survive checking: that everyone finishing inside the window has exactly four unanswered, and that
+a second complete assessment under the same name is the same person retaking it. Both are
+corrected in the entry.
 
 **Eight statuses corrected against the live system, not against memory.** The client's daily brief
 of 13 August listed twelve items his own EOD record showed as shipped while the board still read
