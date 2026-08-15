@@ -1934,22 +1934,38 @@ vocabulary these tasks are written in, including the SBD and SPD distinction tha
   The only caller is the `search_wiki_graph` tool at `:454`. So a bad rotation costs David his
   curriculum search. Chat, assessments and everything else are untouched.
 
-  It also fails loudly rather than quietly: the code throws `PINECONE_API_KEY missing.` when the
-  variable is absent, and the provider answers a dead key with a 401. There is no path here where
-  David silently starts answering without the knowledge base.
+  **It fails SILENTLY, and this is the part that decides how the rotation is checked.** An earlier
+  version of this note said the opposite and was wrong. The code does throw, at `:461` for a
+  missing key and at `:478` for a rejected one, but every throw inside this block is caught eight
+  lines later at `:486` and turned into `toolResult = {error: ...}`, which is pushed into the
+  message chain at `:489` and handed to the **model**, not to the user. The model then answers the
+  question from its own general knowledge, and the reply looks completely normal. The comment at
+  `:475` is the trace of the same fault being fixed once already, at the point where the error
+  *body* was being read as if it were search results.
+
+  So a bad rotation does not produce an error anybody sees. It produces a confident answer with no
+  curriculum behind it, which is worse than an outage because nobody goes looking.
 
   The order matters, and it is the old key staying alive that makes it safe:
 
   1. Create the new key at the provider. **Leave the old one active.**
   2. Set the new value in the deployment environment.
   3. Redeploy `david-chat`.
-  4. Ask David a curriculum question, one that forces `search_wiki_graph` rather than a general
-     answer. A real answer means the new key works.
+  4. Ask David a curriculum question that forces `search_wiki_graph`. **Do not accept "an answer
+     came back" as the check.** Confirm one of these instead:
+     * the answer contains real curriculum content, something specific enough that it could only
+       have come out of the knowledge base, or
+     * the function log carries no `[DAVID] Pinecone search failed` line for that request. That
+       string is logged at `:477` on any non-ok response, so its absence is the positive signal.
   5. Only then delete the old key at the provider.
 
   If step 4 fails, nothing has been lost: the old key is still live, so putting the old value back
-  and redeploying restores the previous state. Deleting first is what turns a bad rotation into an
-  outage.
+  and redeploying restores the previous state. Deleting first is what turns a bad rotation into a
+  David that sounds fine and is not.
+
+  *Worth its own item later:* a tool failure being handed to the model as though it were an
+  answerable result is a general fault in this loop, not a Pinecone one. Every tool in the
+  `catch` at `:486` behaves the same way.
 
 - [x] **T88** Foundations content carries the document's structure, not just its words · est 4d · Medium
   **Done 2026-08-04.** The source documents arrived that evening, the eleven attachments of
@@ -2627,6 +2643,41 @@ already named above: **an ask next to an urgent one still needs its own row.**
   migrations would not reproduce production.
   *Goal:* The migration record matches what production actually runs.
   *Done when:* Every applied change after `20260807120000` is represented in `schema_migrations`, and a fresh apply of the repository's migrations reproduces the live schema.
+
+- [ ] **T112** A skipped question is recorded two different ways, and as absence rather than a verdict · est 0.5d · Medium
+  Opened 2026-08-15 out of the client's question about Nikkia Warfield, *"we do need to look at
+  Nikkia Warfield in the database because some of her answers are missing"*. He is right about her,
+  and the answer to his question is that nothing is wrong with her stored record. What the check
+  turned up instead is two smaller things worth fixing before they cost something.
+
+  **Her own case first, because it is the answer he is waiting on.** Her placement was submitted
+  2026-08-14 at 23:00 and is still `pending`, so nothing has been decided from it. Of 59 questions
+  she left **34 unanswered**: 23 of 39 knowledge and 11 of 20 simulation. So the answers really are
+  missing, and they are missing from what she submitted rather than from what we stored. Her
+  knowledge reads 33.3%, which is 13 right out of 39 asked, and that is the number the
+  specification intends, because an unanswered question is not a right one. Nothing needs
+  correcting in her record. What is worth asking is why a placement can be submitted with more than
+  half of it blank.
+
+  **First fault: a skip is written two different ways.** A skipped knowledge question stores the
+  literal string `'No answer'` (`ui-views.js:2642` and `sbd-force-submit-placement/index.ts:199`),
+  while a skipped simulation stores an empty string. Across the whole table that is 130 of one and
+  56 of the other, cleanly split by type with no mixing. Any single test for "did they answer
+  this", written the obvious way as `!answer.trim()`, is therefore right about simulations and
+  wrong about knowledge, and it will count 130 skipped questions as answered without saying so.
+
+  **Second fault, and it is the client's own standard.** Those 23 rows carry `correct: null`, not
+  `correct: false`. Checked directly: the key is present on all 39 and holds JSON null on exactly
+  the 23 that read `'No answer'`. Neither submit path in the repository produces that; both compute
+  `ans === q.correct`, which is always a boolean, so something else wrote these. Today it is
+  harmless because the engine tests `filter(q => q.correct)` and null is falsy, so the arithmetic
+  comes out right. It stops being harmless the moment anyone writes `correct === false`, which is
+  the natural way to count wrong answers, and gets 23 of her questions counted as neither.
+  This is the same shape as the White placeholder on the report: absence sitting where a decision
+  belongs.
+
+  *Goal:* A skipped question is recorded the same way whichever type it is, and it records a verdict rather than an absence.
+  *Done when:* Both types write the same marker for a skip, unanswered knowledge carries `correct: false` rather than null, existing rows are migrated, and a test covers a submission with skips of both types.
 
 ### Blocked, not on the critical path
 
