@@ -2644,40 +2644,55 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Goal:* The migration record matches what production actually runs.
   *Done when:* Every applied change after `20260807120000` is represented in `schema_migrations`, and a fresh apply of the repository's migrations reproduces the live schema.
 
-- [ ] **T112** A skipped question is recorded two different ways, and as absence rather than a verdict · est 0.5d · Medium
-  Opened 2026-08-15 out of the client's question about Nikkia Warfield, *"we do need to look at
-  Nikkia Warfield in the database because some of her answers are missing"*. He is right about her,
-  and the answer to his question is that nothing is wrong with her stored record. What the check
-  turned up instead is two smaller things worth fixing before they cost something.
+- [ ] **T112** The 90 minute window is cutting candidates off, and the result is scored as if they had skipped · est 1d · **High**
+  Opened 2026-08-15 out of the client's question, *"we do need to look at Nikkia Warfield in the
+  database because some of her answers are missing"*. He was right that they are missing. The cause
+  is not what it first looked like.
 
-  **Her own case first, because it is the answer he is waiting on.** Her placement was submitted
-  2026-08-14 at 23:00 and is still `pending`, so nothing has been decided from it. Of 59 questions
-  she left **34 unanswered**: 23 of 39 knowledge and 11 of 20 simulation. So the answers really are
-  missing, and they are missing from what she submitted rather than from what we stored. Her
-  knowledge reads 33.3%, which is 13 right out of 39 asked, and that is the number the
-  specification intends, because an unanswered question is not a right one. Nothing needs
-  correcting in her record. What is worth asking is why a placement can be submitted with more than
-  half of it blank.
+  **First, the question actually asked: did she answer them?** No, and this was checked the hard
+  way rather than inferred from the stored record. `sbd_assessment_sessions.progress.answers` holds
+  what the candidate typed, and it is written independently of the responses on the review, so the
+  two can be compared against each other. Both directions come out clean:
 
-  **First fault: a skip is written two different ways.** A skipped knowledge question stores the
-  literal string `'No answer'` (`ui-views.js:2642` and `sbd-force-submit-placement/index.ts:199`),
-  while a skipped simulation stores an empty string. Across the whole table that is 130 of one and
-  56 of the other, cleanly split by type with no mixing. Any single test for "did they answer
-  this", written the obvious way as `!answer.trim()`, is therefore right about simulations and
-  wrong about knowledge, and it will count 130 skipped questions as answered without saying so.
+  * 34 responses stored as unanswered: **0** of them appear in what she typed.
+  * 25 answers she typed: **25** are stored, **0** were lost.
 
-  **Second fault, and it is the client's own standard.** Those 23 rows carry `correct: null`, not
-  `correct: false`. Checked directly: the key is present on all 39 and holds JSON null on exactly
-  the 23 that read `'No answer'`. Neither submit path in the repository produces that; both compute
-  `ans === q.correct`, which is always a boolean, so something else wrote these. Today it is
-  harmless because the engine tests `filter(q => q.correct)` and null is falsy, so the arithmetic
-  comes out right. It stops being harmless the moment anyone writes `correct === false`, which is
-  the natural way to count wrong answers, and gets 23 of her questions counted as neither.
-  This is the same shape as the White placeholder on the report: absence sitting where a decision
-  belongs.
+  So nothing was dropped on our side and nothing needs repairing in her record. An earlier reading
+  of this, made from the stored strings alone, was not good enough to say that, because the marker
+  a skip writes is the same one an unresolvable answer would write.
 
-  *Goal:* A skipped question is recorded the same way whichever type it is, and it records a verdict rather than an absence.
-  *Done when:* Both types write the same marker for a skip, unanswered knowledge carries `correct: false` rather than null, existing rows are migrated, and a test covers a submission with skips of both types.
+  **Second, the cause, which is the part worth fixing.** Her window was 90 minutes, it expired, and
+  the assessment was submitted **19 minutes after it closed**. She did not skip 34 questions, she
+  ran out of time on them.
+
+  **Third, it is not only her.** Reading every session with a stored progress record, the split is
+  clean and it is not subtle:
+
+  * Everyone who finished **before** expiry has exactly **4** unanswered, about thirty people. That
+    is the normal baseline.
+  * Everyone who finished **at or after** expiry has a large number unanswered. Nelly Kyeremaa 39
+    on 12 August at 34 minutes over, Nikkia Warfield 34 at 19 minutes over, Rose Diaby 23, Danise
+    Sanders 15, Kevin Mckenzie 10 at 80 minutes over.
+
+  Those unanswered questions are then counted as wrong, which is arithmetically right for a skip
+  and wrong for a cut-off. Nikkia's knowledge reads 33.3%, 13 right out of 39 asked, when she was
+  only given the chance to reach 25 of them.
+
+  **Fourth, and this one needs to reach the client, because it corrects something already sent.**
+  Nelly Kyeremaa **retook the assessment on 14 August and completed all of it**: 0 blank, 33 of 39
+  knowledge correct, 84.6%, status confirmed. Her 12 August attempt, the one reported to the client
+  on 13 August as resting on 8 simulation answers, is superseded. The note that went out about her
+  was true when written and is not true now.
+
+  *Also found, smaller, same area.* A skipped knowledge question stores the literal string
+  `'No answer'` (`ui-views.js:2642`, `sbd-force-submit-placement/index.ts:199`) while a skipped
+  simulation stores an empty string, 130 against 56 across the table. One obvious blank test is
+  therefore right about one type and silently wrong about the other. And those knowledge rows carry
+  `correct: null` rather than `false`; harmless under the current falsy test, and not harmless the
+  first time somebody counts wrong answers as `correct === false`.
+
+  *Goal:* A candidate who runs out of time is handled as having run out of time, not as having answered wrongly.
+  *Done when:* Reaching the end of the window does not silently produce a scored result from a partial attempt; the candidate and the assessor are told; the affected historical attempts are identified and put in front of SIPS; and a skip is recorded the same way for both question types, with a verdict rather than a null.
 
 ### Blocked, not on the critical path
 
