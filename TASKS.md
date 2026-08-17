@@ -2725,8 +2725,20 @@ already named above: **an ask next to an urgent one still needs its own row.**
   knowledge rows carry `correct: null` rather than `false`; harmless under the current falsy test,
   and not harmless the first time somebody counts wrong answers as `correct === false`.
 
-  *Goal:* An incomplete sitting is recovered as what it is, and never described or scored as something it is not.
-  *Done when:* The recovery job stops claiming time expired when it did not, stops flooring to White, and the sittings it has already produced are listed for SIPS to decide on; a skip is recorded the same way for both question types, with a verdict rather than a null.
+  **The client has already answered what should happen instead**, on his own board as D-024's
+  neighbour D-022, in answer to how an incomplete submission should be scored: *"I think we should
+  have a button where we can finalize before the system auto approves and scores it, giving us the
+  ability to have the user be able to pick back up what they left off in the test if they need to
+  before it submits, or we can go ahead and finalize it which pushes it through and scores it as
+  is."*
+
+  That is a design, not a preference, and it replaces the open question this entry was carrying.
+  Two things follow. A sitting that runs out or is abandoned must **stop and wait** rather than be
+  scored by a job on a timer. And an assessor gets a choice at that point: let the candidate resume
+  where they left off, or finalize and score it as it stands.
+
+  *Goal:* An incomplete sitting waits for a person to decide, and is never scored by a timer or described as something it is not.
+  *Done when:* The recovery job no longer scores a sitting on its own; an unfinished sitting surfaces for a decision with resume or finalize as the two options; it stops claiming time expired when it did not and stops flooring to White; the sittings it has already produced are listed for SIPS; and a skip is recorded the same way for both question types, with a verdict rather than a null.
 
 - [x] **T113** The signup password removal promised to Iggie has no scope, no owner, and its date has passed · **High**
   **Live and verified in production 2026-08-17, shipped as PR #203.** Checked against the database
@@ -2771,9 +2783,25 @@ already named above: **an ask next to an urgent one still needs its own row.**
   change is live in production — or Iggie has been told a new date.
 
 - [ ] **T114** Four people have two staff records each, and the client has already ruled on it · est 0.5d · **High**
-  Surfaced 2026-08-15 from one duplicate and answered by the client on 2026-08-16 before we had
-  finished asking: *"We need to combine them... Or choose the one takin last... The one taken last
-  supersedes."* So the rule is settled and this is execution, not a question.
+  Surfaced 2026-08-15 from one duplicate. The client answered twice and **the two answers are not
+  the same**, which matters because the shorter one was read here as a blanket go.
+
+  In chat on 2026-08-16: *"We need to combine them... Or choose the one takin last... The one taken
+  last supersedes."* On his own board, D-024, at more length: *"Let's look at the last record. The
+  last record should have been the one that is more complete, so let's look at that. **But before we
+  make any changes, get back to me;** make sure that that last record has a lot more questions
+  answered, and if so, that's the one we want to roll with... So if we can analyze the last actual
+  assessment that she took, that should be complete, and see what that one is, and that one should
+  be ready to score it."*
+
+  So this is **not** execution yet. It is conditional on us checking the later record really is the
+  fuller one and reporting back before anything is merged. He also says the earlier call was made
+  before he had the full picture from the field.
+
+  **His condition is answered for the pair that raised it.** Nelly Kyeremaa's 14 August record has
+  nothing blank and 33 of 39 knowledge correct. Her 12 August record has 39 of 59 unanswered and 10
+  of 39 correct. The later one is comprehensively the fuller record, so his test is met, and what
+  is owed him is that sentence rather than a merge.
 
   **It is four pairs, not the one that raised it.** Read from the live roster:
 
@@ -2793,9 +2821,10 @@ already named above: **an ask next to an urgent one still needs its own row.**
   disagreement that cost a day earlier in this project. It was read then as a scoring dispute. It
   was two records.
 
-  **Not run.** Retiring a staff record is a write against real people's data, so it waits for an
-  explicit go, and it is done by spreading every existing field rather than patching, or the
-  history and provisions on the record are lost.
+  **Not run, and now explicitly not to be run** until he has been told what the check found and has
+  answered. Retiring a staff record is a write against real people's data. When it does run it is
+  done by spreading every existing field rather than patching, or the history and provisions on the
+  record are lost.
 
   *Goal:* One person, one staff record, with the most recent assessment standing.
   *Done when:* Each pair is down to one record carrying every assessment, assignment and history row from both, the retired ids are recorded here, and a duplicate cannot be created silently in the first place.
