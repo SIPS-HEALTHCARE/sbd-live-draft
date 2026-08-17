@@ -864,6 +864,11 @@ persisted.
 
   Worth finishing, and no longer the item that outranks everything else.
 
+  **2026-08-18: the finish is built, inside T113.** The signup form no longer collects a
+  password at all, the approval function ignores any stored one, and migration `20260818120000`
+  nulls the column and keeps it permanently null via trigger. Closes when T113 deploys and a
+  fresh registration is checked end to end.
+
   *Goal:* A registration never stores a password in readable form, not even between
   submission and approval.
   *Done when:* The signup path stops writing `password` into `registrations`, the auth user
@@ -2738,6 +2743,42 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Goal:* A candidate who runs out of time is handled as having run out of time, not as having answered wrongly.
   *Done when:* Reaching the end of the window does not silently produce a scored result from a partial attempt; the candidate and the assessor are told; the affected historical attempts are identified and put in front of SIPS; and a skip is recorded the same way for both question types, with a verdict rather than a null.
 
+- [ ] **T113** The signup password removal promised to Iggie has no scope, no owner, and its date has passed · **High**
+  Opened 2026-08-18 from a commitment that existed in exactly one place: Shawn's 14 August EOD to
+  Iggie, *"The signup password removal, which we brought forward to Monday."* No ledger item and no
+  card tracked it, which was verified by searching this file and the board before opening this. The
+  14th was a Friday, so Monday reads as 17 August, which has already passed — the first thing owed
+  to Iggie is therefore either the shipped change or a new date, not just the scope.
+
+  What the code does today, read before scoping. The Request Access form collects a password with
+  strength rules (`reg-pass`/`reg-pass2` in `index.html`, validated in `doRegister`,
+  `ui-views.js:124`) and sends it in the registration payload *"for the Edge Function to create the
+  auth user"* on approval. This is the same path as T60: the password a person types at signup is
+  what ends up in `registrations`. Removing the password from signup removes T60's root cause, but
+  which of the three readings was meant — the field, the password step, or the whole password
+  requirement — and what replaces it (a set-password invite on approval is the obvious candidate)
+  is Shawn's to state, not ours to guess.
+
+  **Built 2026-08-18 to the obvious reading, ahead of the scope being written**, so the date
+  question has an answer behind it: the password fields are gone from the signup form, approval
+  creates the auth user with a random credential nobody sees, and the welcome email carries a
+  set-password link into the reset screen that already existed (`checkForPasswordRecovery`). Found
+  and closed on the way: the welcome email was showing the chosen password in plaintext
+  (`temp_password` in `sbd-send-emails`). A side effect to know about: the admin add-user path
+  (`sbd-sync-user-claims`) queues the same email template, so those emails also stop showing the
+  admin-typed password and say to use Forgot Password instead — that password still works for
+  signing in. Branch `work/t113-signup-password-removal`. Deploy order: `sbd-approve-registration`
+  + `sbd-send-emails` first, then frontend, then migration `20260818120000` (nulls
+  `registrations.password` and keeps it permanently null via trigger — applied earlier, the old
+  function would fall back to its shared temporary password). Deploying this also finishes T60.
+
+  *Blocked on:* Shawn confirming this reading is what was promised — the field is removed and a
+  set-password email replaces it — or writing the scope that differs; then the deploy.
+  *Goal:* Every commitment to Iggie gets a card and an owner. This one is either live or re-dated
+  with Iggie told, and either way it is tracked here rather than living in an EOD message.
+  *Done when:* The scope is written, this entry carries it with an estimate and an owner, and the
+  change is live in production — or Iggie has been told a new date.
+
 ### Blocked, not on the critical path
 
 - [ ] **T49** Strip and rotate the PSOP credentials, gate the public page
@@ -2782,7 +2823,13 @@ already named above: **an ask next to an urgent one still needs its own row.**
 
 ## Totals
 
-**Updated 2026-08-15.** 64 items done, 60 open.
+**Updated 2026-08-18.** 64 items done, 61 open.
+
+**T113 was opened from a promise that lived nowhere.** Shawn's 14 August EOD committed a signup
+password removal to Iggie "brought forward to Monday". That Monday was 17 August and has passed,
+and until today no ledger item or card tracked the commitment. It is blocked on Shawn writing the
+scope and Asir confirming a date; the entry records what the signup code actually does today and
+its overlap with T60.
 
 **T110 was answered on 14 August and the answer was yes.** One function in the assessment module,
 `sbd-assessment-notifications`, was reachable in production without signing in. It is closed, and

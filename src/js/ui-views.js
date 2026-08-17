@@ -128,14 +128,8 @@ function doRegister(){
   const reqRole=(document.getElementById('reg-requested-role').value||'staff_member');
   const contact=(document.getElementById('reg-contact').value||'').trim();
   const email=(document.getElementById('reg-email').value||'').trim();
-  const pass=(document.getElementById('reg-pass').value||'').trim();
-  const pass2=(document.getElementById('reg-pass2').value||'').trim();
   const errEl=document.getElementById('reg-error');
   if(!fname||!loc||!dept||!contact||!email){errEl.textContent='Please fill in all required fields.';errEl.style.display='block';return;}
-  if(!pass||pass.length<8){errEl.textContent='Password must be at least 8 characters.';errEl.style.display='block';return;}
-  if(!/[A-Z]/.test(pass)){errEl.textContent='Password must include at least one uppercase letter.';errEl.style.display='block';return;}
-  if(!/[0-9]/.test(pass)){errEl.textContent='Password must include at least one number.';errEl.style.display='block';return;}
-  if(pass!==pass2){errEl.textContent='Passwords do not match.';errEl.style.display='block';return;}
   if(DB.users.find(u=>u.email.toLowerCase()===email.toLowerCase())||DB.pendingRegs.find(r=>r.email.toLowerCase()===email.toLowerCase())){errEl.textContent='An account with this email already exists or is pending review.';errEl.style.display='block';return;}
   
   // Disable submit button to prevent double-submissions
@@ -143,17 +137,18 @@ function doRegister(){
   const orgBtnHTML=btn?btn.innerHTML:'';
   if(btn){btn.disabled=true;btn.innerHTML='<span class="spinner" style="border-width:2px;width:14px;height:14px;margin-right:6px;display:inline-block"></span> Submitting...';}
 
-  // Map fields to match registrations table: name, email, facility, requested_at, location, department, password, requested_role
+  // Map fields to match registrations table: name, email, facility, requested_at, location, department, requested_role
+  // T113/T60: no password is collected at signup. The approval edge function creates the
+  // auth user with a random credential and emails a set-password link instead.
   const reg={
-    name: contact, 
-    email: email, 
-    facility: fname, 
+    name: contact,
+    email: email,
+    facility: fname,
     location: loc,
     department: dept,
     requested_role: reqRole,
     requested_at: new Date().toISOString(),
-    status:'pending',
-    password: pass // Included for the Edge Function to create the auth user
+    status:'pending'
   };
 
   SB.submitRegistration(reg).then(()=>{
