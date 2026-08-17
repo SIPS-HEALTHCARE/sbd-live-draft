@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>White by Default</title>
+<style>
+  :root{
+    --bg:#fbfaf6; --surface:#f4f2ea; --ink:#201d15; --muted:#6d6656; --faint:#8f8874;
+    --rule:#e3dfd0; --rule-soft:#ece8db;
+    --accent:#8f6d12; --accent-ink:#6e5309; --accent-wash:rgba(143,109,18,.08);
+    --bad:#a63c33; --bad-wash:rgba(166,60,51,.07);
+    --ok:#3d6b45;
+    --code-bg:#f1eee2; --code-ink:#403a2a;
+    --serif:'Charter','Bitstream Charter','Palatino Linotype',Georgia,serif;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,'SF Mono',SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#161409; --surface:#1e1b10; --ink:#e9e4d3; --muted:#a49c85; --faint:#7d765f;
+      --rule:#33301f; --rule-soft:#282516;
+      --accent:#c49a20; --accent-ink:#d8b453; --accent-wash:rgba(196,154,32,.10);
+      --bad:#d96b5f; --bad-wash:rgba(217,107,95,.09);
+      --ok:#7fb389;
+      --code-bg:#211e11; --code-ink:#cfc7ab;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#161409; --surface:#1e1b10; --ink:#e9e4d3; --muted:#a49c85; --faint:#7d765f;
+    --rule:#33301f; --rule-soft:#282516;
+    --accent:#c49a20; --accent-ink:#d8b453; --accent-wash:rgba(196,154,32,.10);
+    --bad:#d96b5f; --bad-wash:rgba(217,107,95,.09);
+    --ok:#7fb389;
+    --code-bg:#211e11; --code-ink:#cfc7ab;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--serif);
+       font-size:17px;line-height:1.62;-webkit-font-smoothing:antialiased}
+  .page{max-width:72ch;margin:0 auto;padding:56px 24px 96px}
+  .eyebrow{font-family:var(--sans);font-size:11px;font-weight:600;letter-spacing:.14em;
+           text-transform:uppercase;color:var(--accent);margin:0 0 14px}
+  h1{font-size:clamp(30px,5vw,40px);line-height:1.12;margin:0 0 10px;font-weight:700;
+     letter-spacing:-.01em;text-wrap:balance}
+  .subtitle{color:var(--muted);font-size:18px;margin:0 0 22px;text-wrap:balance}
+  .meta{font-family:var(--sans);font-size:12.5px;color:var(--faint);display:flex;flex-wrap:wrap;
+        gap:6px 18px;padding:14px 0;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);
+        margin-bottom:44px}
+  .meta b{color:var(--muted);font-weight:600}
+  h2{font-size:22px;margin:52px 0 14px;font-weight:700;letter-spacing:-.005em;text-wrap:balance}
+  h2 .n{color:var(--accent);font-family:var(--sans);font-size:14px;font-weight:700;
+        margin-right:10px;vertical-align:2px}
+  p{margin:0 0 16px}
+  strong{font-weight:700}
+  code{font-family:var(--mono);font-size:.82em;background:var(--code-bg);color:var(--code-ink);
+       padding:1px 5px;border-radius:3px;white-space:nowrap}
+  pre{background:var(--code-bg);border:1px solid var(--rule);border-radius:6px;
+      padding:16px 18px;overflow-x:auto;margin:18px 0}
+  pre code{background:none;padding:0;white-space:pre;font-size:12.5px;line-height:1.6}
+  ul,ol{margin:0 0 16px;padding-left:26px}
+  li{margin-bottom:8px}
+  li::marker{color:var(--faint)}
+  .tblwrap{overflow-x:auto;margin:20px 0;border:1px solid var(--rule);border-radius:6px}
+  table{border-collapse:collapse;width:100%;font-family:var(--sans);font-size:13.5px;
+        line-height:1.5;min-width:560px}
+  th{text-align:left;font-size:10.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;
+     color:var(--muted);padding:10px 14px;border-bottom:1px solid var(--rule);background:var(--surface)}
+  td{padding:11px 14px;border-bottom:1px solid var(--rule-soft);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td code{font-size:11.5px}
+  .num{font-variant-numeric:tabular-nums}
+  .chip{display:inline-block;font-family:var(--sans);font-size:11px;font-weight:600;
+        padding:2px 9px;border-radius:20px;white-space:nowrap;vertical-align:1px}
+  .chip::before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;
+                margin-right:6px;background:currentColor;vertical-align:0}
+  .chip-white{color:#7c8494;background:rgba(148,163,184,.16)}
+  .chip-none{color:var(--muted);background:var(--surface);border:1px dashed var(--rule)}
+  .callout{background:var(--accent-wash);border-left:3px solid var(--accent);
+           padding:14px 18px;border-radius:0 6px 6px 0;margin:20px 0;font-size:16px}
+  .callout p:last-child{margin-bottom:0}
+  .warn{background:var(--bad-wash);border-left:3px solid var(--bad)}
+  .decisions{border:1px solid var(--rule);border-radius:8px;margin:24px 0;overflow:hidden}
+  .decisions header{font-family:var(--sans);font-size:11px;font-weight:600;letter-spacing:.14em;
+        text-transform:uppercase;color:var(--accent);background:var(--surface);
+        padding:12px 20px;border-bottom:1px solid var(--rule)}
+  .decision{padding:16px 20px;border-bottom:1px solid var(--rule-soft);display:flex;gap:14px}
+  .decision:last-child{border-bottom:none}
+  .decision .q{font-family:var(--sans);font-size:13px;font-weight:700;color:var(--accent);
+               flex-shrink:0;font-variant-numeric:tabular-nums}
+  .decision .body{font-size:15.5px}
+  .decision .rec{display:block;margin-top:6px;font-family:var(--sans);font-size:12.5px;color:var(--muted)}
+  .decision .rec b{color:var(--ok);font-weight:600}
+  .foot{margin-top:64px;padding-top:18px;border-top:1px solid var(--rule);
+        font-family:var(--sans);font-size:12px;color:var(--faint);line-height:1.7}
+  a{color:var(--accent-ink);text-decoration-color:var(--rule);text-underline-offset:3px}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <p class="eyebrow">SBD Belt Intelligence · Design review · Priority 4</p>
+  <h1>White by Default</h1>
+  <p class="subtitle">Retiring the White-belt default for staff who were never assessed — the interface, the data already wrong, and what an honest unassessed state touches.</p>
+  <div class="meta">
+    <span><b>Date</b> 17 Aug 2026</span>
+    <span><b>Status</b> For review — no code changed</span>
+    <span><b>Origin</b> Iggie brief, 13 Aug, Priority 4</span>
+  </div>
+
+  <h2><span class="n">1</span>The fault</h2>
+  <p>Adding a staff member by hand records <span class="chip chip-white">White Belt</span> for people who were never assessed. The Add Staff modal (<code>openAddStaffModal</code>, <code>ui-views.js:16146</code>) lists all six belts, but <strong>White is preselected</strong> and there is no unassessed option — so White is what gets saved unless the operator deliberately intervenes. The modal also defaults the belt-earn date (<code>since</code>) to today, so the fake belt arrives with a fake earn date.</p>
+  <p>This is the same class of fault as the placement dropdown fixed in PR&nbsp;#197 (it could only approve at White) and the re-score sheet fixed in <code>a415072</code> (rows with no belt on record silently fell out of the counts): <strong>a default printed where a decision belongs.</strong> This write-up applies that standard to the entry points.</p>
+  <div class="callout">
+    <p>One correction to the brief: the picker does not offer "White and nothing else" — it offers all six belts. The observed behavior (everything lands at White) comes from the <em>preselection</em>, not a missing list. The fault is identical under the standard; the fix is different — change the default, not the list.</p>
+  </div>
+
+  <h2><span class="n">2</span>Where the numbers stand</h2>
+  <p>The brief's figures (13 Aug): 92 staff, <span class="num">56</span> at White, <span class="num">28</span> of those flagged <code>placement_needed</code>. Checked live 14 Aug: <strong><span class="num">98</span> staff, <span class="num">18</span> now carry belt <span class="chip chip-none">No Belt</span></strong> — the T106 fix (migration <code>20260813120000</code>, PR&nbsp;#199) made <code>None</code> legal in production and backfilled the records whose No&nbsp;Belt decision had only landed on <code>placement_reviews</code>.</p>
+  <p>So the data side is lighter than the brief suggests. What remains is: <strong>(1)</strong> the interface and two edge functions that still stamp White, and <strong>(2)</strong> the White records never backed by any decision.</p>
+
+  <h2><span class="n">3</span>Every place White gets stamped without a decision</h2>
+  <p>The Add Staff modal is not the last instance — it is one of three <em>write</em> paths, plus a family of render-time fallbacks:</p>
+  <div class="tblwrap"><table>
+    <thead><tr><th>#</th><th>Path</th><th>Where</th><th>Behavior</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1</td><td>Add Staff modal</td><td><code>ui-views.js:16146</code></td><td>White preselected; <code>since</code> defaults to today; no unassessed option</td></tr>
+      <tr><td class="num">2</td><td>Bulk CSV upload</td><td><code>bulk-upload-staff/index.ts:98</code></td><td>blank belt → <code>'White'</code>; <code>validBelts</code> rejects <code>None</code></td></tr>
+      <tr><td class="num">3</td><td>Registration approval</td><td><code>sbd-approve-registration/index.ts:197</code></td><td>hardcodes <code>belt: 'White'</code> on the staff row created with a newly approved facility account</td></tr>
+      <tr><td class="num">4</td><td>Render fallbacks</td><td><code>api-supabase.js:448,486</code>; <code>ui-views.js:4307, 17462, 17493</code></td><td><code>row.belt || 'White'</code> — prints White where no belt exists (free agents, transfers, placement card)</td></tr>
+    </tbody>
+  </table></div>
+  <p>Rows 1–3 write White into the database. Row 4 only displays it, but it is the same standard violation, and the free-agent and transfer fallbacks would mislabel a released unbelted person if their belt column were ever null.</p>
+  <p><strong>Note on the placement flag.</strong> <code>addStaff</code> never sends <code>placement_needed</code> at all (<code>mapStaffToBackend</code> doesn't carry the column), so the database default decides it. The 28-of-56 pattern is consistent with a default of <code>true</code>: hand-added staff got White <em>and</em> stayed flagged for a placement they never took. Verify before relying on it (§7, query A).</p>
+
+  <h2><span class="n">4</span>What an unassessed state touches</h2>
+  <p><code>None</code> (shipped in #197/T106) already has the right semantics almost everywhere, because it sits outside <code>BELT_ORDER</code> (<code>beltIdx('None') = -1</code>):</p>
+  <div class="tblwrap"><table>
+    <thead><tr><th>Surface</th><th>Wrongly at White</th><th>At <code>None</code></th></tr></thead>
+    <tbody>
+      <tr><td>Badge / cert label</td><td>"White Belt" · <strong>"Certified Operator I"</strong> on formal reports</td><td>"No Belt" · "Not Yet Certified"</td></tr>
+      <tr><td>Points (<code>calcPoints</code>)</td><td>+100 unearned belt points → leaderboards, facility totals</td><td class="num">0</td></tr>
+      <tr><td>Progression target</td><td><code>nextBelt</code> = Yellow</td><td><code>nextBelt</code> = White</td></tr>
+      <tr><td>Assessment window</td><td><code>getWindowStatus</code> hardcodes White's current gates as passed → an <strong>open 2-week window to apply for Yellow</strong>, cycling from the fake <code>since</code></td><td>no <code>BELT_WINDOWS</code> entry → always open; placement / remediation can proceed immediately</td></tr>
+      <tr><td>Assessment queue</td><td>eligible to request Yellow gates never having been assessed at anything</td><td>routed to placement</td></tr>
+      <tr><td>Placement queue</td><td>if flagged, appears in the Assessment Authorization block <strong>at the same time</strong> as holding a White cert — both worlds at once</td><td>appears exactly once, as awaiting placement</td></tr>
+      <tr><td>Reports / analytics</td><td>inflates certified counts and belt averages</td><td><code>BELT_VAL.None = 0</code> keeps averages defined</td></tr>
+      <tr><td>DAVID</td><td>forecasts inherit whatever the roster claims</td><td>correct</td></tr>
+    </tbody>
+  </table></div>
+  <p>Two sub-states share the <code>None</code> value, split by the existing flag — <strong>no new sentinel is needed</strong>:</p>
+  <ul>
+    <li><code>None</code> + <code>placement_needed = true</code> → not yet assessed (placement pending)</li>
+    <li><code>None</code> + <code>placement_needed = false</code> → assessed, <strong>No Belt decided</strong> (remediation path, #197)</li>
+  </ul>
+  <p>Known rough edges to carry into the change, not solve here:</p>
+  <ul>
+    <li>~33 raw <code>`${s.belt} Belt`</code> templates print "None Belt" (the <code>beltLabel()</code> upgrade path already noted in <code>logic.js:43</code>).</li>
+    <li><code>sbd-reset-test-assessment</code> writes <code>belt = NULL</code> — a third unbelted shape; <code>beltBadge(null)</code> renders the literal string "null". Converge it on <code>None</code> as a small follow-up.</li>
+    <li>Any correction entry appended to <code>staff.history</code> renders <strong>red as "Fail"</strong> unless its <code>res</code> value is in <code>HISTORY_SUCCESS_VALUES</code> (<code>logic.js:72</code>, QA 2026-07-29 finding 8). The remediation in §6 must extend that list (e.g. <code>'correction'</code>) or skip history.</li>
+  </ul>
+
+  <h2><span class="n">5</span>The interface change (proposed, not built)</h2>
+  <ol>
+    <li><strong>Add Staff modal:</strong> the belt select gains <strong>"Unassessed — placement pending"</strong> as the first and preselected option. It writes <code>belt='None'</code>, <code>placement_needed=true</code>, <code>since=NULL</code>, gate selects disabled. The six real belts remain available — onboarding a roster with known belts is legitimate — but a real belt is now always an explicit act, never inertia. <code>addStaff</code> sends <code>placement_needed</code> explicitly instead of inheriting the column default.</li>
+    <li><strong>Bulk upload:</strong> blank/missing belt → <code>None</code> + <code>placement_needed=true</code> instead of White; explicit belts still accepted; <code>None</code> added to <code>validBelts</code>.</li>
+    <li><strong>Registration approval:</strong> the auto-created staff row starts unassessed instead of hardcoded White.</li>
+    <li><strong>Render fallbacks (§3 row 4):</strong> replace <code>|| 'White'</code> with the unbelted label.</li>
+  </ol>
+  <p>No migration is needed for any of this — the production constraint already admits <code>None</code> (verified live 14 Aug). Frontend plus two edge functions only.</p>
+
+  <h2><span class="n">6</span>The records already wrongly at White</h2>
+  <p>Three buckets, identified read-only first (queries in §7):</p>
+  <ul>
+    <li><strong>Bucket A — mechanically wrong; correct by migration.</strong> <code>belt='White'</code> and <code>placement_needed=true</code> and no gate results and empty history and no confirmed placement review. These are the form's own output: flagged for a placement they never took, certified by default. The migration sets <code>belt='None'</code>, nulls <code>since</code>, and leaves <code>placement_needed=true</code> — they are already in the placement queue and stay there.</li>
+    <li><strong>Bucket B — ambiguous; human review.</strong> <code>belt='White'</code>, <code>placement_needed=false</code>, zero evidence. Possibly genuinely White from an off-system assessment; possibly hand-added with the flag cleared. Output as a named list for review — <strong>no automatic change.</strong></li>
+    <li><strong>Bucket C — evidenced; untouched.</strong> White with a confirmed placement review or gate history.</li>
+  </ul>
+  <div class="callout warn">
+    <p>Stated plainly, correcting Bucket A means each person <strong>loses 100 points, their label changes from "Certified Operator I" to "Not Yet Certified", their Yellow window disappears, and facility belt averages drop.</strong> The reports will visibly change; whether facilities get a heads-up is a decision below (Q4).</p>
+  </div>
+
+  <h2><span class="n">7</span>Verification — read-only, run before anything else</h2>
+<pre><code>-- (A) Column defaults the code currently relies on
+select column_name, column_default, is_nullable
+from information_schema.columns
+where table_name = 'staff'
+  and column_name in ('belt', 'placement_needed');
+
+-- (B) Bucket sizes + names
+select s.id, s.first, s.last, s.fid, s.belt, s.since, s.placement_needed,
+       case
+         when s.placement_needed then 'A: flagged, no evidence'
+         else 'B: unflagged, no evidence'
+       end as bucket
+from staff s
+where s.belt = 'White'
+  and s.cur_comp is null and s.cur_sim is null and s.cur_obs is null
+  and jsonb_array_length(coalesce(s.history, '[]'::jsonb)) = 0
+  and not exists (select 1 from placement_reviews pr
+                  where pr.staff_id = s.id and pr.confirmed_by is not null)
+order by bucket, s.last;
+
+-- (C) The NULL-belt shape left by the reset tool
+select count(*) from staff where belt is null;</code></pre>
+
+  <h2><span class="n">8</span>Decision points</h2>
+  <div class="decisions">
+    <header>Awaiting Iggie's call</header>
+    <div class="decision"><span class="q">Q1</span><div class="body">Default vs forced choice in the Add Staff modal.<span class="rec"><b>Recommendation:</b> "Unassessed" preselected — the safe state is the default; a certification is always explicit.</span></div></div>
+    <div class="decision"><span class="q">Q2</span><div class="body">Hand-entering a real belt — allowed freely, or require a short provenance note (where/when assessed) saved to history?<span class="rec"><b>Recommendation:</b> allow, require the note.</span></div></div>
+    <div class="decision"><span class="q">Q3</span><div class="body">Bucket B disposition — review the named list from §7-B; nothing moves without sign-off.</div></div>
+    <div class="decision"><span class="q">Q4</span><div class="body">Facility communication about report numbers dropping when Bucket A is corrected.</div></div>
+    <div class="decision"><span class="q">Q5</span><div class="body">Registration-created accounts (currently auto-White) start unassessed — confirm.<span class="rec"><b>Recommendation:</b> yes.</span></div></div>
+  </div>
+
+  <h2><span class="n">9</span>Order of operations</h2>
+  <ol>
+    <li>Run §7 queries; review the bucket lists together.</li>
+    <li>Ship the interface change (§5): frontend (<code>ui-views.js</code> + cache-bust) and redeploy <code>bulk-upload-staff</code> and <code>sbd-approve-registration</code>. Closes the tap.</li>
+    <li>After sign-off on the §7-B list: Bucket A migration (with the <code>HISTORY_SUCCESS_VALUES</code> guard from §4), then re-run §7-B — expect zero rows in Bucket A.</li>
+  </ol>
+
+  <div class="foot">
+    Repo copy: <code>docs/decisions/2026-08-17-unassessed-entry-state.md</code> on branch <code>work/unassessed-belt-writeup</code> (uncommitted).<br>
+    Precedents applied: PR&nbsp;#197 (No Belt approvals), T106 / PR&nbsp;#199 (constraint + backfill), <code>a415072</code> (re-score sheet), <code>29ebfbe</code> (placeholder belt chip).
+  </div>
+</div>
+</body>
+</html>
