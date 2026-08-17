@@ -2770,6 +2770,36 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Done when:* The scope is written, this entry carries it with an estimate and an owner, and the
   change is live in production — or Iggie has been told a new date.
 
+- [ ] **T114** Four people have two staff records each, and the client has already ruled on it · est 0.5d · **High**
+  Surfaced 2026-08-15 from one duplicate and answered by the client on 2026-08-16 before we had
+  finished asking: *"We need to combine them... Or choose the one takin last... The one taken last
+  supersedes."* So the rule is settled and this is execution, not a question.
+
+  **It is four pairs, not the one that raised it.** Read from the live roster:
+
+  | Name | Older record | Newer record | Where the data sits |
+  |---|---|---|---|
+  | David Williams | 26 Jun, White, empty | 27 Jul, Green, 1 placement, 2 foundations, 3 instruments | all on the newer |
+  | Nelly Kyeremaa | 12 Aug, 1 placement | 14 Aug, 1 placement | **on both** |
+  | Regina Randle | 26 Jun 18:53, empty | 26 Jun 19:03, empty | neither, ten minutes apart |
+  | Shan Harris | 18 Jun, empty | 1 Jul, 7 foundations, 4 instruments | all on the newer |
+
+  Three of the four are trivial under the rule: everything already sits on the newer record, so the
+  older one is an empty shell to retire. **Only Nelly Kyeremaa has a placement on each side**, and
+  the rule decides it cleanly: the 14 August sitting is complete, 33 of 39 on knowledge, and it
+  supersedes the 12 August one that was abandoned and recovered.
+
+  **What this also explains.** The David Williams pair is the duplicate behind the White-versus-Green
+  disagreement that cost a day earlier in this project. It was read then as a scoring dispute. It
+  was two records.
+
+  **Not run.** Retiring a staff record is a write against real people's data, so it waits for an
+  explicit go, and it is done by spreading every existing field rather than patching, or the
+  history and provisions on the record are lost.
+
+  *Goal:* One person, one staff record, with the most recent assessment standing.
+  *Done when:* Each pair is down to one record carrying every assessment, assignment and history row from both, the retired ids are recorded here, and a duplicate cannot be created silently in the first place.
+
 ### Blocked, not on the critical path
 
 - [ ] **T49** Strip and rotate the PSOP credentials, gate the public page
@@ -2829,6 +2859,12 @@ time. They did not: one stopped with 54 minutes left, the other with 65. What pr
 results was the recovery job, which also writes "time expired" onto blanks regardless and floors an
 incomplete result to White instead of No Belt. Genuine cut-offs do exist and there are seven rather
 than the four first counted, one of them from 17 August, so this is live rather than historical.
+
+**T114 is opened already answered.** The client ruled on duplicate staff records before we finished
+asking: the one taken last supersedes. It turns out to be four pairs rather than the one that
+raised it, and one of them is the duplicate behind the White-versus-Green disagreement that was
+read as a scoring dispute at the time. Execution waits on a go, because retiring a staff record is
+a write against real people's data.
 
 **T111 gained a third instance.** The migration behind the signup change is applied in production
 and absent from `schema_migrations`, the same drift that made T37 unverifiable from the record.
