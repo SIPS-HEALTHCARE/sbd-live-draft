@@ -841,7 +841,11 @@ persisted.
   *Done when:* The four schedule tasks are verified and the account is deactivated, along
   with any schedule and attendance rows created purely for the test.
 
-- [ ] **T60** The signup form still writes a plaintext password into the registrations table · est 0.3d · Medium
+- [x] **T60** The signup form still writes a plaintext password into the registrations table · est 0.3d · Medium
+  **Closed 2026-08-17 by T113, verified in production.** The root cause was the signup form
+  collecting a password at all. It no longer does, approval creates the auth user with a
+  credential nobody sees, and the welcome email carries a set-password link rather than the
+  password itself. `registrations.password` is null on all 146 rows and held null by trigger.
   **Downgraded 2026-07-31 from Critical, and retitled. The critical half is closed.** The
   entry below is the finding as it stood on 26 July and it is kept because the history
   matters, but read this block first, because the old title described an active breach that
@@ -2608,6 +2612,10 @@ already named above: **an ask next to an urgent one still needs its own row.**
   **He owns the content.** He has asked for the module list, the gate structure and an exact
   statement of what content is needed and in what format, and will get it back from Dr. Jake
   himself. The earlier that request goes to him, the harder he can guarantee it.
+  **The 17 August half is delivered, shipped as PR #204**: the module list, the gate structure and
+  the content request are written up for the client in `docs/decisions/`. The modules themselves
+  are the 28 August half and have not started. That date holds only if the content comes back by
+  21 August.
   *Proposed by the client:* module list, gates and content request to him Mon 17 Aug, live Fri 28 Aug.
   *Goal:* Endoscopy modules exist and reach only the people a leader assigns them to.
   *Done when:* A leader assigns an endoscopy module to one named person, that person sees it, nobody else at their belt level does, and no facility-wide or belt-driven trigger exists for it.
@@ -2626,6 +2634,10 @@ already named above: **an ask next to an urgent one still needs its own row.**
   This is the same fault as the report's old White placeholder, and it is the last instance the
   client can see of the standard he is asking us to adopt: never print a default where a decision
   belongs.
+  **The 17 August half is delivered, shipped as PR #202**: the write-up of what an unassessed state
+  touches, checked against the code and production, is in `docs/decisions/`. Three small
+  corrections are noted on it before it goes to the client. The change itself is the 26 August
+  half.
   *Proposed by the client:* impact write-up Mon 17 Aug, live Wed 26 Aug.
   *Goal:* Adding someone by hand records that they have not been assessed, rather than certifying them at White.
   *Done when:* Manual add offers an unassessed state and defaults to it, the existing wrongly-White records are resolved deliberately, and belt progress, reports and the assessment queue all read an unassessed person correctly.
@@ -2672,78 +2684,57 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Goal:* The migration record matches what production actually runs.
   *Done when:* Every applied change after `20260807120000` is represented in `schema_migrations`, and a fresh apply of the repository's migrations reproduces the live schema.
 
-- [ ] **T112** The 90 minute window is cutting candidates off, and the result is scored as if they had skipped · est 1d · **High**
-  Opened 2026-08-15 out of the client's question, *"we do need to look at Nikkia Warfield in the
-  database because some of her answers are missing"*. He was right that they are missing. The cause
-  is not what it first looked like.
+- [ ] **T112** An abandoned assessment is recovered as a scored result, and floored to White · est 1d · **High**
+  Opened 2026-08-15 from the client's question about a candidate's missing answers. **Rewritten
+  2026-08-17: the first reading of the cause was wrong and is withdrawn.**
 
-  **First, the question actually asked: did she answer them?** No, and this was checked the hard
-  way rather than inferred from the stored record. `sbd_assessment_sessions.progress.answers` holds
-  what the candidate typed, and it is written independently of the responses on the review, so the
-  two can be compared against each other. Both directions come out clean:
+  **What is not in doubt.** Nothing is lost on our side. The session keeps its own record of what
+  the candidate typed, written independently of the responses on the review, so the two can be
+  compared. For Nikkia Warfield: 25 answers typed, 25 stored, 0 lost, and the 34 stored as blank
+  appear nowhere in what she typed. Her record is correct.
 
-  * 34 responses stored as unanswered: **0** of them appear in what she typed.
-  * 25 answers she typed: **25** are stored, **0** were lost.
+  **What was wrong.** This entry said her window expired and she ran out of time. It did not and
+  she did not. Her last save was at question 25 with **54 minutes still on the clock**. Nelly
+  Kyeremaa's 12 August sitting is the same shape, stopped at question 20 with **65 minutes left**.
+  Both **abandoned** the sitting. The "19 minutes after expiry" read as a late submission is the
+  recovery job's own run time: `completed_at` and the review's `submitted_at` are the identical
+  machine timestamp on an exact minute boundary, not a person pressing submit.
 
-  So nothing was dropped on our side and nothing needs repairing in her record. An earlier reading
-  of this, made from the stored strings alone, was not good enough to say that, because the marker
-  a skip writes is the same one an unresolvable answer would write.
+  **Two faults in the recovery job, and they are the actual task.**
 
-  **Second, the cause, which is the part worth fixing.** Her window was 90 minutes, it expired, and
-  the assessment was submitted **19 minutes after it closed**. She did not skip 34 questions, she
-  ran out of time on them.
+  1. It writes *"No answer submitted (time expired)"* onto blanks whether or not time expired.
+     That sentence is what sent the first reading of this down the wrong path, and it will do the
+     same to anybody reading a report.
+  2. It floors an incomplete result to **White** rather than No Belt. Nikkia sits at White on a
+     33% knowledge result. Since T106 made No Belt a real outcome, White is the wrong floor, and it
+     is the last instance of the standard the client asked for: never print a default where a
+     decision belongs.
 
-  **Third, it is not only her, though the shape needs stating carefully.** An earlier draft of this
-  entry said everyone who finished inside the window had exactly four unanswered. That is wrong and
-  was withdrawn on re-checking: the worst incomplete attempt in the whole set, 41 unanswered,
-  finished 89 minutes *inside* its window and its session is marked `closed_no_person`, which is an
-  abandoned sitting rather than a timed-out one. There is also no dose response, the correlation
-  between minutes late and questions unanswered is -0.002, effectively zero.
+  **Genuine time cut-offs do exist, and there are more than first counted.** Measured as 3 minutes
+  or less left at the last save: **7 sittings**, not the 4 first listed. Rose Diaby with 23
+  unanswered, Danise Sanders 15, Kevin Mckenzie 10, Dontaye Bosley 8, Jeffrey Bond 7, Kenroy
+  Stewart 5, and **Lisa Cuoco, who sat it on 17 August and lost 6**. That last one matters more
+  than the history: this is happening now, not only in old records.
 
-  What does hold, across 80 sessions with a stored progress record, is the association:
-
-  * Finished **inside** the window: 62 people, **1** left more than four unanswered.
-  * Finished **at or past** the window: 17 people, **9** left more than four unanswered.
-
-  So running to the end of the window is not a reliable predictor of how much is missing, but it is
-  where almost all of the badly incomplete attempts are. Those unanswered questions are then
-  counted as wrong, which is arithmetically right for a skip and wrong for a cut-off. Nikkia's
-  knowledge reads 33.3%, 13 right out of 39 asked, when she reached only 25 of them.
-
-  **Fourth, and this one needs to reach the client, because it bears on something already sent.**
-  There are **two staff records** under the name Nelly Kyeremaa, and they are different ids:
-  `42cd738d` created 12 August and `e3573447` created 14 August. Same facility, same role of SPD
-  Technician I, and two portal accounts carrying the same name with a work address and a personal
-  one. Neither portal account has ever logged in and both are inactive, so both sittings were run
-  through an assessor session rather than a candidate login.
-
-  Each record holds one placement. The 12 August one is the attempt the window cut short, 27
-  knowledge and 12 simulation blank, 10 of 39 correct, marked `adjusted` and decided by J. Jacobs
-  on 13 August. The 14 August one is **complete**: nothing blank, 33 of 39 correct, simulation
-  average 54.9, confirmed by J. Jacobs the same day.
-
-  **What cannot be claimed from the data is that this is one person who retook it.** It looks like a
-  duplicate record for the same human, which is what the matching name, facility, role and email
-  local part suggest, and it is the same shape as the duplicate that caused the Williams confusion.
-  But two people can share a name, and only SIPS can settle which it is. It has to be asked rather
-  than assumed, because the answer decides whether a completed assessment supersedes a cut-short
-  one or whether two different people each have one result.
-
-  Either way the note sent to the client on 13 August, that this result rested on 8 simulation
-  answers, describes the 12 August record and should not be read as the current picture without
-  that question being settled first.
+  Separately, two sittings were abandoned far earlier and are neither: Porter Whitfield with 89
+  minutes left and 41 unanswered, Michael Chambers with 190 minutes left.
 
   *Also found, smaller, same area.* A skipped knowledge question stores the literal string
-  `'No answer'` (`ui-views.js:2642`, `sbd-force-submit-placement/index.ts:199`) while a skipped
-  simulation stores an empty string, 130 against 56 across the table. One obvious blank test is
-  therefore right about one type and silently wrong about the other. And those knowledge rows carry
-  `correct: null` rather than `false`; harmless under the current falsy test, and not harmless the
-  first time somebody counts wrong answers as `correct === false`.
+  `'No answer'` while a skipped simulation stores an empty string, 130 against 56 across the table,
+  so one obvious blank test is right about one type and silently wrong about the other. And those
+  knowledge rows carry `correct: null` rather than `false`; harmless under the current falsy test,
+  and not harmless the first time somebody counts wrong answers as `correct === false`.
 
-  *Goal:* A candidate who runs out of time is handled as having run out of time, not as having answered wrongly.
-  *Done when:* Reaching the end of the window does not silently produce a scored result from a partial attempt; the candidate and the assessor are told; the affected historical attempts are identified and put in front of SIPS; and a skip is recorded the same way for both question types, with a verdict rather than a null.
+  *Goal:* An incomplete sitting is recovered as what it is, and never described or scored as something it is not.
+  *Done when:* The recovery job stops claiming time expired when it did not, stops flooring to White, and the sittings it has already produced are listed for SIPS to decide on; a skip is recorded the same way for both question types, with a verdict rather than a null.
 
-- [ ] **T113** The signup password removal promised to Iggie has no scope, no owner, and its date has passed · **High**
+- [x] **T113** The signup password removal promised to Iggie has no scope, no owner, and its date has passed · **High**
+  **Live and verified in production 2026-08-17, shipped as PR #203.** Checked against the database
+  rather than taken from the merge: `registrations.password` holds a value on **0 of 146** rows,
+  and the table carries the trigger that keeps it that way. The shipped signup path collects no
+  password at all. This also finishes T60, which was the same root cause.
+  One thing that belongs to T111 rather than here: migration `20260818120000` is applied in effect
+  and is **not** recorded in `schema_migrations`.
   Opened 2026-08-18 from a commitment that existed in exactly one place: Shawn's 14 August EOD to
   Iggie, *"The signup password removal, which we brought forward to Monday."* No ledger item and no
   card tracked it, which was verified by searching this file and the board before opening this. The
@@ -2823,7 +2814,24 @@ already named above: **an ask next to an urgent one still needs its own row.**
 
 ## Totals
 
-**Updated 2026-08-18.** 64 items done, 61 open.
+**Updated 2026-08-17.** 66 items done, 59 open.
+
+**T60 and T113 are closed and were checked in production rather than taken from the merge.** Signup
+no longer collects a password at all; `registrations.password` is null on all 146 rows and held
+null by a trigger. T113 was the commitment, T60 was the root cause, and one change closed both.
+
+**T108 and T109 delivered their 17 August halves**, the endoscopy content request and the
+unassessed-state write-up, both as decision documents for the client. Neither build has started;
+those are the 28 and 26 August halves.
+
+**T112 was rewritten because its cause was wrong.** Two candidates were reported as running out of
+time. They did not: one stopped with 54 minutes left, the other with 65. What produced their
+results was the recovery job, which also writes "time expired" onto blanks regardless and floors an
+incomplete result to White instead of No Belt. Genuine cut-offs do exist and there are seven rather
+than the four first counted, one of them from 17 August, so this is live rather than historical.
+
+**T111 gained a third instance.** The migration behind the signup change is applied in production
+and absent from `schema_migrations`, the same drift that made T37 unverifiable from the record.
 
 **T113 was opened from a promise that lived nowhere.** Shawn's 14 August EOD committed a signup
 password removal to Iggie "brought forward to Monday". That Monday was 17 August and has passed,
