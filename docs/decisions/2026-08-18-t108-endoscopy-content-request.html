@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Endoscopy Modules</title>
+<style>
+  :root{
+    --bg:#fbfaf6; --surface:#f4f2ea; --ink:#201d15; --muted:#6d6656; --faint:#8f8874;
+    --rule:#e3dfd0; --rule-soft:#ece8db;
+    --accent:#8f6d12; --accent-ink:#6e5309; --accent-wash:rgba(143,109,18,.08);
+    --bad:#a63c33; --bad-wash:rgba(166,60,51,.07);
+    --ok:#3d6b45;
+    --code-bg:#f1eee2; --code-ink:#403a2a;
+    --serif:'Charter','Bitstream Charter','Palatino Linotype',Georgia,serif;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,'SF Mono',SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#161409; --surface:#1e1b10; --ink:#e9e4d3; --muted:#a49c85; --faint:#7d765f;
+      --rule:#33301f; --rule-soft:#282516;
+      --accent:#c49a20; --accent-ink:#d8b453; --accent-wash:rgba(196,154,32,.10);
+      --bad:#d96b5f; --bad-wash:rgba(217,107,95,.09);
+      --ok:#7fb389;
+      --code-bg:#211e11; --code-ink:#cfc7ab;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#161409; --surface:#1e1b10; --ink:#e9e4d3; --muted:#a49c85; --faint:#7d765f;
+    --rule:#33301f; --rule-soft:#282516;
+    --accent:#c49a20; --accent-ink:#d8b453; --accent-wash:rgba(196,154,32,.10);
+    --bad:#d96b5f; --bad-wash:rgba(217,107,95,.09);
+    --ok:#7fb389;
+    --code-bg:#211e11; --code-ink:#cfc7ab;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--serif);
+       font-size:17px;line-height:1.62;-webkit-font-smoothing:antialiased}
+  .page{max-width:72ch;margin:0 auto;padding:56px 24px 96px}
+  .eyebrow{font-family:var(--sans);font-size:11px;font-weight:600;letter-spacing:.14em;
+           text-transform:uppercase;color:var(--accent);margin:0 0 14px}
+  h1{font-size:clamp(30px,5vw,40px);line-height:1.12;margin:0 0 10px;font-weight:700;
+     letter-spacing:-.01em;text-wrap:balance}
+  .subtitle{color:var(--muted);font-size:18px;margin:0 0 22px;text-wrap:balance}
+  .meta{font-family:var(--sans);font-size:12.5px;color:var(--faint);display:flex;flex-wrap:wrap;
+        gap:6px 18px;padding:14px 0;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);
+        margin-bottom:44px}
+  .meta b{color:var(--muted);font-weight:600}
+  h2{font-size:22px;margin:52px 0 14px;font-weight:700;letter-spacing:-.005em;text-wrap:balance}
+  h2 .n{color:var(--accent);font-family:var(--sans);font-size:14px;font-weight:700;
+        margin-right:10px;vertical-align:2px}
+  h3{font-size:17px;margin:30px 0 10px;font-weight:700}
+  p{margin:0 0 16px}
+  strong{font-weight:700}
+  code{font-family:var(--mono);font-size:.82em;background:var(--code-bg);color:var(--code-ink);
+       padding:1px 5px;border-radius:3px;white-space:nowrap}
+  ul,ol{margin:0 0 16px;padding-left:26px}
+  li{margin-bottom:8px}
+  li::marker{color:var(--faint)}
+  .tblwrap{overflow-x:auto;margin:20px 0;border:1px solid var(--rule);border-radius:6px}
+  table{border-collapse:collapse;width:100%;font-family:var(--sans);font-size:13.5px;
+        line-height:1.5;min-width:560px}
+  th{text-align:left;font-size:10.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;
+     color:var(--muted);padding:10px 14px;border-bottom:1px solid var(--rule);background:var(--surface)}
+  td{padding:11px 14px;border-bottom:1px solid var(--rule-soft);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td code{font-size:11.5px}
+  .callout{background:var(--accent-wash);border-left:3px solid var(--accent);
+           padding:14px 18px;border-radius:0 6px 6px 0;margin:20px 0;font-size:16px}
+  .callout p:last-child{margin-bottom:0}
+</style>
+</head>
+<body>
+<div class="page">
+
+<p class="eyebrow">SBD Platform · Endoscopy Rollout</p>
+<h1>Endoscopy Modules</h1>
+<p class="subtitle">The module list, the gate structure, and exactly what content is needed — ready to hand to Dr.&nbsp;Jake.</p>
+<div class="meta">
+  <span><b>Date</b> 18 Aug 2026</span>
+  <span><b>From</b> Iggie brief 13 Aug, Priority 3</span>
+  <span><b>Content needed by</b> Thu 21 Aug</span>
+  <span><b>Live</b> Fri 28 Aug</span>
+</div>
+
+<p>You asked for three things so Dr.&nbsp;Jake can start writing: the module list, how each module
+is gated, and an exact statement of what content is needed and in what format. This is all three.</p>
+
+<div class="callout">
+<p><strong>The one date that matters:</strong> content in hand by <strong>Thursday 21 August</strong>
+holds the Friday 28 August live date. Every day it lands after the 21st moves the live date by the
+same number of days. Modules can arrive one at a time — sending Module&nbsp;1 first lets us confirm
+the format on real material while the rest are still being written.</p>
+</div>
+
+<h2><span class="n">1</span>How endoscopy works on the platform</h2>
+
+<p><strong>Assignment only, by name.</strong> A leader assigns each endoscopy module to a named
+person. There is no belt trigger, no facility-wide rollout, and it is not part of the new-hire
+onboarding bundle. Someone who is never assigned a module never sees it. This is true in the first
+release because assignment <em>is</em> the mechanism, not a feature added on top: it is the same
+leader-assignment machinery that already runs Foundations, Instruments, and Preceptor today. No
+new architecture.</p>
+
+<p>This is also the clean version of the split you raised: belt continues to trigger the belt
+curriculum, and endoscopy becomes the first content that exists <em>only</em> on the
+leader-assigned side.</p>
+
+<p><strong>Once assigned, each module has the standard three gates</strong> — identical mechanics
+to Foundations:</p>
+
+<div class="tblwrap"><table>
+<thead><tr><th>Gate</th><th>What it is</th><th>Pass rule</th></tr></thead>
+<tbody>
+<tr><td><strong>1 · Knowledge</strong></td><td>10 questions drawn at random from the module's bank of 25</td><td>Score 80%+, three passing attempts</td></tr>
+<tr><td><strong>2 · Simulation</strong></td><td>10 scenario questions drawn from the module's bank of 25</td><td>Score 80%+, three passing attempts</td></tr>
+<tr><td><strong>3 · Observation</strong></td><td>A leader confirms each checklist item in person</td><td>Unlocks after Gates 1 and 2; every item confirmed</td></tr>
+</tbody>
+</table></div>
+
+<p>A module is complete when all three gates are passed. Because each attempt draws a fresh random
+ten from the bank, the three attempts are not the same test three times.</p>
+
+<h2><span class="n">2</span>Proposed module list</h2>
+
+<p>Five modules following the reprocessing flow. Dr.&nbsp;Jake owns the titles, the split, and the
+count — this is a starting structure, not a constraint. The only cost of changing the count is that
+every module, however many there are, needs the full content set in section&nbsp;3.</p>
+
+<div class="tblwrap"><table>
+<thead><tr><th>#</th><th>Working title</th><th>Covers</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><strong>Endoscope Fundamentals</strong></td><td>Scope types and anatomy, channels and elevators, why flexible scopes are the highest-risk devices in reprocessing, Spaulding classification, the IFU as the governing document</td></tr>
+<tr><td>2</td><td><strong>Point-of-Use Treatment &amp; Transport</strong></td><td>Bedside precleaning, transport containment and labeling, time limits and delayed-reprocessing rules</td></tr>
+<tr><td>3</td><td><strong>Leak Testing &amp; Manual Cleaning</strong></td><td>Leak test methods (dry, wet, automated), brushing and flushing all channels, cleaning verification, visual inspection including borescope</td></tr>
+<tr><td>4</td><td><strong>High-Level Disinfection &amp; AER Operation</strong></td><td>HLD agents and their handling, MEC testing, AER loading and cycle verification, manual HLD, rinsing</td></tr>
+<tr><td>5</td><td><strong>Drying, Storage &amp; Documentation</strong></td><td>Drying including forced-air, hang time and storage cabinets, traceability from patient to scope to cycle, quality monitoring and the audit trail</td></tr>
+</tbody>
+</table></div>
+
+<p>One overlap to be aware of: Foundations Module&nbsp;8 (HLD) already gives every technician a
+one-module overview of this territory — HLD vs. sterilization, endoscope anatomy, leak testing,
+AER operation, storage. These five are the working-depth version for people who actually reprocess
+scopes. Dr.&nbsp;Jake's call whether they assume Module&nbsp;8 or stand fully self-contained;
+self-contained is safer, since not everyone assigned endoscopy will have Foundations behind them.</p>
+
+<h2><span class="n">3</span>What each module needs, and in what format</h2>
+
+<p>Four things per module. The reader document converts into the platform automatically if the
+format below is followed — it is the same format as the ten Foundations documents from 4&nbsp;August,
+so it is the format Dr.&nbsp;Jake has already written in once.</p>
+
+<h3>A. Reader document — one Word (.docx) file per module</h3>
+<ul>
+<li>Filename: <code>SIPS_Endoscopy_Module1_Fundamentals.docx</code> and so on — the <code>Module1</code>, <code>Module2</code> part matters.</li>
+<li>Each numbered section starts with a <strong>Heading&nbsp;1</strong> styled paragraph numbered <code>1.1</code>, <code>1.2</code>, … Each Heading&nbsp;1 becomes one readable section on screen.</li>
+<li>Subheadings use <strong>Heading&nbsp;2</strong> and <strong>Heading&nbsp;3</strong> styles.</li>
+<li>Bullet points as real Word lists, not typed dashes.</li>
+<li>Tabular information as real multi-column Word tables — these render as tables on screen.</li>
+<li>Callout boxes: a <strong>single-cell table</strong> whose text starts with one of three symbols, which sets the color and is then removed: ⚠&nbsp;warning (red), 💡&nbsp;tip / SBD standard (green), 📚&nbsp;key point (blue).</li>
+</ul>
+
+<h3>B. Knowledge question bank — 25 multiple-choice questions per module</h3>
+<p>Four options each, correct answer marked. Twenty-five matches the Foundations standard; if time
+is short, fifteen by the 21st is workable and the remainder can follow after go-live.</p>
+
+<h3>C. Simulation bank — 25 scenario questions per module</h3>
+<p>A short workplace situation, four possible responses, the best response marked. Same fallback
+as B if time is short.</p>
+
+<h3>D. Observation checklist — 5 to 7 items per module</h3>
+<p>Each item one observable statement a leader can confirm by watching the person work, e.g.
+<em>"Performs a leak test per the scope's IFU before manual cleaning."</em> These become the
+Gate&nbsp;3 items.</p>
+
+<p>B, C, and D can sit at the end of each module's Word document or arrive as a separate document
+or spreadsheet — whatever is easiest to write, as long as each is clearly labeled with its module,
+questions are numbered, and the correct answer is marked.</p>
+
+<p>If any module should carry video: send links or embed codes only — hosting stays on your side,
+as agreed previously. The embedding surface is a separate piece of work and is not required for
+the 28&nbsp;August release.</p>
+
+<h2><span class="n">4</span>Dates, restated</h2>
+<ul>
+<li><strong>Thu 21 Aug</strong> — content in hand. Module&nbsp;1 earlier if possible, as a format check.</li>
+<li><strong>Fri 28 Aug</strong> — endoscopy live: a leader assigns a module to a named person, that person sees it and works the gates, and nobody unassigned sees anything.</li>
+<li>Content after the 21st moves the live date day for day.</li>
+</ul>
+
+</div>
+</body>
+</html>
