@@ -2542,8 +2542,16 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Done when:* A tracker in the same columns as the 30 July one is sent, generated from this file
   rather than written by hand, so it stays true as this file is maintained.
 
-- [ ] **T105** Load capacity for the onboarding wave · est 1d · **High**
-  **Reported complete 2026-08-14, and deliberately NOT ticked.** The report is that the run was
+- [x] **T105** Load capacity for the onboarding wave · est 1d · **High**
+  **Closed 2026-08-17 by agreement with the client, at a scope we can actually stand behind.**
+  He said plainly: *"Whatever you have, send it, and I will take it as the evidence and close it
+  with you."* So what this delivers is a **capacity estimate read from real usage**, not a stress
+  test against 200 simulated users, and the board carries that sentence rather than implying the
+  stress test happened. If he later wants the real thing it is new, separate work with its own date.
+  The history below stands as written, because refusing to tick it on a report was the right call
+  and is what produced the honest scope.
+
+  **Reported complete 2026-08-14, and deliberately NOT ticked at the time.** The report is that the run was
   done. There is no load-test script in this repository, no stored result, and nothing that a
   second person could re-run to get the same number, so there is nothing here to attack in a
   second pass. The rule this file works by is that a claim is not a verification, so it stays
@@ -2831,8 +2839,16 @@ already named above: **an ask next to an urgent one still needs its own row.**
 
 ### Blocked, not on the critical path
 
-- [ ] **T49** Strip and rotate the PSOP credentials, gate the public page
-  *Blocked on:* the client.
+- [x] **T49** Strip and rotate the PSOP credentials, gate the public page
+  **Closed 2026-08-17 by the client's own answer, and it turns out there was nothing to gate.**
+  His words on the board: the page is not in use, it was a test need for PSOP. So there is no live
+  page carrying those credentials and no rotation owed. Closed on his board the same day with that
+  as the evidence line.
+  Worth keeping the original finding on the record rather than deleting it: credentials really were
+  readable in the source of a reachable page when this was raised on 14 July, and it stayed open
+  for a month because it was blocked on an answer nobody chased. The lesson is the blocker, not the
+  page.
+  *Was blocked on:* the client.
   *Goal:* The PSOP page carries no credentials in its source and is not reachable by anyone who should not see it.
   *Done when:* The credentials are gone from the file, the old ones are rotated, and the public page is gated. Rotation confirmed by the client.
 - [ ] **T50** David inside PSOP
