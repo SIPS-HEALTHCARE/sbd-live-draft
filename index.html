@@ -87,22 +87,7 @@
               <div class="form-group"><label class="form-label">Contact Name *</label><input class="form-input" id="reg-contact" placeholder="Full name"></div>
               <div class="form-group"><label class="form-label">Work Email *</label><input class="form-input" id="reg-email" type="email" placeholder="contact@hospital.com" data-mobile-placeholder="you@hospital.com"></div>
             </div>
-            <div class="g2" style="gap:10px">
-              <div class="form-group" style="position: relative;">
-                <label class="form-label">Password *</label>
-                <input class="form-input" id="reg-pass" type="password" placeholder="Create a password" style="padding-right: 36px;">
-                <span class="pw-toggle" onclick="togglePasswordVisibility('reg-pass', this)" style="position: absolute; right: 12px; bottom: 8px; cursor: pointer; color: var(--txt3); display: flex; align-items: center; justify-content: center; height: 24px; width: 24px; border-radius: 4px; transition: .15s;" title="Toggle password visibility">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                </span>
-              </div>
-              <div class="form-group" style="position: relative;">
-                <label class="form-label">Confirm Password *</label>
-                <input class="form-input" id="reg-pass2" type="password" placeholder="Confirm password" style="padding-right: 36px;">
-                <span class="pw-toggle" onclick="togglePasswordVisibility('reg-pass2', this)" style="position: absolute; right: 12px; bottom: 8px; cursor: pointer; color: var(--txt3); display: flex; align-items: center; justify-content: center; height: 24px; width: 24px; border-radius: 4px; transition: .15s;" title="Toggle password visibility">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                </span>
-              </div>
-            </div>
+            <div style="font-size:11.5px;color:var(--txt3);margin-bottom:12px">Once your registration is approved, you will receive an email with a link to set your password.</div>
             <button class="btn btn-gold" style="width:100%;justify-content:center;padding:11px;margin-top:4px" onclick="doRegister()">Submit Registration Request</button>
             <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--bdr);font-size:11.5px;color:var(--txt3);text-align:center">Already have an account? <span style="color:var(--gold);cursor:pointer;font-weight:600" onclick="switchAuthTab('signin')">Sign in here</span></div>
           </div>
@@ -774,7 +759,7 @@
   <script src="src/js/instruments.js?v=14"></script>
   <script src="src/js/preceptor.js?v=9"></script>
   <script src="src/js/scripts-module.js?v=2"></script>
-  <script src="src/js/ui-views.js?v=217"></script>
+  <script src="src/js/ui-views.js?v=218"></script>
   <script src="src/js/belt-test-engine.js?v=2"></script>
   <script src="src/js/belt-test-flow.js?v=5"></script>
   <script src="src/js/settings.js?v=20"></script>

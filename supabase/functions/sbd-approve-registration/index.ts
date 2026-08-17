@@ -96,22 +96,14 @@ serve(async (req) => {
         // CREATE OR FIND USER
         let newUserId = null;
         let authCreated = false;
+        let setPasswordLink: string | null = null;
 
-        // Enforce the canonical password rule server-side (8+ chars, 1 uppercase, 1 number).
-        // Mirrors the client checks in doRegister()/doResetPassword()/settings change-password.
-        // The client validator is bypassable (direct POST to the registrations table), so this
-        // is the real gate: a weak password must never become a live auth credential here.
-        const providedPass = (regData.password || '').trim();
-        if (providedPass) {
-            if (providedPass.length < 8 || !/[A-Z]/.test(providedPass) || !/[0-9]/.test(providedPass)) {
-                return new Response(
-                    JSON.stringify({ error: 'Password does not meet complexity requirements (8+ chars, one uppercase, one number).' }),
-                    { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-                );
-            }
-        }
-        let authPassword = providedPass || 'TemporarySBD@123';
-        
+        // T113/T60: no password travels through registration any more. The auth user is
+        // created with a random throwaway credential nobody ever sees, and the welcome
+        // email carries a set-password (recovery) link instead. A `password` value still
+        // present on an old pending row is deliberately ignored.
+        const authPassword = 'Aa1!' + crypto.randomUUID();
+
         // Check if user already exists by querying sbd_portal_users
         const { data: existingProfile } = await supabaseAdmin.from('sbd_portal_users').select('auth_uid').eq('email', regData.email).maybeSingle();
 
@@ -140,6 +132,18 @@ serve(async (req) => {
             newUserId = authUser.user.id;
             authCreated = true;
             createdAuthUserId = authUser.user.id;
+
+            // Set-password link for the welcome email. Non-fatal on failure: the account
+            // is fine, and the person can use Forgot Password on the sign-in screen — the
+            // email template says so when no link is present.
+            const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+                type: 'recovery',
+                email: regData.email
+            });
+            setPasswordLink = linkData?.properties?.action_link || null;
+            if (linkError || !setPasswordLink) {
+                console.error('Set-password link generation failed:', linkError?.message || 'no action_link returned');
+            }
         }
 
         console.log("Upserting portal user profile for:", newUserId);
@@ -227,7 +231,7 @@ serve(async (req) => {
                     contact_name: regData.name,
                     name: firstName,
                     facility_name: regData.facility || '',
-                    temp_password: authCreated ? authPassword : null,
+                    set_password_link: setPasswordLink,
                     auth_created: authCreated,
                     role: accountRole,
                     login_email: regData.email
