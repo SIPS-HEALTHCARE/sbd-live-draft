@@ -2825,6 +2825,17 @@ already named above: **an ask next to an urgent one still needs its own row.**
   the rule decides it cleanly: the 14 August sitting is complete, 33 of 39 on knowledge, and it
   supersedes the 12 August one that was abandoned and recovered.
 
+  **The would-be fifth pair resolved itself on 2026-08-18 night, and not by us.** Blake Hansteen
+  briefly had two accounts (nemours, created 03:08, and hotmail, 03:22, where his Green work
+  lives). Between 17:55 and 21:30 UTC his nemours account was deleted entirely, auth user, portal
+  row and staff row all gone. No application log records who; the clean three-layer removal points
+  at dashboard access, which on this project means the client or Sriman's side. Checked before
+  writing this: the deleted half carried zero placement reviews, so nothing is stranded, and the
+  hotmail account is intact. The outcome matches what the client's own rule would have produced,
+  but who ran it is an open question asked back, because a deletion on live people's data with no
+  name on it is exactly what this ledger exists to prevent. The standing pairs remain the four
+  below.
+
   **What this also explains.** The David Williams pair is the duplicate behind the White-versus-Green
   disagreement that cost a day earlier in this project. It was read then as a scoring dispute. It
   was two records.
@@ -2931,6 +2942,11 @@ already named above: **an ask next to an urgent one still needs its own row.**
   hospital's IT people to get the mail-scanner side corrected, and one new ask that is now T116.
   So the second Valan registration stays untouched and pending on his instruction, and the
   scanner conversation with the hospital is his to run, not ours.
+
+  **Superseded the same night:** the roster reconciliation above counted Blake Hansteen's two
+  accounts; his nemours account was deleted by someone outside this session between 17:55 and
+  21:30 UTC (see T114), so the Nemours roster now stands at 40 and his hotmail account is the
+  only one. Nothing was stranded by it.
 
   The box is ticked when joe truax signs in.
 
