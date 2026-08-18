@@ -2894,14 +2894,28 @@ already named above: **an ask next to an urgent one still needs its own row.**
   the app under v43. Blake Hansteen **not touched**, on the client's explicit instruction; his pair
   belongs to T114.
 
-  **Still owed, and neither can be done from a code session.** The Reset Password email template in
-  the dashboard still points at `{{ .ConfirmationURL }}`, the same scanner-burnable shape, and wants
-  `{{ .SiteURL }}/?set_password=1&token_hash={{ .TokenHash }}`; `api.supabase.com` is not reachable
-  from the build environment, so that field is a browser job. And the client's own closing rule
-  needs a human: approve a real account, open the real email, click the real link, set a password,
-  sign in. The approval endpoint requires an admin session token, so that run belongs to whoever
-  holds one. Everything around it is watchable from SQL: the queued link's shape, whether anything
-  consumed the token before the person clicked, and the sign-in event afterwards.
+  **Closed the same evening, all but one click.** The dashboard Reset Password template now carries
+  the `{{ .SiteURL }}/?set_password=1&token_hash={{ .TokenHash }}` shape, changed by hand in the
+  dashboard since `api.supabase.com` is unreachable from the build environment. joe truax was
+  re-approved from the app at 17:39 UTC through v43: his auth user exists, the queued welcome email
+  is `sent`, and the stored link starts with `https://belt.sterilebydesign.ai/?set_password=1&token_hash=`
+  at 115 chars with no `/auth/v1/verify` anywhere in it. His token is untouched and `last_sign_in_at`
+  is still null, which is now the healthy state: opening the URL costs nothing until he presses the
+  button. The superseded 04:32 queue row for the same address still shows the old poisoned
+  `/auth/v1/verify` shape, a before and after sitting in one table.
+
+  **Two finds from the verification pass, neither executed without a go.** First, the re-approval
+  created a fresh facility row named `nemours` (`c19d095f`) instead of attaching him to the existing
+  Nemours DE record (`04e44b89`, 41 staff on it), because the approve modal passed the registration's
+  free text rather than the existing facility's UUID; the repair is one move of his portal and staff
+  `fid` plus deleting the then-empty facility, staged and waiting. Second, `recovery_sent_at` is null
+  on every account except his, so no production Forgot Password run has actually fired yet; the
+  reset-path half of the client's closing rule is still owed by a human with a real inbox. And the
+  second pending registration for the same person under a different facility (SIPs Consult, second
+  yahoo address) is held for the client's answer rather than denied: the earlier read of it as a
+  plain duplicate was wrong, the two registrations name different facilities.
+
+  The box is ticked when joe truax signs in.
 
   **The client's standing rule, set in the same handover and worth quoting because it retires how
   item 125 was closed here.** *"The only thing that closes a registration change is: approve a real
