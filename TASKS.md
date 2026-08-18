@@ -2877,12 +2877,31 @@ already named above: **an ask next to an urgent one still needs its own row.**
   becoming one. `main` replaces it with a random throwaway per account. Deploying from the dashboard
   instead of the repo silently puts the constant back.
 
-  **Still owed, and needs the client's go before any of it runs.** The Reset Password email template
-  in the dashboard still points at `{{ .ConfirmationURL }}`, the same scanner-burnable shape, and
-  wants `{{ .SiteURL }}/?set_password=1&token_hash={{ .TokenHash }}`. Joe Truax has no account at
-  all: two orphan staff rows to retire, and his registration is marked approved with nothing behind
-  it, so it has to go back to pending and be approved once after this is live. Blake Hansteen is
-  **not** to be touched, on the client's explicit instruction; his pair belongs to T114.
+  **Shipped 2026-08-18.** Merged to `main` as `f6cf563` (PR #205) and both halves are live.
+  Vercel production deployment `dpl_5fi4UXDCynqRXb3tyBsPKoteTBGQ` is READY on that exact commit,
+  and the served `belt.sterilebydesign.ai/src/js/auth-password.js` carries `_recoveryTokenHash`,
+  `token_hash` and `_showResetOverlay`, with `api-supabase.js` carrying `verifyRecoveryTokenHash`
+  as a POST. That commit declares `api-supabase.js?v=63` and `auth-password.js?v=21`.
+  `sbd-approve-registration` deployed from the repo at **v43**, `verify_jwt` still true, and the
+  deployed source is read back clean: no `action_link`, no shared fallback credential, and
+  `emailError` declared at try scope. A brace and scope audit of the deployed file reports balanced
+  braces and zero out-of-scope uses, which is the exact bug class that broke v41.
+
+  **Joe Truax staged 2026-08-18.** Two orphan staff rows retired, both verified first as 0 portal
+  rows, 0 auth rows, 0 placement reviews. The facility they pointed at is the real Nemours record
+  with 41 other staff on it and was deliberately left alone. The nemours duplicate `3bafc05b` is
+  **denied**, and the gmail row `0779630e` is back to **pending** so it can be approved once from
+  the app under v43. Blake Hansteen **not touched**, on the client's explicit instruction; his pair
+  belongs to T114.
+
+  **Still owed, and neither can be done from a code session.** The Reset Password email template in
+  the dashboard still points at `{{ .ConfirmationURL }}`, the same scanner-burnable shape, and wants
+  `{{ .SiteURL }}/?set_password=1&token_hash={{ .TokenHash }}`; `api.supabase.com` is not reachable
+  from the build environment, so that field is a browser job. And the client's own closing rule
+  needs a human: approve a real account, open the real email, click the real link, set a password,
+  sign in. The approval endpoint requires an admin session token, so that run belongs to whoever
+  holds one. Everything around it is watchable from SQL: the queued link's shape, whether anything
+  consumed the token before the person clicked, and the sign-in event afterwards.
 
   **The client's standing rule, set in the same handover and worth quoting because it retires how
   item 125 was closed here.** *"The only thing that closes a registration change is: approve a real
