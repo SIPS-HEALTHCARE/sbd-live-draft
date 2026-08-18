@@ -2915,6 +2915,12 @@ already named above: **an ask next to an urgent one still needs its own row.**
   yahoo address) is held for the client's answer rather than denied: the earlier read of it as a
   plain duplicate was wrong, the two registrations name different facilities.
 
+  **The client answered the same night, 2026-08-18.** His words: *"Perfect!!"*, then *"Leave Valan
+  Christy alone for now...unsure of what is happening with here"*, then that he will work with the
+  hospital's IT people to get the mail-scanner side corrected, and one new ask that is now T116.
+  So the second Valan registration stays untouched and pending on his instruction, and the
+  scanner conversation with the hospital is his to run, not ours.
+
   The box is ticked when joe truax signs in.
 
   **The client's standing rule, set in the same handover and worth quoting because it retires how
@@ -2928,6 +2934,37 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Done when:* The queued link is on our own origin with no `/auth/v1/verify` in it, a curl of that
   link does not spend it, a real approval is opened and signed into end to end, the Reset Password
   template matches, and Joe Truax can sign in.
+
+- [ ] **T116** Change-email input, so an account can be moved to the right address · est 1d · **High**
+  The client's own ask, 2026-08-18, in the same thread where he accepted the T115 fix: *"Once we
+  do [work with the hospital's IT people], we will need to implement a change email input so we
+  can make sure people are on the right email."*
+
+  Why it exists: during the T115 incident, people locked out on their hospital address
+  re-registered on personal ones, so real accounts and history now sit on wrong addresses (that is
+  where T114's newest pairs came from). A change-email control lets an admin move an account to
+  the correct address instead of merging records or re-provisioning from scratch.
+
+  Sequencing he stated himself: after his conversation with the hospital's IT side. Logged now so
+  it does not get lost; not started.
+
+  **Design constraint recorded now so the T115 bug is not rebuilt here.** GoTrue's email-change
+  confirmation is ALSO a one-time link (type `email_change`), and by default both the old and the
+  new address receive one. Built naively, the hospital scanner spends it exactly like it spent the
+  recovery links. Two sound shapes: reuse the T115 pattern (hashed token on our own origin,
+  redeemed by POST on a button press), or skip links entirely with an admin-side
+  `auth.admin.updateUserById` email change, which matches "an admin makes sure people are on the
+  right email" better than a self-serve flow. Whichever lands, `auth.users.email` and
+  `sbd_portal_users.email` must move together or sign-in and profile lookups split; the `staff`
+  row carries no email, so nothing to touch there.
+
+  Interaction with T114: for the personal-address duplicates, change-email plus retiring the empty
+  shell may replace some merges. Decide per pair, not globally.
+
+  *Owner: unassigned; who builds it gets agreed with Sriman before anyone starts.*
+  *Goal:* An admin can put an account on the person's correct email without losing anything.
+  *Done when:* An account's sign-in email is changed end to end on production, the person signs in
+  on the new address, the old address no longer works, and no scanner can spend the change link.
 
 ### Blocked, not on the critical path
 
