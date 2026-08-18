@@ -2946,7 +2946,7 @@ already named above: **an ask next to an urgent one still needs its own row.**
   link does not spend it, a real approval is opened and signed into end to end, the Reset Password
   template matches, and Joe Truax can sign in.
 
-- [ ] **T116** Change-email input, so an account can be moved to the right address · est 1d · **High**
+- [ ] **T116** Change-email input, so an account can be moved to the right address · est 1d · Medium
   The client's own ask, 2026-08-18, in the same thread where he accepted the T115 fix: *"Once we
   do [work with the hospital's IT people], we will need to implement a change email input so we
   can make sure people are on the right email."*
@@ -2958,6 +2958,14 @@ already named above: **an ask next to an urgent one still needs its own row.**
 
   Sequencing he stated himself: after his conversation with the hospital's IT side. Logged now so
   it does not get lost; not started.
+
+  **He expanded it by voice the same night, and three details matter.** His own description is a
+  user-facing control: *"an email update thing that allows them to put their new email in or their
+  work email back in and update that email address."* So the self-serve shape is his stated
+  preference, and the admin-side variant below stays recorded as the fallback. His timing, in his
+  words: *"It's not something that we need to do now"*, which is why this sits at Medium rather
+  than High. And he will put it on his own board himself to get a date once the hospital's IT side
+  gives him clarity, so the date comes from his board, not from here.
 
   **Design constraint recorded now so the T115 bug is not rebuilt here.** GoTrue's email-change
   confirmation is ALSO a one-time link (type `email_change`), and by default both the old and the
