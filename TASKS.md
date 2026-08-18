@@ -2915,6 +2915,17 @@ already named above: **an ask next to an urgent one still needs its own row.**
   yahoo address) is held for the client's answer rather than denied: the earlier read of it as a
   plain duplicate was wrong, the two registrations name different facilities.
 
+  **The facility move ran the same evening, on the client's go relayed through Shawn.** joe truax's
+  portal and staff rows now point at the real Nemours DE record (`04e44b89`), done as single-column
+  SQL updates so nothing else on the staff row was touched, and the hour-old duplicate `c19d095f`
+  is deleted. Before the delete, a sweep of all 38 facility-bearing columns in the schema found
+  zero references to it. The roster reconciles afterwards: 41 staff and 41 portal users on the one
+  remaining Nemours facility. Two things inside that count are known and deliberate: Blake
+  Hansteen's two accounts (T114, untouched on instruction, hotmail on Green and nemours on White),
+  and one staff row added today directly by an admin (Cortney Jumper), which is ordinary Add Staff
+  usage, not part of this incident. The separate Forgot Password rehearsal is skipped by decision;
+  joe truax's first sign-in closes the loop.
+
   **The client answered the same night, 2026-08-18.** His words: *"Perfect!!"*, then *"Leave Valan
   Christy alone for now...unsure of what is happening with here"*, then that he will work with the
   hospital's IT people to get the mail-scanner side corrected, and one new ask that is now T116.
