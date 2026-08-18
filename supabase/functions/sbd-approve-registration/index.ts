@@ -140,9 +140,28 @@ serve(async (req) => {
                 type: 'recovery',
                 email: regData.email
             });
-            setPasswordLink = linkData?.properties?.action_link || null;
+            // NEVER put GoTrue's action_link in an email. It is a /auth/v1/verify URL and GoTrue
+            // consumes the token on the FIRST GET, by anyone. Hospital mailboxes run link
+            // scanners that GET every URL in a message within seconds of delivery, so the token
+            // is spent before the person clicks and they land on a bare sign-in page.
+            //
+            // Measured on 17 August rather than assumed. Milena Eremenko's link was issued at
+            // 19:33:35 and consumed at 19:33:45, ten seconds later, by an agent that was not her
+            // browser; a Microsoft scanner range then made a HEAD on the same path at 19:33:55;
+            // every attempt of hers after that returned "One-time token not found". The same
+            // shape appears for every nemours.org approval that night, and the workaround people
+            // found by themselves, re-registering on a personal address, is where the duplicate
+            // staff records in T114 come from.
+            //
+            // So the email carries the HASHED token on our own origin. Opening that URL renders
+            // a form and nothing else. The token is redeemed by a POST when the person presses
+            // the button, which a scanner never does.
+            const hashedToken = linkData?.properties?.hashed_token || null;
+            setPasswordLink = hashedToken
+                ? `https://belt.sterilebydesign.ai/?set_password=1&token_hash=${encodeURIComponent(hashedToken)}`
+                : null;
             if (linkError || !setPasswordLink) {
-                console.error('Set-password link generation failed:', linkError?.message || 'no action_link returned');
+                console.error('Set-password link generation failed:', linkError?.message || 'no hashed_token returned');
             }
         }
 

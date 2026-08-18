@@ -2837,6 +2837,65 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Goal:* One person, one staff record, with the most recent assessment standing.
   *Done when:* Each pair is down to one record carrying every assessment, assignment and history row from both, the retired ids are recorded here, and a duplicate cannot be created silently in the first place.
 
+- [ ] **T115** Approval emails a link the mailbox scanner spends before the person clicks · est 0.5d · **Critical**
+  Reported by the client on 2026-08-18 as people being approved and then landing on a plain sign-in
+  screen with no account they could get into. Two separate faults, both now measured rather than
+  assumed.
+
+  **Fault A, the one that hit everybody.** The welcome email carried GoTrue's own `action_link`,
+  which is an `/auth/v1/verify` URL. GoTrue spends that token on the **first GET, by anyone**.
+  Hospital mailboxes run link scanners that fetch every URL in a message within seconds of delivery,
+  so the token was gone before the human clicked, and the app had no screen for the bounce that came
+  back. Read from the auth log for one account on 17 August: link issued 19:33:35, consumed 19:33:45
+  by an agent that was not her browser, a Microsoft scanner range made a HEAD on the same path at
+  19:33:55, and every attempt of hers after that returned `403 One-time token not found`. She then
+  re-registered on a personal address at 19:42 and it worked first time. The same shape appears for
+  every nemours.org approval that night, and the personal-address workaround people found by
+  themselves is where **half of T114's duplicate records come from**.
+
+  **Fault B, which explains one person only.** Deployed v41 of `sbd-approve-registration` referenced
+  `emailError` outside the scope it was declared in. The throw landed in the catch, the catch deleted
+  the auth user it had just created, and the approval looked successful from the admin side. Log line
+  `Approve Error: emailError is not defined` at 04:20:02.601, one line before
+  `DELETE /admin/users/5cfd8a01`. v42 was deployed at 04:48 UTC and already fixes that reference.
+
+  **The fix, on `work/onboarding-link-scanner-fix`.** The email now carries the **hashed** token on
+  our own origin, `/?set_password=1&token_hash=…`. Opening that URL renders a form and nothing else,
+  so a scanner GET is free; the token is redeemed by a POST to `/auth/v1/verify` when the person
+  presses the button, which a scanner never does. The page also handles the two failure shapes it
+  used to swallow: a GoTrue `otp_expired` bounce and a token that is already spent both land on the
+  forgot-password panel with the reason on screen, instead of a blank sign-in page. Legacy
+  `#access_token` links keep working while old emails are still in flight.
+  `node scripts/verify-set-password-link.js` is the guard, 30 assertions.
+
+  **Found on the way, and it is why the deploy has to come from the repo.** Deployed v42 has drifted
+  from `main`. It still reads the registration `password` column and falls back to a **hardcoded
+  constant** when that column is empty, which it now always is because two triggers null it. So every
+  account v42 creates is born on one shared, known credential and stays there until the person sets
+  their own. Checked against `auth.users` on 18 August: **0 of 127 accounts are currently on that
+  fallback**, so this is a latent hazard and not a live breach, but it is one dead link away from
+  becoming one. `main` replaces it with a random throwaway per account. Deploying from the dashboard
+  instead of the repo silently puts the constant back.
+
+  **Still owed, and needs the client's go before any of it runs.** The Reset Password email template
+  in the dashboard still points at `{{ .ConfirmationURL }}`, the same scanner-burnable shape, and
+  wants `{{ .SiteURL }}/?set_password=1&token_hash={{ .TokenHash }}`. Joe Truax has no account at
+  all: two orphan staff rows to retire, and his registration is marked approved with nothing behind
+  it, so it has to go back to pending and be approved once after this is live. Blake Hansteen is
+  **not** to be touched, on the client's explicit instruction; his pair belongs to T114.
+
+  **The client's standing rule, set in the same handover and worth quoting because it retires how
+  item 125 was closed here.** *"The only thing that closes a registration change is: approve a real
+  account, open the real email, click the real link, set a password, and sign in."* Item 125 was
+  closed on "the password field holds a value on 0 of 146 records", which was true and verified a
+  column rather than the journey. Nobody had opened the email.
+
+  *Goal:* An approved person can set their password from the email they were sent, on a hospital
+  mailbox, first try.
+  *Done when:* The queued link is on our own origin with no `/auth/v1/verify` in it, a curl of that
+  link does not spend it, a real approval is opened and signed into end to end, the Reset Password
+  template matches, and Joe Truax can sign in.
+
 ### Blocked, not on the critical path
 
 - [x] **T49** Strip and rotate the PSOP credentials, gate the public page

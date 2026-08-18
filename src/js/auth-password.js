@@ -2,28 +2,70 @@
 // AUTH PASSWORD — Forgot Password & Reset Flow
 // ============================================================
 
-let _recoveryToken = null;
+let _recoveryToken = null;      // implicit-flow access_token from #access_token=…&type=recovery
+let _recoveryTokenHash = null;  // token_hash from ?set_password=1&token_hash=… (redeemed on submit)
 
-// ── Check for password recovery hash on page load ──
+// ── On page load: open the set-password screen if the URL carries a token, and explain a dead link ──
+//
+// The token_hash branch is the one that matters. A GoTrue action link is a /auth/v1/verify URL
+// and GoTrue spends the token on the FIRST GET, by anyone, so a hospital mailbox scanner that
+// fetches every URL in a message burns it seconds after delivery and the person lands on a bare
+// sign-in page. Carrying the hashed token on our own origin instead means opening the URL only
+// renders this form; the token is redeemed by a POST in doResetPassword(), on the button press,
+// which a scanner never does.
 function checkForPasswordRecovery() {
-  const hash = window.location.hash;
-  if (!hash) return;
-  const params = {};
-  hash.replace('#', '').split('&').forEach(part => {
+  const qs = new URLSearchParams(window.location.search);
+  const hashParams = {};
+  (window.location.hash || '').replace('#', '').split('&').forEach(part => {
     const [k, v] = part.split('=');
-    if (k && v) params[k] = decodeURIComponent(v);
+    if (k && v) hashParams[k] = decodeURIComponent(v);
   });
-  if (params.type === 'recovery' && params.access_token) {
-    _recoveryToken = params.access_token;
+
+  // 1. New scanner-proof link: ?set_password=1&token_hash=…  (also used by the Reset Password email template)
+  const tokenHash = qs.get('token_hash');
+  if (tokenHash) {
+    _recoveryTokenHash = tokenHash;
     history.replaceState(null, '', window.location.pathname);
-    const loginEl = document.getElementById('login');
-    const resetEl = document.getElementById('auth-reset-overlay');
-    if (loginEl) {
-      loginEl.classList.add('hidden');
-      loginEl.style.display = 'none';   // overrides inline display set on the login screen
-    }
-    if (resetEl) resetEl.classList.remove('hidden');
+    _showResetOverlay();
+    return;
   }
+
+  // 2. Legacy implicit-flow link: #access_token=…&type=recovery (keep working while old emails are in flight)
+  if (hashParams.type === 'recovery' && hashParams.access_token) {
+    _recoveryToken = hashParams.access_token;
+    history.replaceState(null, '', window.location.pathname);
+    _showResetOverlay();
+    return;
+  }
+
+  // 3. GoTrue bounced an already-used / expired link back to us: say so instead of showing the plain sign-in page
+  if (hashParams.error_code || hashParams.error) {
+    history.replaceState(null, '', window.location.pathname);
+    const msg = hashParams.error_code === 'otp_expired'
+      ? 'That link has already been used or has expired. Enter your email below and we will send a fresh one.'
+      : 'That link could not be used. Enter your email below and we will send a fresh one.';
+    _openForgotWithMessage(msg);
+  }
+}
+
+function _showResetOverlay() {
+  const loginEl = document.getElementById('login');
+  const resetEl = document.getElementById('auth-reset-overlay');
+  if (loginEl) {
+    loginEl.classList.add('hidden');
+    loginEl.style.display = 'none';   // overrides inline display set on the login screen
+  }
+  if (resetEl) resetEl.classList.remove('hidden');
+}
+
+function _openForgotWithMessage(msg) {
+  const run = () => {
+    if (typeof showForgotPassword === 'function') showForgotPassword();
+    const errEl = document.getElementById('fp-error');
+    if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
+  };
+  // the login card is revealed by auth-init after the session check; give it a tick
+  setTimeout(run, 400);
 }
 
 // ── Show Forgot Password panel ──
@@ -141,10 +183,16 @@ async function doResetPassword() {
   if (!/[A-Z]/.test(pass)) { _resetErr('Password must include at least one uppercase letter.', errEl); return; }
   if (!/[0-9]/.test(pass)) { _resetErr('Password must include at least one number.', errEl); return; }
   if (pass !== pass2) { _resetErr('Passwords do not match.', errEl); return; }
-  if (!_recoveryToken) { _resetErr('Reset link has expired. Please request a new one.', errEl); return; }
+  if (!_recoveryToken && !_recoveryTokenHash) { _resetErr('Reset link has expired. Please request a new one.', errEl); return; }
 
   if (btn) { btn.disabled = true; btn.textContent = 'Updating…'; }
   try {
+    // Redeem the token_hash only now, on the person's click, never on page load.
+    if (!_recoveryToken && _recoveryTokenHash) {
+      const session = await SB_AUTH.verifyRecoveryTokenHash(_recoveryTokenHash);
+      _recoveryToken = session.access_token;
+      _recoveryTokenHash = null;
+    }
     await SB_AUTH.updatePassword(_recoveryToken, pass);
     _recoveryToken = null;
     const resetEl  = document.getElementById('auth-reset-overlay');
@@ -155,7 +203,19 @@ async function doResetPassword() {
     const succEl = document.getElementById('auth-success');
     if (succEl) { succEl.textContent = '✓ Password updated. Please sign in with your new password.'; succEl.style.display = 'block'; }
   } catch (e) {
-    _resetErr(e.message || 'Failed to update password. The link may have expired.', errEl);
+    // A dead token leaves the person staring at an overlay that will never work. Send them to
+    // the forgot-password panel with the reason, so the next step is one click and not a guess.
+    const dead = /expired|invalid|not found|already/i.test(e.message || '');
+    if (dead) {
+      _recoveryToken = null; _recoveryTokenHash = null;
+      const resetEl = document.getElementById('auth-reset-overlay');
+      const loginEl = document.getElementById('login');
+      if (resetEl) resetEl.classList.add('hidden');
+      if (loginEl) { loginEl.classList.remove('hidden'); loginEl.style.display = ''; }
+      _openForgotWithMessage('That link has already been used or has expired. Enter your email below and we will send a fresh one.');
+    } else {
+      _resetErr(e.message || 'Failed to update password. Please try again.', errEl);
+    }
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Set New Password'; }
   }

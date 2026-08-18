@@ -160,6 +160,21 @@ const SB_AUTH = {
     });
     return res.ok;
   },
+  // ── Redeem a set-password token_hash for a session ──
+  // Deliberately a POST. GoTrue's own /verify link spends its token on the first GET, which a
+  // mail scanner performs seconds after delivery, so the person clicking afterwards is told the
+  // link is invalid. Redeeming here, on submit, means opening the URL costs nothing and only a
+  // human pressing the button consumes the token.
+  async verifyRecoveryTokenHash(tokenHash){
+    const res = await fetch(`${SB_API_URL}/auth/v1/verify`, {
+      method: 'POST',
+      headers: { 'apikey': SB_ANON_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'recovery', token_hash: tokenHash })
+    });
+    const data = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(data.error_description || data.msg || data.error || 'This link has already been used or has expired.');
+    return data;
+  },
   // ── Update password using a session or recovery access token ──
   async updatePassword(accessToken, newPassword){
     const res = await fetch(`${SB_API_URL}/auth/v1/user`, {
