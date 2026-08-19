@@ -178,6 +178,7 @@ Every view has this pattern:
 | `david_usage_logs` | AI usage metering (tokens + ground-truth cost). **`source` col (#14):** `'chat'` = David chat, `'assessment'` = grading. Chat readers filter `source='chat'`. | `facility_id` → `facilities`, `user_id` → `auth.users` |
 | `sbd_facility_trends` | Analytics trend data | `facility_id` → `facilities` |
 | `sbd_report_audit_log` | Report download audit trail | — |
+| `sbd_account_audit` | Account-deletion ledger: who deleted whom (written BEFORE the delete by `sbd-sync-user-claims`; the delete aborts if this insert fails). Admin-read-only, append-only to clients. | — |
 | `sbd_onboarding_state` | Tour/walkthrough completion state | — |
 | `foundations_assignments` / `foundations_progress` | Foundations curriculum: one assignment + one 3-gate progress row per staff+module. RLS via `sbd_fi_leader_scope`. See §16A. **Also stores the T92 Scripts module assignment as `module_id='scripts'`** (no progress row) — see §16B. | `staff_id` → `staff`, `facility_id` → `facilities` |
 | `instrument_assignments` / `instrument_progress` | Instruments curriculum (mirror of Foundations, same 3-gate engine). RLS via `sbd_fi_leader_scope`. See §16A. | `staff_id` → `staff`, `facility_id` → `facilities` |

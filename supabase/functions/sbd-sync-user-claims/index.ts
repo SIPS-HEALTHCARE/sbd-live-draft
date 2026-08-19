@@ -60,8 +60,15 @@ serve(async (req) => {
 
         // ── DELETE USER ACTION ──
         if (data.action === 'delete' && data.userId) {
+            // Permanent, unrecoverable removal — master admin ONLY. The broad role
+            // gate above is for create/update; everyone else deactivates instead
+            // (sbd-set-account-active), which locks the login and keeps all records.
+            if (callerRole !== 'master_admin') {
+                throw new Error('Unauthorized: only a Master Admin can permanently delete an account. Use Deactivate Login instead — it locks sign-in, keeps every record, and is reversible.');
+            }
+
             // data.userId = sbd_portal_users.id (the PK)
-            
+
             // Look up the full profile to get the auth_uid
             const { data: targetProfile, error: profileErr } = await supabaseAdmin
                 .from('sbd_portal_users')
@@ -99,7 +106,48 @@ serve(async (req) => {
             const authUidToDelete = profile.auth_uid;
             const portalIdToDelete = profile.id;
 
-            console.log(`Deleting user: ${profile.name} (portal_id=${portalIdToDelete}, auth_uid=${authUidToDelete})`);
+            // Refuse a delete that would strand the person's professional record.
+            // These tables carry staff_id (= the auth uid) with NO foreign key to
+            // staff, so a delete orphans the rows silently. Fail closed: a count
+            // error also aborts. Extend this list as more staff_id tables are
+            // agreed to block deletion.
+            if (authUidToDelete) {
+                const DEPENDENT_TABLES: Record<string, string> = {
+                    placement_reviews: 'placement review(s)',
+                    sbd_assessment_queue: 'assessment record(s)',
+                };
+                const stranded: string[] = [];
+                for (const [table, label] of Object.entries(DEPENDENT_TABLES)) {
+                    const { count, error: cntErr } = await supabaseAdmin
+                        .from(table)
+                        .select('*', { count: 'exact', head: true })
+                        .eq('staff_id', authUidToDelete);
+                    if (cntErr) throw new Error(`Delete aborted: could not verify ${table} records (${cntErr.message})`);
+                    if (count) stranded.push(`${count} ${label}`);
+                }
+                if (stranded.length) {
+                    throw new Error(`Cannot permanently delete ${profile.name}: they have ${stranded.join(' and ')} on file that would be orphaned. Deactivate the login instead (keeps every record), or resolve those records first.`);
+                }
+            }
+
+            // Record WHO is deleting WHOM before anything is removed. If the audit
+            // row cannot be written, the delete does not happen.
+            const { error: auditErr } = await supabaseAdmin.from('sbd_account_audit').insert({
+                action: 'user_deleted',
+                actor_auth_uid: currentUser.id,
+                actor_email: currentUser.email || null,
+                actor_role: callerRole,
+                target_auth_uid: authUidToDelete,
+                target_portal_id: String(portalIdToDelete),
+                target_email: profile.email || null,
+                target_name: profile.name || null,
+                target_role: profile.role || null
+            });
+            if (auditErr) {
+                throw new Error('Delete aborted: could not write the audit record (' + auditErr.message + ')');
+            }
+
+            console.log(`Deleting user: ${profile.name} (portal_id=${portalIdToDelete}, auth_uid=${authUidToDelete}) by ${currentUser.email || currentUser.id}`);
 
             // 1. Delete from staff table (cleanup linked staff record)
             const { error: staffDelErr } = await supabaseAdmin.from('staff').delete().eq('id', authUidToDelete);
