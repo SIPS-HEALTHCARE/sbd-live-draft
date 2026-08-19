@@ -3033,6 +3033,19 @@ already named above: **an ask next to an urgent one still needs its own row.**
   21:30 UTC (see T114), so the Nemours roster now stands at 40 and his hotmail account is the
   only one. Nothing was stranded by it.
 
+  **Deployed the same night, on the approved go, every step verified.** PR #208 merged clean
+  (ff-only, `2bd24e7`). Both migrations applied through the migration tool so they are RECORDED in
+  `supabase_migrations.schema_migrations`, unlike the two out-of-band ones the drift entry tracks.
+  After-state read back: the 118-email trigger GONE, only `sbd_registrations_clear_password` left
+  on registrations, all three dead functions GONE, `sbd_password_resets` keeps its 117 rows, the
+  alert function exists and `sbd-stranded-registration-alert` is on cron at :30. Functions:
+  `sbd-approve-registration` v43 to **v44**, `sbd-send-emails` v22 to **v23**, both from the repo.
+  First manual run of the alert queued **12 emails, which is 4 stranded registrations times 3
+  master admins**, not the 1 predicted in the PR: Cortney Jumper plus three more incident-era
+  strays inside the 7-day window (Milena's and me0066's nemours rows from the v41 rollbacks, and
+  Blake's nemours row left approved when his account was deleted). All four are genuinely
+  stranded, so the alert's first sweep is the feature working, and each row alerts once ever.
+
   **141, 142 and 143 are built, 2026-08-19 night, on `work/board-141-143-approval-hardening`,
   pending the go to apply.** 141: the approve function now tracks every side effect (portal row,
   staff row, registration flip, queued email id) and its catch walks them back in reverse order,
