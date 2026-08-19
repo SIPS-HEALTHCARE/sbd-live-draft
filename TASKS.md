@@ -2825,6 +2825,13 @@ already named above: **an ask next to an urgent one still needs its own row.**
   the rule decides it cleanly: the 14 August sitting is complete, 33 of 39 on knowledge, and it
   supersedes the 12 August one that was abandoned and recovered.
 
+  **The second word came on 2026-08-18 night, for one pair.** D-025 is answered on the client's
+  board: *"This is the account we are keeping: Nelly Kyeremaa 72.7%"*, read and acknowledged the
+  same night. That is the explicit go for the Nelly pair only, keep the 14 August account
+  (`e3573447`) and retire the 12 August one (`42cd738d`), carrying every record over. The other
+  three pairs are empty shells on one side and still get one line to him before retiring, to stay
+  inside the same rule. Execution is scheduled behind the 2026-08-19 board items, not run yet.
+
   **The would-be fifth pair resolved itself on 2026-08-18 night, and not by us.** Blake Hansteen
   briefly had two accounts (nemours, created 03:08, and hotmail, 03:22, where his Green work
   lives). Between 17:55 and 21:30 UTC his nemours account was deleted entirely, auth user, portal
