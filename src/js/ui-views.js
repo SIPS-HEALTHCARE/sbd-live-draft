@@ -18505,17 +18505,41 @@ function confirmRemoveUser(uid){
     return;
   }
   const roleLabel={master_admin:'Master Admin',staff_admin:'Assessor',system_admin:'System Admin',hospital:'Hospital Manager',facility_admin:'Facility Admin',staff_member:'Staff Member'}[u.role]||u.role;
+  // Deactivate-first: locking the login keeps every record and is reversible.
+  // Permanent deletion is a separate, master-admin-only second step — the server
+  // (sbd-sync-user-claims) also refuses non-master callers and anyone who still
+  // has placement reviews / assessment records on file.
+  const isMaster=ST.user && ST.user.role==='master_admin';
   openModal('Remove User',`
+    <div class="modal-body">
+      <div style="text-align:center;padding:8px 0 16px">
+        <div style="width:48px;height:48px;border-radius:50%;background:rgba(245,158,11,.12);border:2px solid rgba(245,158,11,.4);display:flex;align-items:center;justify-content:center;margin:0 auto 14px">
+          <svg width="20" height="20" viewBox="0 0 18 18" fill="none"><path d="M6 6l6 6M12 6l-6 6" stroke="#f59e0b" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </div>
+        <div style="font-size:15px;font-weight:700;margin-bottom:6px">Remove ${u.name}?</div>
+        <div style="font-size:12.5px;color:var(--txt2);line-height:1.6">Recommended: <strong style="color:var(--txt)">deactivate the login</strong> for the <strong>${roleLabel}</strong> account <strong>${u.email}</strong>. They can no longer sign in, every record they own stays intact, and it can be undone at any time.<br><br>${isMaster?'Permanent deletion erases the account entirely and is refused while they still have placement reviews or assessments on file.':'Permanent deletion is restricted to Master Admins.'}</div>
+      </div>
+    </div>
+    <div class="modal-ft"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button>${isMaster?`<button class="btn btn-err" onclick="confirmHardDeleteUser('${uid}')">Delete Permanently…</button>`:''}${u.active===false?'':`<button class="btn" style="background:#f59e0b;color:#0b0f17" onclick="confirmSetAccountActive('${uid}',false)">Deactivate Login</button>`}</div>`,'modal-sm');
+}
+
+// Second confirmation for the permanent path (master admin only — the edge
+// function enforces this server-side too).
+function confirmHardDeleteUser(uid){
+  const u=DB.users.find(x=>x.id===uid);
+  if(!u)return;
+  const roleLabel={master_admin:'Master Admin',staff_admin:'Assessor',system_admin:'System Admin',hospital:'Hospital Manager',facility_admin:'Facility Admin',staff_member:'Staff Member'}[u.role]||u.role;
+  openModal('Permanently Delete User',`
     <div class="modal-body">
       <div style="text-align:center;padding:8px 0 16px">
         <div style="width:48px;height:48px;border-radius:50%;background:var(--err-bg);border:2px solid var(--err-bd);display:flex;align-items:center;justify-content:center;margin:0 auto 14px">
           <svg width="20" height="20" viewBox="0 0 18 18" fill="none"><path d="M9 6v5M9 13v.5" stroke="var(--err)" stroke-width="1.8" stroke-linecap="round"/><path d="M7.5 2.5L2 14h14L10.5 2.5h-3z" stroke="var(--err)" stroke-width="1.5" stroke-linejoin="round"/></svg>
         </div>
-        <div style="font-size:15px;font-weight:700;margin-bottom:6px">Remove ${u.name}?</div>
-        <div style="font-size:12.5px;color:var(--txt2);line-height:1.6">This will permanently remove the <strong>${roleLabel}</strong> account for <strong>${u.email}</strong>. This action cannot be undone.</div>
+        <div style="font-size:15px;font-weight:700;margin-bottom:6px">Permanently delete ${u.name}?</div>
+        <div style="font-size:12.5px;color:var(--txt2);line-height:1.6">This will permanently remove the <strong>${roleLabel}</strong> account for <strong>${u.email}</strong>, including their login and staff record. This action cannot be undone, and it is recorded in the audit log under your name.</div>
       </div>
     </div>
-    <div class="modal-ft"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-err" onclick="executeRemoveUser('${uid}')">${ICO.x} Remove Account</button></div>`,'modal-sm');
+    <div class="modal-ft"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-err" onclick="executeRemoveUser('${uid}')">${ICO.x} Delete Permanently</button></div>`,'modal-sm');
 }
 
 async function executeRemoveUser(uid){
