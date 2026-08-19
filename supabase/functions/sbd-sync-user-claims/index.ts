@@ -114,7 +114,7 @@ serve(async (req) => {
             if (authUidToDelete) {
                 const DEPENDENT_TABLES: Record<string, string> = {
                     placement_reviews: 'placement review(s)',
-                    sbd_assessment_queue: 'assessment record(s)',
+                    sbd_assessment_sessions: 'assessment sitting(s)',
                 };
                 const stranded: string[] = [];
                 for (const [table, label] of Object.entries(DEPENDENT_TABLES)) {
@@ -149,20 +149,34 @@ serve(async (req) => {
 
             console.log(`Deleting user: ${profile.name} (portal_id=${portalIdToDelete}, auth_uid=${authUidToDelete}) by ${currentUser.email || currentUser.id}`);
 
-            // 1. Delete from staff table (cleanup linked staff record)
-            const { error: staffDelErr } = await supabaseAdmin.from('staff').delete().eq('id', authUidToDelete);
-            if (staffDelErr) console.error("Staff cleanup error:", staffDelErr);
-            else console.log("Staff record deleted for:", authUidToDelete);
+            // Each step now FAILS LOUDLY instead of console.error-and-carry-on:
+            // a failure aborts the remaining steps and returns the error, so a
+            // partial delete can no longer masquerade as success. The portal row
+            // goes LAST because the delete lookup above keys off it — that way a
+            // failed delete is always retryable (already-removed pieces no-op:
+            // a staff DELETE matching zero rows isn't an error, and a missing
+            // auth user is treated as already done).
 
-            // 2. Delete from sbd_portal_users
+            // 1. Delete from staff table (cleanup linked staff record)
+            if (authUidToDelete) {
+                const { error: staffDelErr } = await supabaseAdmin.from('staff').delete().eq('id', authUidToDelete);
+                if (staffDelErr) throw new Error('Delete aborted: staff record removal failed (' + staffDelErr.message + '). Nothing else was removed — retry the delete.');
+                console.log("Staff record deleted for:", authUidToDelete);
+            }
+
+            // 2. Delete from Supabase Auth (using the correct auth_uid)
+            if (authUidToDelete) {
+                const { error: authDelErr } = await supabaseAdmin.auth.admin.deleteUser(authUidToDelete);
+                if (authDelErr && authDelErr.status !== 404) {
+                    throw new Error('Delete incomplete: the login (auth user) could not be removed (' + authDelErr.message + '). Retry the delete.');
+                }
+                console.log("Auth user deleted:", authUidToDelete);
+            }
+
+            // 3. Delete from sbd_portal_users (last — the retry lookup needs it)
             const { error: portalDelErr } = await supabaseAdmin.from('sbd_portal_users').delete().eq('id', portalIdToDelete);
-            if (portalDelErr) console.error("Portal profile delete error:", portalDelErr);
-            else console.log("Portal profile deleted:", portalIdToDelete);
-            
-            // 3. Delete from Supabase Auth (using the correct auth_uid)
-            const { error: authDelErr } = await supabaseAdmin.auth.admin.deleteUser(authUidToDelete);
-            if (authDelErr) console.error("Auth user delete error:", authDelErr);
-            else console.log("Auth user deleted:", authUidToDelete);
+            if (portalDelErr) throw new Error('Delete incomplete: the login is gone but the portal profile removal failed (' + portalDelErr.message + '). Retry the delete.');
+            console.log("Portal profile deleted:", portalIdToDelete);
 
             return new Response(JSON.stringify({ 
                 success: true,
