@@ -785,6 +785,7 @@ function mapPlacementReviewFromBackend(row){
     reviewedBy:   row.reviewed_by,
     reviewedAt:   row.reviewed_at,
     assessorNote: row.assessor_note,
+    recovery:     row.recovery || null,
     createdAt:    row.created_at
   };
 }

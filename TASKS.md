@@ -2756,6 +2756,36 @@ already named above: **an ask next to an urgent one still needs its own row.**
   paragraph stays worth fixing the next time someone is in that code. Not ticked only because
   those two threads are still open elsewhere.
 
+  **2026-08-19, later the same day: the survivors are built, on `work/t112-recovery-scoring`,
+  pending user apply.** The recovery job keeps scoring — that is the ruling — but it
+  now scores with the client's engine rather than a drifted third copy. Migration `20260819130000`
+  replaces `sbd_recover_placements` with an exact port of `sbdSuggestBelt`: full-precision
+  comparisons per spec §7.6, the Conditional split on the sim floor, Knowledge Foundation instead
+  of the old K-based White Conditional, No Belt as the real floor, and the 2026-07-28
+  dangerous-answer ruling (a dangerous answer defers Knowledge Foundation, it no longer blocks a
+  belt — the ticket's "client + force-submit give No Belt" premise was one ruling out of date).
+  `tentative_belt` now stores a belt word or NULL, never a White placeholder. The function also
+  records *why* each row was built — `timer`, `abandoned`, or `unknown`, measured from
+  `progress.lastSavedAt` against `expires_at` on the same 3-minute line used above — into a new
+  `placement_reviews.recovery` column that the review card shows the assessor, and a blank is now
+  stored identically for both question types: answer `'No answer'`, `correct: false`, and feedback
+  that says the sitting was left unfinished when the person left rather than claiming time
+  expired. Verified in a throwaway local postgres with a stubbed grader, never against
+  production: three synthetic sittings (abandoned with a dangerous answer → No Belt; timed-out
+  high scorer → Green Belt Conditional; no save marker → Knowledge Foundation, reason unknown)
+  assert clean, and a fourth shaped like Nikkia's stored row recomputes White → No Belt with the
+  markers fixed and every answered response byte-identical.
+  `scripts/t112-recheck-recovered-reviews.sql` re-checks every row in
+  `sbd_placement_recovery_log` read-only, then repairs the still-pending ones inside a
+  transaction that commits nothing by itself; it never touches an answered response and never
+  touches a review an assessor has confirmed. Apply order: migration first (the function writes
+  the new column), then the recheck script, frontend whenever (`ui-views.js v=219`,
+  `api-supabase.js v=64`; the banner is inert until rows carry `recovery`). Two caveats carried
+  deliberately: SQL cannot read `BELT_TEST_CONFIG`, so the thresholds are a marked must-match
+  copy authorized by this ticket's own wording; and `sbd-force-submit-placement` still carries
+  the pre-July-28 engine (dangerous → No Belt, White Belt Conditional), which is now the last
+  drifted copy standing and is not touched here.
+
   *Goal:* An incomplete sitting waits for a person to decide, and is never scored by a timer or described as something it is not.
   *Done when:* The recovery job no longer scores a sitting on its own; an unfinished sitting surfaces for a decision with resume or finalize as the two options; it stops claiming time expired when it did not and stops flooring to White; the sittings it has already produced are listed for SIPS; and a skip is recorded the same way for both question types, with a verdict rather than a null.
 
