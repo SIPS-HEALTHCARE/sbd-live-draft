@@ -3033,6 +3033,21 @@ already named above: **an ask next to an urgent one still needs its own row.**
   21:30 UTC (see T114), so the Nemours roster now stands at 40 and his hotmail account is the
   only one. Nothing was stranded by it.
 
+  **141, 142 and 143 are built, 2026-08-19 night, on `work/board-141-143-approval-hardening`,
+  pending the go to apply.** 141: the approve function now tracks every side effect (portal row,
+  staff row, registration flip, queued email id) and its catch walks them back in reverse order,
+  and the previously unchecked registration status update throws on failure, so the call ends
+  fully approved or untouched, never the 18 August in-between. 142: migration `20260819234000`
+  puts `sbd_check_stranded_registrations()` on pg_cron hourly at :30, one admin_alert email per
+  approved-with-no-account registration to the active master admins, deduped per registration,
+  10-minute grace, 7-day window; its first real catch will be Cortney Jumper's stranded nemours
+  row from the 18th. 143: migration `20260819234500` drops the 118-email trigger, the duplicate
+  null-password trigger and the never-bound incident-night function, keeps the table and its rows
+  as history. Chosen not to touch anything the delete-control branch touches, zero shared files
+  with it. `node scripts/verify-approval-hardening.js`, 35 assertions, and the 30-assertion
+  scanner harness still green over the edited function. Deploy order when the go comes: the two
+  migrations, then `sbd-approve-registration` and `sbd-send-emails` from the repo.
+
   **Committed on the client's board for 2026-08-19, answered there by Shawn the same night:**
   141 the atomic approval rollback, 142 an alert when a registration sits approved with no auth
   user behind it, 143 retiring the dead and duplicate approval code (the unconsumed

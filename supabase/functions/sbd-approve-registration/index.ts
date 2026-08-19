@@ -11,12 +11,22 @@ serve(async (req) => {
         return new Response('ok', { headers: corsHeaders });
     }
 
-    // Rollback tracking (function scope so the catch can undo a partial provision):
-    // if we create a facility and/or an auth user and a later step fails, we remove
-    // them so a failed approval never leaves an orphaned account or facility (AUTH-F1).
+    // Rollback tracking (function scope so the catch can undo a partial provision).
+    // Board item 141: the rollback is atomic over EVERYTHING this call creates or
+    // flips, not just the auth user and facility. The 18 August incident was a throw
+    // after the user-visible steps had run: the catch deleted the auth user but left
+    // the registration approved and the email queued, so a person held a working
+    // welcome email with no account behind it. Every step below records what it did
+    // so the catch can walk it back in reverse order, and the function can only end
+    // in one of two states: fully approved, or exactly as it was before the call.
     let supabaseAdmin: any = null;
     let createdAuthUserId: string | null = null;
     let createdFacilityId: string | null = null;
+    let createdPortalRow = false;          // upsert INSERTED (only possible when authCreated)
+    let createdStaffRow = false;           // upsert INSERTED (only possible when authCreated)
+    let registrationApproved = false;      // status flipped pending -> approved
+    let queuedEmailId: string | number | null = null;
+    let registrationIdForRollback: string | null = null;
 
     try {
         supabaseAdmin = createClient(
@@ -65,6 +75,7 @@ serve(async (req) => {
         if (regData.status !== 'pending') {
             throw new Error(`Registration is already ${regData.status}`);
         }
+        registrationIdForRollback = registration_id;
 
         // --- FACILITY HANDLING ---
         let facilityId = facility_name;
@@ -186,6 +197,10 @@ serve(async (req) => {
             console.error("Profile Upsert Error:", profileUpsertError);
             throw new Error('Failed to create user profile: ' + profileUpsertError.message);
         }
+        // A brand-new auth uid cannot collide with an existing portal row, so this
+        // upsert inserted; on the existing-user path it may have UPDATED a real row,
+        // which a rollback must never delete.
+        if (authCreated) createdPortalRow = true;
 
         // 2. Assign Staff record (for legacy compatibility and staff views)
         const nameParts = (regData.name || '').trim().split(' ');
@@ -227,20 +242,29 @@ serve(async (req) => {
             // (Throwing here would hit the catch and delete the just-created auth user +
             // facility — the opposite of the intended narrow-to-orphan-path rollback.)
             console.error("Staff Insert Error:", staffError);
+        } else if (authCreated) {
+            createdStaffRow = true;
         }
 
-        // 3. Update registration status
-        await supabaseAdmin.from('registrations').update({
+        // 3. Update registration status. This used to run unchecked, so a failed update
+        // returned success with the registration still pending — an admin re-approving it
+        // would then hit the existing-user path and double-provision. Now it throws, and
+        // the catch walks back everything created above, leaving the row cleanly pending.
+        const { error: regUpdateError } = await supabaseAdmin.from('registrations').update({
             status: 'approved',
             reviewed_at: new Date().toISOString(),
             reviewed_by: adminId
         }).eq('id', registration_id);
+        if (regUpdateError) {
+            throw new Error('Failed to mark registration approved: ' + regUpdateError.message);
+        }
+        registrationApproved = true;
 
         let emailError = null;
 
         // 4. Queue Welcome Email via sbd_email_queue (processed by sbd-send-emails with retry logic)
         try {
-            const { error: queueError } = await supabaseAdmin.from('sbd_email_queue').insert({
+            const { data: queuedRow, error: queueError } = await supabaseAdmin.from('sbd_email_queue').insert({
                 recipient_email: regData.email,
                 template: 'registration_approved',
                 subject: authCreated
@@ -258,12 +282,13 @@ serve(async (req) => {
                 status: 'pending',
                 attempts: 0,
                 created_at: new Date().toISOString()
-            });
+            }).select('id').single();
 
             if (queueError) {
                 console.error("Email queue insert failed:", queueError);
                 emailError = queueError.message;
             } else {
+                queuedEmailId = queuedRow?.id ?? null;
                 console.log("Approval email queued for:", regData.email);
             }
         } catch (e: any) {
@@ -285,8 +310,33 @@ serve(async (req) => {
 
     } catch (err: any) {
         console.error('Approve Error:', err.message);
-        // Roll back anything we created on this call so a partial failure cannot leave
-        // an orphaned auth user or facility behind (closes the AUTH-F1 orphan path).
+        // Board item 141: walk back everything this call did, in reverse order of
+        // creation, so a partial failure can never leave the 18 August shape behind
+        // (an approved registration and a queued welcome email with no account).
+        // Each step is try/caught on its own: one failed cleanup must not stop the rest.
+        if (supabaseAdmin && queuedEmailId !== null) {
+            try {
+                await supabaseAdmin.from('sbd_email_queue').delete()
+                    .eq('id', queuedEmailId).eq('status', 'pending');
+                console.log('Rolled back queued welcome email', queuedEmailId);
+            } catch (e: any) { console.error('Rollback (queued email) failed:', e?.message); }
+        }
+        if (supabaseAdmin && registrationApproved && registrationIdForRollback) {
+            try {
+                await supabaseAdmin.from('registrations').update({
+                    status: 'pending', reviewed_at: null, reviewed_by: null
+                }).eq('id', registrationIdForRollback);
+                console.log('Rolled back registration to pending', registrationIdForRollback);
+            } catch (e: any) { console.error('Rollback (registration) failed:', e?.message); }
+        }
+        if (supabaseAdmin && createdStaffRow && createdAuthUserId) {
+            try { await supabaseAdmin.from('staff').delete().eq('id', createdAuthUserId); console.log('Rolled back created staff row', createdAuthUserId); }
+            catch (e: any) { console.error('Rollback (staff) failed:', e?.message); }
+        }
+        if (supabaseAdmin && createdPortalRow && createdAuthUserId) {
+            try { await supabaseAdmin.from('sbd_portal_users').delete().eq('auth_uid', createdAuthUserId); console.log('Rolled back created portal row', createdAuthUserId); }
+            catch (e: any) { console.error('Rollback (portal) failed:', e?.message); }
+        }
         if (supabaseAdmin && createdAuthUserId) {
             try { await supabaseAdmin.auth.admin.deleteUser(createdAuthUserId); console.log('Rolled back orphaned auth user', createdAuthUserId); }
             catch (e: any) { console.error('Rollback (auth user) failed:', e?.message); }
