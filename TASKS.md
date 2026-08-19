@@ -2745,6 +2745,17 @@ already named above: **an ask next to an urgent one still needs its own row.**
   scored by a job on a timer. And an assessor gets a choice at that point: let the candidate resume
   where they left off, or finalize and score it as it stands.
 
+    **The client ruled on 2026-08-19, and it takes most of this off.** From his morning brief:
+  *"A candidate who stops and a candidate who runs out of time are the same result by design,
+  because performing under pressure is part of what the assessment measures. So the recovery job
+  scoring an incomplete sitting is correct behaviour, not a defect. That work is off."* So the
+  finalize step priced at 1 to 1.5 days is cancelled, not postponed, and the recovery job stays
+  as it is on purpose. What survives of this entry: the mislabel line and the White floor question
+  resolve through board 139 (his verified number replaces the 28.3, on his number only) and board
+  144 (No Belt made first-class in every view), and the skip-storage inconsistency in the last
+  paragraph stays worth fixing the next time someone is in that code. Not ticked only because
+  those two threads are still open elsewhere.
+
   *Goal:* An incomplete sitting waits for a person to decide, and is never scored by a timer or described as something it is not.
   *Done when:* The recovery job no longer scores a sitting on its own; an unfinished sitting surfaces for a decision with resume or finalize as the two options; it stops claiming time expired when it did not and stops flooring to White; the sittings it has already produced are listed for SIPS; and a skip is recorded the same way for both question types, with a verdict rather than a null.
 
@@ -2831,6 +2842,16 @@ already named above: **an ask next to an urgent one still needs its own row.**
   (`e3573447`) and retire the 12 August one (`42cd738d`), carrying every record over. The other
   three pairs are empty shells on one side and still get one line to him before retiring, to stay
   inside the same rule. Execution is scheduled behind the 2026-08-19 board items, not run yet.
+
+  **A new pair formed on 2026-08-19 morning, and it is Joe Truax again.** He registered a third
+  time on `joetruax56@gmail.com` (name typed "joe trauax"), was approved at 06:03 UTC and signed
+  in at 06:11, so that account is the live one. Yesterday's repaired `joetruax@gmail.com` account
+  was never opened and its token is unspent. Under the client's own rule the later, used account
+  supersedes; retiring the unused one (auth, portal, staff, and putting its registration out of
+  the approved-with-account state) is staged and waits for a word, his "leave Joseph alone" from
+  the 18th is read as covering exactly this. The name typo on the live account (trauax) goes to
+  him in the same question. On Blake, the client answered in the same brief: he will supply the
+  name for the record.
 
   **The would-be fifth pair resolved itself on 2026-08-18 night, and not by us.** Blake Hansteen
   briefly had two accounts (nemours, created 03:08, and hotmail, 03:22, where his Green work
@@ -2964,7 +2985,20 @@ already named above: **an ask next to an urgent one still needs its own row.**
   with the emailError evidence line. Four deliverables, one day; 139 gets scoped with Sriman first
   because assessment recording sits next to the recovery-job work.
 
-  The box is ticked when joe truax signs in.
+  **The loop closed on real people on 2026-08-19 morning.** ITionna Bryant, approved 03:32 UTC,
+  signed in 03:36, four minutes from approval to inside. And Joe Truax himself: he registered a
+  third time (`joetruax56@gmail.com`, name typed "joe trauax"), was approved 06:03, and signed in
+  at **06:11**. Both went through the new link end to end: real email, real click, password set,
+  in. The scanner-facing case (a nemours.org address) has not been exercised since the fix and
+  remains the one acid test outstanding. Side effect: yesterday's `joetruax@gmail.com` account
+  (approved 17:39, never used, token still unspent) is now the unused half of a fresh pair, noted
+  in T114. The box's condition is met; the tick waits on Shawn's word.
+
+  **The client's 2026-08-19 brief accepted the fix** ("closed and the fix is the right one...
+  found by measurement rather than guesswork"), he fixed his own board button (a reserved-word
+  bug in `mark_tracker_synced`, not null handling as first guessed here), and he posted the 17th
+  and 18th EODs into his board himself, asking that future ones land the same day through his
+  board's own tool.
 
   **The client's standing rule, set in the same handover and worth quoting because it retires how
   item 125 was closed here.** *"The only thing that closes a registration change is: approve a real
@@ -3016,6 +3050,44 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Goal:* An admin can put an account on the person's correct email without losing anything.
   *Done when:* An account's sign-in email is changed end to end on production, the person signs in
   on the new address, the old address no longer works, and no scanner can spend the change link.
+
+- [ ] **T117** No Belt appears everywhere a belt appears, red, sorted before White · est 2d · **High**
+  The client's board item 144, proposed for **27 August**, full write-up on his board's More
+  details tab. The second half of work already finished: since 13 August the WRITE path is right,
+  a No Belt decision lands on the person's record with the decider in history, but every
+  aggregate view still omits them, so *"the group most in need of attention is the one the
+  dashboard does not draw."* The ask: No Belt becomes first-class in the distribution graph, the
+  bar, the list beneath, and every belt filter and selector in the admin portal, selectable like
+  White, sorted before White, treated in red with the hazard-bar slash styling since no red belt
+  exists. Real data exists to test against, no fixtures needed.
+
+  Two cautions written into the item itself. First, his echo of this project's own 13 August
+  lesson: keep `system_suggestion` and `final_belt` apart everywhere here, the same mix-up inside
+  a distribution graph is quieter and harder to spot than it was on a sheet. Second, his own
+  finding: `sbd_network_stats` (CASE over six belts, no ELSE), `sbd_calc_points` (hardcodes six)
+  and `sbd_record_assessment_atomic` (hard-rejects outside six) all query `sbd_staff`, **which
+  does not exist on the live database**, so all three are dead code and something else feeds the
+  dashboard. Find what does before touching any of them. Pairs with his board item 112 (manual
+  add only offers White, 21 August), same selector; he says answer the date back rather than
+  accept it if the belt list turns out to be rendered in three places.
+  *Goal:* A person holding No Belt is visible, filterable and selectable in every view a belt appears in, in red, before White.
+  *Done when:* The distribution graph, bars, lists, filters and selectors all carry No Belt against the real backfilled records, suggestion and final belt never cross, and the client confirms on his board.
+
+- [ ] **T118** Spike: why Nikkia's second sitting never reached the record · est 0.5d · **High**
+  The client's board item 145, proposed for **21 August, tight on purpose because the logs that
+  can answer it age out**. Her second sitting happened, was watched, and is on video, yet nothing
+  reached the record, which is why answers had to be scored off a recording by hand. **Read-only
+  spike**: her records are not touched, the correction itself stays on his board item 139 (and
+  139's number comes from him alone, not from any sheet on our side). His write-up carries three
+  hypotheses with queries to separate them, stated as hypotheses: the result row was never
+  written; it was written into a state nothing renders; or it was written and the sitting never
+  closed out. The third is silent by construction, the submit trigger only fires where the test
+  row is still `active`, so a mismatched update matches nothing, raises nothing, and the
+  transaction still succeeds. First check whether this is only her: if results are piling in
+  `PENDING_REVIEW`, this was never about one person. His closing reason: she was caught because a
+  human was in the room with a camera, the next one will not be.
+  *Goal:* The write that should have landed is named, with evidence, and whether anyone else is affected is known.
+  *Done when:* One of the three hypotheses is confirmed from logs or data, the blast radius is counted, and the finding is on his board with the fix proposed as its own item.
 
 ### Blocked, not on the critical path
 
