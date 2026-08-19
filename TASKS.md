@@ -2948,6 +2948,15 @@ already named above: **an ask next to an urgent one still needs its own row.**
   21:30 UTC (see T114), so the Nemours roster now stands at 40 and his hotmail account is the
   only one. Nothing was stranded by it.
 
+  **Committed on the client's board for 2026-08-19, answered there by Shawn the same night:**
+  141 the atomic approval rollback, 142 an alert when a registration sits approved with no auth
+  user behind it, 143 retiring the dead and duplicate approval code (the unconsumed
+  `sbd_password_resets` path that produced the 118-email blast, the unbound
+  `sbd_on_registration_approved()`, and one of the two password-nulling triggers), and 139 the
+  Nikkia Warfield recording, countered from the 18th to the 19th. 140 is marked done on the board
+  with the emailError evidence line. Four deliverables, one day; 139 gets scoped with Sriman first
+  because assessment recording sits next to the recovery-job work.
+
   The box is ticked when joe truax signs in.
 
   **The client's standing rule, set in the same handover and worth quoting because it retires how
