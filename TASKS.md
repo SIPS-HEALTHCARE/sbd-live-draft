@@ -2691,6 +2691,12 @@ already named above: **an ask next to an urgent one still needs its own row.**
   migrations would not reproduce production.
   *Goal:* The migration record matches what production actually runs.
   *Done when:* Every applied change after `20260807120000` is represented in `schema_migrations`, and a fresh apply of the repository's migrations reproduces the live schema.
+  **Two more on 2026-08-19 night:** migrations `20260819130000` (recovery engine, new
+  `placement_reviews.recovery` column and the rewritten `sbd_recover_placements`) and
+  `20260819150000` (`sbd_account_audit`) are live on production, verified by reading the schema,
+  but neither appears in `supabase_migrations.schema_migrations`, so the drift this entry tracks
+  grew by two the same week it was written down.
+
 
 - [ ] **T112** An abandoned assessment is recovered as a scored result, and floored to White · est 1d · **High**
   Opened 2026-08-15 from the client's question about a candidate's missing answers. **Rewritten
@@ -2882,6 +2888,27 @@ already named above: **an ask next to an urgent one still needs its own row.**
   the 18th is read as covering exactly this. The name typo on the live account (trauax) goes to
   him in the same question. On Blake, the client answered in the same brief: he will supply the
   name for the record.
+
+  **Corrected 2026-08-19 late night, verified rather than absorbed.** The deletions were NOT
+  dashboard access. The portal has its own Delete User button (service-role, in
+  `sbd-sync-user-claims`), and the actor was Dr. Jake: his portal row id `9ac46522` is exactly the
+  session in our own activity log signing in 21:28 and logging out 21:47 on 2026-08-18, around the
+  21:30 Blake deletion, which matches the sign-in correlation Sriman's side reached independently.
+  Two more the same way: Cortney Jumper's nemours account (2026-08-18 17:35), which left her
+  `cortney.jumper@nemours.org` registration approved with **no auth user behind it**, the exact
+  stranded state board item 142's alert exists to catch, while her gmail account lives on, so she
+  is a pair in the registration sense. And Joe's old `joetruax@gmail.com` account was not deleted
+  but **deactivated** (banned) at 06:00:06 on 2026-08-19, three minutes before the same admin
+  approved Joe's new registration, so the "waits for a word" line below is overtaken: it is
+  already half-retired, only the registration row still says approved. The delete button itself
+  (no caller record, open to facility roles, strands sittings) is being fixed on the client's own
+  report: PR #207 merged with an audit ledger, master-admin gate and orphan guard, and a follow-up
+  commit on `work/delete-control` (22:32 UTC) corrects two gaps found in review, the guard checked
+  `sbd_assessment_queue` where the stranded count lives on `sbd_assessment_sessions`, and delete
+  steps that logged errors and carried on now abort. That work is assigned elsewhere and actively
+  moving; the missing piece as of 22:10 UTC is the edge function deploy, the live
+  `sbd-sync-user-claims` is still July's v28, read back to confirm, so the server-side gate is not
+  live yet and the new UI is the only gate until their branch merges and deploys.
 
   **The would-be fifth pair resolved itself on 2026-08-18 night, and not by us.** Blake Hansteen
   briefly had two accounts (nemours, created 03:08, and hotmail, 03:22, where his Green work
@@ -3116,6 +3143,23 @@ already named above: **an ask next to an urgent one still needs its own row.**
   transaction still succeeds. First check whether this is only her: if results are piling in
   `PENDING_REVIEW`, this was never about one person. His closing reason: she was caught because a
   human was in the room with a camera, the next one will not be.
+  **Answered early, 2026-08-19 night, by Sriman's side, and the checkable core verifies.** Her
+  second sitting is not a failed write: **her account has been switched off since 2026-08-14
+  21:47:27**, twenty six seconds after her last saved answer, with 53 minutes on her clock.
+  Verified here against auth: `banned_until 2126-08-15 21:47:27`, active false, still off today,
+  no sign-in since 20:38 that day. No session and no assessor PIN exist under her name after the
+  ban, so nothing could ever have been written for a second sitting. Their first broader read
+  (Nelly and Esposito also cut) was self-corrected the same night: both submitted normally before
+  their deactivations, so only Nikkia was cut mid-sitting. Who switched her off is unknowable from
+  here, master-admin action with those days' logs gone. Two live consequences: she cannot retake
+  anything until the account is switched back on, and the T112 cancellation ruling (stops equal
+  timeouts by design) does not cover someone switched off mid-sitting, which goes to the client
+  with her account question. Also from the same sweep, corrected once: no one is missing a result
+  among the 22 open sittings, but three sittings belong to deleted accounts and are silent by
+  construction, the recovery job skips them without error; the delete-control follow-up guards
+  that path going forward, and whether the job's 30-day cutoff and skip-if-any-result are
+  deliberate design is a question for the client.
+
   *Goal:* The write that should have landed is named, with evidence, and whether anyone else is affected is known.
   *Done when:* One of the three hypotheses is confirmed from logs or data, the blast radius is counted, and the finding is on his board with the fix proposed as its own item.
 
