@@ -4171,6 +4171,19 @@ function renderAPlacementReviews(){
         </div>
         <div id="pr-body-${pr.id}" style="display:none;padding:0 14px 14px">
           <div style="height:1px;background:rgba(255,255,255,.06);margin:0 0 14px"></div>
+          ${pr.recovery ? (()=>{
+            // Written only by sbd_recover_placements. Say honestly WHY the system built this
+            // review — the timer taking the sitting and the candidate walking away are the same
+            // result by the client's 2026-08-19 ruling, but they must never be described as
+            // each other (T112).
+            const rc = pr.recovery;
+            const mins = rc.minutes_left != null ? Math.round(Number(rc.minutes_left)) : null;
+            const saved = rc.last_saved_at ? new Date(rc.last_saved_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : null;
+            const why = rc.reason === 'timer' ? 'the candidate ran out of time'
+              : rc.reason === 'abandoned' ? `the candidate stopped${mins != null ? ` with ${mins} minutes still on the clock` : ''} and did not return`
+              : 'the sitting was never submitted';
+            return `<div style="margin-bottom:12px;padding:10px 12px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:8px;font-size:12px;line-height:1.5;color:#fbbf24"><b>Auto-recovered by the system</b> — ${why}.${saved ? ` Last save ${saved}.` : ''} Unanswered questions scored zero.</div>`;
+          })() : ''}
           <div style="font-size:11px;font-weight:700;color:#64748b;letter-spacing:.06em;margin-bottom:12px">ASSESSMENT RESPONSES</div>
           ${(pr.responses && pr.responses.length) ? pr.responses.map(renderResponse).join('') : `<div style="font-size:12px;color:#64748b;font-style:italic;padding:6px 0 12px">No question-level data captured for this review.</div>`}
           ${isPending ? `
