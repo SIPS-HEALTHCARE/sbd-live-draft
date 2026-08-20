@@ -3,7 +3,7 @@
 **Living document.** This is the single record of what has been built and what is left.
 It is not regenerated. It is edited in place.
 
-**Last updated:** 2026-08-13
+**Last updated:** 2026-08-20
 **Audit basis:** 2026-07-25, verified against the live project and the live code.
 **History basis:** 2026-07-31, the complete client conversation from 22 May to 31 July read end
 to end including every attachment. See `docs/DOMAIN_GLOSSARY.md` for the vocabulary this ledger
@@ -3202,6 +3202,46 @@ already named above: **an ask next to an urgent one still needs its own row.**
 
   *Goal:* The write that should have landed is named, with evidence, and whether anyone else is affected is known.
   *Done when:* One of the three hypotheses is confirmed from logs or data, the blast radius is counted, and the finding is on his board with the fix proposed as its own item.
+
+- [ ] **T119** Twelve deployed edge functions have no source in the repo · est 0.5d · **High**
+  Board #748, same family as T110 (#711) and T111 (#721). The deployed list carries twelve
+  functions absent from `supabase/functions/`: nobody can review or redeploy them, two report
+  a `/Users/iiggie/…` laptop path as entrypoint, and `sbd-matrix-seeder` — ordered deleted in
+  the 18 Jul security EOD — is still ACTIVE at v12.
+  **Analysed 2026-08-20, source-verified 2026-08-21. Decision doc at
+  `docs/decisions/2026-08-20-t119-retire-orphan-edge-functions.md`.**
+  Repo-side sweep (production frontend, both cron migrations, function-to-function calls, the
+  legacy monolith) found nothing calling any of the twelve. Then the deployed source of the ten
+  survivors was downloaded and read, which corrected the ticket: **`admin-analytics` is not
+  SBD's** — its header says it serves WHEALTHY dashboard metrics and it queries WHEALTHY tables
+  (`approved_members`, `page_events`), so it belonged to another property, not this cleanup.
+  The source also confirmed the ticket's headline claims: four run `verify_jwt=false`, two
+  carry `/Users/iiggie/…` laptop-path entrypoints. The actual delete/keep outcome is in the
+  comment below — it did not go exactly as analysed.
+
+  <!-- OUTCOME 2026-08-21, executed by the user against SBD prod (creds in .env.local,
+       gitignored; the agent's own MCP token still sees only the Tippy org). 57 deployed → 49.
+       DELETED (7): tmp-donell-pr, sbd-matrix-seeder, sbd-data, calculate-points,
+         david-grade-assessment, sbd-rag-search, sbd-observation-notify. Also admin-analytics
+         — NOTE that was the misfiled WHEALTHY function, not SBD's; if WHEALTHY's dashboard
+         breaks this is why. Recoverable: its deployed source was downloaded at
+         supabase/functions/admin-analytics/index.ts (uncommitted) and can be redeployed.
+       KEPT (4): sbd-auth, sbd-bulk-upload, sbd-ai-proxy, sync-user-claims — NOT deleted
+         because their dashboard invocation logs showed real traffic. Our repo grep found no
+         caller, so the traffic is external to this repo (the legacy SBD_GOD_SOG.html monolith
+         calls the un-prefixed sync-user-claims and friends, or an old cached client is still
+         live). Per the ticket's keep-rule ("anything the app or a cron still calls gets checked
+         into the repo") these four are now KEEP-pending: either check their source in to make
+         them reviewable, or find and migrate the remaining caller so they can be retired later.
+         Their downloaded source sits uncommitted at supabase/functions/<slug>/. Left to the
+         user — do not commit legacy verify_jwt=false / laptop-path source without a real call. -->
+
+  *Goal:* No SBD-side function is left deployed without source in the repo. (The literal "list
+  matches the repo folder" cannot hold — the project is shared with other SIPS properties whose
+  functions correctly have no source here.)
+  *Done when:* the four kept-because-they-get-traffic functions (`sbd-auth`, `sbd-bulk-upload`,
+  `sbd-ai-proxy`, `sync-user-claims`) are resolved — source checked in, or caller migrated and
+  the function retired — with the per-function decision recorded in the PR.
 
 ### Blocked, not on the critical path
 
