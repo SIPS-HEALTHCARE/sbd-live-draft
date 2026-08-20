@@ -180,8 +180,9 @@ Every view has this pattern:
 | `sbd_report_audit_log` | Report download audit trail | — |
 | `sbd_account_audit` | Account-deletion ledger: who deleted whom (written BEFORE the delete by `sbd-sync-user-claims`; the delete aborts if this insert fails). Admin-read-only, append-only to clients. | — |
 | `sbd_onboarding_state` | Tour/walkthrough completion state | — |
-| `foundations_assignments` / `foundations_progress` | Foundations curriculum: one assignment + one 3-gate progress row per staff+module. RLS via `sbd_fi_leader_scope`. See §16A. **Also stores the T92 Scripts module assignment as `module_id='scripts'`** (no progress row) — see §16B. | `staff_id` → `staff`, `facility_id` → `facilities` |
+| `foundations_assignments` / `foundations_progress` | Foundations curriculum: one assignment + one 3-gate progress row per staff+module. RLS via `sbd_fi_leader_scope`. See §16A. (T92 briefly stored the Scripts assignment here as `module_id='scripts'`; migration `20260820120000` moved those rows to `script_assignments` — see §16B.) | `staff_id` → `staff`, `facility_id` → `facilities` |
 | `instrument_assignments` / `instrument_progress` | Instruments curriculum (mirror of Foundations, same 3-gate engine). RLS via `sbd_fi_leader_scope`. See §16A. | `staff_id` → `staff`, `facility_id` → `facilities` |
+| `script_assignments` | T92a: Scripts module assignment — fourth assignment table, same shape/RLS rule set as the other three, no progress table (no gates). One row per staff (module_id always `'scripts'` today). See §16B. | `staff_id` → `staff`, `facility_id` → `facilities` |
 
 ### Row Level Security (RLS)
 Every table uses RLS. Access is controlled via JWT claims:
@@ -505,15 +506,17 @@ The communication scripts have **two surfaces over one copy of the content**.
   of "which curriculum sections are the scripts" (title matches `/script|approved
   language|forbidden language/i`); the Study & Practice Scripts tab calls it too, so there is
   one definition, not two.
-- **Storage:** `foundations_assignments` with `module_id='scripts'`. **No migration** — that
-  column is free text with no FK/CHECK, `UNIQUE(staff_id,module_id)` already exists, and its
-  RLS is already the needed rule set (leaders write, assessors blocked by #55, DELETE
-  master_admin only, reads own-or-leader). **No `foundations_progress` row is created** —
-  this module has no gates, which is why `assignModule()` is not reused.
-- **⚠️ The one coupling to remember:** `getFoundationsAssignments()` (foundations.js) filters
-  the `'scripts'` row out. Every Foundations consumer routes through that accessor, so counts
-  and the "N/10" convention are unaffected. Code that reads `DB.foundationsAssignments`
-  **directly** would count Scripts as an 11th module.
+- **Storage (T92a, migration `20260820120000`):** its own `script_assignments` table —
+  the fourth assignment table, same shape as foundations/instruments/preceptor, hydrated
+  into `DB.scriptAssignments` (auth-init.js). Same RLS rule set (leaders write via
+  `sbd_fi_can_manage_assignments`, assessors blocked, DELETE master_admin only, reads
+  own-or-leader). **No progress table** — this module has no gates. Per the client's
+  2026-08-13 brief: assigned deliberately, one person at a time, not bundled inside
+  another track — which retired T92's original `foundations_assignments`
+  `module_id='scripts'` piggyback (the migration moved those rows over).
+- **Guard left behind:** `getFoundationsAssignments()` (foundations.js) still filters
+  `module_id='scripts'` out, so a stale/pre-migration row can never turn the Foundations
+  "N/10" convention into N/11.
 - **Staff surface:** nav item `s-nav-scripts` + view `s-scripts`, hidden by default and
   revealed by `applyScriptsNavGate(staffId)` in `enterPortal` (safe there: `initAppData()`
   is awaited before `enterPortal`, and it is the only entry point). `renderSScripts()`
