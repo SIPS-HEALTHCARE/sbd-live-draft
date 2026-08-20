@@ -2620,6 +2620,16 @@ already named above: **an ask next to an urgent one still needs its own row.**
   migration FIRST, then frontend (v: api-supabase 65, foundations 20, scripts-module 3,
   auth-init 42), same window.** Verified: `node scripts/verify-scripts-module.js`, 41 assertions
   including the new storage-repoint section.
+  **Applied, merged and LIVE, confirmed against production 2026-08-20.** Merged to main as #209.
+  `script_assignments` exists on the live database with RLS on and 4 policies. The frontend is
+  live and was checked the way that can actually fail: the file production serves at
+  `/src/js/scripts-module.js` was read back and carries the T92a storage move, rather than
+  trusting the merge. `index.html` serves `scripts-module.js?v=3`. Both halves of the deploy order
+  held, table before frontend, so nothing was ever pointed at a table that did not exist.
+  Row check at the same moment: `script_assignments` 0 rows and `foundations_assignments` 0 rows
+  carrying `module_id='scripts'`, which is consistent, there were no script assignments yet to
+  move. **This closes the client's board item 124 (Scripts standalone module live, 21 August),
+  a day early.** Evidence line for the board is in the site steps of the 20 August EOD.
 
 - [ ] **T108** Endoscopy modules, assignable to named people from the first release · est 3d · **High**
   Asked for in the daily brief of 2026-08-13, Priority 3. Endoscopy is not a belt requirement and
@@ -2708,6 +2718,12 @@ already named above: **an ask next to an urgent one still needs its own row.**
   `20260819150000` (`sbd_account_audit`) are live on production, verified by reading the schema,
   but neither appears in `supabase_migrations.schema_migrations`, so the drift this entry tracks
   grew by two the same week it was written down.
+  **A third on 2026-08-20:** `20260820120000` (T92a `script_assignments`). The table is live with
+  RLS on and 4 policies, confirmed by reading the schema, and it is not in `schema_migrations`
+  either. Counted 2026-08-20: 200 recorded migrations, latest recorded `20260819225523`, which is
+  one of ours. So three applied-but-unrecorded changes now, all from the last two days, all from
+  work applied outside the migration tool. The pattern is the cause worth naming in the fix, not
+  the three files.
 
 
 - [ ] **T112** An abandoned assessment is recovered as a scored result, and floored to White · est 1d · **High**
@@ -3167,6 +3183,18 @@ already named above: **an ask next to an urgent one still needs its own row.**
   dashboard. Find what does before touching any of them. Pairs with his board item 112 (manual
   add only offers White, 21 August), same selector; he says answer the date back rather than
   accept it if the belt list turns out to be rendered in three places.
+
+  **Measured 2026-08-20, both cautions check out and one is worse than he assumed.** The six-belt
+  list is hardcoded in **at least five** places in `ui-views.js`, not three: `SBD_BELT_ORDER`
+  (2401), the placement review selector (4197), a sort order (4445), and two more at 15657 and
+  15701, none of which carry `None`. So the date on 144 should be answered back rather than
+  accepted, which is exactly what he said to do if it turned out this way. Also confirmed the same
+  day: all three functions he named as dead are still present in `pg_proc`, so nothing has been
+  cleaned up there and the trap is still live for whoever starts this.
+  **Blocked by T120, and this is the substantive one.** 26 people carry no belt value at all on a
+  closed placement review and read No Belt on their own record. Building 144 without settling that
+  first would publish those 26 in red to every manager, director and system-level user, with no
+  way to tell a decision from an omission. See `docs/decisions/2026-08-20-placement-belt-not-recorded.md`.
   *Goal:* A person holding No Belt is visible, filterable and selectable in every view a belt appears in, in red, before White.
   *Done when:* The distribution graph, bars, lists, filters and selectors all carry No Belt against the real backfilled records, suggestion and final belt never cross, and the client confirms on his board.
 
