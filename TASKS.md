@@ -3243,6 +3243,47 @@ already named above: **an ask next to an urgent one still needs its own row.**
   `sbd-ai-proxy`, `sync-user-claims`) are resolved — source checked in, or caller migrated and
   the function retired — with the per-function decision recorded in the PR.
 
+- [ ] **T120** 26 placement reviews close with no belt value, and the person reads No Belt · est 1d · **High**
+  **Found 2026-08-20 while verifying something else. Read-only, nothing touched. Decision doc at
+  `docs/decisions/2026-08-20-placement-belt-not-recorded.md`.**
+  26 rows in `placement_reviews` carry neither `tentative_belt` nor `confirmed_belt` while their
+  status reads `confirmed` (22) or `adjusted` (4). All 26 people read `None` in `staff.belt`.
+  Level-score averages run 53.8 to 77.8, earliest sitting 11 August, most recent **20 August**,
+  so this is current behaviour and not a historical batch. The path is not broken outright:
+  ITionna Bryant's review from 19 August carries White in both columns and her record reads
+  White, same week, same code.
+  **Why it cannot be resolved from the data.** A genuine No Belt decision and a review where no
+  decision was recorded are byte-identical here: `confirmed`, both belt columns null, staff record
+  `None`. `reviewed_at` is null on all 26 and `confirmed_at` holds a midnight date rather than a
+  timestamp, so there is no reviewer trace to separate them either. This is the near neighbour of
+  the client's own 13 August finding but not the same thing: that one recorded the decision on the
+  assessment and not on the person, and was backfilled; these have no decision recorded anywhere.
+  **This blocks T117 (his board 144) rather than following it.** Making No Belt first-class and red
+  across every graph, bar, list and selector would put these 26 into that band in front of every
+  manager, director and system-level user. If some are there by omission rather than by decision,
+  144 publishes the omission. That is his own caution on the item one layer down.
+  *Goal:* Every closed placement review carries the belt decision that was actually made, and No Belt means a decision rather than an absence.
+  *Done when:* The client has ruled whether the 26 are decisions or gaps, any backfill that ruling requires has run with a before-and-after, and the confirm path refuses to close a review with no belt on it.
+
+- [ ] **T121** Switching an account off writes no record of who did it · est 0.5d · Medium
+  **Found 2026-08-20.** Three accounts were switched off that afternoon within three minutes,
+  Aaron Morales 13:37:35, ITionna Bryant 13:40:04, Joe 13:40:12, each with `banned_until` set
+  roughly 100 years out and the portal row inactive. All three had completed their placement
+  properly beforehand (55 answers saved, sitting closed), so no assessment work was lost and this
+  is not the T118 mid-sitting case. The only portal session open in that window was Dr. Jake's,
+  which is the same circumstantial route that named the Blake removal, and it should be read the
+  same way: the record points there, it is not proof.
+  **The gap is that it cannot be better than circumstantial.** Deactivation writes nothing. The
+  delete button now writes an audit line before anything is removed (20260819150000, board 141
+  family) but deactivation was never covered by it, `sbd_account_audit` holds 0 rows, and
+  `sbd_activity_log` carries no deactivate action at all, only login, logout, view, heartbeat,
+  session start and end. So a person losing access leaves no trace of who or when, which is the
+  hole that took two days to close on deletions.
+  Note for whoever picks this up: T118 turned on exactly this question for Nikkia and the answer
+  was unknowable. That is the cost, twice in one week.
+  *Goal:* Switching an account off or back on is attributable after the fact.
+  *Done when:* Deactivate and reactivate both write an audit line naming the actor before the change lands, on the same pattern as the delete audit, and the three switch-offs above are reconciled against it or noted as pre-dating it.
+
 ### Blocked, not on the critical path
 
 - [x] **T49** Strip and rotate the PSOP credentials, gate the public page
