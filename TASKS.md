@@ -3191,10 +3191,15 @@ already named above: **an ask next to an urgent one still needs its own row.**
   accepted, which is exactly what he said to do if it turned out this way. Also confirmed the same
   day: all three functions he named as dead are still present in `pg_proc`, so nothing has been
   cleaned up there and the trap is still live for whoever starts this.
-  **Blocked by T120, and this is the substantive one.** 26 people carry no belt value at all on a
-  closed placement review and read No Belt on their own record. Building 144 without settling that
-  first would publish those 26 in red to every manager, director and system-level user, with no
-  way to tell a decision from an omission. See `docs/decisions/2026-08-20-placement-belt-not-recorded.md`.
+  **Not blocked. The 26 No Belt records are sound, checked 2026-08-20.** An earlier reading here
+  claimed they might be omissions rather than decisions; that was withdrawn the same day, see the
+  struck T120. All 26 carry a confirmed No Belt decision with the decider named in `staff.history`,
+  so the write path this item sits on top of is proven on live data and there is real, correct
+  data to build the aggregate views against on day one, exactly as the client says.
+  **The number to build against is 26, not 13.** The client's write-up asks directly for this to be
+  re-read rather than quoted from mid-August. Live on 2026-08-20: `staff.belt` distribution is
+  White 66, **None 26**, Green 13, Yellow 10, Brown 5, Blue 1, and the stored value is the literal
+  string `'None'`.
   *Goal:* A person holding No Belt is visible, filterable and selectable in every view a belt appears in, in red, before White.
   *Done when:* The distribution graph, bars, lists, filters and selectors all carry No Belt against the real backfilled records, suggestion and final belt never cross, and the client confirms on his board.
 
@@ -3271,27 +3276,39 @@ already named above: **an ask next to an urgent one still needs its own row.**
   `sbd-ai-proxy`, `sync-user-claims`) are resolved — source checked in, or caller migrated and
   the function retired — with the per-function decision recorded in the PR.
 
-- [ ] **T120** 26 placement reviews close with no belt value, and the person reads No Belt · est 1d · **High**
-  **Found 2026-08-20 while verifying something else. Read-only, nothing touched. Decision doc at
-  `docs/decisions/2026-08-20-placement-belt-not-recorded.md`.**
-  26 rows in `placement_reviews` carry neither `tentative_belt` nor `confirmed_belt` while their
-  status reads `confirmed` (22) or `adjusted` (4). All 26 people read `None` in `staff.belt`.
-  Level-score averages run 53.8 to 77.8, earliest sitting 11 August, most recent **20 August**,
-  so this is current behaviour and not a historical batch. The path is not broken outright:
-  ITionna Bryant's review from 19 August carries White in both columns and her record reads
-  White, same week, same code.
-  **Why it cannot be resolved from the data.** A genuine No Belt decision and a review where no
-  decision was recorded are byte-identical here: `confirmed`, both belt columns null, staff record
-  `None`. `reviewed_at` is null on all 26 and `confirmed_at` holds a midnight date rather than a
-  timestamp, so there is no reviewer trace to separate them either. This is the near neighbour of
-  the client's own 13 August finding but not the same thing: that one recorded the decision on the
-  assessment and not on the person, and was backfilled; these have no decision recorded anywhere.
-  **This blocks T117 (his board 144) rather than following it.** Making No Belt first-class and red
-  across every graph, bar, list and selector would put these 26 into that band in front of every
-  manager, director and system-level user. If some are there by omission rather than by decision,
-  144 publishes the omission. That is his own caution on the item one layer down.
-  *Goal:* Every closed placement review carries the belt decision that was actually made, and No Belt means a decision rather than an absence.
-  *Done when:* The client has ruled whether the 26 are decisions or gaps, any backfill that ruling requires has run with a before-and-after, and the confirm path refuses to close a review with no belt on it.
+- [x] **T120** WITHDRAWN. The 26 No Belt records are deliberate decisions, not gaps
+  **Raised and withdrawn the same day, 2026-08-20. Recorded rather than deleted because the wrong
+  version reached a draft report before it was checked.**
+  **What was claimed:** 26 rows in `placement_reviews` carry neither `tentative_belt` nor
+  `confirmed_belt` while their status reads `confirmed` or `adjusted`, and all 26 of those people
+  read `None` in `staff.belt`, so some of them might be at No Belt by omission rather than by
+  decision, which would make T117 publish an omission in red.
+  **Why it is wrong.** The claim was built without reading `staff.history`, and the client's own
+  144 write-up says in plain terms that the 13 August backfill put "the decision and who made it"
+  there. Checked properly: all 26 carry exactly one history entry, all 26 read
+  `belt: None, res: confirmed`, and all 26 name the decider. Five spellings of the same assessor
+  note across 12 to 20 August, including one that reads "Placement decision: No Belt, confirmed by
+  J. Jacobs. Placed on the remediation path." So every one of the 26 is a recorded, attributed
+  decision and the 13 August write path is confirmed working on live data.
+  `placement_reviews.confirmed_belt` being null on those rows is not the authoritative record;
+  `staff.belt` plus `staff.history` are, and both carry it.
+  **The one thing worth keeping from it**, and it answers the question the client asks directly in
+  the 144 write-up ("Do not guess it. Read it."): the stored value is the string `'None'`, and the
+  live count is **26**, not the 13 quoted from mid-August. Full distribution 2026-08-20: White 66,
+  None 26, Green 13, Yellow 10, Brown 5, Blue 1.
+  **Process note, kept on purpose.** The 144 write-up on the client's More details tab had already
+  answered this and it had not been read. Read the write-up behind an item before reporting a
+  finding against that item.
+
+- [ ] **T120a** The confirm path leaves `placement_reviews` belt columns null · est 0.5d · Low
+  Split out of the withdrawn T120 above, reduced to what is actually true. On 26 closed placement
+  reviews the belt columns are null even though the decision exists on the staff record, so the
+  review table alone cannot answer "what was this person placed at" and anything reading it will
+  undercount. Not a correctness bug and not user-visible, because the authoritative record is
+  right. Worth tidying so the two agree, and worth knowing before anything is built that reads
+  `placement_reviews` for belts rather than `staff`.
+  *Goal:* The placement review and the staff record agree on the belt that was decided.
+  *Done when:* Closed reviews carry the decided belt, backfilled with a before-and-after, and the confirm path writes it going forward.
 
 - [ ] **T121** Switching an account off writes no record of who did it · est 0.5d · Medium
   **Found 2026-08-20.** Three accounts were switched off that afternoon within three minutes,

@@ -1,69 +1,75 @@
-# 2026-08-20: Placement reviews that carry no belt value (blocks board 144)
+# 2026-08-20: the 26 No Belt records are decisions, not gaps (withdrawn finding)
 
-Status:         Finding only. Nothing has been changed. Read-only measurement.
-Raised because: board 144 (No Belt as a first-class entry, in red, everywhere a
-                belt appears) is proposed for 27 August, and this decides what
-                that graph would publish.
+Status:         **WITHDRAWN the same day it was raised.** Kept rather than deleted
+                because the wrong version reached a draft report before it was
+                checked, and because the reason it was wrong is worth not
+                repeating.
 
-## What was measured
+## What was claimed
 
-26 placement reviews carry **no belt value at all**, neither `tentative_belt`
-nor `confirmed_belt`, while their review `status` reads `confirmed` (22) or
-`adjusted` (4). Every one of those 26 people reads `None` in `staff.belt`.
+That 26 placement reviews close with no belt value on them (`tentative_belt`
+and `confirmed_belt` both null, status `confirmed` or `adjusted`), that all 26
+of those people read `None` in `staff.belt`, and that a genuine No Belt
+decision was therefore indistinguishable from a review where no decision was
+ever made. The conclusion drawn was that board 144 should be held, because
+making No Belt first-class and red would publish an omission in front of every
+manager and director.
 
-    select pr.status, count(*),
-           count(*) filter (where pr.confirmed_belt is null) as no_belt_value
-    from placement_reviews pr group by pr.status;
+## Why it is wrong
 
-    adjusted          32 reviews,  4 with no belt value
-    closed_no_person   2 reviews,  2 with no belt value
-    confirmed         62 reviews, 22 with no belt value
-    pending            3 reviews,  3 with no belt value
+The claim was built from `placement_reviews` and `staff.belt` without reading
+`staff.history`, which is where the decision actually lives. The client's own
+144 write-up says so in plain terms, quoting the 13 August EOD: the backfilled
+records "each now shows No Belt with the decision and who made it in their
+history". That write-up was on the More details tab and had not been read.
 
-Level-score averages across the 26 run from 53.8 to 77.8. The earliest sat on
-11 August, the most recent on 20 August, so this is current behaviour and not a
-historical batch.
+Checked properly:
 
-## The contrast that shows the path does work
+    select count(*) filter (where h->>'belt' = 'None')      as says_none,
+           count(*) filter (where h->>'res'  = 'confirmed') as says_confirmed,
+           count(*) filter (where h->>'note' <> '')         as has_decider
+    from staff s cross join lateral jsonb_array_elements(s.history) h
+    where s.belt = 'None';
 
-ITionna Bryant sat on 19 August. Her review carries `tentative_belt = White`
-and `confirmed_belt = White`, and her staff record reads `White`. Same code
-path, same week, correct outcome. So this is not "the confirm path never
-writes a belt", it is that a substantial share of confirmed reviews end with
-the value absent.
+    26 / 26 / 26
 
-## Why it cannot be resolved from the data
+Every one of the 26 carries exactly one history entry, every entry reads
+`belt: None, res: confirmed`, and every entry names the decider. Five spellings
+of the same assessor note span 12 to 20 August, one of them explicit:
+"Placement decision: No Belt, confirmed by J. Jacobs. Placed on the remediation
+path."
 
-A genuine No Belt outcome and a review where no decision was recorded are
-**byte-identical** in this schema. Both are `confirmed` with two null belt
-columns and a staff record reading `None`. There is no reviewer stamp to
-separate them either: `reviewed_at` is null on all 26, and `confirmed_at`
-carries a date at midnight rather than a timestamp.
+So all 26 are recorded, attributed decisions, and the 13 August write path is
+confirmed working on live data rather than merely believed to be.
 
-Ignacio's own 13 August finding is the near neighbour, not the same thing:
-that one was a No Belt decision recorded on the assessment but not on the
-person's record, and it was corrected and backfilled. These 26 have no
-decision recorded in either place.
+## What survives, and it answers a question the item asks
 
-## Why this blocks 144 rather than following it
+The 144 write-up says of the stored No Belt value: "Do not guess it. Read it,"
+and asks for the mid-August count of 13 to be re-read rather than quoted.
 
-144 makes No Belt a first-class, red, sorted-before-White entry across every
-distribution graph, bar, list and selector. If some share of these 26 are in
-that band by omission rather than by decision, 144 publishes the omission to
-every manager, director and system-level user, in red. Ignacio's own caution
-on the item is the same shape one layer down: "Keep `system_suggestion` and
-`final_belt` apart in anything built here. The same mix-up inside a
-distribution graph would be quieter and much harder to spot."
+Read 2026-08-20. The stored value is the literal string `'None'`. The live
+distribution of `staff.belt`:
 
-## The question for the client
+| Belt | Count |
+|---|---|
+| White | 66 |
+| **None** | **26** |
+| Green | 13 |
+| Yellow | 10 |
+| Brown | 5 |
+| Blue | 1 |
 
-Are the 26 genuine No Belt decisions whose value was never written, or
-sittings where no decision was made? The answer decides three things: whether
-144 ships against the data as it stands, whether a backfill is needed first,
-and whether the confirm path needs a guard that refuses to close a review with
-no belt on it.
+26, not 13. That is the number 144 builds against.
 
-## Not proposed here
+## The smaller true thing, split out as T120a
 
-No backfill, no schema change, no write of any kind. The count and the names
-are reproducible from the query above and were taken read-only.
+`placement_reviews.confirmed_belt` is null on those 26 rows even though the
+decision exists on the staff record. Not user-visible and not a correctness
+bug, because the authoritative record is right. It does mean the review table
+alone cannot answer what someone was placed at, so anything built to read
+belts from `placement_reviews` rather than `staff` will undercount.
+
+## The process lesson
+
+Read the write-up behind an item before reporting a finding against that item.
+The answer was already written down.
