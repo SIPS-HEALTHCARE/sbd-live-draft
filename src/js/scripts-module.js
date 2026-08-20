@@ -14,15 +14,16 @@
 // Study & Practice Scripts tab calls this same function, so "which sections are
 // the scripts" has one definition instead of two (Standards B6).
 //
-// STORAGE — reuses foundations_assignments with module_id='scripts', so this
-// ships with no migration. That table's module_id is free text (no FK, no CHECK
-// — 20260625181543_foundations_backend.sql), it already carries
-// UNIQUE(staff_id,module_id), the assigned_by/assigned_date/type/trigger audit
-// trail, and a status column; and its RLS is already exactly this feature's
-// rule set: leaders write, assessors are blocked from INSERT/UPDATE (#55,
-// 20260707120000), DELETE is master_admin only (20260703120000), reads are
-// own-or-leader. getFoundationsAssignments() in foundations.js filters this row
-// back out, so Foundations still sees exactly its 10 modules.
+// STORAGE (T92a) — its own table, script_assignments (20260820120000): the
+// fourth assignment table of the pattern, same shape as foundations_/
+// instrument_/preceptor_assignments, hydrated into DB.scriptAssignments.
+// The client's 2026-08-13 brief made storage explicit: assigned deliberately,
+// one person at a time, and NOT bundled inside another track — which retires
+// T92's original foundations_assignments module_id='scripts' piggyback (rows
+// moved by the migration; getFoundationsAssignments() keeps filtering the id
+// as a guard against pre-migration stale rows). RLS carries the same rule
+// set: leaders write, assessors blocked from INSERT/UPDATE, DELETE is
+// master_admin only, reads own-or-leader.
 // See docs/decisions/2026-08-06-t92-scripts-standalone-module.md.
 //
 // Completion is leader-confirmed, not gated: scripts are spoken language with
@@ -65,7 +66,7 @@ function scriptsBeltsWithContent(upTo) {
 
 // ── Assignment state ────────────────────────────────────────────────────────
 function scriptsAssignment(staffId) {
-  return (DB.foundationsAssignments || [])
+  return (DB.scriptAssignments || [])
     .find(a => a.staffId === staffId && a.moduleId === SCRIPTS_MODULE_ID) || null;
 }
 function isScriptsAssigned(staffId) { return !!scriptsAssignment(staffId); }
@@ -82,7 +83,7 @@ function scriptsCanAssign() {
 // assignModule() itself is deliberately NOT reused: it also seeds a 3-gate
 // foundations_progress row, and this module has no gates to track.
 function assignScriptsModule(staffId, assignedBy, trigger) {
-  if (!DB.foundationsAssignments) DB.foundationsAssignments = [];
+  if (!DB.scriptAssignments) DB.scriptAssignments = [];
   if (scriptsAssignment(staffId)) return false;
   const s = (typeof getStaff === 'function') ? getStaff(staffId) : null;
   const a = {
@@ -94,15 +95,15 @@ function assignScriptsModule(staffId, assignedBy, trigger) {
     assignedDate: new Date().toISOString().slice(0, 10),
     status: 'assigned'
   };
-  DB.foundationsAssignments.push(a);
+  DB.scriptAssignments.push(a);
   _scriptsSaveAssignment(a);
   return true;
 }
 
 function _scriptsSaveAssignment(a) {
   try {
-    if (typeof IS_LIVE !== 'undefined' && IS_LIVE && typeof SB !== 'undefined' && SB.createFoundationsAssignment) {
-      SB.createFoundationsAssignment({
+    if (typeof IS_LIVE !== 'undefined' && IS_LIVE && typeof SB !== 'undefined' && SB.createScriptAssignment) {
+      SB.createScriptAssignment({
         staff_id: a.staffId, module_id: a.moduleId, assigned_by: a.assignedBy || null,
         type: a.type, trigger: a.trigger, assignment_type: a.type, trigger_event: a.trigger,
         facility_id: a.facilityId || null, assigned_date: a.assignedDate, status: a.status
@@ -119,8 +120,8 @@ function setScriptsStatus(staffId, status) {
   if (!a) return;
   a.status = status;
   try {
-    if (typeof IS_LIVE !== 'undefined' && IS_LIVE && typeof SB !== 'undefined' && SB.updateFoundationsAssignmentStatus) {
-      SB.updateFoundationsAssignmentStatus(staffId, SCRIPTS_MODULE_ID, status).catch(e => {
+    if (typeof IS_LIVE !== 'undefined' && IS_LIVE && typeof SB !== 'undefined' && SB.updateScriptAssignmentStatus) {
+      SB.updateScriptAssignmentStatus(staffId, SCRIPTS_MODULE_ID, status).catch(e => {
         if (typeof handleSyncError === 'function') handleSyncError(e, 'Scripts status');
         else console.warn('[scripts] status sync', e && e.message);
       });
@@ -261,11 +262,11 @@ function hToggleScriptsDone(staffId) {
 function hUnassignScripts(staffId) {
   if (!(ST.user && ST.user.role === 'master_admin')) { toast('Only the Master Admin can unassign modules', 'err'); return; }
   if (!confirm('Unassign the Scripts module? The staff member loses the tab; their scripts stay available inside Study & Practice.')) return;
-  DB.foundationsAssignments = (DB.foundationsAssignments || [])
+  DB.scriptAssignments = (DB.scriptAssignments || [])
     .filter(a => !(a.staffId === staffId && a.moduleId === SCRIPTS_MODULE_ID));
   try {
-    if (typeof IS_LIVE !== 'undefined' && IS_LIVE && typeof SB !== 'undefined' && SB.deleteFoundationsAssignment) {
-      SB.deleteFoundationsAssignment(staffId, SCRIPTS_MODULE_ID).catch(e => {
+    if (typeof IS_LIVE !== 'undefined' && IS_LIVE && typeof SB !== 'undefined' && SB.deleteScriptAssignment) {
+      SB.deleteScriptAssignment(staffId, SCRIPTS_MODULE_ID).catch(e => {
         if (typeof handleSyncError === 'function') handleSyncError(e, 'Scripts unassign');
       });
     }
