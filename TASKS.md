@@ -2608,6 +2608,18 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Proposed by the client:* approach confirmed Mon 17 Aug, live Fri 21 Aug.
   *Goal:* A leader can assign the Scripts module to one named person, the same way Foundations is assigned.
   *Done when:* Scripts appears as an assignable module, an assignment to one person is visible to that person and to nobody else, and no belt level triggers it automatically.
+  **Code-complete 2026-08-20 on `work/script-assignments`, pending user apply + deploy.** T92 had
+  already shipped every surface (assign from the Training table, staff-only tab, leader
+  mark-done, master-only unassign) but stored the row inside `foundations_assignments` as
+  `module_id='scripts'` — the bundled-inside-another-track shape this brief rules out. The build
+  is therefore the storage move: migration `20260820120000` creates `script_assignments` (fourth
+  table, exact shape and RLS rule set of the other three — leaders write, assessors blocked,
+  DELETE master_admin only, reads own-or-leader) and moves the existing rows over;
+  `scripts-module.js` repoints to `DB.scriptAssignments` via four new `SB.*ScriptAssignment*`
+  functions; `getFoundationsAssignments()` keeps its filter as a stale-row guard. **Deploy order:
+  migration FIRST, then frontend (v: api-supabase 65, foundations 20, scripts-module 3,
+  auth-init 42), same window.** Verified: `node scripts/verify-scripts-module.js`, 41 assertions
+  including the new storage-repoint section.
 
 - [ ] **T108** Endoscopy modules, assignable to named people from the first release · est 3d · **High**
   Asked for in the daily brief of 2026-08-13, Priority 3. Endoscopy is not a belt requirement and

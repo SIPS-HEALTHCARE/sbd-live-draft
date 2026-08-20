@@ -797,10 +797,10 @@ function _fndSaveAssignment(a){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typ
 function _fndSaveAssignmentStatus(staffId,moduleId,status){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.updateFoundationsAssignmentStatus){SB.updateFoundationsAssignmentStatus(staffId,moduleId,status).catch(e=>{if(typeof handleSyncError==='function')handleSyncError(e,'Foundations status');else console.warn('[fnd] status sync',e&&e.message);});}}catch(e){}}
 
 // ── Foundations 3-Gate Data Helpers ──
-// T92: the standalone Scripts module stores its assignment in this same table
-// (see scripts-module.js for why). Filtered out here, in the one accessor every
-// Foundations consumer routes through, so counts, rollups and the "N/10"
-// convention keep meaning exactly what they meant before.
+// T92/T92a: the standalone Scripts module stored its assignment in this same
+// table until migration 20260820120000 moved it to its own script_assignments
+// table. The filter stays as a guard: a stale/pre-migration 'scripts' row must
+// never turn the Foundations "N/10" convention into N/11.
 //
 // The id is DECLARED HERE, not in scripts-module.js, because this file loads
 // first and getFoundationsAssignments — which every Foundations screen calls —

@@ -128,6 +128,26 @@ ok(!/^const SCRIPTS_MODULE_ID/m.test(SCRIPTS),
 ok(/^const SCRIPTS_MODULE_ID/m.test(FND),
   'foundations.js — the file that loads first and needs it — owns the declaration');
 
+console.log('\n5. T92a: storage is the script_assignments table, not a foundations row');
+// The client's 2026-08-13 brief: not bundled inside another track. The module
+// must read/write its own table end to end — any DB.foundationsAssignments
+// reference in scripts-module.js is the old piggyback leaking back in.
+const API = fs.readFileSync(path.join(root, 'src/js/api-supabase.js'), 'utf8');
+const AUTH = fs.readFileSync(path.join(root, 'src/js/auth-init.js'), 'utf8');
+ok(/DB\.scriptAssignments/.test(SCRIPTS),
+  'scripts-module.js reads DB.scriptAssignments');
+ok(!/DB\.foundationsAssignments/.test(SCRIPTS),
+  'scripts-module.js no longer touches DB.foundationsAssignments');
+ok(!/SB\.(create|update|delete)Foundations/.test(SCRIPTS),
+  'scripts-module.js calls none of the Foundations sync functions');
+['createScriptAssignment', 'updateScriptAssignmentStatus', 'deleteScriptAssignment'].forEach(fn =>
+  ok(new RegExp('SB\\.' + fn).test(SCRIPTS) && new RegExp(fn + '\\(').test(API),
+    fn + ' is called by the module and defined against script_assignments'));
+ok(/\/rest\/v1\/script_assignments/.test(API),
+  'api-supabase.js targets the script_assignments table');
+ok(/DB\.scriptAssignments = /.test(AUTH) && /getScriptAssignments/.test(AUTH),
+  'auth-init.js hydrates DB.scriptAssignments at login');
+
 console.log('\n' + (failed === 0
   ? '\x1b[32mAll ' + passed + ' assertions passed.\x1b[0m\n'
   : '\x1b[31m' + failed + ' of ' + (passed + failed) + ' assertions FAILED.\x1b[0m\n'));

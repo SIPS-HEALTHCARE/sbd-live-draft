@@ -279,6 +279,11 @@ const SB = {
   upsertPreceptorProgress(row){ return sbFetch('/rest/v1/preceptor_progress?on_conflict=staff_id,module_id', { method:'POST', prefer:'resolution=merge-duplicates,return=minimal', body:row }); },
   updatePreceptorAssignmentStatus(staffId, moduleId, status){ return sbFetch(`/rest/v1/preceptor_assignments?staff_id=eq.${staffId}&module_id=eq.${encodeURIComponent(moduleId)}`, { method:'PATCH', prefer:'return=minimal', body:{ status } }); },
   deletePreceptorAssignment(staffId, moduleId){ return sbFetch(`/rest/v1/preceptor_assignments?staff_id=eq.${staffId}&module_id=eq.${encodeURIComponent(moduleId)}`, { method:'DELETE', prefer:'return=minimal' }); },
+  // ── SBD Scripts module (T92a) — fourth assignment table, same matrix minus progress (no gates) ──
+  getScriptAssignments(){ return sbFetch('/rest/v1/script_assignments?select=*'); },
+  createScriptAssignment(data){ return sbFetch('/rest/v1/script_assignments?on_conflict=staff_id,module_id', { method:'POST', prefer:'resolution=ignore-duplicates,return=minimal', body:data }); },
+  updateScriptAssignmentStatus(staffId, moduleId, status){ return sbFetch(`/rest/v1/script_assignments?staff_id=eq.${staffId}&module_id=eq.${encodeURIComponent(moduleId)}`, { method:'PATCH', prefer:'return=minimal', body:{ status } }); },
+  deleteScriptAssignment(staffId, moduleId){ return sbFetch(`/rest/v1/script_assignments?staff_id=eq.${staffId}&module_id=eq.${encodeURIComponent(moduleId)}`, { method:'DELETE', prefer:'return=minimal' }); },
   // ── SBD Preceptor Certification (#78 Ph3) — master-admin access control (RLS: read own-or-leader, write master-admin only) ──
   getPreceptorAccess(){ return sbFetch('/rest/v1/preceptor_access?select=*'); },
   upsertPreceptorAccess(row){ return sbFetch('/rest/v1/preceptor_access?on_conflict=staff_id', { method:'POST', prefer:'resolution=merge-duplicates,return=minimal', body:row }); },
