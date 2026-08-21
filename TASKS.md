@@ -3328,6 +3328,60 @@ already named above: **an ask next to an urgent one still needs its own row.**
   was unknowable. That is the cost, twice in one week.
   *Goal:* Switching an account off or back on is attributable after the fact.
   *Done when:* Deactivate and reactivate both write an audit line naming the actor before the change lands, on the same pattern as the delete audit, and the three switch-offs above are reconciled against it or noted as pre-dating it.
+  **HANDED OVER 2026-08-21. This is the team's card 890, due the 26th, filed with the evidence from
+  the 20 August EOD attached. Do not build it here.** The delete-guard half is their card 843. One
+  thing they need before deploying 843: the guard fix already merged into main carries two defects
+  that the unmerged follow-up corrects, it checks the wrong table for the guard and it continues
+  after an error instead of stopping. Deploying main as it stands ships the broken version.
+
+- [ ] **T122** Preceptor School runs on summaries and the real curriculum has nowhere to live · est TBD · **Critical**
+  The client's board item 150, opened 2026-08-21, **date pending and deliberately not answered yet.**
+  Leaders start Monday and the school is live in the nav today running on light summaries.
+  **Two blockers found the same morning, both read-only, both raised with him before any work.**
+  **1. Scope is stated two different ways.** His board brief says "Level 1, modules 1 to 6, live
+  before Monday. That is the bar. Levels 2 and 3 follow after, because nobody starting Monday can
+  reach Level 2 for six months." His message the same morning says "The entire curriculum goes in,
+  all three levels, all fifteen modules, live before they arrive." Six against fifteen. Not a
+  detail, it is the whole size of the job, and no date should be given until he picks one.
+  **2. The content does not fit the table, which is the harder one.** His write-up says the module
+  shape "maps straight onto `preceptor_modules`". It does not. Measured 2026-08-21: that table is
+  `id, seq, level, level_label, level_pos, title, focus, k_threshold, s_threshold, o_threshold,
+  content_pending`. There is **no column for the four objectives, the four sections, the three
+  activities or the ten scored questions** each module carries. A row today is a title plus a
+  one-line focus, e.g. seq 1, "The SBD Philosophy and System Architecture", focus "Philosophy,
+  system architecture, the facilitator role". So this is not transcription into an existing shape;
+  a content model has to exist first, and that is what the Monday date actually rests on.
+  Also corrected: his brief says the three tables are "built and empty and waiting". They are not.
+  `preceptor_modules` 15 rows (all fifteen, Level 1 titles matching his list exactly),
+  `preceptor_assignments` 15, `preceptor_progress` 18. And the stored `k_threshold` is 90 while the
+  brief says knowledge checks pass at 80 percent, eight of ten.
+  **Lane not decided.** New and unassigned; who builds it is a conversation with the team, not an
+  assumption. Nothing started here.
+  *Goal:* A leader opening Preceptor School reads the real curriculum, not a summary.
+  *Done when:* The agreed module set carries its objectives, sections, activities and ten-question check, each check scoring at the agreed threshold, read back from the running school rather than from the table.
+
+- [ ] **T123** Section proceed does nothing, and a proctored request reaches no dashboard · est TBD · **Critical**
+  The client's board item 151, opened 2026-08-21, **date pending.** Three symptoms from real use,
+  all silent, nothing errors: proceed at section 9 of the study and practice guide does nothing and
+  two people hit it independently; practice tests and simulations read as off in Position School and
+  Preceptor; and a proctored assessment request with a PIN appears on no dashboard. The third is the
+  serious one, a candidate can ask to be assessed and no assessor is ever told.
+  **His hypothesis is that two parallel assessment systems do not talk to each other. Measured
+  2026-08-21 and it needs adjusting before anyone builds on it.**
+  `aip_assessment_requests` holds **0 rows**, so nothing is landing in the aip side at all. The
+  portal both writes and reads the same table: `api-supabase.js:216` posts to `sbd_assessment_queue`
+  and `:214` reads it back filtered `status=in.(pending,approved)`. His claim that no function writes
+  to that queue does not hold either, `sbd-record-assessment` inserts into it. The dead one he found
+  is `sbd-data`, which queried the queue joined to `sbd_staff` (a table that does not exist), **and
+  that function was deleted 2026-08-20 in the T119 sweep**, so it is already gone.
+  Queue status spread on the day: superseded 21, passed 12, failed 8, resolved 6, denied 4,
+  **pending 4, approved 3**. So 7 rows are eligible for the dashboard filter right now and should be
+  visible. That points at the facility filter on that read, or RLS, rather than at the tables being
+  split. His own diagnostic, run: **13 PINs with no session behind them.**
+  Section 9 is a separate, front-end symptom and should not be folded into the same fix.
+  **Lane not decided.** Nothing started here.
+  *Goal:* A proctored request reaches an assessor, and proceed advances the section.
+  *Done when:* A request raised on the real path appears on the assessor's dashboard, the 13 orphan PINs are accounted for, and section 9 advances, each read back from the running system.
 
 ### Blocked, not on the critical path
 
