@@ -3203,7 +3203,12 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Goal:* A person holding No Belt is visible, filterable and selectable in every view a belt appears in, in red, before White.
   *Done when:* The distribution graph, bars, lists, filters and selectors all carry No Belt against the real backfilled records, suggestion and final belt never cross, and the client confirms on his board.
 
-- [ ] **T118** Spike: why Nikkia's second sitting never reached the record · est 0.5d · **High**
+- [x] **T118** Spike: why Nikkia's second sitting never reached the record · est 0.5d · **High**
+  **CLOSED on the client's board 2026-08-21 as item 145, with the evidence line below.** The finding
+  held on re-measurement: the write did not fail, there was never anything to write, because the
+  account was switched off 26 seconds after her last saved answer. One thing the spike did not
+  reach, now answered by T128: her review row was not empty, it held 59 slots of which 34 were
+  padding, and that padding is what item 139 filled.
   The client's board item 145, proposed for **21 August, tight on purpose because the logs that
   can answer it age out**. Her second sitting happened, was watched, and is on video, yet nothing
   reached the record, which is why answers had to be scored off a recording by hand. **Read-only
@@ -3479,6 +3484,38 @@ already named above: **an ask next to an urgent one still needs its own row.**
   boundary.
   *Goal:* 134 to 138 carry dates built on what the code actually does.
   *Done when:* The four answers are with the client and 134 to 138 carry our dates rather than his estimates.
+
+- [x] **T128** Enter Nikkia Warfield's corrected assessment on her record · est 0.5d · **Critical**
+  The client's board item 139. **Done and closed on his board 2026-08-21.** Record of the before
+  and after state at `docs/records/2026-08-14-nikkia-warfield-placement-before-139.md`.
+  **What it actually was, which is not what the item said.** The item reads as replacing a completed
+  assessment. There was none to replace. Her 14 August review was still `pending` and held 59
+  response slots: **25 real and 34 padding**, the padding being 23 knowledge entries whose `answer`
+  reads the literal string `"No answer"` and 11 simulations with an empty answer and a
+  "time expired" note. **His 34 responses map one to one onto those exact 34 blanks** (23 knowledge
+  to the 23 "No answer" ids, Q24 to Q34 to the 11 empty simulations). The second sitting covered
+  precisely the questions the first never reached, so this was a fill-in, not a replacement.
+  Verified before writing that the 34 patch keys and the 34 blank slots matched exactly: nothing
+  already on the record was overwritten and nothing was left blank.
+  Written: the 34 responses, `level_scores` 87/78/71/72/52 (average exactly the 72 he stated),
+  status `confirmed`, `confirmed_belt` White, `confirmed_at` kept at 14 August. `staff.history`
+  gained the placement entry so the profile and the assessment agree. Login, staff record and
+  facility re-read afterwards, all unchanged.
+  **Two things worth carrying forward.** First, `renderResponse` prints "Answered incorrectly" on
+  any knowledge item whose `correct` is not explicitly true, so leaving it unset would have marked
+  every filled answer wrong on a real person's record; correctness was set by comparing each
+  verbatim answer to the `correctAnswer` already stored on that question, not by judgement, and two
+  of the 23 do not match. Second, **the review card's percentage chip will read 75.1, not 72**: the
+  chip is `rptComputeModel`, 60% knowledge and 40% simulation across all 59 responses, while his 72
+  is the mean of the five level scores he hand-scored over the 34. Both are right for what they
+  measure. His level scores are not derivable from the responses at all, checked: solving for them
+  needs 102.8% knowledge at L1.
+  **A process note, kept.** Two readings of this record were reported wrong before it was built,
+  both because a single column was read and the second was not: `placement_reviews.answers` is
+  unused and empty on every row, the live column is `responses`. Sriman flagged the 59 and was
+  right; the correction sent to him was itself wrong and had to be withdrawn.
+  *Goal:* Her record shows the assessment she actually sat.
+  *Done when:* Closed on his board with the screenshot he asked for. Done 2026-08-21.
 
 ### Blocked, not on the critical path
 
