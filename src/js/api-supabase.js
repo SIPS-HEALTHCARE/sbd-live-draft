@@ -465,7 +465,7 @@ function mapFreeAgentFromBackend(row){
     first:          row.first || (row.name||'').split(' ')[0] || '--',
     last:           row.last  || (row.name||'').split(' ').slice(1).join(' ') || '',
     role:           row.role        || '',
-    belt:           row.belt        || 'White',
+    belt:           row.belt        || 'None', // #718: no belt on record ≠ White; beltBadge('None') = "No Belt"
     since:          row.since       || null,
     sbdYears:       row.sbd_program_years != null ? row.sbd_program_years : null,
     certYears:      row.sbd_cert_years    != null ? row.sbd_cert_years    : null,
@@ -503,7 +503,7 @@ function mapTransferFromBackend(row){
     staffId:         row.staff_id || null,
     faId:            row.fa_id    || null,
     staffName:       row.staff_name || '',
-    belt:            row.belt || 'White',
+    belt:            row.belt || 'None', // #718
     fromFacId:       row.from_fac_id   || null,
     fromFacName:     row.from_fac_name || (row.type==='assignment' ? 'Free Agent Pool' : '--'),
     toFacId:         row.to_fac_id     || null,
@@ -669,6 +669,10 @@ function mapStaffToBackend(staff){
     obj.nxt_obs  = staff.nxt.o || null;
   }
   if(staff.observer !== undefined) obj.observer = !!staff.observer;
+  // #718: sent only when the caller decided it (addStaff sets it explicitly for both the
+  // unassessed and the explicit-belt case). Left undefined it stays off the payload, so
+  // partial PATCH paths that never loaded it cannot blank it.
+  if(staff.placementNeeded !== undefined) obj.placement_needed = !!staff.placementNeeded;
   return obj;
 }
 

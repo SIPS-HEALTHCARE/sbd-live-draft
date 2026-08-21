@@ -292,14 +292,16 @@ serve(async (req) => {
                     throw new Error('Failed to sync staff record: ' + staffUpdateErr.message);
                 }
             } else {
-                // New staff: insert with a default belt so the NOT NULL constraint is satisfied.
+                // New staff: insert with the unassessed state to satisfy the NOT NULL constraint.
+                // #718: 'None' + placement_needed, not White — a new account is not a certification.
                 const staffInsert: any = {
                     id: staffKey,
                     first: first,
                     last: last,
                     fid: resolvedFid,
                     role: title || 'Staff Member',
-                    belt: 'White'
+                    belt: 'None',
+                    placement_needed: true
                 };
 
                 const { error: staffInsertErr } = await supabaseAdmin.from('staff').insert(staffInsert);
