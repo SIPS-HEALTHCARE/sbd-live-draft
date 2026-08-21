@@ -2620,6 +2620,16 @@ already named above: **an ask next to an urgent one still needs its own row.**
   migration FIRST, then frontend (v: api-supabase 65, foundations 20, scripts-module 3,
   auth-init 42), same window.** Verified: `node scripts/verify-scripts-module.js`, 41 assertions
   including the new storage-repoint section.
+  **Applied, merged and LIVE, confirmed against production 2026-08-20.** Merged to main as #209.
+  `script_assignments` exists on the live database with RLS on and 4 policies. The frontend is
+  live and was checked the way that can actually fail: the file production serves at
+  `/src/js/scripts-module.js` was read back and carries the T92a storage move, rather than
+  trusting the merge. `index.html` serves `scripts-module.js?v=3`. Both halves of the deploy order
+  held, table before frontend, so nothing was ever pointed at a table that did not exist.
+  Row check at the same moment: `script_assignments` 0 rows and `foundations_assignments` 0 rows
+  carrying `module_id='scripts'`, which is consistent, there were no script assignments yet to
+  move. **This closes the client's board item 124 (Scripts standalone module live, 21 August),
+  a day early.** Evidence line for the board is in the site steps of the 20 August EOD.
 
 - [ ] **T108** Endoscopy modules, assignable to named people from the first release · est 3d · **High**
   Asked for in the daily brief of 2026-08-13, Priority 3. Endoscopy is not a belt requirement and
@@ -2708,6 +2718,12 @@ already named above: **an ask next to an urgent one still needs its own row.**
   `20260819150000` (`sbd_account_audit`) are live on production, verified by reading the schema,
   but neither appears in `supabase_migrations.schema_migrations`, so the drift this entry tracks
   grew by two the same week it was written down.
+  **A third on 2026-08-20:** `20260820120000` (T92a `script_assignments`). The table is live with
+  RLS on and 4 policies, confirmed by reading the schema, and it is not in `schema_migrations`
+  either. Counted 2026-08-20: 200 recorded migrations, latest recorded `20260819225523`, which is
+  one of ours. So three applied-but-unrecorded changes now, all from the last two days, all from
+  work applied outside the migration tool. The pattern is the cause worth naming in the fix, not
+  the three files.
 
 
 - [ ] **T112** An abandoned assessment is recovered as a scored result, and floored to White · est 1d · **High**
@@ -3167,10 +3183,32 @@ already named above: **an ask next to an urgent one still needs its own row.**
   dashboard. Find what does before touching any of them. Pairs with his board item 112 (manual
   add only offers White, 21 August), same selector; he says answer the date back rather than
   accept it if the belt list turns out to be rendered in three places.
+
+  **Measured 2026-08-20, both cautions check out and one is worse than he assumed.** The six-belt
+  list is hardcoded in **at least five** places in `ui-views.js`, not three: `SBD_BELT_ORDER`
+  (2401), the placement review selector (4197), a sort order (4445), and two more at 15657 and
+  15701, none of which carry `None`. So the date on 144 should be answered back rather than
+  accepted, which is exactly what he said to do if it turned out this way. Also confirmed the same
+  day: all three functions he named as dead are still present in `pg_proc`, so nothing has been
+  cleaned up there and the trap is still live for whoever starts this.
+  **Not blocked. The 26 No Belt records are sound, checked 2026-08-20.** An earlier reading here
+  claimed they might be omissions rather than decisions; that was withdrawn the same day, see the
+  struck T121. All 26 carry a confirmed No Belt decision with the decider named in `staff.history`,
+  so the write path this item sits on top of is proven on live data and there is real, correct
+  data to build the aggregate views against on day one, exactly as the client says.
+  **The number to build against is 26, not 13.** The client's write-up asks directly for this to be
+  re-read rather than quoted from mid-August. Live on 2026-08-20: `staff.belt` distribution is
+  White 66, **None 26**, Green 13, Yellow 10, Brown 5, Blue 1, and the stored value is the literal
+  string `'None'`.
   *Goal:* A person holding No Belt is visible, filterable and selectable in every view a belt appears in, in red, before White.
   *Done when:* The distribution graph, bars, lists, filters and selectors all carry No Belt against the real backfilled records, suggestion and final belt never cross, and the client confirms on his board.
 
-- [ ] **T118** Spike: why Nikkia's second sitting never reached the record · est 0.5d · **High**
+- [x] **T118** Spike: why Nikkia's second sitting never reached the record · est 0.5d · **High**
+  **CLOSED on the client's board 2026-08-21 as item 145, with the evidence line below.** The finding
+  held on re-measurement: the write did not fail, there was never anything to write, because the
+  account was switched off 26 seconds after her last saved answer. One thing the spike did not
+  reach, now answered by T128: her review row was not empty, it held 59 slots of which 34 were
+  padding, and that padding is what item 139 filled.
   The client's board item 145, proposed for **21 August, tight on purpose because the logs that
   can answer it age out**. Her second sitting happened, was watched, and is on video, yet nothing
   reached the record, which is why answers had to be scored off a recording by hand. **Read-only
@@ -3259,6 +3297,225 @@ already named above: **an ask next to an urgent one still needs its own row.**
   retirement, not patched. `sbd-data` + `admin-analytics` already 404 (deleted by T119 today).
   *Done when:* table delivered (done); `sbd-emails` fail-closed fix deployed and re-probed;
   orphan auth tracked under T119.
+
+- [x] **T121** WITHDRAWN. The 26 No Belt records are deliberate decisions, not gaps
+  **Raised and withdrawn the same day, 2026-08-20. Recorded rather than deleted because the wrong
+  version reached a draft report before it was checked.**
+  **What was claimed:** 26 rows in `placement_reviews` carry neither `tentative_belt` nor
+  `confirmed_belt` while their status reads `confirmed` or `adjusted`, and all 26 of those people
+  read `None` in `staff.belt`, so some of them might be at No Belt by omission rather than by
+  decision, which would make T117 publish an omission in red.
+  **Why it is wrong.** The claim was built without reading `staff.history`, and the client's own
+  144 write-up says in plain terms that the 13 August backfill put "the decision and who made it"
+  there. Checked properly: all 26 carry exactly one history entry, all 26 read
+  `belt: None, res: confirmed`, and all 26 name the decider. Five spellings of the same assessor
+  note across 12 to 20 August, including one that reads "Placement decision: No Belt, confirmed by
+  J. Jacobs. Placed on the remediation path." So every one of the 26 is a recorded, attributed
+  decision and the 13 August write path is confirmed working on live data.
+  `placement_reviews.confirmed_belt` being null on those rows is not the authoritative record;
+  `staff.belt` plus `staff.history` are, and both carry it.
+  **The one thing worth keeping from it**, and it answers the question the client asks directly in
+  the 144 write-up ("Do not guess it. Read it."): the stored value is the string `'None'`, and the
+  live count is **26**, not the 13 quoted from mid-August. Full distribution 2026-08-20: White 66,
+  None 26, Green 13, Yellow 10, Brown 5, Blue 1.
+  **Process note, kept on purpose.** The 144 write-up on the client's More details tab had already
+  answered this and it had not been read. Read the write-up behind an item before reporting a
+  finding against that item.
+
+- [ ] **T121a** The confirm path leaves `placement_reviews` belt columns null · est 0.5d · Low
+  Split out of the withdrawn T121 above, reduced to what is actually true. On 26 closed placement
+  reviews the belt columns are null even though the decision exists on the staff record, so the
+  review table alone cannot answer "what was this person placed at" and anything reading it will
+  undercount. Not a correctness bug and not user-visible, because the authoritative record is
+  right. Worth tidying so the two agree, and worth knowing before anything is built that reads
+  `placement_reviews` for belts rather than `staff`.
+  *Goal:* The placement review and the staff record agree on the belt that was decided.
+  *Done when:* Closed reviews carry the decided belt, backfilled with a before-and-after, and the confirm path writes it going forward.
+
+- [ ] **T122** Switching an account off writes no record of who did it · est 0.5d · Medium
+  **Found 2026-08-20.** Three accounts were switched off that afternoon within three minutes,
+  Aaron Morales 13:37:35, ITionna Bryant 13:40:04, Joe 13:40:12, each with `banned_until` set
+  roughly 100 years out and the portal row inactive. All three had completed their placement
+  properly beforehand (55 answers saved, sitting closed), so no assessment work was lost and this
+  is not the T118 mid-sitting case. The only portal session open in that window was Dr. Jake's,
+  which is the same circumstantial route that named the Blake removal, and it should be read the
+  same way: the record points there, it is not proof.
+  **The gap is that it cannot be better than circumstantial.** Deactivation writes nothing. The
+  delete button now writes an audit line before anything is removed (20260819150000, board 141
+  family) but deactivation was never covered by it, `sbd_account_audit` holds 0 rows, and
+  `sbd_activity_log` carries no deactivate action at all, only login, logout, view, heartbeat,
+  session start and end. So a person losing access leaves no trace of who or when, which is the
+  hole that took two days to close on deletions.
+  Note for whoever picks this up: T118 turned on exactly this question for Nikkia and the answer
+  was unknowable. That is the cost, twice in one week.
+  *Goal:* Switching an account off or back on is attributable after the fact.
+  *Done when:* Deactivate and reactivate both write an audit line naming the actor before the change lands, on the same pattern as the delete audit, and the three switch-offs above are reconciled against it or noted as pre-dating it.
+  **HANDED OVER 2026-08-21. This is the team's card 890, due the 26th, filed with the evidence from
+  the 20 August EOD attached. Do not build it here.** The delete-guard half is their card 843. One
+  thing they need before deploying 843: the guard fix already merged into main carries two defects
+  that the unmerged follow-up corrects, it checks the wrong table for the guard and it continues
+  after an error instead of stopping. Deploying main as it stands ships the broken version.
+
+- [ ] **T123** Preceptor School: the knowledge checks are short and carry no rationale · est 1d · **Critical**
+  The client's board item 150, opened 2026-08-21, date pending. Leaders start Monday.
+  **His premise is that the school is a summary page. Measured against production, it is not, and
+  that changes the size of this by an order of magnitude.**
+  `preceptor.js?v=9` is live and the file production actually serves was read back: **all fifteen
+  modules are in with full reader content**, 71 to 125 blocks each, `contentPending: false` on every
+  one, Level 1 titles matching his list exactly. Content lives in generated JS, the same established
+  pattern as `foundations.js`, and `preceptor_modules` correctly holds metadata only. His brief's
+  "built and empty and waiting" is also wrong: 15, 15 and 18 rows respectively.
+  **A wrong reading recorded on purpose.** This entry first claimed the content "has nowhere to
+  live" because `preceptor_modules` has no column for objectives, sections, activities or the ten
+  questions. That was measured off the database alone without checking whether the content already
+  lived in JS, which it does. Same failure as the struck T121: one source read, the second not.
+  **The real gap, and it is small.** He says every module carries ten questions each with a written
+  rationale. Actual counts: modules 3, 4 and 5 have 10; module 2 has 7; module 6 has 8; module 1 has
+  5; Levels 2 and 3 mostly 5. And there is **no rationale field at all**, items are `n, q, options,
+  answer`. For Level 1 that is **10 questions to add across modules 1, 2 and 6, plus a rationale
+  field and 60 rationales.** The six source workbooks are already in the repo at
+  `docs/curriculum/preceptor/`, so nothing needs requesting from him.
+  **Scope settled with Shawn: Level 1, modules 1 to 6.** His board brief and his message disagreed
+  (six against fifteen); the board brief's own reasoning holds, nobody starting Monday reaches
+  Level 2 for six months.
+  **Threshold settled: 80.** The DB stores `k_threshold` 90, but the brief and the module text
+  itself both say the check passes at 80 percent, so the stored 90 is the wrong value and gets
+  corrected with this work.
+  *Goal:* Every Level 1 module ends with a ten-question check that explains why each answer is right.
+  *Done when:* Modules 1 to 6 each carry ten questions with a rationale on every one, the threshold reads 80, and it is read back from the running school rather than from the file.
+
+- [ ] **T124** Section proceed does nothing, and a proctored request reaches no dashboard · est TBD · **Critical**
+  The client's board item 151, opened 2026-08-21, **date pending.** Three symptoms from real use,
+  all silent, nothing errors: proceed at section 9 of the study and practice guide does nothing and
+  two people hit it independently; practice tests and simulations read as off in Position School and
+  Preceptor; and a proctored assessment request with a PIN appears on no dashboard. The third is the
+  serious one, a candidate can ask to be assessed and no assessor is ever told.
+  **His hypothesis is that two parallel assessment systems do not talk to each other. Measured
+  2026-08-21 and it needs adjusting before anyone builds on it.**
+  `aip_assessment_requests` holds **0 rows**, so nothing is landing in the aip side at all. The
+  portal both writes and reads the same table: `api-supabase.js:216` posts to `sbd_assessment_queue`
+  and `:214` reads it back filtered `status=in.(pending,approved)`. His claim that no function writes
+  to that queue does not hold either, `sbd-record-assessment` inserts into it. The dead one he found
+  is `sbd-data`, which queried the queue joined to `sbd_staff` (a table that does not exist), **and
+  that function was deleted 2026-08-20 in the T119 sweep**, so it is already gone.
+  Queue status spread on the day: superseded 21, passed 12, failed 8, resolved 6, denied 4,
+  **pending 4, approved 3**. So 7 rows are eligible for the dashboard filter right now and should be
+  visible. That points at the facility filter on that read, or RLS, rather than at the tables being
+  split. His own diagnostic, run: **13 PINs with no session behind them.**
+  Section 9 is a separate, front-end symptom and should not be folded into the same fix.
+  **Lane not decided.** Nothing started here.
+  *Goal:* A proctored request reaches an assessor, and proceed advances the section.
+  *Done when:* A request raised on the real path appears on the assessor's dashboard, the 13 orphan PINs are accounted for, and section 9 advances, each read back from the running system.
+
+- [ ] **T125** Manual staff add has no No Belt option, so an unassessed person is recorded as White · est 0.5d · **High**
+  The client's board item 112, due 2026-08-21. **The impact note he asked for twice is delivered
+  2026-08-21 (Drive, "Item 112 impact note, the unassessed state"). No code written yet, on his
+  explicit instruction: "Do not build the selector before the impact note."**
+  **His wording is wrong, the effect is right.** The item says the selector "offers White Belt and
+  nothing else". `openAddStaffModal` (ui-views.js 16143) builds it from `BELT_ORDER`
+  (logic.js:38) which is all six, White through Black, defaulting to White. What it has no entry
+  for is No Belt. So the fix is one list plus a default, not a rebuilt selector.
+  **No DDL needed, confirmed.** `staff_belt_check` already reads
+  `CHECK (belt = ANY (ARRAY['None','White','Yellow','Green','Blue','Brown','Black']))`, so the
+  value is already accepted. Section 6 of his write-up asks explicitly whether a constraint blocks
+  it; it does not. Note for elsewhere: `sbd_belt_tests_target_belt_check` does **not** carry
+  'None', so a belt test can never target No Belt.
+  **What the note found, measured 2026-08-21 against 123 staff.** Spread: White 67, **None 27**,
+  Green 13, Yellow 10, Brown 5, Blue 1. The mid-August 92/56/28 figures in the item are superseded.
+  1. **Belt progress:** all 27 at No Belt have no current gate, no next gate, no window override
+     and no Position School enrolment. No Belt is beside the ladder, not the bottom rung.
+  2. **Reports, and this is the substantive one.** `rptBeltBars` (4869) and `pBeltBars` (5866) both
+     take `n` as the **full** staff count and then iterate `BELT_ORDER`, six entries. So the
+     denominator includes the 27 and no bar is drawn for them: the bars total ~78% and the missing
+     22% has no empty row to notice. Every belt filter is built from the same six-item list, so
+     those 27 cannot even be filtered for. This is the 13 August sheet fault one layer down.
+  3. **Assessment queue:** none of the 27 appear, and none is flagged `placement_needed` while 31
+     across the roster are. They are invisible twice and have no route out by themselves.
+  4. **The 27 are not errors.** Every one carries a confirmed No Belt decision in `staff.history`
+     with the assessor named, 12 to 20 August, one reading "Placed on the remediation path." The
+     note therefore proposes nothing that touches any belt value.
+  *Goal:* Adding an unassessed person by hand records that they are unassessed.
+  *Done when:* The selector offers No Belt and defaults to it for an unassessed person, a person added through it reads that value on the profile and in the distribution, and the evidence line carries the spread before and after.
+
+- [ ] **T126** Manual add: an added-not-assessed record says so · est 0.5d · **High**
+  The client's board item 126, dated 2026-08-19 and overdue. Read the write-up 2026-08-21.
+  **The state already exists and is already correct, which makes this mostly a surfacing job.**
+  `staff.placement_needed` is exactly "has no placement review": of 67 at White, 30 have no review
+  and precisely 30 carry the flag; all 27 at No Belt have a review and none carries it; Yellow is
+  10 with 9 reviews and 1 flagged. It lines up at every belt. So the storage question his section 4
+  leaves to us is already answered by the data: use the existing flag, do not add a second column.
+  **His own diagnostic, run: `sbd_belt_test_results` holds one row, status REMEDIATION_REQUIRED.**
+  There is no pile sitting in `PENDING_REVIEW`. That answers the question he attaches to this item
+  and to 145, and it means pending is not silently happening at scale.
+  **The real dependency, which he invited us to raise.** His section 2: "If it turns out this
+  cannot be built sensibly before 112 lands, say so and move it behind the 21st," and section 8:
+  "Do not ship it silently against the belt selector if 112 is about to change that selector."
+  112 is now waiting on his answer to the impact note, so this should move behind it rather than be
+  built against a selector about to change.
+  Remaining work is the three surfaces: staff profile, staff list, assessment queue. Plus his
+  two-way requirement, the marker must be able to return if an assessment is corrected or removed,
+  which is why a derived state beats a hand-set one.
+  *Goal:* Somebody added by hand reads as awaiting assessment, and stops reading that way when they sit one.
+  *Done when:* The marker shows on profile, list and queue, clears itself on a completed assessment and returns if one is removed, one query gives a facility's pending count, and the evidence line names where the state lives and why.
+
+- [ ] **T127** Spike: where curriculum is defined and gated in the front end · est 0.25d · Medium
+  The client's board item 133, dated 2026-08-18 and overdue. **A two hour look, not a build; his
+  four answers go in an EOD, not a document. Run 2026-08-21, all four answered.**
+  **Q1, where the module lists live: hardcoded in the app, no table and no storage.**
+  `FOUNDATIONS_MODULES` (foundations.js:41, 10 modules), `INSTRUMENT_MODULES` (instruments.js:44,
+  4), `PRECEPTOR_MODULES` (preceptor.js:10, 15 modules and 1,305 reader blocks). Confirms his read
+  that no Foundations or Instruments content table exists. **What he did not have:** the Foundations
+  content is *generated*, not hand-written. `scripts/foundations-from-docx.py` reads
+  `docs/curriculum/foundations/` and rewrites the JS. So a docx-to-content pipeline already exists
+  and 134's registry can be generated from the same source rather than hand-populated.
+  **Q2, how many UI places decide which curriculum to show: one per curriculum.** Foundations is
+  consumed only in foundations.js (10 references) plus one shared David serializer; Instruments the
+  same shape; Preceptor only in preceptor.js. This is the bottom of his estimate, not the top, so
+  134 to 137 size down rather than up.
+  **Q3, where grants are administered: spread, and this is the one worth acting on.** Preceptor
+  access is applied inside `preceptor.js` on its own surface, while login deactivation and observer
+  rights sit in `ui-views.js` on the admin views. Two places, not one. His words: "If they are
+  spread across different screens, say so, because then we consolidate rather than adding a third."
+  So 135 should consolidate rather than add a third surface.
+  **Q4, confirm no server-side belt gating: confirmed.** The only belt reference in any constraint
+  or policy is `sbd_belt_tests_target_belt_check`, a value constraint on the six belts, not an
+  access gate. Every policy keys on role, facility or self. The rule that stops a Brown belt opening
+  White material is front-end only, which is deliberate and is not being treated as a security
+  boundary.
+  *Goal:* 134 to 138 carry dates built on what the code actually does.
+  *Done when:* The four answers are with the client and 134 to 138 carry our dates rather than his estimates.
+
+- [x] **T128** Enter Nikkia Warfield's corrected assessment on her record · est 0.5d · **Critical**
+  The client's board item 139. **Done and closed on his board 2026-08-21.** Record of the before
+  and after state at `docs/records/2026-08-14-nikkia-warfield-placement-before-139.md`.
+  **What it actually was, which is not what the item said.** The item reads as replacing a completed
+  assessment. There was none to replace. Her 14 August review was still `pending` and held 59
+  response slots: **25 real and 34 padding**, the padding being 23 knowledge entries whose `answer`
+  reads the literal string `"No answer"` and 11 simulations with an empty answer and a
+  "time expired" note. **His 34 responses map one to one onto those exact 34 blanks** (23 knowledge
+  to the 23 "No answer" ids, Q24 to Q34 to the 11 empty simulations). The second sitting covered
+  precisely the questions the first never reached, so this was a fill-in, not a replacement.
+  Verified before writing that the 34 patch keys and the 34 blank slots matched exactly: nothing
+  already on the record was overwritten and nothing was left blank.
+  Written: the 34 responses, `level_scores` 87/78/71/72/52 (average exactly the 72 he stated),
+  status `confirmed`, `confirmed_belt` White, `confirmed_at` kept at 14 August. `staff.history`
+  gained the placement entry so the profile and the assessment agree. Login, staff record and
+  facility re-read afterwards, all unchanged.
+  **Two things worth carrying forward.** First, `renderResponse` prints "Answered incorrectly" on
+  any knowledge item whose `correct` is not explicitly true, so leaving it unset would have marked
+  every filled answer wrong on a real person's record; correctness was set by comparing each
+  verbatim answer to the `correctAnswer` already stored on that question, not by judgement, and two
+  of the 23 do not match. Second, **the review card's percentage chip will read 75.1, not 72**: the
+  chip is `rptComputeModel`, 60% knowledge and 40% simulation across all 59 responses, while his 72
+  is the mean of the five level scores he hand-scored over the 34. Both are right for what they
+  measure. His level scores are not derivable from the responses at all, checked: solving for them
+  needs 102.8% knowledge at L1.
+  **A process note, kept.** Two readings of this record were reported wrong before it was built,
+  both because a single column was read and the second was not: `placement_reviews.answers` is
+  unused and empty on every row, the live column is `responses`. Sriman flagged the 59 and was
+  right; the correction sent to him was itself wrong and had to be withdrawn.
+  *Goal:* Her record shows the assessment she actually sat.
+  *Done when:* Closed on his board with the screenshot he asked for. Done 2026-08-21.
 
 ### Blocked, not on the critical path
 
