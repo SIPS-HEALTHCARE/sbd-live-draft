@@ -3402,6 +3402,84 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Goal:* A proctored request reaches an assessor, and proceed advances the section.
   *Done when:* A request raised on the real path appears on the assessor's dashboard, the 13 orphan PINs are accounted for, and section 9 advances, each read back from the running system.
 
+- [ ] **T125** Manual staff add has no No Belt option, so an unassessed person is recorded as White · est 0.5d · **High**
+  The client's board item 112, due 2026-08-21. **The impact note he asked for twice is delivered
+  2026-08-21 (Drive, "Item 112 impact note, the unassessed state"). No code written yet, on his
+  explicit instruction: "Do not build the selector before the impact note."**
+  **His wording is wrong, the effect is right.** The item says the selector "offers White Belt and
+  nothing else". `openAddStaffModal` (ui-views.js 16143) builds it from `BELT_ORDER`
+  (logic.js:38) which is all six, White through Black, defaulting to White. What it has no entry
+  for is No Belt. So the fix is one list plus a default, not a rebuilt selector.
+  **No DDL needed, confirmed.** `staff_belt_check` already reads
+  `CHECK (belt = ANY (ARRAY['None','White','Yellow','Green','Blue','Brown','Black']))`, so the
+  value is already accepted. Section 6 of his write-up asks explicitly whether a constraint blocks
+  it; it does not. Note for elsewhere: `sbd_belt_tests_target_belt_check` does **not** carry
+  'None', so a belt test can never target No Belt.
+  **What the note found, measured 2026-08-21 against 123 staff.** Spread: White 67, **None 27**,
+  Green 13, Yellow 10, Brown 5, Blue 1. The mid-August 92/56/28 figures in the item are superseded.
+  1. **Belt progress:** all 27 at No Belt have no current gate, no next gate, no window override
+     and no Position School enrolment. No Belt is beside the ladder, not the bottom rung.
+  2. **Reports, and this is the substantive one.** `rptBeltBars` (4869) and `pBeltBars` (5866) both
+     take `n` as the **full** staff count and then iterate `BELT_ORDER`, six entries. So the
+     denominator includes the 27 and no bar is drawn for them: the bars total ~78% and the missing
+     22% has no empty row to notice. Every belt filter is built from the same six-item list, so
+     those 27 cannot even be filtered for. This is the 13 August sheet fault one layer down.
+  3. **Assessment queue:** none of the 27 appear, and none is flagged `placement_needed` while 31
+     across the roster are. They are invisible twice and have no route out by themselves.
+  4. **The 27 are not errors.** Every one carries a confirmed No Belt decision in `staff.history`
+     with the assessor named, 12 to 20 August, one reading "Placed on the remediation path." The
+     note therefore proposes nothing that touches any belt value.
+  *Goal:* Adding an unassessed person by hand records that they are unassessed.
+  *Done when:* The selector offers No Belt and defaults to it for an unassessed person, a person added through it reads that value on the profile and in the distribution, and the evidence line carries the spread before and after.
+
+- [ ] **T126** Manual add: an added-not-assessed record says so · est 0.5d · **High**
+  The client's board item 126, dated 2026-08-19 and overdue. Read the write-up 2026-08-21.
+  **The state already exists and is already correct, which makes this mostly a surfacing job.**
+  `staff.placement_needed` is exactly "has no placement review": of 67 at White, 30 have no review
+  and precisely 30 carry the flag; all 27 at No Belt have a review and none carries it; Yellow is
+  10 with 9 reviews and 1 flagged. It lines up at every belt. So the storage question his section 4
+  leaves to us is already answered by the data: use the existing flag, do not add a second column.
+  **His own diagnostic, run: `sbd_belt_test_results` holds one row, status REMEDIATION_REQUIRED.**
+  There is no pile sitting in `PENDING_REVIEW`. That answers the question he attaches to this item
+  and to 145, and it means pending is not silently happening at scale.
+  **The real dependency, which he invited us to raise.** His section 2: "If it turns out this
+  cannot be built sensibly before 112 lands, say so and move it behind the 21st," and section 8:
+  "Do not ship it silently against the belt selector if 112 is about to change that selector."
+  112 is now waiting on his answer to the impact note, so this should move behind it rather than be
+  built against a selector about to change.
+  Remaining work is the three surfaces: staff profile, staff list, assessment queue. Plus his
+  two-way requirement, the marker must be able to return if an assessment is corrected or removed,
+  which is why a derived state beats a hand-set one.
+  *Goal:* Somebody added by hand reads as awaiting assessment, and stops reading that way when they sit one.
+  *Done when:* The marker shows on profile, list and queue, clears itself on a completed assessment and returns if one is removed, one query gives a facility's pending count, and the evidence line names where the state lives and why.
+
+- [ ] **T127** Spike: where curriculum is defined and gated in the front end · est 0.25d · Medium
+  The client's board item 133, dated 2026-08-18 and overdue. **A two hour look, not a build; his
+  four answers go in an EOD, not a document. Run 2026-08-21, all four answered.**
+  **Q1, where the module lists live: hardcoded in the app, no table and no storage.**
+  `FOUNDATIONS_MODULES` (foundations.js:41, 10 modules), `INSTRUMENT_MODULES` (instruments.js:44,
+  4), `PRECEPTOR_MODULES` (preceptor.js:10, 15 modules and 1,305 reader blocks). Confirms his read
+  that no Foundations or Instruments content table exists. **What he did not have:** the Foundations
+  content is *generated*, not hand-written. `scripts/foundations-from-docx.py` reads
+  `docs/curriculum/foundations/` and rewrites the JS. So a docx-to-content pipeline already exists
+  and 134's registry can be generated from the same source rather than hand-populated.
+  **Q2, how many UI places decide which curriculum to show: one per curriculum.** Foundations is
+  consumed only in foundations.js (10 references) plus one shared David serializer; Instruments the
+  same shape; Preceptor only in preceptor.js. This is the bottom of his estimate, not the top, so
+  134 to 137 size down rather than up.
+  **Q3, where grants are administered: spread, and this is the one worth acting on.** Preceptor
+  access is applied inside `preceptor.js` on its own surface, while login deactivation and observer
+  rights sit in `ui-views.js` on the admin views. Two places, not one. His words: "If they are
+  spread across different screens, say so, because then we consolidate rather than adding a third."
+  So 135 should consolidate rather than add a third surface.
+  **Q4, confirm no server-side belt gating: confirmed.** The only belt reference in any constraint
+  or policy is `sbd_belt_tests_target_belt_check`, a value constraint on the six belts, not an
+  access gate. Every policy keys on role, facility or self. The rule that stops a Brown belt opening
+  White material is front-end only, which is deliberate and is not being treated as a security
+  boundary.
+  *Goal:* 134 to 138 carry dates built on what the code actually does.
+  *Done when:* The four answers are with the client and 134 to 138 carry our dates rather than his estimates.
+
 ### Blocked, not on the critical path
 
 - [x] **T49** Strip and rotate the PSOP credentials, gate the public page
