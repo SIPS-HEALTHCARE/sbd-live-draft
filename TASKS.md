@@ -3276,6 +3276,23 @@ already named above: **an ask next to an urgent one still needs its own row.**
   `sbd-ai-proxy`, `sync-user-claims`) are resolved — source checked in, or caller migrated and
   the function retired — with the per-function decision recorded in the PR.
 
+- [ ] **T120** Audit every `verify_jwt=false` function: which ones really check who is calling · est 0.5d · **High**
+  Board #749, natural next step after T110. Nobody re-checked edge-fn auth since the 18 Jul
+  sweep; functions changed since. **Audited + source-verified + live-probed 2026-08-21.
+  Decision doc with the full table at `docs/decisions/2026-08-21-t120-verify-jwt-auth-audit.md`.**
+  Every `verify_jwt=false` fn read for its in-code guard and probed unauthenticated against
+  prod (`POST {}`, no bearer/apikey/`x-sbd-user-id`). Result: the actively-maintained SBD
+  functions all reject an anonymous caller. The ticket's headline claim on `sbd-score-assessment`
+  is **stale** — its credit-abuse vector was closed by the per-IP rate limit shipped 20 Jul
+  (`migrations/20260720120000`), so the permissive-by-design auth needs no change. The one real
+  code fix landed this PR: **`sbd-emails` webhook branch was fail-open (`if (WEBHOOK_SECRET)`)
+  and is now mandatory/fail-closed** — safe to deploy, the live 403 probe proves the secret is
+  already set and sent. The insecure legacy orphans (`sbd-auth` fake `validate` + plaintext
+  passwords; `sbd-bulk-upload` trusts `x-sbd-user-id`; `sbd-ai-proxy`) are deferred to T119 for
+  retirement, not patched. `sbd-data` + `admin-analytics` already 404 (deleted by T119 today).
+  *Done when:* table delivered (done); `sbd-emails` fail-closed fix deployed and re-probed;
+  orphan auth tracked under T119.
+
 - [x] **T121** WITHDRAWN. The 26 No Belt records are deliberate decisions, not gaps
   **Raised and withdrawn the same day, 2026-08-20. Recorded rather than deleted because the wrong
   version reached a draft report before it was checked.**

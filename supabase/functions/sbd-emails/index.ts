@@ -144,13 +144,14 @@ serve(async (req) => {
       return new Response(JSON.stringify({ success: true, emailType: 'registration_denied', queued: emailsQueued }), { headers: corsHeaders });
     }
 
-    // ── Webhook events (DB triggers, verified via WEBHOOK_SECRET if configured) ──
+    // ── Webhook events (DB triggers) — WEBHOOK_SECRET is MANDATORY, fail closed ──
+    // The DB webhook must send `Authorization: Bearer <WEBHOOK_SECRET>`. If the secret
+    // is unset, we refuse rather than run the branch open: an unset env must never turn
+    // this into an anon-callable email queuer (the 18 Jul finding).
     const WEBHOOK_SECRET = Deno.env.get("WEBHOOK_SECRET");
-    if (WEBHOOK_SECRET) {
-      const authHeader = req.headers.get("Authorization");
-      if (authHeader !== `Bearer ${WEBHOOK_SECRET}`) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), { headers: corsHeaders, status: 403 });
-      }
+    const authHeader = req.headers.get("Authorization");
+    if (!WEBHOOK_SECRET || authHeader !== `Bearer ${WEBHOOK_SECRET}`) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { headers: corsHeaders, status: 403 });
     }
 
     // 1. New Facility Registration Request → queue emails
