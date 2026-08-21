@@ -84,7 +84,9 @@ serve(async (req) => {
     }
 
     // 5. Build Staff Operations
-    const validBelts = ['White','Yellow','Green','Blue','Brown','Black']
+    // #718: 'None' = unassessed (placement pending). A blank belt means the roster does not
+    // know — recording White there certified people who were never assessed.
+    const validBelts = ['None','White','Yellow','Green','Blue','Brown','Black']
     
     const recordsToInsert: any[] = [];
     const errors: Array<{ row: number, name: string, reason: string }> = [];
@@ -95,7 +97,7 @@ serve(async (req) => {
         const fid = facLookup.get(facName.toLowerCase())
         if (!fid) throw new Error(`Could not resolve or create facility: ${facName}`)
 
-        const beltRaw = String(item.belt || 'White').trim()
+        const beltRaw = String(item.belt || '').trim() || 'None'
         const beltTitle = beltRaw.charAt(0).toUpperCase() + beltRaw.slice(1).toLowerCase()
         if (!validBelts.includes(beltTitle)) throw new Error(`Invalid belt: ${beltTitle}`)
 
@@ -111,7 +113,10 @@ serve(async (req) => {
           last: last,
           role: String(item.role || 'SPD Tech').trim(),
           belt: beltTitle,
-          since: dateSince ? new Date(dateSince).toISOString().split('T')[0] : null
+          // Unassessed rows carry no earn date and go to the placement queue; an explicit
+          // belt is a decision, so it clears the flag rather than inheriting the column default.
+          since: beltTitle === 'None' ? null : (dateSince ? new Date(dateSince).toISOString().split('T')[0] : null),
+          placement_needed: beltTitle === 'None'
         })
       } catch (err: any) {
         errors.push({ row: idx + 1, name: `${item.first || ''} ${item.last || ''}`, reason: err.message })

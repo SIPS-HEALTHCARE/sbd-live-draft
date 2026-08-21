@@ -16151,13 +16151,26 @@ function openAddStaffModal(lockedFid){
     <div class="modal-body">
       <div class="form-group"><label class="form-label">Facility *</label><select class="form-select" id="ns-fac" ${facAdmin&&lockedFid?'disabled':''} style="${facAdmin&&lockedFid?'opacity:.7;cursor:not-allowed':''}">${facOpts}</select></div>
       <div class="form-row"><div class="form-group"><label class="form-label">First Name *</label><input class="form-input" id="ns-first" placeholder="First name"></div><div class="form-group"><label class="form-label">Last Name *</label><input class="form-input" id="ns-last" placeholder="Last name"></div></div>
-      <div class="form-row"><div class="form-group"><label class="form-label">Role *</label><select class="form-select" id="ns-role"><option>SPD Technician</option><option>Lead Technician</option><option>Supervisor</option><option>Director</option><option>Other</option></select></div><div class="form-group"><label class="form-label">Current Belt *</label><select class="form-select" id="ns-belt">${BELT_ORDER.map(b=>`<option>${b}</option>`).join('')}</select></div></div>
-      <div class="form-row"><div class="form-group"><label class="form-label">Belt Start Date</label><input class="form-input" id="ns-since" type="date" value="${new Date().toISOString().slice(0,10)}"></div><div class="form-group"><label class="form-label">Position School Track</label><select class="form-select" id="ns-ps"><option value="">Not enrolled</option><option>Lead Technician Track</option><option>Supervisor Track</option><option>Director Track</option></select></div></div>
+      <div class="form-row"><div class="form-group"><label class="form-label">Role *</label><select class="form-select" id="ns-role"><option>SPD Technician</option><option>Lead Technician</option><option>Supervisor</option><option>Director</option><option>Other</option></select></div><div class="form-group"><label class="form-label">Current Belt *</label><select class="form-select" id="ns-belt" onchange="nsBeltChanged()"><option value="None" selected>Unassessed — placement pending</option>${BELT_ORDER.map(b=>`<option>${b}</option>`).join('')}</select></div></div>
+      <div class="form-row"><div class="form-group"><label class="form-label">Belt Start Date</label><input class="form-input" id="ns-since" type="date" value="${new Date().toISOString().slice(0,10)}" disabled style="opacity:.6"></div><div class="form-group"><label class="form-label">Position School Track</label><select class="form-select" id="ns-ps"><option value="">Not enrolled</option><option>Lead Technician Track</option><option>Supervisor Track</option><option>Director Track</option></select></div></div>
       <div class="form-group"><div class="section-lbl" style="margin-bottom:8px">Current Belt Assessment Status</div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
-        ${['Competency','Simulation','Observation'].map(a=>`<div><label class="form-label">${a}</label><select class="form-select" id="ns-${a.toLowerCase().slice(0,3)}"><option value="">Not started</option><option value="pass">Pass</option><option value="fail">Fail</option></select></div>`).join('')}
+        ${['Competency','Simulation','Observation'].map(a=>`<div><label class="form-label">${a}</label><select class="form-select" id="ns-${a.toLowerCase().slice(0,3)}" disabled style="opacity:.6"><option value="">Not started</option><option value="pass">Pass</option><option value="fail">Fail</option></select></div>`).join('')}
       </div></div>
     </div>
     <div class="modal-ft"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-gold" onclick="addStaff(${lockedFid?`'${lockedFid}'`:'null'})">Add Staff Member</button></div>`,'modal-lg');
+}
+
+// #718: earn date and gate status only make sense once a real belt is an explicit choice.
+// While "Unassessed" is selected they stay disabled so White-by-inertia cannot recur.
+function nsBeltChanged(){
+  const unassessed = document.getElementById('ns-belt').value === 'None';
+  ['ns-since','ns-com','ns-sim','ns-obs'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.disabled = unassessed;
+    el.style.opacity = unassessed ? '.6' : '';
+    if(unassessed && el.tagName==='SELECT') el.value = '';
+  });
 }
 
 async function addStaff(lockedFid){
@@ -16172,8 +16185,14 @@ async function addStaff(lockedFid){
   const sim=document.getElementById('ns-sim').value;
   const obs=document.getElementById('ns-obs').value;
   if(!first||!last){toast('Please enter first and last name.','err');return;}
-  const newStaff={fid,first,last,role,belt,since:since||new Date().toISOString().slice(0,10),stars:0,
-    cur:{c:comp||null,s:sim||null,o:obs||null},nxt:{c:null,s:null,o:null},
+  // #718: 'None' = unassessed, awaiting placement. No earn date, no gates, flagged for the
+  // placement queue. A real belt is an explicit choice and clears the flag explicitly —
+  // never inherit the column default (that is how hand-added staff got White AND stayed
+  // flagged for a placement they never took).
+  const unassessed = belt==='None';
+  const newStaff={fid,first,last,role,belt,since:unassessed?null:(since||new Date().toISOString().slice(0,10)),
+    placementNeeded:unassessed,stars:0,
+    cur:{c:unassessed?null:(comp||null),s:unassessed?null:(sim||null),o:unassessed?null:(obs||null)},nxt:{c:null,s:null,o:null},
     ps:{enrolled:!!psTrack,done:false,track:psTrack,mod:psTrack?'0 of 6':'',tracks:{}},
     oip:{completed:false,completedAt:null,primaryType:null,secondaryType:null,scores:{S:0,St:0,Su:0,A:0},answers:[]},
     promo:false,history:[]};
@@ -16645,8 +16664,9 @@ async function approveReg(rid){
       last: nameParts.slice(1).join(' '),
       fid: finalFacilityId,
       role: staffRole,
-      belt: 'White',
-      since: new Date().toISOString().split('T')[0]
+      belt: 'None', // #718: mirrors sbd-approve-registration — accounts start unassessed, not White
+      since: null,
+      placementNeeded: true
     });
     
     // Remove pending local status
@@ -17467,7 +17487,7 @@ function renderAFreeAgents(){
         <thead><tr><th>Staff Member</th><th>Belt</th><th>Type</th><th>Movement</th><th>Requested By</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody>${allTransfers.map(tr=>`<tr style="background:${tr.status==='pending'?'rgba(245,158,11,.03)':'transparent'}">
           <td class="fw7">${cleanName(tr.staffName)||'Unknown'}</td>
-          <td>${beltBadge(tr.belt||'White')}</td>
+          <td>${beltBadge(tr.belt||'None')}</td>
           <td>${typeBadge(tr)}</td>
           <td style="font-size:11.5px;color:var(--txt2)">${tr.fromFacName} &rarr; ${tr.toFacName}</td>
           <td style="font-size:11.5px;color:var(--txt3)">${tr.requestedByName||'Admin'}</td>
@@ -17498,7 +17518,7 @@ function renderAFreeAgents(){
         <thead><tr><th>Staff Member</th><th>Belt</th><th>From</th><th>To</th><th>Outcome</th><th>Released</th><th>Placed</th><th>By</th></tr></thead>
         <tbody>${placed.map(pl=>`<tr>
           <td class="fw7">${pl.faName||'--'}</td>
-          <td>${beltBadge(pl.belt||'White')}</td>
+          <td>${beltBadge(pl.belt||'None')}</td>
           <td style="font-size:11.5px;color:var(--txt3)">${pl.fromFacName||'--'}</td>
           <td style="font-size:11.5px;font-weight:600;color:${pl.outcome==='placed'?'var(--ok)':'var(--txt2)'}">${pl.toFacName||'--'}</td>
           <td><span class="pill ${pl.outcome==='placed'?'p-ok':pl.outcome==='released'?'p-warn':'p-muted'}" style="font-size:10px">${(pl.outcome||'--').charAt(0).toUpperCase()+(pl.outcome||'--').slice(1)}</span></td>
@@ -18902,8 +18922,9 @@ async function submitAddUser(type){
         first: newUser.name.split(' ')[0] || 'Unknown',
         last: newUser.name.split(' ').slice(1).join(' ') || '',
         role: document.getElementById('nu-position')?.value || 'Technician',
-        belt: 'White',
-        since: new Date().toISOString().split('T')[0],
+        belt: 'None', // #718: mirrors sbd-sync-user-claims — new accounts start unassessed, not White
+        since: null,
+        placementNeeded: true,
         stars: 0,
         promo: false,
         cur: {c:null,s:null,o:null},
@@ -19165,7 +19186,7 @@ function processBulkUpload(){
         facilityName: colFac>=0 ? row[colFac] : '',
         first: row[colFirst],
         last: row[colLast],
-        belt: colBelt>=0 ? row[colBelt] : 'White',
+        belt: colBelt>=0 ? row[colBelt] : '', // #718: blank → server records unassessed ('None'), not White
         role: colRole>=0 ? row[colRole] : 'SPD Tech',
         since: colSince>=0 ? row[colSince] : ''
       });

@@ -232,8 +232,11 @@ serve(async (req) => {
             last: lastName,
             fid: facilityId,
             role: staffPosition,
-            belt: 'White',
-            since: new Date().toISOString().split('T')[0]
+            // #718: nobody is assessed by having their registration approved. The row starts
+            // unassessed and enters the placement queue instead of being certified White.
+            belt: 'None',
+            since: null,
+            placement_needed: true
         }, { onConflict: 'id' });
 
         if (staffError) {
