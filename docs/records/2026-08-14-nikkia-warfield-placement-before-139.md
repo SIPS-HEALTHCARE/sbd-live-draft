@@ -1,57 +1,74 @@
-# Nikkia Warfield, placement record as it stands before board item 139
+# Nikkia Warfield, placement record before and after board item 139
 
-Captured 2026-08-20, read-only, because item 139 says "Export the 28.3 result
-before removing it". This is that export. Nothing has been changed.
+Item 139 says "Export the 28.3 percent result before removing it." This is that
+export, plus what replaced it. Written 2026-08-21.
 
-## The record item 139 refers to
+**A correction to the first version of this file.** It reported the review as
+holding zero responses. That was read from `placement_reviews.answers`, which is
+empty on every row in the table and is not the column in use. The live column is
+`responses`, and hers held 59 entries. The claim that her row held nothing was
+wrong, and the person who flagged it was right.
 
-There is **no row for her in `sbd_belt_test_results` and none in
-`sbd_belt_tests`**. The result the item calls "the 28.3 percent result
-currently showing" is a single `placement_reviews` row:
+## Before
+
+Review `f2a6502c-9ba3-4fb7-b237-6772c68fa6a6`, session
+`72d4de65-c2ea-4dd4-b146-c43628464855`, type Initial.
 
 | field | value |
 |---|---|
-| review id | `f2a6502c-9ba3-4fb7-b237-6772c68fa6a6` |
-| session id | `72d4de65-c2ea-4dd4-b146-c43628464855` |
-| type | Initial |
-| status | **pending** (never reviewed, never confirmed) |
-| tentative_belt | White |
-| confirmed_belt | null |
+| status | pending, never reviewed, never confirmed |
+| tentative_belt / confirmed_belt | White / null |
 | level_scores | L1 39, L2 33, L3 33, L4 22, L5 17 |
-| staff_title | SPD Technician I |
-| created_at / submitted_at | 2026-08-14 23:00:00.080013+00 |
-| reviewed_at / confirmed_at | null / null |
-| review_notes / assessor_note | null / null |
-| answers stored on the review | 0 |
+| responses | 59 entries: **25 real, 34 blank** |
+| created_at / submitted_at | 2026-08-14 23:00:00 |
 
-Straight average of the five level scores is 28.8.
+The 34 blanks were 23 knowledge entries carrying the literal string
+`"No answer"` with `correct: null`, and 11 simulation entries with an empty
+answer and `aiFeedback` reading "No answer submitted (time expired)".
 
-## Her staff record as it stands
+The sitting: authorized 21:10:35, last save 21:47:01, expiry 22:40:35 so 53
+minutes unused, closed by the recovery sweep at 23:00. Her account was switched
+off 26 seconds after that last save and is still off, which is why the sitting
+stopped where it did.
 
-`belt` = White. `cur_comp`, `cur_sim`, `cur_obs` all null. `history` empty.
+## The finding that made the fill-in safe
 
-## The sitting behind it
+**Ignacio's 34 responses map one to one onto those exact 34 blanks.** His 23
+knowledge questions are the 23 stored as "No answer" (p53, p51, p20, p30, p29,
+p26, p37, p28, p2, p4, p25, p56, p15, p7, p16, p43, p3, p50, p19, p17, p55,
+p41, p44) and his Q24 to Q34 are the 11 empty simulations (p48, p21, p9, p34,
+p12, p57, p22, p60, p11, p33, p45). The second sitting covered exactly the
+questions the first one never reached.
 
-One session, `72d4de65-c2ea-4dd4-b146-c43628464855`, type `placement`,
-status `completed`.
+Verified before writing: the 34 patch keys and the 34 blank slots matched
+exactly, so no real answer was overwritten and no blank was left behind.
 
-- authorized / created 2026-08-14 21:10:35
-- last answer saved 2026-08-14 21:47:01.556
-- session expiry 2026-08-14 22:40:35, so 53 minutes 34 seconds were unused
-- closed out 2026-08-14 23:00:00 by the recovery sweep, 20 minutes after expiry
-- 25 answers saved in the session progress, at question 25
+## After
 
-Her account was switched off with `banned_until` set roughly 100 years out and
-her portal row inactive. Both still hold as of this capture, so she cannot sit
-anything until it is switched back on.
+| field | value |
+|---|---|
+| status | confirmed |
+| confirmed_belt | White |
+| level_scores | L1 87, L2 78, L3 71, L4 72, L5 52, **average exactly 72.0** |
+| responses | 59 entries, **0 blank** |
+| confirmed_at | 2026-08-14, the date kept as instructed |
+| created_at / submitted_at | unchanged |
 
-## Why this matters to how 139 is built
+Knowledge now reads 34 correct and 5 wrong, with **none left null**. That last
+part matters: `renderResponse` prints "Answered incorrectly" on any knowledge
+item whose `correct` is not explicitly true, so leaving it unset would have
+labelled every filled answer wrong on her record.
 
-The item is written as replacing a completed assessment. There is no completed
-assessment to replace. The work is finishing a review that was never closed,
-and the 34 responses named on the item come from the recording of the second
-sitting, not from this session, which holds 25.
+Correctness was set by comparing her verbatim answer against the `correctAnswer`
+already stored on each question, not by judgement. Two of the 23 do not match:
+p53, corrective action, and p28, the Spaulding category requiring sterilization.
 
-Question raised with the client on the item: finish this 14 August review in
-place, or enter the corrected result as its own record dated to the second
-sitting. Nothing is entered until that comes back.
+Unchanged and confirmed after the write: login `nikkiawarfield@nemours.org`,
+facility Nemours Children's Hospital DE, staff record intact. `staff.belt`
+reads White and now carries the placement entry in history so the profile and
+the assessment agree.
+
+## Still open
+
+Her account remains switched off, so she cannot sit anything until it is
+switched back on. That is with the client and is not part of this item.
