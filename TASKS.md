@@ -3193,7 +3193,7 @@ already named above: **an ask next to an urgent one still needs its own row.**
   cleaned up there and the trap is still live for whoever starts this.
   **Not blocked. The 26 No Belt records are sound, checked 2026-08-20.** An earlier reading here
   claimed they might be omissions rather than decisions; that was withdrawn the same day, see the
-  struck T120. All 26 carry a confirmed No Belt decision with the decider named in `staff.history`,
+  struck T121. All 26 carry a confirmed No Belt decision with the decider named in `staff.history`,
   so the write path this item sits on top of is proven on live data and there is real, correct
   data to build the aggregate views against on day one, exactly as the client says.
   **The number to build against is 26, not 13.** The client's write-up asks directly for this to be
@@ -3276,7 +3276,7 @@ already named above: **an ask next to an urgent one still needs its own row.**
   `sbd-ai-proxy`, `sync-user-claims`) are resolved — source checked in, or caller migrated and
   the function retired — with the per-function decision recorded in the PR.
 
-- [x] **T120** WITHDRAWN. The 26 No Belt records are deliberate decisions, not gaps
+- [x] **T121** WITHDRAWN. The 26 No Belt records are deliberate decisions, not gaps
   **Raised and withdrawn the same day, 2026-08-20. Recorded rather than deleted because the wrong
   version reached a draft report before it was checked.**
   **What was claimed:** 26 rows in `placement_reviews` carry neither `tentative_belt` nor
@@ -3300,8 +3300,8 @@ already named above: **an ask next to an urgent one still needs its own row.**
   answered this and it had not been read. Read the write-up behind an item before reporting a
   finding against that item.
 
-- [ ] **T120a** The confirm path leaves `placement_reviews` belt columns null · est 0.5d · Low
-  Split out of the withdrawn T120 above, reduced to what is actually true. On 26 closed placement
+- [ ] **T121a** The confirm path leaves `placement_reviews` belt columns null · est 0.5d · Low
+  Split out of the withdrawn T121 above, reduced to what is actually true. On 26 closed placement
   reviews the belt columns are null even though the decision exists on the staff record, so the
   review table alone cannot answer "what was this person placed at" and anything reading it will
   undercount. Not a correctness bug and not user-visible, because the authoritative record is
@@ -3310,7 +3310,7 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Goal:* The placement review and the staff record agree on the belt that was decided.
   *Done when:* Closed reviews carry the decided belt, backfilled with a before-and-after, and the confirm path writes it going forward.
 
-- [ ] **T121** Switching an account off writes no record of who did it · est 0.5d · Medium
+- [ ] **T122** Switching an account off writes no record of who did it · est 0.5d · Medium
   **Found 2026-08-20.** Three accounts were switched off that afternoon within three minutes,
   Aaron Morales 13:37:35, ITionna Bryant 13:40:04, Joe 13:40:12, each with `banned_until` set
   roughly 100 years out and the portal row inactive. All three had completed their placement
@@ -3334,33 +3334,35 @@ already named above: **an ask next to an urgent one still needs its own row.**
   that the unmerged follow-up corrects, it checks the wrong table for the guard and it continues
   after an error instead of stopping. Deploying main as it stands ships the broken version.
 
-- [ ] **T122** Preceptor School runs on summaries and the real curriculum has nowhere to live · est TBD · **Critical**
-  The client's board item 150, opened 2026-08-21, **date pending and deliberately not answered yet.**
-  Leaders start Monday and the school is live in the nav today running on light summaries.
-  **Two blockers found the same morning, both read-only, both raised with him before any work.**
-  **1. Scope is stated two different ways.** His board brief says "Level 1, modules 1 to 6, live
-  before Monday. That is the bar. Levels 2 and 3 follow after, because nobody starting Monday can
-  reach Level 2 for six months." His message the same morning says "The entire curriculum goes in,
-  all three levels, all fifteen modules, live before they arrive." Six against fifteen. Not a
-  detail, it is the whole size of the job, and no date should be given until he picks one.
-  **2. The content does not fit the table, which is the harder one.** His write-up says the module
-  shape "maps straight onto `preceptor_modules`". It does not. Measured 2026-08-21: that table is
-  `id, seq, level, level_label, level_pos, title, focus, k_threshold, s_threshold, o_threshold,
-  content_pending`. There is **no column for the four objectives, the four sections, the three
-  activities or the ten scored questions** each module carries. A row today is a title plus a
-  one-line focus, e.g. seq 1, "The SBD Philosophy and System Architecture", focus "Philosophy,
-  system architecture, the facilitator role". So this is not transcription into an existing shape;
-  a content model has to exist first, and that is what the Monday date actually rests on.
-  Also corrected: his brief says the three tables are "built and empty and waiting". They are not.
-  `preceptor_modules` 15 rows (all fifteen, Level 1 titles matching his list exactly),
-  `preceptor_assignments` 15, `preceptor_progress` 18. And the stored `k_threshold` is 90 while the
-  brief says knowledge checks pass at 80 percent, eight of ten.
-  **Lane not decided.** New and unassigned; who builds it is a conversation with the team, not an
-  assumption. Nothing started here.
-  *Goal:* A leader opening Preceptor School reads the real curriculum, not a summary.
-  *Done when:* The agreed module set carries its objectives, sections, activities and ten-question check, each check scoring at the agreed threshold, read back from the running school rather than from the table.
+- [ ] **T123** Preceptor School: the knowledge checks are short and carry no rationale · est 1d · **Critical**
+  The client's board item 150, opened 2026-08-21, date pending. Leaders start Monday.
+  **His premise is that the school is a summary page. Measured against production, it is not, and
+  that changes the size of this by an order of magnitude.**
+  `preceptor.js?v=9` is live and the file production actually serves was read back: **all fifteen
+  modules are in with full reader content**, 71 to 125 blocks each, `contentPending: false` on every
+  one, Level 1 titles matching his list exactly. Content lives in generated JS, the same established
+  pattern as `foundations.js`, and `preceptor_modules` correctly holds metadata only. His brief's
+  "built and empty and waiting" is also wrong: 15, 15 and 18 rows respectively.
+  **A wrong reading recorded on purpose.** This entry first claimed the content "has nowhere to
+  live" because `preceptor_modules` has no column for objectives, sections, activities or the ten
+  questions. That was measured off the database alone without checking whether the content already
+  lived in JS, which it does. Same failure as the struck T121: one source read, the second not.
+  **The real gap, and it is small.** He says every module carries ten questions each with a written
+  rationale. Actual counts: modules 3, 4 and 5 have 10; module 2 has 7; module 6 has 8; module 1 has
+  5; Levels 2 and 3 mostly 5. And there is **no rationale field at all**, items are `n, q, options,
+  answer`. For Level 1 that is **10 questions to add across modules 1, 2 and 6, plus a rationale
+  field and 60 rationales.** The six source workbooks are already in the repo at
+  `docs/curriculum/preceptor/`, so nothing needs requesting from him.
+  **Scope settled with Shawn: Level 1, modules 1 to 6.** His board brief and his message disagreed
+  (six against fifteen); the board brief's own reasoning holds, nobody starting Monday reaches
+  Level 2 for six months.
+  **Threshold settled: 80.** The DB stores `k_threshold` 90, but the brief and the module text
+  itself both say the check passes at 80 percent, so the stored 90 is the wrong value and gets
+  corrected with this work.
+  *Goal:* Every Level 1 module ends with a ten-question check that explains why each answer is right.
+  *Done when:* Modules 1 to 6 each carry ten questions with a rationale on every one, the threshold reads 80, and it is read back from the running school rather than from the file.
 
-- [ ] **T123** Section proceed does nothing, and a proctored request reaches no dashboard · est TBD · **Critical**
+- [ ] **T124** Section proceed does nothing, and a proctored request reaches no dashboard · est TBD · **Critical**
   The client's board item 151, opened 2026-08-21, **date pending.** Three symptoms from real use,
   all silent, nothing errors: proceed at section 9 of the study and practice guide does nothing and
   two people hit it independently; practice tests and simulations read as off in Position School and
