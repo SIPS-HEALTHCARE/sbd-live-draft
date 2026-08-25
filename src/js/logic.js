@@ -40,9 +40,10 @@ const BELT_ORDER = ['White','Yellow','Green','Blue','Brown','Black'];
 // deliberately NOT in BELT_ORDER: beltIdx('None') = -1 makes nextBelt() = White and
 // calcPoints() award nothing, which is exactly the semantics of an unbelted person.
 // It still needs entries here or belt averages go NaN and cert labels print undefined.
-// ponytail: beltBadge() and the placement-flow views label 'None' as "No Belt", but raw
-// `${s.belt} Belt` template strings elsewhere read "None Belt"; if that grates, the upgrade
-// path is a beltLabel() helper swapped into those templates, not more sentinel values.
+// Labels: beltLabel()/beltName() (utils.js) render 'None' as "No Belt" — use them, never
+// raw `${s.belt} Belt` templates, wherever the value can be a staff's current belt (#718).
+// Distribution charts iterate BELT_DIST so unbelted people are drawn, not dropped.
+const BELT_DIST = [...BELT_ORDER].reverse().concat('None'); // chart rows: Black first, unbelted last
 const BELT_CLR = {None:'#94a3b8',White:'#cbd5e1',Yellow:'#eab308',Green:'#22c55e',Blue:'#60a5fa',Brown:'#c2772a',Black:'#8b929e'};
 const BELT_BG  = {None:'#94a3b812',White:'#cbd5e118',Yellow:'#eab30815',Green:'#22c55e12',Blue:'#60a5fa12',Brown:'#c2772a15',Black:'#8b929e12'};
 const BELT_CERT= {None:'Not Yet Certified',White:'Certified Operator I',Yellow:'Certified Operator II',Green:'Certified Operator III',Blue:'Certified Operator IV',Brown:'Certified Operator V',Black:'Master Operator'};
@@ -193,7 +194,7 @@ function generateProjection(staff){
   } else if(gatesLeft===0 && win.status==='closed'){
     summary=`All ${nb} Belt gates cleared. Window reopens in ${win.daysUntilOpen||'--'} days.`;
   } else if(win.status==='locked'){
-    summary=`Complete all 3 current ${staff.belt} Belt assessments before advancing to ${nb}.`;
+    summary=`Complete all 3 current ${beltLabel(staff.belt)} assessments before advancing to ${nb}.`;
   } else {
     summary=`${gatesLeft} gate${gatesLeft>1?'s':''} remaining for ${nb} Belt. Estimated ${totalWeeks} week${totalWeeks!==1?'s':''} to completion.`;
   }
