@@ -3336,6 +3336,51 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Flag:* this was scoped as content into existing tables. The rationale half is not content, it is
   a shape change plus sixty written justifications, and it should be sized as such.
 
+- [ ] **T125** Bucket A: the #718 correction contradicts the client's own ruling on 112 · est 0d · **Critical**
+  **Blocked on one line from the client. Do not apply `20260827120000_718_bucket_a_unassessed_correction.sql`
+  until it comes back.** Question posted on board 126, 2026-08-25.
+  30 staff read White Belt with no evidence of any kind: no gate results, empty history, no
+  confirmed placement review, all flagged `placement_needed`. That is the Add Staff form's default,
+  not a decision. Counted against the migration's own criteria rather than a description of them,
+  so the number is exactly what it would touch. Verified independently on the same criteria.
+  The migration sets `belt='None'` and `since=null` on those rows. The client's section 4 answer on
+  112 was **"touch nobody's belt value"**, and 112's own `why_it_matters` names this same population
+  ("56 of 92 staff sit at White and 28 of those are still flagged as needing placement", and that 28
+  is today's 30). So the ruling and the correction point opposite ways.
+  **The two populations do not overlap and that is what settles it.** The 28 already at No Belt all
+  carry a history decision *and* a confirmed review, and none is flagged `placement_needed`. Those
+  are real assessor decisions and nothing proposed touches them. Bucket A is a separate 30 with no
+  evidence at all.
+  Confirmed not applied: Bucket A still 30 White, No Belt still 28, and the migration is the single
+  local-only row in the ledger after the T126 sync below.
+  *Done when:* the client answers yes or no on 126, and the migration either runs or is withdrawn
+  with the answer recorded against it.
+
+- [ ] **T126** A belt decision leaves no usable record of who made it or when (board 944) · est 0.5d · **High**
+  Measured live 2026-08-25. Of **98** decided placement reviews, **zero** carry `reviewed_by`, so the
+  only actor recorded on a belt decision is a free-text name. **97 of 98** `confirmed_at` values sit
+  at exactly `00:00:00`, and **63** are dated *earlier than their own `created_at`*, i.e. the record
+  says the belt was confirmed before the assessment was taken. No `sbd_activity_log` action exists
+  for a confirmation either.
+  **This already reaches the client.** Since T98 the client-facing report prints its attribution from
+  those two columns, so reports have gone out carrying a confirmation dated before the sitting.
+  Cause of the midnight half is a single line at `ui-views.js:4599`. Nothing changes on screen.
+  *Done when:* `reviewed_by` is written on confirm, `confirmed_at` carries a real timestamp, a
+  confirmation writes an activity row, and the report's attribution is re-read against a fresh
+  confirmation.
+
+- [x] **T127** Migration ledger reconciled with production (board 129, #721) · **Closed 2026-08-25**
+  The ledger held two migrations under versions that did not match their own filenames
+  (`20260819225511`/`225523` against files dated `20260819234000`/`234500`), so any check reading the
+  ledger to decide whether something shipped returned the wrong answer. Measured, then fixed the same
+  day: files renamed to match the recorded versions, and the ledger backfilled with the 50 versions
+  verified live by schema probe rather than trusted from the record.
+  Ledger now holds 250 rows ending `20260826120000`, with exactly one local-only migration left:
+  `20260827120000`, the Bucket A correction under T125, deliberately held.
+  *Lesson kept:* the finding was posted to the client roughly an hour before the fix merged, so the
+  note went out stale and needed a correction on the item. Check the merge state of a thing before
+  reporting it as open.
+
 ### Blocked, not on the critical path
 
 - [x] **T49** Strip and rotate the PSOP credentials, gate the public page
