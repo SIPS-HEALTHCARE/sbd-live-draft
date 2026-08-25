@@ -80,6 +80,9 @@ function userInitials(s){
 }
 function beltIdx(b){ return BELT_ORDER.indexOf(b); }
 function nextBelt(b){ const i=beltIdx(b); return i<5?BELT_ORDER[i+1]:null; }
+// #718: 'None' (and the reset-tool's NULL) is unbelted — never render "None Belt"/"null".
+function beltName(b){ return (!b || b==='None') ? 'No Belt' : b; }
+function beltLabel(b){ return (!b || b==='None') ? 'No Belt' : b + ' Belt'; }
 function daysAt(since){
   if(!since) return null;
   const d = new Date(since);
