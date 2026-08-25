@@ -3260,6 +3260,31 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Done when:* table delivered (done); `sbd-emails` fail-closed fix deployed and re-probed;
   orphan auth tracked under T119.
 
+- [ ] **T121** Retire `sbd-auth`: 78 of 81 live accounts would accept any password · est 0.25d · **Critical**
+  The orphan T119 marked DELETE and T120 deferred rather than patched, now measured.
+  **Full write-up at `docs/decisions/2026-08-25-sbd-auth-retire.md`.**
+  `index.ts:41` guards the password comparison on the truthiness of the stored value, with no
+  else branch, so an account whose `password_hash` is null or empty authenticates on any input.
+  Counted live 2026-08-25: 81 active accounts, **78 with null or empty `password_hash`, three of
+  those holding an admin role**. The function runs `verify_jwt=false`.
+  **The only thing holding it shut is a missing table.** The login select at `:32` embeds
+  `sbd_facilities`, which does not exist, so PostgREST rejects the query and every login 401s at
+  `:33` before reaching line 41. One line of diff, or one table created by that name, opens all 78.
+  Verified safe to delete on two independent sources, because dormant and live look alike in code:
+  **references**, none anywhere outside this ledger and the T119/T120 notes; and **traffic**, where
+  `sbd_activity_log` holds 2446 `action='login'` rows but only **7** carry this function's shape
+  (`target_type='portal_user'`), all dated 2026-03-19, the day it was created, and none since. The
+  other 2439 are the live GoTrue path through `sbd-log-activity`. The alarming count is the one that
+  proves the function is dead.
+  Recommendation is delete, not patch: patching means a real hash compare, a real token store for
+  the fake `validate` at `:111`, and a migration over 78 columns, all to restore a login nothing
+  calls and GoTrue replaced. Source stays in the repo, so redeploy is the rollback.
+  *Carved out, deliberately:* the three accounts that do carry a plaintext value in `password_hash`.
+  Deleting the function does not clear the column, and the column may be read by something this pass
+  did not check. Separate item, not folded in here.
+  *Done when:* the client has given an explicit go, the function is deleted, and a re-probe returns
+  404. **Not executed. Waiting on that go.**
+
 ### Blocked, not on the critical path
 
 - [x] **T49** Strip and rotate the PSOP credentials, gate the public page
