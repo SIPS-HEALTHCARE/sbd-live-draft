@@ -16,7 +16,7 @@ Options:        1. Log the caller into `sbd_activity_log` and tighten the gate â
                    (see 20260723162412_assessment_pin_attempts.sql).
                 2. Dedicated admin-only `sbd_account_audit` table, delete branch
                    restricted to master_admin, delete refused while the person
-                   still has placement_reviews / sbd_assessment_queue rows, and a
+                   still has placement_reviews / sbd_assessment_sessions rows, and a
                    deactivate-first UI. (Chosen.)
                 3. Also add FKs to all 31 staff_id tables â€” correct long-term, but
                    existing orphans make each `ADD CONSTRAINT` fail without a

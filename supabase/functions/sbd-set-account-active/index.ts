@@ -50,7 +50,7 @@ serve(async (req) => {
 
         // Load the target account.
         const { data: target, error: targetErr } = await supabaseAdmin
-            .from('sbd_portal_users').select('auth_uid, email, role, name, active, protected')
+            .from('sbd_portal_users').select('id, auth_uid, email, role, name, active, protected')
             .eq('auth_uid', auth_uid).single();
         if (targetErr || !target) throw new Error('Account not found.');
 
@@ -58,6 +58,25 @@ serve(async (req) => {
         const protectedEmail = /jjacobs|izambrano|dpayne/i.test(target.email || '');
         if (target.protected || protectedEmail) {
             throw new Error('This is a protected system account and cannot be deactivated.');
+        }
+
+        // Record WHO switched the account and WHY before acting — same rule as the
+        // delete in sbd-sync-user-claims: if the audit row cannot be written, the
+        // switch does not happen. (#890 — console.log alone ages out in ~24h.)
+        const { error: auditErr } = await supabaseAdmin.from('sbd_account_audit').insert({
+            action: active ? 'account_reactivated' : 'account_deactivated',
+            actor_auth_uid: user.id,
+            actor_email: user.email || null,
+            actor_role: callerProfile.role,
+            target_auth_uid: target.auth_uid,
+            target_portal_id: String(target.id),
+            target_email: target.email || null,
+            target_name: target.name || null,
+            target_role: target.role || null,
+            detail: reason ? { reason } : null
+        });
+        if (auditErr) {
+            throw new Error('Aborted: could not write the audit record (' + auditErr.message + ')');
         }
 
         if (active === false) {

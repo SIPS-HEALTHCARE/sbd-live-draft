@@ -4181,6 +4181,7 @@ function renderAPlacementReviews(){
             const saved = rc.last_saved_at ? new Date(rc.last_saved_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : null;
             const why = rc.reason === 'timer' ? 'the candidate ran out of time'
               : rc.reason === 'abandoned' ? `the candidate stopped${mins != null ? ` with ${mins} minutes still on the clock` : ''} and did not return`
+              : rc.reason === 'deactivated' ? `the account was deactivated during the sitting${mins != null ? ` with ${mins} minutes still on the clock` : ''}`
               : 'the sitting was never submitted';
             return `<div style="margin-bottom:12px;padding:10px 12px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:8px;font-size:12px;line-height:1.5;color:#fbbf24"><b>Auto-recovered by the system</b> — ${why}.${saved ? ` Last save ${saved}.` : ''} Unanswered questions scored zero.</div>`;
           })() : ''}
@@ -4869,11 +4870,11 @@ function rptStat(label, value, sub, color){
 function rptBeltBars(staffArr){
   const n = staffArr.length;
   if(!n) return '<div style="font-size:12px;color:var(--txt3);text-align:center;padding:10px">No staff data</div>';
-  return BELT_ORDER.slice().reverse().map(b=>{
+  return BELT_DIST.map(b=>{
     const cnt = staffArr.filter(s=>s.belt===b).length;
     const pct = Math.round(cnt/n*100);
     return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
-      <div style="width:52px;font-size:10.5px;color:${BELT_CLR[b]};font-weight:600;flex-shrink:0">${b}</div>
+      <div style="width:52px;font-size:10.5px;color:${BELT_CLR[b]};font-weight:600;flex-shrink:0">${beltName(b)}</div>
       <div style="flex:1;height:7px;background:var(--s3);border-radius:4px;overflow:hidden">
         <div style="height:100%;width:${Math.max(pct,1)}%;background:${BELT_CLR[b]};border-radius:4px"></div>
       </div>
@@ -5866,13 +5867,12 @@ function pStatGrid(stats, cols){
 function pBeltBars(staffArr){
   const n=staffArr.length;
   if(!n) return '<div style="color:#94a3b8;font-size:9pt;padding:8px 0">No staff data</div>';
-  const beltColors={White:'#94a3b8',Yellow:'#d97706',Green:'#16a34a',Blue:'#2563eb',Brown:'#92400e',Black:'#1e293b'};
-  return BELT_ORDER.slice().reverse().map(b=>{
+  return BELT_DIST.map(b=>{
     const cnt=staffArr.filter(s=>s.belt===b).length;
     const pct=n?Math.round(cnt/n*100):0;
     return `<div class="bar-row">
-      <div class="bar-lbl" style="color:${beltColors[b]}">${b}</div>
-      <div class="bar-track"><div class="bar-fill" style="width:${Math.max(pct,1)}%;background:${beltColors[b]}"></div></div>
+      <div class="bar-lbl" style="color:${BELT_CLR_PRINT[b]}">${beltName(b)}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${Math.max(pct,1)}%;background:${BELT_CLR_PRINT[b]}"></div></div>
       <div class="bar-cnt">${cnt} <span style="font-size:7.5pt;color:#94a3b8">${pct}%</span></div>
     </div>`;
   }).join('');
@@ -6039,7 +6039,7 @@ function openPromoteModal(staffId, context){
         <div style="width:40px;height:40px;border-radius:10px;background:${BELT_CLR[s.belt]||'#888'}22;border:2px solid ${BELT_CLR[s.belt]||'#888'};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:${BELT_CLR[s.belt]||'#888'};flex-shrink:0">${userInitials(s)}</div>
         <div>
           <div style="font-size:13.5px;font-weight:700">${fullName(s)}</div>
-          <div style="font-size:11.5px;color:var(--txt2)">${s.role} &bull; ${s.belt} Belt</div>
+          <div style="font-size:11.5px;color:var(--txt2)">${s.role} &bull; ${beltLabel(s.belt)}</div>
           <div style="margin-top:4px">${beltBadge(s.belt,s)}</div>
         </div>
       </div>
@@ -6297,7 +6297,7 @@ async function clearDangerousProvision(staffId, index, context){
 }
 
 function beltBadge(belt, staff){
-  const lbl = belt==='None' ? 'No Belt' : belt;
+  const lbl = beltName(belt);
   if(staff){
     const s = (typeof staff === 'object') ? staff : getStaff(staff);
     if(s){
@@ -6644,7 +6644,7 @@ function downloadStaffReport(staffId){
     </div>
 
     ${pStatGrid([
-      ['Days at Belt', daysAtLabel(s.since), s.belt+' Belt', BELT_CLR_PRINT[s.belt]||'#0f172a'],
+      ['Days at Belt', daysAtLabel(s.since), beltLabel(s.belt), BELT_CLR_PRINT[s.belt]||'#0f172a'],
       ['Points', pts.toLocaleString(), 'Rank #'+rank+' system-wide', '#d97706'],
       ['Pass Rate', passRate!==null?passRate+'%':'–', (s.history||[]).length+' assessments', passRate>=80?'#16a34a':passRate>=60?'#d97706':'#dc2626'],
       ['PS Stars', psStars, psStars===0?'No tracks yet':'Tracks done', '#d97706'],
@@ -6655,7 +6655,7 @@ function downloadStaffReport(staffId){
     ${pSection('Belt Assessment: Current Status')}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px" class="no-break">
       <div>
-        <div style="font-size:8.5pt;font-weight:700;color:#0f172a;margin-bottom:8px">${s.belt} Belt Gates (Current)</div>
+        <div style="font-size:8.5pt;font-weight:700;color:#0f172a;margin-bottom:8px">${beltLabel(s.belt)} Gates (Current)</div>
         <table><thead><tr><th>Assessment</th><th>Result</th></tr></thead><tbody>
           ${['Competency','Simulation','Observation'].map((a,i)=>{const v=['c','s','o'].map(k=>s.cur[k])[i];return`<tr><td>${a}</td><td><span class="badge ${v==='pass'?'badge-green':v==='fail'?'badge-err':'badge-muted'}">${v||'Pending'}</span></td></tr>`;}).join('')}
         </tbody></table>
@@ -6713,7 +6713,7 @@ function downloadStaffReport(staffId){
 }
 
 // Print-safe belt color lookup (hex values, not CSS vars)
-const BELT_CLR_PRINT = {White:'#94a3b8',Yellow:'#d97706',Green:'#16a34a',Blue:'#2563eb',Brown:'#92400e',Black:'#1e293b'};
+const BELT_CLR_PRINT = {None:'#64748b',White:'#94a3b8',Yellow:'#d97706',Green:'#16a34a',Blue:'#2563eb',Brown:'#92400e',Black:'#1e293b'};
 
 
 // ============================================================ DOWNLOAD: LEVEL 2  --  FACILITY (Hospital Manager)
@@ -7027,7 +7027,7 @@ function downloadNetworkReport(){
     ], 4)}
 
     ${(promoReady.length>0||psTestQueueAll.length>0)?`${pSection('Active Alerts')}
-    ${promoReady.length>0?`<div class="alert alert-warn"><strong>Promotion Reviews Pending (${promoReady.length}):</strong> ${promoReady.map(s=>`${fullName(s)}: ${s.belt} Belt (${getFac(s.fid)?.name||'?'})`).join(' &bull; ')}</div>`:''}
+    ${promoReady.length>0?`<div class="alert alert-warn"><strong>Promotion Reviews Pending (${promoReady.length}):</strong> ${promoReady.map(s=>`${fullName(s)}: ${beltLabel(s.belt)} (${getFac(s.fid)?.name||'?'})`).join(' &bull; ')}</div>`:''}
     ${psTestQueueAll.length>0?`<div class="alert alert-info"><strong>PS Test Queue (${psTestQueueAll.length}):</strong> ${psTestQueueAll.map(({s,tid})=>`${fullName(s)} – ${PS_TRACKS[tid].name}`).join(' &bull; ')}</div>`:''}
     `:''}
 
@@ -7175,7 +7175,7 @@ async function renderSReport(){
 
     <!-- Key Metrics Row -->
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;margin-bottom:16px">
-      ${rptStat('Days at Belt', daysAtLabel(s.since,''), s.belt+' Belt', BELT_CLR[s.belt])}
+      ${rptStat('Days at Belt', daysAtLabel(s.since,''), beltLabel(s.belt), BELT_CLR[s.belt])}
       ${isWhiteBaseline(s) ? rptStat('Current Gates', 'Baseline', 'Starting belt', 'var(--txt3)') : rptStat('Current Gates', [s.cur?.c,s.cur?.s,s.cur?.o].filter(g=>g==='pass').length+'/3', 'Passed', 'var(--ok)')}
       ${rptStat('Adv. Gates', [s.nxt?.c,s.nxt?.s,s.nxt?.o].filter(g=>g==='pass').length+'/3', nextBelt(s.belt)||'Max', 'var(--blue)')}
       ${rptStat('PS Stars', psStars, psStars===0?'No tracks yet':psStars+' completed', 'var(--gold)')}
@@ -7187,7 +7187,7 @@ async function renderSReport(){
     ${rptSection('Assessment Progress')}
     <div class="g2 mb16">
       <div class="card">
-        <div class="card-hd"><div class="card-ttl">Current Belt Assessments</div><span style="font-size:11px;color:var(--txt3)">${isWhiteBaseline(s)?'Baseline':s.belt+' Belt'}</span></div>
+        <div class="card-hd"><div class="card-ttl">Current Belt Assessments</div><span style="font-size:11px;color:var(--txt3)">${isWhiteBaseline(s)?'Baseline':beltLabel(s.belt)}</span></div>
         <div class="card-body">
           ${currentGateCards(s)}
         </div>
@@ -8211,7 +8211,7 @@ function renderSDashboard(){
     `<div style="background:#052e16;border:1px solid #16a34a;border-radius:var(--r);padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
       <div style="width:36px;height:36px;background:#166534;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px">&#10003;</div>
       <div style="flex:1">
-        <div style="font-size:13px;font-weight:700;color:#22c55e">Starting Point Confirmed: ${existingPR.confirmedBelt ? existingPR.confirmedBelt+' Belt' : s.belt==='None' ? 'No Belt — Remediation Path' : s.belt+' Belt'}</div>
+        <div style="font-size:13px;font-weight:700;color:#22c55e">Starting Point Confirmed: ${existingPR.confirmedBelt ? existingPR.confirmedBelt+' Belt' : s.belt==='None' ? 'No Belt — Remediation Path' : beltLabel(s.belt)}</div>
         <div style="font-size:11.5px;color:#86efac;margin-top:2px">Your assessor has reviewed your responses and confirmed your placement. Welcome to the SIPS Belt Intelligence Program.</div>
       </div>
       <button onclick="acknowledgePlacement('${s.id}')" style="background:#166534;border:1px solid #22c55e;border-radius:6px;padding:6px 14px;font-size:11.5px;font-weight:700;color:#22c55e;cursor:pointer;white-space:nowrap;font-family:'Poppins',sans-serif;flex-shrink:0">Acknowledge</button>
@@ -8278,7 +8278,7 @@ function renderSDashboard(){
       <div style="width:34px;height:34px;background:rgba(96,165,250,.12);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px">📋</div>
       <div style="flex:1;min-width:0">
         <div style="font-size:12.5px;font-weight:700;color:var(--blue)">${win.status==='open'?'Assessment Window Open: Study Now':'Prepare for Your '+( nb||s.belt)+' Belt Assessment'}</div>
-        <div style="font-size:11.5px;color:var(--txt2);margin-top:2px">Curriculum, scripts, and SIPS Intelligence practice tests for ${s.belt} Belt${nb?' and '+nb+' Belt advance prep':''}</div>
+        <div style="font-size:11.5px;color:var(--txt2);margin-top:2px">Curriculum, scripts, and SIPS Intelligence practice tests for ${beltLabel(s.belt)}${nb?' and '+nb+' Belt advance prep':''}</div>
       </div>
       <div style="color:var(--txt3)"><svg viewBox="0 0 18 18" fill="none" width="14" height="14"><path d="M6 3l6 6-6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
     </div>` : '';
@@ -8315,7 +8315,7 @@ function renderSDashboard(){
         <div class="stat-sub" style="font-size:10px">${win.label||''}</div>
       </div>
       <div class="stat-card"><div class="stat-accent" style="background:var(--blue)"></div>
-        <div class="stat-lbl">Days at ${s.belt} Belt</div>
+        <div class="stat-lbl">Days at ${beltLabel(s.belt)}</div>
         <div class="stat-val" style="color:var(--blue)">${daysAt(s.since) ?? '—'}</div>
         <div class="stat-sub">Since ${s.since || '—'}</div>
       </div>
@@ -8353,7 +8353,7 @@ function renderSDashboard(){
             // time and hides what is actually outstanding.
             : sbdAdvancementBlock(s)
             ? `<div style="padding:11px 14px;background:rgba(220,38,38,.08);border:1px solid rgba(220,38,38,.3);border-radius:var(--rs);font-size:12px;color:var(--txt2);text-align:left;margin-top:8px;line-height:1.5">${sbdAdvancementBlock(s)}</div>`
-            : `<div style="padding:11px 14px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:var(--rs);font-size:12px;color:var(--txt2);text-align:center;margin-top:8px;line-height:1.5">Complete your ${s.belt} Belt Knowledge and Simulation practice tests at 80% or higher to unlock your assessment request.<div style="margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="sNav(document.querySelector('#s-portal .nav-item[data-view=s-study]'),'s-study','Study &amp; Practice')">Go to Study &amp; Practice</button></div></div>`
+            : `<div style="padding:11px 14px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:var(--rs);font-size:12px;color:var(--txt2);text-align:center;margin-top:8px;line-height:1.5">Complete your ${beltLabel(s.belt)} Knowledge and Simulation practice tests at 80% or higher to unlock your assessment request.<div style="margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="sNav(document.querySelector('#s-portal .nav-item[data-view=s-study]'),'s-study','Study &amp; Practice')">Go to Study &amp; Practice</button></div></div>`
           ):''}
           ${win.status==='closed'?`<div style="padding:10px;background:var(--err-bg);border:1px solid var(--err-bd);border-radius:var(--rs);font-size:12px;color:var(--err);text-align:center;margin-top:8px">Window closed. Keep training – it reopens automatically.</div>`:''}
           `}
@@ -8409,7 +8409,7 @@ function openApplyModal(sid){
       <div class="modal-body">
         <div style="padding:14px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:var(--rs);font-size:12.5px;color:var(--txt2);line-height:1.6">
           <div style="font-weight:700;color:var(--warn);margin-bottom:6px">Practice tests required</div>
-          Complete your <strong>${s.belt} Belt</strong> Knowledge and Simulation practice tests at 80% or higher before requesting an assessment.
+          Complete your <strong>${beltLabel(s.belt)}</strong> Knowledge and Simulation practice tests at 80% or higher before requesting an assessment.
           <div style="margin-top:8px;font-size:12px">Knowledge: <strong>${psc.knowledge||0}%</strong> &bull; Simulation: <strong>${psc.simulation||0}%</strong></div>
         </div>
       </div>
@@ -8475,7 +8475,7 @@ function renderSBelt(){
       <div style="background:rgba(96,165,250,.05);border:1px solid rgba(96,165,250,.25);border-radius:var(--r);padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px;cursor:pointer;flex-wrap:wrap" onclick="sNav(document.querySelector('#s-portal .nav-item[data-view=s-study]'),'s-study','Study &amp; Practice')">
         <div style="width:38px;height:38px;background:rgba(96,165,250,.12);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px">📋</div>
         <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:700;color:var(--blue)">Study &amp; Practice: ${s.belt} Belt</div>
+          <div style="font-size:13px;font-weight:700;color:var(--blue)">Study &amp; Practice: ${beltLabel(s.belt)}</div>
           <div style="font-size:11.5px;color:var(--txt2);margin-top:2px">Full curriculum, all scripts with approved language and forbidden phrases, and SIPS Intelligence practice tests to prep for your assessment.</div>
         </div>
         <div style="color:var(--txt3);flex-shrink:0"><svg viewBox="0 0 18 18" fill="none" width="16" height="16"><path d="M6 3l6 6-6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
@@ -8493,7 +8493,7 @@ function renderSWindow(){
   const cycleDays=win.cfg?(win.cfg.open+win.cfg.closed)*7:0;
   document.getElementById('s-window').innerHTML=`
     <div class="card mb16">
-      <div class="card-hd"><div class="card-ttl">Assessment Window: ${s.belt} Belt</div></div>
+      <div class="card-hd"><div class="card-ttl">Assessment Window: ${beltLabel(s.belt)}</div></div>
       <div class="card-body" style="text-align:center;padding:28px">
         <div style="font-size:48px;font-weight:800;color:${win.status==='open'?'var(--ok)':win.status==='closed'?'var(--err)':'var(--txt3)'};margin-bottom:8px">${win.status==='open'?'OPEN':win.status==='max'?'MAX':win.status==='locked'?'LOCKED':'CLOSED'}</div>
         <div style="font-size:14px;color:var(--txt2);margin-bottom:${win.manual?'6px':'20px'}">${win.label||'No window applicable'}</div>
@@ -9843,7 +9843,7 @@ function renderSStudy() {
           <div style="text-align:center;padding:20px 0 16px">
             <div style="font-size:60px;font-weight:900;color:${gc};line-height:1">${pct}%</div>
             <div style="font-size:15px;font-weight:800;color:${gc};margin:5px 0 3px">${grade}</div>
-            <div style="font-size:11.5px;color:var(--txt3)">${ps.belt} Belt ${ps.mode==='knowledge'?'Knowledge Test':'Simulation'} &bull; ${ps.score}/${ps.questions.length} correct &bull; ${elapsed} min</div>
+            <div style="font-size:11.5px;color:var(--txt3)">${beltLabel(ps.belt)} ${ps.mode==='knowledge'?'Knowledge Test':'Simulation'} &bull; ${ps.score}/${ps.questions.length} correct &bull; ${elapsed} min</div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
             <div style="background:${pct>=80?'rgba(34,197,94,.06)':'rgba(239,68,68,.06)'};border:1px solid ${pct>=80?'rgba(34,197,94,.2)':'rgba(239,68,68,.2)'};border-radius:var(--rs);padding:12px;text-align:center">
@@ -9859,7 +9859,7 @@ function renderSStudy() {
           </div>
           ${ps.belt===s.belt
             ? ((bothPassed||canRequestAssessment(s.id,s.belt)) ? _studyGateBtns(s,nxtBelt,kScore,sScore) : _studyNotPassedMsg(ps.mode,pct))
-            : `<div style="background:var(--s2);border:1px solid var(--bdr);border-radius:var(--rs);padding:11px 14px;margin-bottom:14px;font-size:12px;color:var(--txt2)">Preview practice — gate assessment requests unlock from your <strong>${s.belt} Belt</strong> practice tests.</div>`}
+            : `<div style="background:var(--s2);border:1px solid var(--bdr);border-radius:var(--rs);padding:11px 14px;margin-bottom:14px;font-size:12px;color:var(--txt2)">Preview practice — gate assessment requests unlock from your <strong>${beltLabel(s.belt)}</strong> practice tests.</div>`}
 
 
 
@@ -9882,7 +9882,7 @@ function renderSStudy() {
       <div style="max-width:660px;margin:0 auto">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
           <div>
-            <div style="font-size:13px;font-weight:700;color:${BELT_CLR[ps.belt]}">${ps.belt} Belt: ${isSim?'Simulation Scenarios':'Knowledge Test'}</div>
+            <div style="font-size:13px;font-weight:700;color:${BELT_CLR[ps.belt]}">${beltLabel(ps.belt)}: ${isSim?'Simulation Scenarios':'Knowledge Test'}</div>
             <div style="font-size:11px;color:var(--txt3)">Question ${ps.current+1} of ${ps.questions.length}</div>
           </div>
           <button class="btn btn-ghost btn-sm" onclick="resetPractice()">Exit</button>
@@ -9982,7 +9982,7 @@ function renderSStudy() {
 
     tabContent = `
       <div style="background:${bColor}08;border:1px solid ${bColor}20;border-radius:var(--rs);padding:12px 16px;margin-bottom:14px">
-        <div style="font-size:12.5px;font-weight:700;color:${bColor};margin-bottom:4px">${curBelt} Belt Scripts: Master These</div>
+        <div style="font-size:12.5px;font-weight:700;color:${bColor};margin-bottom:4px">${beltLabel(curBelt)} Scripts: Master These</div>
         <div style="font-size:12px;color:var(--txt2)">You must be able to deliver every script below from memory, with the exact approved language, under pressure. Knowing the forbidden phrases is equally important – know why each one fails.</div>
       </div>
       ${allScriptHTML || '<div class="empty-state"><div class="empty-ttl">Script content loading</div><div class="empty-desc">Navigate to the Full Curriculum tab and open the Scripts section.</div></div>'}
@@ -10043,7 +10043,7 @@ function renderSStudy() {
       ${isReady ? `<div style="background:rgba(34,197,94,.06);border:1.5px solid rgba(34,197,94,.3);border-radius:var(--r);padding:14px 16px;text-align:center">
         <div style="font-size:16px;margin-bottom:8px">🎯</div>
         <div style="font-size:14px;font-weight:700;color:var(--ok);margin-bottom:5px">All Competencies Confirmed</div>
-        <div style="font-size:12px;color:var(--txt2);margin-bottom:12px">You have checked off every item on the ${curBelt} Belt observation readiness list. Let your Lead or Educator know you are ready to schedule your Level 3 Observation assessment.</div>
+        <div style="font-size:12px;color:var(--txt2);margin-bottom:12px">You have checked off every item on the ${beltLabel(curBelt)} observation readiness list. Let your Lead or Educator know you are ready to schedule your Level 3 Observation assessment.</div>
       </div>` : ''}`;
 
   // ── PRACTICE TAB ──────────────────────────────────────────────────
@@ -10603,7 +10603,6 @@ function renderHDashboard(){
   const pct=Math.round(aboveGreen/n*100);
   const avg=(st.reduce((a,s)=>a+BELT_VAL[s.belt],0)/n).toFixed(2);
   const pending=DB.queue.filter(q=>q.fid===fid).length;
-  const beltCounts=BELT_ORDER.map(b=>st.filter(s=>s.belt===b).length);
   const hs=buildHealthScore(fid);
   const fiRoll=(typeof fiFacilityRollup==='function')?fiFacilityRollup(fid):null;
   const prcRoll=(typeof prcFacilityRollup==='function')?prcFacilityRollup(fid):null;
@@ -10625,7 +10624,7 @@ function renderHDashboard(){
       <div class="card">
         <div class="card-hd"><div class="card-ttl">Belt Distribution</div><span class="tc-muted" style="font-size:11px">${n} staff</span></div>
         <div class="card-body">
-          ${BELT_ORDER.slice().reverse().map((b,i)=>{const cnt=beltCounts[5-i];const pctB=n?Math.round(cnt/n*100):0;return`<div class="bbar-row"><div class="bbar-lbl" style="color:${BELT_CLR[b]}">${b}</div><div class="bbar-track"><div class="bbar-fill" style="width:${pctB}%;background:${BELT_CLR[b]}">${cnt>0?cnt:''}</div></div><div class="bbar-cnt">${cnt}</div></div>`}).join('')}
+          ${BELT_DIST.map(b=>{const cnt=st.filter(s=>s.belt===b).length;const pctB=n?Math.round(cnt/n*100):0;return`<div class="bbar-row"><div class="bbar-lbl" style="color:${BELT_CLR[b]}">${beltName(b)}</div><div class="bbar-track"><div class="bbar-fill" style="width:${pctB}%;background:${BELT_CLR[b]}">${cnt>0?cnt:''}</div></div><div class="bbar-cnt">${cnt}</div></div>`}).join('')}
           <div class="divider"></div>
           <div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:6px"><span class="tc-muted">Green Belt Compliance</span><span class="fw7 ${pct>=75?'tc-ok':pct>=50?'tc-warn':'tc-err'}">${pct}% (${aboveGreen}/${n})</span></div>
           <div class="prog"><div class="prog-fill" style="width:${pct}%;background:var(--ok)"></div></div>
@@ -10860,7 +10859,7 @@ function openBeltOverrideModal(staffId, context){
         <div style="width:40px;height:40px;border-radius:10px;background:${BELT_CLR[s.belt]||'#888'}22;border:2px solid ${BELT_CLR[s.belt]||'#888'};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:${BELT_CLR[s.belt]||'#888'};flex-shrink:0">${userInitials(s)}</div>
         <div>
           <div style="font-size:13.5px;font-weight:700">${fullName(s)}</div>
-          <div style="font-size:11.5px;color:var(--txt2)">${s.role} &bull; ${s.belt} Belt</div>
+          <div style="font-size:11.5px;color:var(--txt2)">${s.role} &bull; ${beltLabel(s.belt)}</div>
           <div style="margin-top:4px">${beltBadge(s.belt,s)}</div>
         </div>
       </div>
@@ -11064,7 +11063,7 @@ function renderHProfile(sid,context){
       </div>
     </div>
     <div class="g2 mb16">
-      <div class="card"><div class="card-hd"><div class="card-ttl">${s.belt} Belt Development Track</div></div><div class="card-body">${trackItems}</div></div>
+      <div class="card"><div class="card-hd"><div class="card-ttl">${beltLabel(s.belt)} Development Track</div></div><div class="card-body">${trackItems}</div></div>
       <div>
         <div class="card mb16"><div class="card-hd"><div class="card-ttl">Position School</div><span style="color:var(--gold);font-size:13px;font-weight:700">${calcTotalPSStars(s)>0?Array(calcTotalPSStars(s)).fill('★').join(' '):''}</span></div><div class="card-body">${(()=>{
   const bIdx=beltIdx(s.belt);
@@ -11661,7 +11660,7 @@ function openShiftEditModal(fid, date, shift){
               <!-- Staff info -->
               <div onclick="toggleShiftStaff('${s.id}',document.querySelector('.se-row[data-sid=\\'${s.id}\\']'))" style="cursor:pointer;min-width:0">
                 <div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${fullName(s)}</div>
-                <div style="font-size:10px;color:var(--txt3)">${s.role} &bull; ${s.belt} Belt</div>
+                <div style="font-size:10px;color:var(--txt3)">${s.role} &bull; ${beltLabel(s.belt)}</div>
               </div>
               <!-- Zone dropdown -->
               <div style="min-width:150px" onclick="event.stopPropagation()">
@@ -11985,12 +11984,12 @@ function buildAttendanceTab(fid, shifts){
           return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bdr);flex-wrap:wrap">
             <div style="flex:1;min-width:140px">
               <div style="font-size:12px;font-weight:700;color:var(--err)">${fullName(s)}: absent</div>
-              <div style="font-size:11px;color:var(--txt3);margin-top:2px">${s.belt} Belt &bull; ${s.role}</div>
+              <div style="font-size:11px;color:var(--txt3);margin-top:2px">${beltLabel(s.belt)} &bull; ${s.role}</div>
               ${neededZone?`<div style="margin-top:4px;display:inline-flex;align-items:center;gap:4px;background:${neededZone.bg};color:${neededZone.color};border:1px solid ${neededZone.bd};border-radius:12px;padding:2px 8px;font-size:10.5px;font-weight:700">${neededZone.icon} Zone needed: ${neededZone.label}</div>`:''}
             </div>
             <select class="form-select" style="width:auto;max-width:220px;font-size:11.5px" id="cov-${sid}">
               <option value="">Select coverage...</option>
-              ${avail.map(x=>`<option value="${x.id}">${fullName(x)} – ${x.belt} Belt</option>`).join('')}
+              ${avail.map(x=>`<option value="${x.id}">${fullName(x)} – ${beltLabel(x.belt)}</option>`).join('')}
             </select>
             <button class="btn btn-blue btn-sm" onclick="assignCoverage('${fid}','${attDate}','${attShift}','${sid}')">Assign +${ATTEND_POINTS.coverage} bonus</button>
           </div>`;
@@ -12048,7 +12047,7 @@ function buildAttendanceRecord(fid){
   // staff.id is a uuid, so parseInt made this NaN and the picker snapped back to the first
   // person every time. Found while wiring this tab into the admin portal (T58).
   const staffSel = `<select class="form-select" style="width:auto;max-width:220px;font-size:12px" onchange="attRecordStaffId=this.value;_refreshHAtt()">
-    ${allSt.sort((a,b)=>beltIdx(b.belt)-beltIdx(a.belt)).map(x=>`<option value="${x.id}" ${x.id===s.id?'selected':''}>${fullName(x)} – ${x.belt}</option>`).join('')}
+    ${allSt.sort((a,b)=>beltIdx(b.belt)-beltIdx(a.belt)).map(x=>`<option value="${x.id}" ${x.id===s.id?'selected':''}>${fullName(x)} – ${beltName(x.belt)}</option>`).join('')}
   </select>`;
 
   // Month rows
@@ -12202,7 +12201,7 @@ function downloadAttendanceRecord(fid, staffId, year){
     <div class="meta-item"><label>Employee Name</label><span>${fullName(s)}</span></div>
     <div class="meta-item"><label>Facility</label><span>${fac?.name||'–'}</span></div>
     <div class="meta-item"><label>Role / Title</label><span>${s.role}</span></div>
-    <div class="meta-item"><label>Belt Level</label><span>${s.belt} Belt</span></div>
+    <div class="meta-item"><label>Belt Level</label><span>${beltLabel(s.belt)}</span></div>
     <div class="meta-item"><label>Attend. Points</label><span style="color:${totalAttPts>=0?'#16a34a':'#dc2626'}">${totalAttPts>=0?'+':''}${totalAttPts}</span></div>
     <div class="meta-item"><label>Year</label><span>${year}</span></div>
   </div>
@@ -13148,7 +13147,7 @@ function renderHAssessments(){
     ${promoReady.length>0?`
     <div style="padding:12px 16px;background:rgba(196,154,32,.08);border:1px solid rgba(196,154,32,.3);border-radius:var(--rs);margin-bottom:14px;display:flex;align-items:flex-start;gap:10px">
       <svg width="16" height="16" viewBox="0 0 18 18" fill="none" style="flex-shrink:0;margin-top:1px"><path d="M9 2l2.1 4.3 4.7.7-3.4 3.3.8 4.7L9 12.8l-4.2 2.2.8-4.7L2.2 7l4.7-.7z" stroke="#c49a20" stroke-width="1.4" stroke-linejoin="round"/></svg>
-      <div><strong style="color:#c49a20">Promotion Reviews Pending (${promoReady.length})</strong><div style="font-size:12px;color:#94a3b8;margin-top:3px">${promoReady.map(s=>fullName(s)+': '+s.belt+' Belt').join(' &bull; ')}</div></div>
+      <div><strong style="color:#c49a20">Promotion Reviews Pending (${promoReady.length})</strong><div style="font-size:12px;color:#94a3b8;margin-top:3px">${promoReady.map(s=>fullName(s)+': '+beltLabel(s.belt)).join(' &bull; ')}</div></div>
     </div>`:''}
 
     <!-- Alert: PS Test Queue -->
@@ -13321,7 +13320,7 @@ function renderAOverview(){
       </div>
       <div class="card"><div class="card-hd"><div class="card-ttl">Network Belt Distribution</div></div>
         <div class="card-body">
-          ${BELT_ORDER.slice().reverse().map(b=>{const cnt=DB.staff.filter(s=>s.belt===b).length;const pct=n?Math.round(cnt/n*100):0;return`<div class="bbar-row"><div class="bbar-lbl" style="color:${BELT_CLR[b]}">${b}</div><div class="bbar-track"><div class="bbar-fill" style="width:${Math.max(pct,2)}%;background:${BELT_CLR[b]}">${cnt}</div></div><div class="bbar-cnt">${cnt}</div></div>`}).join('')}
+          ${BELT_DIST.map(b=>{const cnt=DB.staff.filter(s=>s.belt===b).length;const pct=n?Math.round(cnt/n*100):0;return`<div class="bbar-row"><div class="bbar-lbl" style="color:${BELT_CLR[b]}">${beltName(b)}</div><div class="bbar-track"><div class="bbar-fill" style="width:${Math.max(pct,2)}%;background:${BELT_CLR[b]}">${cnt}</div></div><div class="bbar-cnt">${cnt}</div></div>`}).join('')}
         </div>
       </div>
     </div>
@@ -13720,7 +13719,7 @@ function renderAAllStaff(){
   const filterBar=adminFilterBar(true, facList, 'renderAAllStaff');
 
   // Belt distribution counts from filtered pool
-  const beltCounts=BELT_ORDER.map(b=>({belt:b,count:st.filter(s=>s.belt===b).length}));
+  const beltCounts=['None',...BELT_ORDER].map(b=>({belt:b,count:st.filter(s=>s.belt===b).length}));
   const promoCount=st.filter(s=>s.promo).length;
 
   document.getElementById('a-allstaff').innerHTML=`
@@ -13763,7 +13762,7 @@ function renderAAllStaff(){
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
           ${beltCounts.filter(b=>b.count>0).map(b=>`
             <span class="pill" style="background:${BELT_CLR[b.belt]}22;color:${BELT_CLR[b.belt]};border:1px solid ${BELT_CLR[b.belt]}44;font-size:10px">
-              ${b.belt}: ${b.count}
+              ${beltName(b.belt)}: ${b.count}
             </span>`).join('')}
         </div>
       </div>
@@ -14291,7 +14290,7 @@ function renderFacOverview(el){
     <div class="g2 mb16">
       <!-- Belt Distribution -->
       <div class="card"><div class="card-hd"><div class="card-ttl">Belt Distribution</div></div>
-        <div class="card-body">${BELT_ORDER.slice().reverse().map(b=>{const cnt=st.filter(s=>s.belt===b).length;const pct=stats.n?Math.round(cnt/stats.n*100):0;return`<div class="bbar-row"><div class="bbar-lbl" style="color:${BELT_CLR[b]}">${b}</div><div class="bbar-track"><div class="bbar-fill" style="width:${Math.max(pct,2)}%;background:${BELT_CLR[b]}">${cnt}</div></div><div class="bbar-cnt">${cnt}</div></div>`}).join('')}
+        <div class="card-body">${BELT_DIST.map(b=>{const cnt=st.filter(s=>s.belt===b).length;const pct=stats.n?Math.round(cnt/stats.n*100):0;return`<div class="bbar-row"><div class="bbar-lbl" style="color:${BELT_CLR[b]}">${beltName(b)}</div><div class="bbar-track"><div class="bbar-fill" style="width:${Math.max(pct,2)}%;background:${BELT_CLR[b]}">${cnt}</div></div><div class="bbar-cnt">${cnt}</div></div>`}).join('')}
         </div>
       </div>
       <!-- Department Health Score -->
@@ -15844,9 +15843,6 @@ function renderAReports(){
     return {f, st, hs, fs, pr, ps, stag, handoff, oip};
   }).sort((a,b)=>b.hs.totalScore-a.hs.totalScore);
 
-  // ─ Network belt distribution
-  const beltCountsNet = BELT_ORDER.map(b=>allSt.filter(s=>s.belt===b).length);
-
   const selFid = facPool[0]?.id||'test-a';
 
   document.getElementById('a-reports').innerHTML=`
@@ -16256,7 +16252,7 @@ function openRecordModal(sid){
   const actFac=getFac(activeFid);
   const curS=sid?getStaff(sid):null;
   const staffSel=curS?`<div class="form-group"><label class="form-label">Staff Member</label><div style="padding:8px 11px;background:var(--s2);border:1px solid var(--bdr2);border-radius:var(--rs);font-size:12.5px;font-weight:600">${fullName(curS)}</div></div>`:
-    `<div class="form-group"><label class="form-label">Staff Member *</label><select class="form-select" id="ra-staff">${staffOf(activeFid).map(s=>`<option value="${s.id}">${fullName(s)}${s.belt?` — ${s.belt} Belt`:''}</option>`).join('')}</select></div>`;
+    `<div class="form-group"><label class="form-label">Staff Member *</label><select class="form-select" id="ra-staff">${staffOf(activeFid).map(s=>`<option value="${s.id}">${fullName(s)}${s.belt?` — ${beltLabel(s.belt)}`:''}</option>`).join('')}</select></div>`;
   const nb=curS?nextBelt(curS.belt):null;
   const gateInfo=curS&&nb?`<div style="padding:10px 12px;background:var(--s2);border-radius:var(--rs);border:1px solid var(--bdr);margin-bottom:14px;font-size:12px;color:var(--txt2);line-height:1.6">
     Advancing to <strong>${nb} Belt</strong>: ${ICO.check}<span style="color:${(curS.nxt||{}).c==='pass'?'var(--ok)':'var(--txt3)'}"> Competency</span> &bull; <span style="color:${(curS.nxt||{}).s==='pass'?'var(--ok)':'var(--txt3)'}"> Simulation</span> &bull; <span style="color:${(curS.nxt||{}).o==='pass'?'var(--ok)':'var(--txt3)'}"> Observation</span>
@@ -16281,7 +16277,7 @@ function openRecordModal(sid){
 function updateRaStaff(fid){
   const sel=document.getElementById('ra-staff');
   if(!sel) return;
-  sel.innerHTML=staffOf(fid).map(s=>`<option value="${s.id}">${fullName(s)}${s.belt?` — ${s.belt} Belt`:''}</option>`).join('');
+  sel.innerHTML=staffOf(fid).map(s=>`<option value="${s.id}">${fullName(s)}${s.belt?` — ${beltLabel(s.belt)}`:''}</option>`).join('');
 }
 
 let raResult=null;
@@ -16380,7 +16376,7 @@ function downloadFacilityReport(fid){
   const st=staffOf(fid);
   const stats=facStats(fid);
   const grade=stats.greenPct>=90?'A':stats.greenPct>=75?'B':stats.greenPct>=60?'C+':stats.greenPct>=40?'C':'D';
-  const beltTbl=BELT_ORDER.map(b=>{const cnt=st.filter(s=>s.belt===b).length;return`<tr><td>${b} Belt</td><td>${BELT_CERT[b]}</td><td style="text-align:center">${cnt}</td><td style="text-align:center">${st.length?Math.round(cnt/st.length*100):0}%</td></tr>`}).join('');
+  const beltTbl=['None',...BELT_ORDER].map(b=>{const cnt=st.filter(s=>s.belt===b).length;return`<tr><td>${beltLabel(b)}</td><td>${BELT_CERT[b]}</td><td style="text-align:center">${cnt}</td><td style="text-align:center">${st.length?Math.round(cnt/st.length*100):0}%</td></tr>`}).join('');
   const promoReady=st.filter(s=>s.promo);
   const staffTbl=st.sort((a,b)=>beltIdx(b.belt)-beltIdx(a.belt)).map(s=>{
     try{
@@ -16441,7 +16437,7 @@ function downloadFacilityReport(fid){
     <div class="prog-bar"><div class="prog-fill" style="width:${stats.greenPct}%"></div></div>
     <strong style="white-space:nowrap">${stats.greenPct}% of 100% Goal</strong>
   </div>
-  ${promoReady.length?`<div style="background:#fef9ee;border:1px solid #d97706;border-radius:6px;padding:12px 16px;margin-bottom:20px"><strong style="color:#92400e">Promotion Eligible Staff (${promoReady.length}):</strong> ${promoReady.map(s=>`${fullName(s)} – ${s.belt} Belt`).join(' &bull; ')}</div>`:''}
+  ${promoReady.length?`<div style="background:#fef9ee;border:1px solid #d97706;border-radius:6px;padding:12px 16px;margin-bottom:20px"><strong style="color:#92400e">Promotion Eligible Staff (${promoReady.length}):</strong> ${promoReady.map(s=>`${fullName(s)} – ${beltLabel(s.belt)}`).join(' &bull; ')}</div>`:''}
   <h2>Belt Distribution</h2>
   <table><thead><tr><th>Belt Level</th><th>Certification</th><th style="text-align:center">Count</th><th style="text-align:center">%</th></tr></thead><tbody>${beltTbl}</tbody></table>
   <h2>Staff Roster with Projections</h2>
@@ -16954,7 +16950,7 @@ function openFreeAgentFullReport(faId) {
       <div style="padding:12px 14px">
         <div style="display:flex;gap:3px;margin-bottom:12px">${beltProgressBar}</div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
-          <div class="irow"><div class="ilbl">Current Belt</div><div class="ival" style="color:${bColor};font-weight:800">${fa.belt}</div></div>
+          <div class="irow"><div class="ilbl">Current Belt</div><div class="ival" style="color:${bColor};font-weight:800">${beltName(fa.belt)}</div></div>
           <div class="irow"><div class="ilbl">Since</div><div class="ival">${fa.since||'--'}</div></div>
           <div class="irow"><div class="ilbl">Next Belt</div><div class="ival" style="color:${nxt?BELT_CLR[nxt]:'var(--txt3)'}">${nxt||'Certified'}</div></div>
         </div>
@@ -17090,7 +17086,7 @@ function downloadFreeAgentReport(faId) {
       <div>
         <div class="rpt-brand">SIPS Healthcare Solutions &bull; Sterile By Design &bull; Free Agent Registry</div>
         <div class="rpt-title">${fullName(fa)}</div>
-        <div class="rpt-sub">${fa.role} &bull; Sterile Processing Department<br>Current Belt: ${fa.belt} (${BELT_CERT[fa.belt]||''}) &bull; Certified Since ${fa.since||'–'}<br>Released: ${fa.releasedAt||'–'}</div>
+        <div class="rpt-sub">${fa.role} &bull; Sterile Processing Department<br>Current Belt: ${beltName(fa.belt)} (${BELT_CERT[fa.belt]||''}) &bull; Certified Since ${fa.since||'–'}<br>Released: ${fa.releasedAt||'–'}</div>
       </div>
       <div class="rpt-grade-box">
         <div class="rpt-grade" style="color:${bColor}">${psStars > 0 ? Array(psStars).fill('★').join('') : '–'}</div>
@@ -17103,7 +17099,7 @@ function downloadFreeAgentReport(faId) {
 
     <!-- Stat Grid -->
     ${pStatGrid([
-      ['Current Belt', fa.belt, 'Since ' + (fa.since||'–'), bColor],
+      ['Current Belt', beltName(fa.belt), 'Since ' + (fa.since||'–'), bColor],
       ['Points', pts.toLocaleString(), 'SBD Score', '#d97706'],
       ['PS Stars', psStars, psStars===0 ? 'No tracks yet' : psStars===1 ? '1 track complete' : psStars+' tracks complete', '#d97706'],
       ['Assessments', (fa.history||[]).length, (fa.history||[]).filter(h=>isSuccessOutcome(h.res)).length+' passed', '#16a34a'],
@@ -17732,7 +17728,7 @@ function releaseToFreeAgent(staffId){
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;padding:12px;background:#131829;border-radius:var(--rs)">
         <div style="width:40px;height:40px;border-radius:10px;background:${BELT_CLR[s.belt]||'#888'}22;border:2px solid ${BELT_CLR[s.belt]||'#888'};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:${BELT_CLR[s.belt]||'#dde3f0'};flex-shrink:0">${userInitials(s)}</div>
         <div><div style="font-size:13.5px;font-weight:700">${fullName(s)}</div>
-        <div style="font-size:11.5px;color:#94a3b8">${s.role} &bull; ${s.belt} Belt &bull; ${fac?.name||'--'}</div></div>
+        <div style="font-size:11.5px;color:#94a3b8">${s.role} &bull; ${beltLabel(s.belt)} &bull; ${fac?.name||'--'}</div></div>
       </div>
       <div class="form-group"><label class="form-label">Release Date</label>
         <input type="date" class="form-input" id="fa-rel-date" value="${new Date().toISOString().slice(0,10)}">
@@ -18019,7 +18015,7 @@ function _rmPanel(s){
     <div class="card-hd"><div class="card-ttl">${fullName(s)}</div>
       <button class="btn btn-ghost btn-xs" onclick="ROLEMGMT_SEL=null;renderARoleMgmt()">Close</button></div>
     <div class="card-body" style="display:flex;flex-direction:column;gap:14px">
-      <div style="font-size:11.5px;color:var(--txt3)">${fac?fac.name:'No facility'}${sys?' &middot; '+sys.name:''}${_rmHasStaffRow(s)?' &middot; '+s.belt+' Belt':' &middot; Portal account, no staff record'}</div>
+      <div style="font-size:11.5px;color:var(--txt3)">${fac?fac.name:'No facility'}${sys?' &middot; '+sys.name:''}${_rmHasStaffRow(s)?' &middot; '+beltLabel(s.belt):' &middot; Portal account, no staff record'}</div>
       <div>
         <div style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Account Role</div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -18812,7 +18808,7 @@ function openAddUserModal(type){
         <div class="form-group"><label class="form-label">Link to Staff Record (Optional)</label>
           <select class="form-select" id="nu-sid">
             <option value="">-- No linked staff record yet --</option>
-            ${staffOf(DB.facilities.filter(f=>f.active!==false)[0]?.id).map(s=>`<option value="${s.id}">${fullName(s)} \u2014 ${s.belt} Belt</option>`).join('')}
+            ${staffOf(DB.facilities.filter(f=>f.active!==false)[0]?.id).map(s=>`<option value="${s.id}">${fullName(s)} \u2014 ${beltLabel(s.belt)}</option>`).join('')}
           </select>
           <div class="form-hint">Optional: Select an existing staff record this login belongs to.</div>
         </div>
@@ -18852,7 +18848,7 @@ function updateStaffRecordOpts(fid){
   const sel=document.getElementById('nu-sid');
   if(!sel)return;
   const staff=staffOf(fid);
-  sel.innerHTML=staff.map(s=>`<option value="${s.id}">${fullName(s)} – ${s.belt} Belt</option>`).join('');
+  sel.innerHTML=staff.map(s=>`<option value="${s.id}">${fullName(s)} – ${beltLabel(s.belt)}</option>`).join('');
 }
 
 async function submitAddUser(type){

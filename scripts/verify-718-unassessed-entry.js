@@ -27,6 +27,14 @@ const checks = [
   ['no default-White writes remain', ![ui, bulk, approve, claims].some(src => /belt:\s*'White'\s*[,}]/.test(src))],
   // 6. Display fallbacks no longer invent White for a missing belt.
   ['no || White fallbacks remain', !/\|\|\s*'White'/.test(api) && !/belt\|\|'White'/.test(ui)],
+  // 7. Read side (#718 reports): unbelted people are drawn and never labeled "None Belt".
+  ['beltLabel/beltName helpers exist', /function beltName\(b\)\{ return \(!b \|\| b==='None'\) \? 'No Belt' : b; \}/.test(read('src/js/utils.js'))],
+  ['BELT_DIST ends with None', /const BELT_DIST = \[\.\.\.BELT_ORDER\]\.reverse\(\)\.concat\('None'\)/.test(read('src/js/logic.js'))],
+  ['distribution charts iterate BELT_DIST', (ui.match(/BELT_DIST\.map\(/g) || []).length >= 5],
+  ['print colour map has None', /BELT_CLR_PRINT = \{None:/.test(ui)],
+  // Staff-belt interpolations must route through beltLabel/beltName. Target-belt templates
+  // (targetBelt, m.belt, t.belt, nb…) can never be 'None' and are exempt.
+  ['no raw staff-belt " Belt" labels remain', !/\$\{(s|st|x|fa|ps|staff|curBelt)(\.belt)?\} Belt/.test(ui) && !/[^A-Za-z](s|fa|staff)\.belt\s*\+\s*' Belt'/.test(ui)],
 ];
 
 let failed = 0;
