@@ -4181,6 +4181,7 @@ function renderAPlacementReviews(){
             const saved = rc.last_saved_at ? new Date(rc.last_saved_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : null;
             const why = rc.reason === 'timer' ? 'the candidate ran out of time'
               : rc.reason === 'abandoned' ? `the candidate stopped${mins != null ? ` with ${mins} minutes still on the clock` : ''} and did not return`
+              : rc.reason === 'deactivated' ? `the account was deactivated during the sitting${mins != null ? ` with ${mins} minutes still on the clock` : ''}`
               : 'the sitting was never submitted';
             return `<div style="margin-bottom:12px;padding:10px 12px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:8px;font-size:12px;line-height:1.5;color:#fbbf24"><b>Auto-recovered by the system</b> — ${why}.${saved ? ` Last save ${saved}.` : ''} Unanswered questions scored zero.</div>`;
           })() : ''}
