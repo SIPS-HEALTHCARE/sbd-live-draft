@@ -40,10 +40,18 @@ Read from the live project `mhijaqahbceuahfzezbh` on 2026-08-25:
 | Active accounts in `sbd_portal_users` | 81 |
 | Active accounts with null or empty `password_hash` | **78** |
 | Active accounts with a stored value | 3 |
-| Of the 78, accounts holding an admin role | **3** |
+| Of the 78, `facility_admin` | **10** |
+| Of the 78, `staff_admin` | **3** |
+| Of the 78, `master_admin` | **0** |
 
-So 78 of 81 live accounts, three of them administrators, would authenticate on any
-input if this path were reachable.
+So 78 of 81 live accounts, **thirteen of them administrators**, would authenticate
+on any input if this path were reachable.
+
+The three accounts that do carry a stored value are precisely the three
+`master_admin` accounts, so the highest privilege tier is the one part already
+covered. An earlier draft of this note said "three administrators", which counted
+only `master_admin` and `staff_admin` and so both undercounted the exposure and
+implied the wrong tier. Corrected here.
 
 ## Why it has not been exploited
 
@@ -60,6 +68,20 @@ The login query at `:32` is:
 
 The embedded resource makes PostgREST reject the query, so `userErr` is truthy and
 every login returns 401 at `:33` before ever reaching line 41.
+
+**Verified by probe, not by inference.** Running the identical select over REST:
+
+```
+GET /rest/v1/sbd_portal_users?select=*,sbd_facilities(name,active,system_id)&limit=1
+-> PGRST200 "Could not find a relationship between 'sbd_portal_users' and
+   'sbd_facilities' in the schema cache"
+```
+
+Control, the same query with the embed removed, returns `401` instead. The schema
+error therefore precedes the permission check, which means the service role the
+function runs under hits it too. This was also read off the **deployed** function
+(v12) rather than the repository copy; the two are identical on both of the lines
+that matter.
 
 **A missing table is the only thing holding this shut.** It is not a control. Anyone
 who creates a table by that name, or who edits that select while fixing something

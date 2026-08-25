@@ -3,7 +3,7 @@
 **Living document.** This is the single record of what has been built and what is left.
 It is not regenerated. It is edited in place.
 
-**Last updated:** 2026-08-20
+**Last updated:** 2026-08-25
 **Audit basis:** 2026-07-25, verified against the live project and the live code.
 **History basis:** 2026-07-31, the complete client conversation from 22 May to 31 July read end
 to end including every attachment. See `docs/DOMAIN_GLOSSARY.md` for the vocabulary this ledger
@@ -3260,16 +3260,25 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Done when:* table delivered (done); `sbd-emails` fail-closed fix deployed and re-probed;
   orphan auth tracked under T119.
 
-- [ ] **T121** Retire `sbd-auth`: 78 of 81 live accounts would accept any password · est 0.25d · **Critical**
+- [ ] **T121** Retire `sbd-auth`: built to accept any password for 78 of 81 accounts, currently unreachable · est 0.25d · **High**
   The orphan T119 marked DELETE and T120 deferred rather than patched, now measured.
   **Full write-up at `docs/decisions/2026-08-25-sbd-auth-retire.md`.**
-  `index.ts:41` guards the password comparison on the truthiness of the stored value, with no
-  else branch, so an account whose `password_hash` is null or empty authenticates on any input.
-  Counted live 2026-08-25: 81 active accounts, **78 with null or empty `password_hash`, three of
-  those holding an admin role**. The function runs `verify_jwt=false`.
-  **The only thing holding it shut is a missing table.** The login select at `:32` embeds
-  `sbd_facilities`, which does not exist, so PostgREST rejects the query and every login 401s at
-  `:33` before reaching line 41. One line of diff, or one table created by that name, opens all 78.
+  Read on the **deployed** function (v12), not the repo copy; the two are identical on both
+  lines that matter. `:41` guards the password comparison on the truthiness of the stored value,
+  with no else branch, so an account whose `password_hash` is null or empty would authenticate on
+  any input. `verify_jwt=false`.
+  Counted live 2026-08-25: 81 active, **78 with null or empty `password_hash`**. Broken down,
+  because the first version of this entry got it wrong: of the 78, **ten are `facility_admin` and
+  three are `staff_admin`, so thirteen administrators, not three**. The three accounts that *do*
+  carry a stored value are the three `master_admin` accounts, so the highest privilege tier is the
+  one part already covered.
+  **It cannot run today, and that is load-bearing.** The login select at `:32` embeds
+  `sbd_facilities`, which does not exist. Verified by probe rather than inference: the same query
+  returns `PGRST200` naming the missing relationship, and returns it *before* any permission check.
+  Control: the identical query without the embed returns `401` instead, which proves the schema
+  error precedes auth and therefore hits the service role too. So every login 401s at `:33`.
+  Not a live hole. A hole with a wall in front of it. Restoring a table by that name, or editing
+  that one line while fixing something nearby, exposes all 78 in a single change.
   Verified safe to delete on two independent sources, because dormant and live look alike in code:
   **references**, none anywhere outside this ledger and the T119/T120 notes; and **traffic**, where
   `sbd_activity_log` holds 2446 `action='login'` rows but only **7** carry this function's shape
@@ -3284,6 +3293,48 @@ already named above: **an ask next to an urgent one still needs its own row.**
   did not check. Separate item, not folded in here.
   *Done when:* the client has given an explicit go, the function is deleted, and a re-probe returns
   404. **Not executed. Waiting on that go.**
+
+- [ ] **T122** No Belt on every surface (board 144): nine render sites, and the one-line fix is wrong · est 1d · **High**
+  Board 144, answered into the 24 Aug EOD. The client sized it as five hardcoded render sites and
+  asked what that actually costs. It is **nine**: seven distribution or table renders and two filter
+  chip rows in `ui-views.js` (978, 3084, 10606, 10700, 13324, 13723, 14294, 15848, 16383), plus the
+  print bars at 4872 and 5870.
+  **All nine read `BELT_ORDER` (`logic.js:37`), which excludes `'None'` on purpose.** The comment at
+  the definition says why: `beltIdx('None') = -1` is what makes `nextBelt()` return White and
+  `calcPoints()` award nothing, which is the correct semantics for an unbelted person.
+  So adding `'None'` to `BELT_ORDER` fixes all nine renders in one line **and silently breaks
+  next-belt and points arithmetic** across the ~35 other call sites. Do not do that.
+  Sound shape: a separate display-order list consumed by the render sites only, leaving the
+  progression list untouched. `BELT_CLR`, `BELT_BG`, `BELT_CERT` and `BELT_VAL` already carry a
+  `None` entry, so the display half is partly built. The comment names the same path: a
+  `beltLabel()` helper, "not more sentinel values".
+  *Done when:* bars and filter chips show No Belt in red at all nine sites, `nextBelt()` and
+  `calcPoints()` are unchanged under test, and the 112 selector follows on the proven read side.
+
+- [ ] **T123** Board 151 is not two assessment systems; it is one filter · est 0.5d · **Medium**
+  Board 151 carries a read that the portal is split across two parallel assessment systems.
+  **It does not hold.** Measured 2026-08-25: `aip_assessment_requests` holds **zero rows** and has
+  never been written to. The portal writes and reads `sbd_assessment_queue`, 58 rows, of which four
+  are pending and three approved, which is exactly the seven the dashboard filter surfaces. The
+  function that did join a different staff table is `sbd-data`, already deleted under T119.
+  So the remaining work is the facility filter or the row-level access on that screen, not a table
+  split. Considerably smaller than the item is sized for.
+  *Note:* board 152 (study gate) carries the same section proceed control. Do not split 151 and 152
+  across two people; the second will undo the first.
+
+- [ ] **T124** Preceptor knowledge checks and the missing rationale field (board 150) · est 2d · **High**
+  Counted out of `preceptor.js?v=9`, the file production serves, module by module.
+  **Reader content is complete:** 15 modules, six at Level 1, four at Level 2, five at Level 3,
+  `contentPending: false` on every one. The client's ask was ten questions per module each with a
+  written rationale.
+  **Actual: 105 questions against a target of 150, and zero rationales out of 105.** The question
+  shape is `{n, q, options, answer}`; there is no rationale field to hold one.
+  Per module: P03/P04/P05 ten; P06 eight; P02 seven; P01 five; P07/P08 eight; P09/P10 seven;
+  P11 to P15 five each.
+  **Level 1 only**, which is the agreed scope: ten more questions across P01, P02 and P06, plus
+  sixty rationales, plus the field. Six source workbooks are already in the repo.
+  *Flag:* this was scoped as content into existing tables. The rationale half is not content, it is
+  a shape change plus sixty written justifications, and it should be sized as such.
 
 ### Blocked, not on the critical path
 
