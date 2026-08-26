@@ -3,7 +3,7 @@
 **Living document.** This is the single record of what has been built and what is left.
 It is not regenerated. It is edited in place.
 
-**Last updated:** 2026-08-25
+**Last updated:** 2026-08-26
 **Audit basis:** 2026-07-25, verified against the live project and the live code.
 **History basis:** 2026-07-31, the complete client conversation from 22 May to 31 July read end
 to end including every attachment. See `docs/DOMAIN_GLOSSARY.md` for the vocabulary this ledger
@@ -3260,7 +3260,13 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Done when:* table delivered (done); `sbd-emails` fail-closed fix deployed and re-probed;
   orphan auth tracked under T119.
 
-- [ ] **T121** Retire `sbd-auth`: built to accept any password for 78 of 81 accounts, currently unreachable · est 0.25d · **High**
+- [x] **T121** Retire `sbd-auth`: built to accept any password for 78 of 81 accounts · **Done 2026-08-26**
+  **Deleted from production 2026-08-26, along with the other three T119 orphans.** Verified by
+  listing the deployed functions rather than taking the report: `sbd-auth`, `sbd-bulk-upload`,
+  `sbd-ai-proxy` and `sync-user-claims` are all absent. `sbd-sync-user-claims` (the live one, v30)
+  is untouched and every account still signs in through GoTrue, which is what the evidence below
+  said would happen. T119 is complete with this.
+  The finding as it stood, kept because the reasoning is the reusable part:
   The orphan T119 marked DELETE and T120 deferred rather than patched, now measured.
   **Full write-up at `docs/decisions/2026-08-25-sbd-auth-retire.md`.**
   Read on the **deployed** function (v12), not the repo copy; the two are identical on both
@@ -3352,24 +3358,49 @@ already named above: **an ask next to an urgent one still needs its own row.**
   are real assessor decisions and nothing proposed touches them. Bucket A is a separate 30 with no
   evidence at all.
   Confirmed not applied: Bucket A still 30 White, No Belt still 28, and the migration is the single
-  local-only row in the ledger after the T126 sync below.
-  *Done when:* the client answers yes or no on 126, and the migration either runs or is withdrawn
-  with the answer recorded against it.
+  local-only row in the ledger after the T127 sync below.
+  **Update 2026-08-26, and the first point changes what a yes actually authorises.**
+  1. **The 30 are not one cohort.** 27 were already there before 13 August, which is the population
+     the client was shown; **3 were added after**, the last on 21 August 14:12. One of the three is
+     Barbara Rios, the same account still unexplained under 154. So a yes on 126 covers 27 he has
+     seen and 3 he has not. Say that when the answer comes rather than applying it blind.
+  2. **The bucket has stopped growing.** The last person added as White was on the 21st; everyone
+     since arrives as not yet certified. So this is a fixed backlog now, not a leak.
+  3. **The display half is live.** Production and the repo are byte identical on it, so a report
+     already reads an unassessed person correctly. Only the stored belt value is still at issue.
+  4. On attribution: the "56 of 92" line sits under **T109** in this ledger *and* on board item
+     112's own `why_it_matters`. Both are true; the citation above is to the board item.
+  *Done when:* the client answers yes or no on 126, the 27/3 split is put to him rather than assumed,
+  and the migration either runs or is withdrawn with the answer recorded against it.
 
 - [ ] **T126** A belt decision leaves no usable record of who made it or when (board 944) · est 0.5d · **High**
-  Measured live 2026-08-25. Of **98** decided placement reviews, **zero** carry `reviewed_by`, so the
-  only actor recorded on a belt decision is a free-text name. **97 of 98** `confirmed_at` values sit
-  at exactly `00:00:00`, and **63** are dated *earlier than their own `created_at`*, i.e. the record
-  says the belt was confirmed before the assessment was taken. No `sbd_activity_log` action exists
-  for a confirmation either.
-  **This already reaches the client.** Since T98 the client-facing report prints its attribution from
-  those two columns, so reports have gone out carrying a confirmation dated before the sitting.
+  Re-measured 2026-08-26; the first draft of this entry undercounted and overclaimed, both corrected.
+  Decided placement reviews are **99**, not 98. The 99th carries a `confirmed_belt` with neither
+  `confirmed_at` nor `confirmed_by`, so a count keyed on those two columns misses it.
+  **Zero of the 99** carry `reviewed_by`, so the only actor recorded on a belt decision is a
+  free-text name. **97 of the 98 that carry a date** sit at exactly `00:00:00`, and **63** are dated
+  *earlier than their own `created_at`*, i.e. the record says the belt was confirmed before the
+  assessment was taken. No `sbd_activity_log` action exists for a confirmation either.
+  **Of those 63, 60 have a staff row and 3 do not.** The three orphans are a separate defect and are
+  not part of this fix.
+  **On exposure, the honest limit.** `sbd_report_audit_log` does record generation, 296 rows, so
+  "nothing records that a report was generated" is too strong. But it carries `facility_id`,
+  `generated_by`, `report_type` and `generated_at` and **no person**, so which individuals appeared
+  in any given report is not recoverable. What can be said: the 60 sit across **8 facilities**, and
+  **48 reports were generated at those facilities after one of these confirmations**. So the safe
+  wording, and the one to use with the client, is that any report printed for those people shows a
+  date earlier than the sitting, not that 63 such reports demonstrably went out.
   Cause of the midnight half is a single line at `ui-views.js:4599`. Nothing changes on screen.
   *Done when:* `reviewed_by` is written on confirm, `confirmed_at` carries a real timestamp, a
   confirmation writes an activity row, and the report's attribution is re-read against a fresh
   confirmation.
 
-- [x] **T127** Migration ledger reconciled with production (board 129, #721) · **Closed 2026-08-25**
+- [ ] **T127** Migration ledger reconciled with production (board 129, #721) · **Reopened 2026-08-26**
+  **Closed too early.** The record side is clean, but the card cannot close: the repo holds **93
+  migration files against 250 recorded versions**, so a fresh apply against an empty database still
+  would not rebuild production. The ledger now tells the truth about what ran; it does not follow
+  that the repo can reproduce it. Those are two different claims and only the first was proven.
+  What follows below is the part that is genuinely done.
   The ledger held two migrations under versions that did not match their own filenames
   (`20260819225511`/`225523` against files dated `20260819234000`/`234500`), so any check reading the
   ledger to decide whether something shipped returned the wrong answer. Measured, then fixed the same
@@ -3379,7 +3410,22 @@ already named above: **an ask next to an urgent one still needs its own row.**
   `20260827120000`, the Bucket A correction under T125, deliberately held.
   *Lesson kept:* the finding was posted to the client roughly an hour before the fix merged, so the
   note went out stale and needed a correction on the item. Check the merge state of a thing before
-  reporting it as open.
+  reporting it as open. Then it was closed on the record fix alone, which is the same mistake in the
+  other direction: verify the whole claim, not the half that was measured.
+  *Done when:* a fresh apply from the repo reproduces production, or the gap between 93 files and
+  250 versions is explained and recorded as deliberate.
+
+- [ ] **T128** The account audit records intent, not outcome (board 890) · est 0.25d · **Medium**
+  `sbd-set-account-active` (v4, live 2026-08-26) writes the `sbd_account_audit` row **before** it
+  bans the auth user and flips the flag, and aborts if the audit insert fails. Fail-closed is the
+  right call and the comment says so. The consequence is the part to look at: if
+  `updateUserById` or the flag update then fails, the ledger already says `account_deactivated`
+  while the account is still live, and nothing rewrites it.
+  Same shape in the delete path in `sbd-sync-user-claims`, which the comment explicitly mirrors, so
+  this is a deliberate pattern rather than a slip. It is still a ledger of what was attempted.
+  *Sound alternative:* keep the pre-write as an `attempted` row and stamp the outcome after, or
+  write the row after the action and fail the call if the write fails. Either keeps fail-closed.
+  *Done when:* a failed deactivation leaves no row claiming it succeeded.
 
 ### Blocked, not on the critical path
 
