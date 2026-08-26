@@ -1,3 +1,7 @@
+// RETIRED 2026-08-26 (#748 / T121): deleted from the Supabase deployment, kept here as backup only.
+// Do NOT redeploy. Login accepted any password for accounts without a password_hash (78 of 81),
+// and only "worked" because its query joins the nonexistent sbd_facilities table.
+// Decision doc: docs/decisions/2026-08-25-sbd-auth-retire.md
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 const corsHeaders = {

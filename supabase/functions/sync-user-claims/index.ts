@@ -1,3 +1,6 @@
+// RETIRED 2026-08-26 (#748): deleted from the Supabase deployment, kept here as backup only.
+// Do NOT redeploy. Legacy function with zero invocations in the logs — no caller exists
+// (only the un-prefixed name suggests the retired SBD_GOD_SOG monolith era).
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 const corsHeaders = {
