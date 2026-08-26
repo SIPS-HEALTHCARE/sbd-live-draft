@@ -1,3 +1,6 @@
+// RETIRED 2026-08-26 (#748): deleted from the Supabase deployment, kept here as backup only.
+// Do NOT redeploy. Legacy weak-auth function from the #749 audit; only traffic in its lifetime
+// logs was our own audit curl probes — no real caller exists.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 const corsHeaders = {

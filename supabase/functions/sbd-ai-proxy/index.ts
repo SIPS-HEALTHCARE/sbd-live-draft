@@ -1,3 +1,6 @@
+// RETIRED 2026-08-26 (#748): deleted from the Supabase deployment, kept here as backup only.
+// Do NOT redeploy. Legacy weak-auth function from the #749 audit; only traffic in its lifetime
+// logs was our own audit curl probes — no real caller exists.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 const corsHeaders = {
