@@ -3,7 +3,7 @@
 **Living document.** This is the single record of what has been built and what is left.
 It is not regenerated. It is edited in place.
 
-**Last updated:** 2026-08-20
+**Last updated:** 2026-08-25
 **Audit basis:** 2026-07-25, verified against the live project and the live code.
 **History basis:** 2026-07-31, the complete client conversation from 22 May to 31 July read end
 to end including every attachment. See `docs/DOMAIN_GLOSSARY.md` for the vocabulary this ledger
@@ -3259,6 +3259,127 @@ already named above: **an ask next to an urgent one still needs its own row.**
   retirement, not patched. `sbd-data` + `admin-analytics` already 404 (deleted by T119 today).
   *Done when:* table delivered (done); `sbd-emails` fail-closed fix deployed and re-probed;
   orphan auth tracked under T119.
+
+- [ ] **T121** Retire `sbd-auth`: built to accept any password for 78 of 81 accounts, currently unreachable · est 0.25d · **High**
+  The orphan T119 marked DELETE and T120 deferred rather than patched, now measured.
+  **Full write-up at `docs/decisions/2026-08-25-sbd-auth-retire.md`.**
+  Read on the **deployed** function (v12), not the repo copy; the two are identical on both
+  lines that matter. `:41` guards the password comparison on the truthiness of the stored value,
+  with no else branch, so an account whose `password_hash` is null or empty would authenticate on
+  any input. `verify_jwt=false`.
+  Counted live 2026-08-25: 81 active, **78 with null or empty `password_hash`**. Broken down,
+  because the first version of this entry got it wrong: of the 78, **ten are `facility_admin` and
+  three are `staff_admin`, so thirteen administrators, not three**. The three accounts that *do*
+  carry a stored value are the three `master_admin` accounts, so the highest privilege tier is the
+  one part already covered.
+  **It cannot run today, and that is load-bearing.** The login select at `:32` embeds
+  `sbd_facilities`, which does not exist. Verified by probe rather than inference: the same query
+  returns `PGRST200` naming the missing relationship, and returns it *before* any permission check.
+  Control: the identical query without the embed returns `401` instead, which proves the schema
+  error precedes auth and therefore hits the service role too. So every login 401s at `:33`.
+  Not a live hole. A hole with a wall in front of it. Restoring a table by that name, or editing
+  that one line while fixing something nearby, exposes all 78 in a single change.
+  Verified safe to delete on two independent sources, because dormant and live look alike in code:
+  **references**, none anywhere outside this ledger and the T119/T120 notes; and **traffic**, where
+  `sbd_activity_log` holds 2446 `action='login'` rows but only **7** carry this function's shape
+  (`target_type='portal_user'`), all dated 2026-03-19, the day it was created, and none since. The
+  other 2439 are the live GoTrue path through `sbd-log-activity`. The alarming count is the one that
+  proves the function is dead.
+  Recommendation is delete, not patch: patching means a real hash compare, a real token store for
+  the fake `validate` at `:111`, and a migration over 78 columns, all to restore a login nothing
+  calls and GoTrue replaced. Source stays in the repo, so redeploy is the rollback.
+  *Carved out, deliberately:* the three accounts that do carry a plaintext value in `password_hash`.
+  Deleting the function does not clear the column, and the column may be read by something this pass
+  did not check. Separate item, not folded in here.
+  *Done when:* the client has given an explicit go, the function is deleted, and a re-probe returns
+  404. **Not executed. Waiting on that go.**
+
+- [ ] **T122** No Belt on every surface (board 144): nine render sites, and the one-line fix is wrong · est 1d · **High**
+  Board 144, answered into the 24 Aug EOD. The client sized it as five hardcoded render sites and
+  asked what that actually costs. It is **nine**: seven distribution or table renders and two filter
+  chip rows in `ui-views.js` (978, 3084, 10606, 10700, 13324, 13723, 14294, 15848, 16383), plus the
+  print bars at 4872 and 5870.
+  **All nine read `BELT_ORDER` (`logic.js:37`), which excludes `'None'` on purpose.** The comment at
+  the definition says why: `beltIdx('None') = -1` is what makes `nextBelt()` return White and
+  `calcPoints()` award nothing, which is the correct semantics for an unbelted person.
+  So adding `'None'` to `BELT_ORDER` fixes all nine renders in one line **and silently breaks
+  next-belt and points arithmetic** across the ~35 other call sites. Do not do that.
+  Sound shape: a separate display-order list consumed by the render sites only, leaving the
+  progression list untouched. `BELT_CLR`, `BELT_BG`, `BELT_CERT` and `BELT_VAL` already carry a
+  `None` entry, so the display half is partly built. The comment names the same path: a
+  `beltLabel()` helper, "not more sentinel values".
+  *Done when:* bars and filter chips show No Belt in red at all nine sites, `nextBelt()` and
+  `calcPoints()` are unchanged under test, and the 112 selector follows on the proven read side.
+
+- [ ] **T123** Board 151 is not two assessment systems; it is one filter · est 0.5d · **Medium**
+  Board 151 carries a read that the portal is split across two parallel assessment systems.
+  **It does not hold.** Measured 2026-08-25: `aip_assessment_requests` holds **zero rows** and has
+  never been written to. The portal writes and reads `sbd_assessment_queue`, 58 rows, of which four
+  are pending and three approved, which is exactly the seven the dashboard filter surfaces. The
+  function that did join a different staff table is `sbd-data`, already deleted under T119.
+  So the remaining work is the facility filter or the row-level access on that screen, not a table
+  split. Considerably smaller than the item is sized for.
+  *Note:* board 152 (study gate) carries the same section proceed control. Do not split 151 and 152
+  across two people; the second will undo the first.
+
+- [ ] **T124** Preceptor knowledge checks and the missing rationale field (board 150) · est 2d · **High**
+  Counted out of `preceptor.js?v=9`, the file production serves, module by module.
+  **Reader content is complete:** 15 modules, six at Level 1, four at Level 2, five at Level 3,
+  `contentPending: false` on every one. The client's ask was ten questions per module each with a
+  written rationale.
+  **Actual: 105 questions against a target of 150, and zero rationales out of 105.** The question
+  shape is `{n, q, options, answer}`; there is no rationale field to hold one.
+  Per module: P03/P04/P05 ten; P06 eight; P02 seven; P01 five; P07/P08 eight; P09/P10 seven;
+  P11 to P15 five each.
+  **Level 1 only**, which is the agreed scope: ten more questions across P01, P02 and P06, plus
+  sixty rationales, plus the field. Six source workbooks are already in the repo.
+  *Flag:* this was scoped as content into existing tables. The rationale half is not content, it is
+  a shape change plus sixty written justifications, and it should be sized as such.
+
+- [ ] **T125** Bucket A: the #718 correction contradicts the client's own ruling on 112 · est 0d · **Critical**
+  **Blocked on one line from the client. Do not apply `20260827120000_718_bucket_a_unassessed_correction.sql`
+  until it comes back.** Question posted on board 126, 2026-08-25.
+  30 staff read White Belt with no evidence of any kind: no gate results, empty history, no
+  confirmed placement review, all flagged `placement_needed`. That is the Add Staff form's default,
+  not a decision. Counted against the migration's own criteria rather than a description of them,
+  so the number is exactly what it would touch. Verified independently on the same criteria.
+  The migration sets `belt='None'` and `since=null` on those rows. The client's section 4 answer on
+  112 was **"touch nobody's belt value"**, and 112's own `why_it_matters` names this same population
+  ("56 of 92 staff sit at White and 28 of those are still flagged as needing placement", and that 28
+  is today's 30). So the ruling and the correction point opposite ways.
+  **The two populations do not overlap and that is what settles it.** The 28 already at No Belt all
+  carry a history decision *and* a confirmed review, and none is flagged `placement_needed`. Those
+  are real assessor decisions and nothing proposed touches them. Bucket A is a separate 30 with no
+  evidence at all.
+  Confirmed not applied: Bucket A still 30 White, No Belt still 28, and the migration is the single
+  local-only row in the ledger after the T126 sync below.
+  *Done when:* the client answers yes or no on 126, and the migration either runs or is withdrawn
+  with the answer recorded against it.
+
+- [ ] **T126** A belt decision leaves no usable record of who made it or when (board 944) · est 0.5d · **High**
+  Measured live 2026-08-25. Of **98** decided placement reviews, **zero** carry `reviewed_by`, so the
+  only actor recorded on a belt decision is a free-text name. **97 of 98** `confirmed_at` values sit
+  at exactly `00:00:00`, and **63** are dated *earlier than their own `created_at`*, i.e. the record
+  says the belt was confirmed before the assessment was taken. No `sbd_activity_log` action exists
+  for a confirmation either.
+  **This already reaches the client.** Since T98 the client-facing report prints its attribution from
+  those two columns, so reports have gone out carrying a confirmation dated before the sitting.
+  Cause of the midnight half is a single line at `ui-views.js:4599`. Nothing changes on screen.
+  *Done when:* `reviewed_by` is written on confirm, `confirmed_at` carries a real timestamp, a
+  confirmation writes an activity row, and the report's attribution is re-read against a fresh
+  confirmation.
+
+- [x] **T127** Migration ledger reconciled with production (board 129, #721) · **Closed 2026-08-25**
+  The ledger held two migrations under versions that did not match their own filenames
+  (`20260819225511`/`225523` against files dated `20260819234000`/`234500`), so any check reading the
+  ledger to decide whether something shipped returned the wrong answer. Measured, then fixed the same
+  day: files renamed to match the recorded versions, and the ledger backfilled with the 50 versions
+  verified live by schema probe rather than trusted from the record.
+  Ledger now holds 250 rows ending `20260826120000`, with exactly one local-only migration left:
+  `20260827120000`, the Bucket A correction under T125, deliberately held.
+  *Lesson kept:* the finding was posted to the client roughly an hour before the fix merged, so the
+  note went out stale and needed a correction on the item. Check the merge state of a thing before
+  reporting it as open.
 
 ### Blocked, not on the critical path
 
