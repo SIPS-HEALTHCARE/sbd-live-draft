@@ -4596,7 +4596,11 @@ async function confirmPlacement(prId){
   // confirmed_by / confirmed_at / the note / the staff history entry.
   const confirmedBelt = noBelt ? null : chosenBelt;
   const status = (noBelt ? !pr.tentativeBelt : chosenBelt === pr.tentativeBelt) ? 'confirmed' : 'adjusted';
-  const confirmedAt = new Date().toISOString().split('T')[0];
+  // confirmedAt is a bare date for the two DATE targets (staff.since, history dt).
+  // placement_reviews.confirmed_at is timestamptz — a bare date stored there parses as
+  // midnight UTC, which backdated evening confirmations before their own review (#944).
+  const confirmedTs = new Date().toISOString();
+  const confirmedAt = confirmedTs.split('T')[0];
   const confirmedBy = ST.user ? ST.user.name : 'Assessor';
 
   const s = getStaff(pr.staffId);
@@ -4629,7 +4633,8 @@ async function confirmPlacement(prId){
       await sbFetch(`/rest/v1/placement_reviews?id=eq.${pr.id}`, {
         method:'PATCH',
         body: {status, confirmed_belt: confirmedBelt, assessor_note: note,
-               confirmed_at: confirmedAt, confirmed_by: confirmedBy}
+               confirmed_at: confirmedTs, confirmed_by: confirmedBy,
+               reviewed_by: ST.user ? ST.user.id : null, reviewed_at: confirmedTs}
       });
     }catch(e){
       handleSyncError(e, 'Placement confirm sync');
@@ -4641,8 +4646,10 @@ async function confirmPlacement(prId){
   pr.confirmedBelt = confirmedBelt;
   pr.assessorNote = note;
   pr.status = status;
-  pr.confirmedAt = confirmedAt;
+  pr.confirmedAt = confirmedTs;
   pr.confirmedBy = confirmedBy;
+  pr.reviewedBy = ST.user ? ST.user.id : null;
+  pr.reviewedAt = confirmedTs;
   if(s){
     s.belt = noBelt ? 'None' : chosenBelt;
     s.placementNeeded = false;
