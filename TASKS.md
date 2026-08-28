@@ -2639,6 +2639,22 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Proposed by the client:* module list, gates and content request to him Mon 17 Aug, live Fri 28 Aug.
   *Goal:* Endoscopy modules exist and reach only the people a leader assigns them to.
   *Done when:* A leader assigns an endoscopy module to one named person, that person sees it, nobody else at their belt level does, and no facility-wide or belt-driven trigger exists for it.
+  **Content landed 27 Aug** (Dr. Jake's Self-Study Manual + Preceptor Guide, forwarded via the 8 Aug
+  email). **Build half code-complete 29 Aug** on `work/t108-endoscopy-build`: rides
+  `foundations_assignments`/`foundations_progress` with `module_id='en-01'` (zero migration — no
+  CHECK/FK on the column in any of the 8 migrations that touch it), new `src/js/endoscopy.js` +
+  `scripts/endoscopy-from-docx.py` (13 chapters + Quick Reference converted verbatim, colours and
+  callouts intact — word-fidelity `--check` clean), `getFoundationsAssignments()` filters the
+  `en-` prefix so the Foundations "N/10" convention stays honest. Gate 1 is 14 auto-scored items
+  (8 True/False + 6 fill-in-the-blank, both auto-markable from the manual's answer key) with a
+  100%-required pass rule — a fixed 8-item bank at "7 of 8" is guessable in ~28 attempts on
+  average given unlimited free retakes, so this was tightened rather than shipped as originally
+  scoped. Gate 2 is seeded pre-passed (no scenario content exists); Gate 3 is the Preceptor
+  Guide's 28-item, 5-group Competency Verification plus the 4 short-answer questions as a
+  leader-marked "Written Answers" group. Design note: `docs/decisions/2026-08-28-t108-endoscopy-build.md`.
+  Verify: `node scripts/verify-endoscopy-module.js` (36 assertions). Not yet: pushed/PR'd, or
+  QA'd against a live Supabase session (deferred — creating a test assignment against production
+  is exactly what the CRITICAL DIRECTIVE in CLAUDE.md forbids doing via automation).
 
 - [ ] **T109** Manually added staff default to White, which is a decision nobody made · est 1d · **High**
   Asked for in the daily brief of 2026-08-13, Priority 4. Adding someone by hand offers White Belt
