@@ -51,6 +51,9 @@ const sandbox = new Function(
   // Lifted, not hardcoded: the declaration must live in foundations.js, which
   // loads first. See the "no cross-file load-order dependency" check below.
   liftDecl(FND, 'SCRIPTS_MODULE_ID', 'foundations.js') + '\n' +
+  // T108: getFoundationsAssignments() also excludes 'en-*' rows now (endoscopy
+  // rides this same table). Lifted, not hardcoded, same reasoning as SCRIPTS_MODULE_ID.
+  liftDecl(FND, 'ENDO_MODULE_PREFIX', 'foundations.js') + '\n' +
   'const DB = {};\n' +
   liftBlock(FND, 'function getFoundationsAssignments', 'foundations.js') + '\n' +
   'return { FULL_CURRICULUM_DATA, BELT_ORDER, scriptSectionsForBelt, scriptsBeltsWithContent,' +
