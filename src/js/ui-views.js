@@ -399,6 +399,8 @@ function enterPortal(type){
     // here because initAppData() has already hydrated DB.foundationsAssignments
     // (doLogin awaits it before calling enterPortal), and this is the only door in.
     if(typeof applyScriptsNavGate==='function') applyScriptsNavGate(sid);
+    // T108: same reasoning — endoscopy is assigned-only, no belt trigger.
+    if(typeof applyEndoscopyNavGate==='function') applyEndoscopyNavGate(sid);
     renderSView(_sv);
     return;
   }
@@ -637,7 +639,7 @@ function renderSView(view){
   // Scoreboard lockdown: re-checked here, not just at nav visibility, because a saved
   // sessionStorage view can route straight to a view id.
   if(view==='s-scoreboard' && !scoreboardAllowed()){ toast('The scoreboard is unavailable while it is being updated.','warn'); view='s-dashboard'; }
-  ['s-dashboard','s-belt','s-window','s-scoreboard','s-posschool','s-report','s-oip','s-schedule','s-history','s-study','s-foundations','s-instruments','s-scripts','s-preceptor','s-observations','s-observationreviews','s-assessments','s-guide','s-settings','s-david'].forEach(v=>{
+  ['s-dashboard','s-belt','s-window','s-scoreboard','s-posschool','s-report','s-oip','s-schedule','s-history','s-study','s-foundations','s-instruments','s-scripts','s-endoscopy','s-preceptor','s-observations','s-observationreviews','s-assessments','s-guide','s-settings','s-david'].forEach(v=>{
     const el=document.getElementById(v);
     if(el){el.classList.add('hidden');el.classList.remove('fade-in');}
   });
@@ -663,6 +665,8 @@ function renderSView(view){
     // T92: assigned-only surface. renderSScripts re-checks the assignment itself,
     // because a saved sessionStorage view can route straight to a view id.
     's-scripts':()=>{ if(typeof renderSScripts==='function') renderSScripts(); },
+    // T108: same assigned-only pattern. renderSEndoscopy re-checks the assignment.
+    's-endoscopy':()=>{ if(typeof renderSEndoscopy==='function') renderSEndoscopy(); },
     's-preceptor':()=>{ if(typeof renderSPreceptor==='function') renderSPreceptor(); },
     // #73: assessor consoles inside the staff portal. Re-checked here, not just at nav
     // visibility, because a saved view in sessionStorage can route straight to a view id.
