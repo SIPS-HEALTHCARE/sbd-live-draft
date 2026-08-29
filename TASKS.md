@@ -1449,7 +1449,17 @@ persisted.
   returns true for all three granted accounts and false for a plain staff member and a plain manager.
 
 - [ ] **T74** Grantable roles are system wide and need to be per facility · est 3d · High
-  **Half live, checked 2026-08-13. Staying open.** The assessor half is in production:
+  **Assessor half now complete, checked 2026-08-29. Still staying open.** The last ten system-wide
+  assessor policies were rewritten per facility and merged as `c0cb8f4` (#719) on 2026-08-28, and
+  the client was told on the 28th that this was checked on the live site and signed off. That
+  closes the assessor half, not the item. **Watch the wording when this reaches the client:** the
+  28 August note reads "assessor access is now scoped per facility everywhere", which is true of
+  the assessor and only the assessor. Role management by facility, which is what was actually
+  asked for, is still system wide for every other role. Do not let the two be read as one.
+  See also `docs/decisions/2026-08-29-assessor-facility-scope-contradiction.md`, which records
+  that RLS Addendum 8.6 and the client's 30 July ruling point opposite ways on G3, and that the
+  client's ruling stands.
+  **Half live, checked 2026-08-13.** The assessor half is in production:
   `sbd_portal_users.assigned_facility_ids` holds the per-facility grant, and the UI reads it
   through `effAssessorScoped()` and `effIsAssessorAt(fid, u)` (`ui-views.js:10759`). What was
   asked for was all of role management by facility, not the assessor alone, so every other
@@ -2621,7 +2631,7 @@ already named above: **an ask next to an urgent one still needs its own row.**
   auth-init 42), same window.** Verified: `node scripts/verify-scripts-module.js`, 41 assertions
   including the new storage-repoint section.
 
-- [ ] **T108** Endoscopy modules, assignable to named people from the first release · est 3d · **High**
+- [x] **T108** Endoscopy modules, assignable to named people from the first release · **Done 2026-08-29**
   Asked for in the daily brief of 2026-08-13, Priority 3. Endoscopy is not a belt requirement and
   not a facility-wide rollout, because not everyone in a department works endoscopy. The modules
   have to land only on the people a leader deliberately assigns them to, and the client is
@@ -2636,6 +2646,23 @@ already named above: **an ask next to an urgent one still needs its own row.**
   the content request are written up for the client in `docs/decisions/`. The modules themselves
   are the 28 August half and have not started. That date holds only if the content comes back by
   21 August.
+  **The 28 August half is now delivered and live, verified 2026-08-29.** Production serves
+  `endoscopy.js?v=1` and every one of the nine assets matches the local `index.html` exactly, so
+  what is merged is what is running. Measured against the source manual rather than the merge:
+  14 sections (13 chapters plus the Quick Reference workflow), a final assessment of 14
+  auto-marked questions (8 true/false, 6 fill-in-the-blank) plus 4 written answers that go to the
+  leader, and 28 observation items across 5 groups from the preceptor guide. That is the 18
+  question total the client was told about.
+  Assignment is by name and nothing rolls out by belt or facility, as asked. Assignments are
+  stored in `foundations_assignments` under the `ENDO_MODULE_PREFIX` module id rather than in a
+  table of their own, so `getEndoAssignments()` filters that prefix (`endoscopy.js:134`).
+  **Nobody has been assigned yet**: `foundations_assignments` holds 218 rows and none of them
+  carry an `endo` module id, so no real user has walked the module end to end. One test
+  assignment and a watched full pass are still owed before this is called proven to the client.
+  **Carried forward as its own item, see T129 below:** the source manual defines four callout
+  types and the platform styles three, so STOP renders in the warning style and FACILITY-SPECIFIC
+  renders in the key-concept style. The content is all present; two of the four types are not
+  visually distinct.
   *Proposed by the client:* module list, gates and content request to him Mon 17 Aug, live Fri 28 Aug.
   *Goal:* Endoscopy modules exist and reach only the people a leader assigns them to.
   *Done when:* A leader assigns an endoscopy module to one named person, that person sees it, nobody else at their belt level does, and no facility-wide or belt-driven trigger exists for it.
@@ -3275,6 +3302,22 @@ already named above: **an ask next to an urgent one still needs its own row.**
   retirement, not patched. `sbd-data` + `admin-analytics` already 404 (deleted by T119 today).
   *Done when:* table delivered (done); `sbd-emails` fail-closed fix deployed and re-probed;
   orphan auth tracked under T119.
+  **Re-measured 2026-08-29, and the population has moved since the 21 August table.** Seven SBD
+  functions now run with `verify_jwt=false`: `serve-app`, `sync-spd911`, `sbd-emails`,
+  `sbd-release-to-free-agent`, `sbd-assign-free-agent`, `david-admin-api` and
+  `sbd-score-assessment`. The 21 August audit covered the ones that existed then; the two
+  free-agent functions move a staff member between facilities and `david-admin-api` is an admin
+  surface, and none of the three has been read for its in-code guard since. Config was read, code
+  was not, so this is a list of what to re-probe, not a finding against any of them.
+  Also measured the same day, and it belongs on this item because it is the same blind spot:
+  **45 edge functions are deployed against 25 folders in the repo.** Deleting the seven dead
+  folders under #748 on 2026-08-28 removed nothing from production, by that commit's own wording,
+  so the gap widened rather than closed. Four of the deployed functions carry a local filesystem
+  entrypoint rather than a git one: `sbd-approve-registration`, `bulk-upload-staff`,
+  `sbd-sync-user-claims` and `sbd-set-account-active`. That is a machine this ledger has not
+  recorded before, and it contradicts `AGENTS.md`, where every edge deploy comes from git. The
+  full entrypoint string is readable from the deployment metadata for whoever needs to trace it.
+  It is left out here because it carries an account name and this file is client-readable.
 
 - [x] **T121** Retire `sbd-auth`: built to accept any password for 78 of 81 accounts · **Done 2026-08-26**
   **Deleted from production 2026-08-26, along with the other three T119 orphans.** Verified by
@@ -3410,10 +3453,28 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Done when:* `reviewed_by` is written on confirm, `confirmed_at` carries a real timestamp, a
   confirmation writes an activity row, and the report's attribution is re-read against a fresh
   confirmation.
+  **Two of the four are shipped, 2026-08-28, merged as `1638ce0` (#944). The item stays open.**
+  `confirmPlacement` now sends a full ISO timestamp to `confirmed_at` and writes
+  `reviewed_by`/`reviewed_at` in the same PATCH, keeping the bare date for `staff.since` and the
+  history entry. That is conditions one and two. **Condition three is not in the commit**: no
+  `sbd_activity_log` row is written on a confirmation, and the commit says report output is
+  unchanged. Condition four cannot be met yet, for the reason below.
+  **The fix is forward-only and has not been exercised once, verified 2026-08-29.** Decided
+  reviews are still 99 (66 `confirmed` plus 33 `adjusted`), **zero of them carry `reviewed_by`**,
+  69 confirmation timestamps still sit at midnight and 46 are still dated before their own row.
+  No confirmation has been recorded since the fix went live. So the code is right and the data is
+  unchanged: every historical report still prints the old attribution, and nothing yet proves the
+  new path writes what it should.
+  **Careful with the client wording.** "Belt confirmation now records the exact time and the
+  confirming user" is true of confirmations made from now on. It is not true of the 99 already on
+  the record, and the backfill was never in scope. Say which one is meant.
+  *Still to do:* the activity row, one real confirmation to prove the write, and a decision on
+  whether the 99 historical rows get corrected or are left with a documented caveat.
 
 - [ ] **T127** Migration ledger reconciled with production (board 129, #721) · **Reopened 2026-08-26**
   **Closed too early.** The record side is clean, but the card cannot close: the repo holds **93
-  migration files against 250 recorded versions**, so a fresh apply against an empty database still
+  migration files against 250 recorded versions** (**94 against 251 when re-counted 2026-08-29**;
+  the shape of the gap is unchanged), so a fresh apply against an empty database still
   would not rebuild production. The ledger now tells the truth about what ran; it does not follow
   that the repo can reproduce it. Those are two different claims and only the first was proven.
   What follows below is the part that is genuinely done.
@@ -3442,6 +3503,39 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Sound alternative:* keep the pre-write as an `attempted` row and stamp the outcome after, or
   write the row after the action and fail the call if the write fails. Either keeps fail-closed.
   *Done when:* a failed deactivation leaves no row claiming it succeeded.
+
+- [ ] **T129** The March public copy of the app is still deployed and still open · est 0.25d · **Critical**
+  **`serve-app` is ACTIVE, created 2026-03-20, running with `verify_jwt=false`. Verified by
+  listing the deployed functions on 2026-08-29.** The 27 August end-of-day note told the client
+  that an old public copy of the app from March "was found and is being taken down". It has not
+  been taken down. Nothing in the repo removes it and nothing in the deployment record retires it.
+  Two separate things to fix, and they should not be merged into one line. The function itself
+  needs a decision: read what it serves, then delete it or put it behind a check. And the claim
+  needs correcting, because a statement that something is being taken down has been sitting with
+  the client for two days while the thing runs.
+  Do not treat this as covered by #748. That commit deleted **seven dead folders with nothing
+  deployed behind them**, in its own words, and `serve-app` is the opposite case: deployed, with
+  no folder.
+  *Done when:* `serve-app` is gone from the deployed list or demonstrably gated, and whichever of
+  the two the client was told is corrected on the record.
+
+- [ ] **T130** Endoscopy renders four callout types in three styles · est 0.5d · **Medium**
+  The source manual, `docs/curriculum/endoscopy/SIPS_Endoscopy_Module1_Reprocessing.docx`, defines
+  its callouts in a legend of four: STOP Critical Safety Issue (13), WARNING Important Caution (9),
+  KEY CONCEPT (11) and FACILITY-SPECIFIC (30). `foundations.css` defines three note styles,
+  `fnd-note-key`, `fnd-note-tip` and `fnd-note-warn`, and nothing else.
+  So in `endoscopy.js` a STOP block is emitted as `fnd-note-warn` and a FACILITY-SPECIFIC block as
+  `fnd-note-key`. Every callout's text is present and correct; two of the four types simply do not
+  look different from the type they borrow from. A reader cannot tell a stop from a caution, which
+  on a reprocessing manual is the distinction that matters most.
+  **This is worth stating precisely before it reaches the client**, because the 28 August draft
+  says the stop, warning, key point and facility specific callouts are "carried through". They are
+  carried through as content. They are not carried through as four distinct treatments.
+  *Sound fix:* add `fnd-note-stop` and `fnd-note-fac` to `foundations.css` as new classes so
+  Foundations and Instruments are not restyled by the change, swap the class on the affected
+  blocks in `endoscopy.js`, and bump `endoscopy.js` and `foundations.css` in `index.html`.
+  *Done when:* all four legend types render distinctly and Foundations and Instruments are
+  unchanged on screen.
 
 ### Blocked, not on the critical path
 
