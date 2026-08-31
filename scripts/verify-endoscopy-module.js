@@ -182,6 +182,40 @@ ok(/foundations\.js\?v=(\d+)/.test(HTML) && /endoscopy\.js\?v=(\d+)/.test(HTML),
 ok(/applyEndoscopyNavGate/.test(UI), 'ui-views.js calls applyEndoscopyNavGate() in enterPortal');
 ok(/'s-endoscopy'/.test(UI), 'ui-views.js registers the s-endoscopy view');
 
+console.log('\n11. DB guard: g2 is server-owned for en- modules, g1 protection intact');
+// The defect Sriman found on the live DB 2026-08-31: sbd_fi_progress_guard reset
+// the client's seeded g2 pass on every leader INSERT (is_owner false) and pinned it
+// on every leader UPDATE, so `complete` — derived from all three gates — could
+// never be true for a module that has only two. Asserted here rather than in SQL
+// because re-applying 20260703120000 silently restores the old body (that file's
+// own RE-RUN HAZARDS note describes this class), and the symptom is invisible until
+// a leader has already walked a real person through all 28 observation items.
+const MIG = (function () {
+  const dir = path.join(root, 'supabase/migrations');
+  const f = fs.readdirSync(dir).filter(x => /_720_endoscopy_no_simulation_gate\.sql$/.test(x));
+  ok(f.length === 1, 'the #720 endoscopy guard migration exists (found ' + f.length + ')');
+  return f.length ? fs.readFileSync(path.join(dir, f[0]), 'utf8') : '';
+})();
+const guardBody = MIG.slice(MIG.indexOf('create or replace function public.sbd_fi_progress_guard'));
+const endoBranch = guardBody.indexOf("new.module_id like 'en-%'");
+const actorBlock = guardBody.indexOf('if tg_op = \'UPDATE\' then');
+const completeCalc = guardBody.indexOf('new.complete :=');
+ok(endoBranch > -1, 'the guard carries the en-% branch');
+ok(endoBranch > actorBlock,
+  'the en-% g2 override sits AFTER the actor checks (else the leader INSERT reset and the leader UPDATE pin both still win)');
+ok(endoBranch < completeCalc,
+  'the en-% g2 override sits BEFORE the `complete` derivation (else completion still reads the un-overridden g2)');
+ok(/new\.g2 := '\{"status":"pass"[^']*\}'::jsonb;/.test(guardBody),
+  'the override sets g2 to a passed shape, so the unchanged three-gate rule reduces to g1 && g3');
+ok(/"na":true/.test(guardBody),
+  'the forced g2 is marked "na":true, so an unearned pass is never mistaken for a real one');
+ok(/if not is_owner then\s*\n\s*new\.g1 := '\{"status":"open"/.test(guardBody),
+  'the non-owner INSERT reset of g1 is still there — a leader still cannot seed a passed Knowledge gate (20260703120000 P2)');
+ok(!/new\.g1 := '\{"status":"pass"/.test(guardBody),
+  'nothing in the guard ever force-passes g1');
+ok(guardBody.includes("module_id like 'en-%'") && !/instrument/.test(guardBody.slice(endoBranch, completeCalc)),
+  'the branch keys on the en- prefix alone; instrument_progress shares this guard and can never match it');
+
 console.log('\n' + (failed === 0
   ? '\x1b[32mAll ' + passed + ' assertions passed.\x1b[0m\n'
   : '\x1b[31m' + failed + ' of ' + (passed + failed) + ' assertions FAILED.\x1b[0m\n'));
