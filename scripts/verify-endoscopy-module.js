@@ -33,6 +33,7 @@ const UI = fs.readFileSync(path.join(root, 'src/js/ui-views.js'), 'utf8');
 const ENDO = fs.readFileSync(path.join(root, 'src/js/endoscopy.js'), 'utf8');
 const FND = fs.readFileSync(path.join(root, 'src/js/foundations.js'), 'utf8');
 const HTML = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+const SCR = fs.readFileSync(path.join(root, 'src/js/scripts-module.js'), 'utf8');
 
 function liftBlock(src, startsWith, file) {
   const lines = src.split('\n');
@@ -48,6 +49,16 @@ function liftBlock(src, startsWith, file) {
   }
   throw new Error('unterminated block in ' + file + ': ' + startsWith);
 }
+// #1073: ENDOSCOPY_MODULES is derived from the content constants rather than
+// written out as a literal, so the sandbox needs the whole span, not one block.
+function liftRange(src, startsWith, endsWith, file) {
+  const lines = src.split('\n');
+  const a = lines.findIndex(l => l.startsWith(startsWith));
+  if (a === -1) throw new Error('not found in ' + file + ': ' + startsWith);
+  const b = lines.findIndex((l, i) => i > a && l.startsWith(endsWith));
+  if (b === -1) throw new Error('not found in ' + file + ': ' + endsWith);
+  return lines.slice(a, b + 1).join('\n');
+}
 function liftDecl(src, name, file) {
   const m = src.match(new RegExp('^const ' + name + " = '[^']*';$", 'm'));
   if (!m) throw new Error('const ' + name + ' must be declared in ' + file);
@@ -59,24 +70,30 @@ const sandbox = new Function(
   liftDecl(FND, 'ENDO_MODULE_PREFIX', 'foundations.js') + '\n' +
   'const DB = {};\n' +
   liftBlock(FND, 'function getFoundationsAssignments', 'foundations.js') + '\n' +
-  liftBlock(ENDO, 'const ENDOSCOPY_MODULES = [', 'endoscopy.js') + '\n' +
+  liftRange(ENDO, 'const ENDO_SECTIONS = [', 'function endoHasObs', 'endoscopy.js') + '\n' +
   liftBlock(ENDO, 'function getEndoAssignments', 'endoscopy.js') + '\n' +
   liftBlock(ENDO, 'function endoGatePassed', 'endoscopy.js') + '\n' +
   liftBlock(ENDO, 'function endoObsReady', 'endoscopy.js') + '\n' +
   'const toast=()=>{}; const _fndSaveProgress=()=>{}; const _fndSaveAssignment=()=>{};' +
   ' const _fndSaveAssignmentStatus=()=>{};\n' +
+  liftBlock(ENDO, 'function _endoNewProgress', 'endoscopy.js') + '\n' +
   liftBlock(ENDO, 'function assignEndoModule', 'endoscopy.js').replace(/getStaff/g, '(()=>null)') + '\n' +
   liftBlock(ENDO, 'function saveEndoGateScore', 'endoscopy.js') + '\n' +
   liftBlock(ENDO, 'function markEndoG3Item', 'endoscopy.js') + '\n' +
   liftBlock(ENDO, 'function _endoNormalize', 'endoscopy.js') + '\n' +
   'return { DB, getFoundationsAssignments, getEndoAssignments, ENDOSCOPY_MODULES,' +
-  ' endoGatePassed, endoObsReady, assignEndoModule, saveEndoGateScore, markEndoG3Item, _endoNormalize };'
+  ' endoHasQuiz, endoHasObs, endoGatePassed, endoObsReady, assignEndoModule,' +
+  ' saveEndoGateScore, markEndoG3Item, _endoNormalize };'
 )();
 
 const { DB, getFoundationsAssignments, getEndoAssignments, ENDOSCOPY_MODULES,
-        endoGatePassed, endoObsReady, assignEndoModule, saveEndoGateScore,
-        markEndoG3Item, _endoNormalize } = sandbox;
-const m = ENDOSCOPY_MODULES[0];
+        endoHasQuiz, endoHasObs, endoGatePassed, endoObsReady, assignEndoModule,
+        saveEndoGateScore, markEndoG3Item, _endoNormalize } = sandbox;
+// #1073: the assessment and the competency list live on the capstone (en-14).
+// `m` keeps naming the module that carries them, so sections 3-8 below still
+// assert against the client's content, wherever it sits.
+const chapters = ENDOSCOPY_MODULES.slice(0, 13);
+const m = ENDOSCOPY_MODULES[13];
 
 let passed = 0, failed = 0;
 function ok(cond, msg) {
@@ -111,8 +128,9 @@ ok(getEndoAssignments('staff-1').length === 1 && getEndoAssignments('staff-1')[0
   'the endoscopy accessor sees exactly the en-* rows, scoped to the requested staffer');
 ok(getEndoAssignments('staff-3').length === 0, 'an unassigned staffer sees nothing (visibility, not lock)');
 
-console.log('\n3. Gate 1 — 14 items, matches the manual\'s answer key, ALL required to pass');
-ok(m.questions.length === 14, 'module carries 14 knowledge items, got ' + m.questions.length);
+console.log('\n3. Capstone Gate 1 — 14 items, matches the manual\'s answer key, ALL required to pass');
+ok(m.id === 'en-14', 'the capstone is en-14, got ' + m.id);
+ok(m.questions.length === 14, 'capstone carries 14 knowledge items, got ' + m.questions.length);
 const tf = m.questions.filter(q => q.type === 'tf');
 const fill = m.questions.filter(q => q.type === 'fill');
 ok(tf.length === 8 && fill.length === 6, '8 True/False + 6 fill-in-the-blank, got ' + tf.length + '/' + fill.length);
@@ -127,21 +145,29 @@ ok(_endoNormalize('Immediately.') === _endoNormalize('immediately'),
 
 console.log('\n4. Pass rule requires ALL 14 correct — not a percentage threshold (guessing fix, 2026-08-28)');
 DB.foundationsProgress = [];
-let p = saveEndoGateScore('s', 'en-01', 13, 14);
+let p = saveEndoGateScore('s', 'en-14', 13, 14);
 ok(p.g1.status !== 'pass', '13 of 14 correct does NOT pass');
-p = saveEndoGateScore('s', 'en-01', 14, 14);
+p = saveEndoGateScore('s', 'en-14', 14, 14);
 ok(p.g1.status === 'pass' && endoGatePassed(p.g1), '14 of 14 correct passes');
 ok(!/>=\s*80/.test(liftBlock(ENDO, 'function saveEndoGateScore', 'endoscopy.js')),
   'saveEndoGateScore contains no 80%-style threshold — pass is score===total only');
 
 console.log('\n5. Gate 2 is seeded pre-passed (no scenario bank exists — D2, design note 2026-08-28)');
-const assignBody = liftBlock(ENDO, 'function assignEndoModule', 'endoscopy.js');
-ok(/g2:\{status:'pass'/.test(assignBody), 'assignEndoModule seeds g2 as already-passed');
+// #1073 moved the seed into _endoNewProgress so the assign path and
+// saveEndoGateScore's fallback share one definition (Standards B6).
+const seedBody = liftBlock(ENDO, 'function _endoNewProgress', 'endoscopy.js');
+ok(/g2:\{status:'pass'/.test(seedBody), 'the seeded progress row marks g2 already-passed');
+ok(/_endoNewProgress\(/.test(liftBlock(ENDO, 'function assignEndoModule', 'endoscopy.js')),
+  'assignEndoModule seeds through _endoNewProgress rather than its own copy');
 ok(!/'gate2'/.test(ENDO) && !/Gate 2: Simulation/.test(ENDO),
   'no Gate 2 tab exists in the staff-facing module viewer');
+ok(/g3=endoHasObs\(m\)\?\{status:'open'/.test(liftBlock(ENDO, 'function _endoNewProgress', 'endoscopy.js')),
+  'a module with no observation list seeds g3 as a not-applicable pass, so Knowledge alone completes it');
+ok(/na:true/.test(liftBlock(ENDO, 'function _endoNewProgress', 'endoscopy.js')),
+  'that seeded g3 is marked na:true — never mistakable for an earned confirmation');
 
 console.log('\n6. Gate 3 — 28 observation items in the Preceptor Guide\'s 5 groups + 4 Written Answers');
-ok(m.observations.length === 28, 'module carries 28 observation items, got ' + m.observations.length);
+ok(m.observations.length === 28, 'capstone carries 28 observation items, got ' + m.observations.length);
 const groupCounts = {};
 m.observations.forEach(o => { groupCounts[o.group] = (groupCounts[o.group] || 0) + 1; });
 const expectedGroups = { 'Pre-Cleaning & Transport': 4, 'Leak Testing': 6, 'Manual Cleaning': 9,
@@ -215,6 +241,59 @@ ok(!/new\.g1 := '\{"status":"pass"/.test(guardBody),
   'nothing in the guard ever force-passes g1');
 ok(guardBody.includes("module_id like 'en-%'") && !/instrument/.test(guardBody.slice(endoBranch, completeCalc)),
   'the branch keys on the en- prefix alone; instrument_progress shares this guard and can never match it');
+
+console.log('\n12. #1073 — fourteen modules, one per chapter, each with its own tab-side assign');
+ok(ENDOSCOPY_MODULES.length === 14, 'fourteen modules exist, got ' + ENDOSCOPY_MODULES.length);
+const mids = ENDOSCOPY_MODULES.map(x => x.id);
+ok(mids.every(id => /^en-\d{2}$/.test(id)),
+  "every module id keeps the 'en-' prefix, so getFoundationsAssignments's filter and #720's `like 'en-%'` guard cover all fourteen with no new migration");
+ok(new Set(mids).size === 14, 'all fourteen module ids are unique: ' + mids.join(','));
+ok(mids.join(',') === Array.from({ length: 14 }, (_, i) => 'en-' + String(i + 1).padStart(2, '0')).join(','),
+  'ids run en-01..en-14 in chapter order');
+ok(ENDOSCOPY_MODULES.every((x, i) => x.num === i + 1), 'num matches position for every module');
+ok(chapters.every(c => c.sections.length === 1 && c.sectionContent.length === 1),
+  'each chapter module carries exactly its own one chapter of content');
+ok(chapters.every(c => c.sectionContent[0] && c.sectionContent[0].length > 50),
+  'no chapter module lost its content in the split');
+ok(new Set(chapters.map(c => c.sectionContent[0])).size === 13,
+  'the thirteen chapters carry thirteen distinct bodies (no chapter duplicated into another slot)');
+ok(chapters.every(c => !endoHasObs(c)),
+  'no chapter module carries observation items — competency verification is one sit-down on the capstone, not thirteen');
+ok(endoHasObs(m) && endoHasQuiz(m), 'the capstone carries both the assessment and the competency list');
+
+console.log('\n13. #1073 — per-chapter question banks are pending, and wired to switch on');
+ok(/const ENDO_CHAPTER_QUESTIONS = /.test(ENDO),
+  'ENDO_CHAPTER_QUESTIONS exists as the single drop-in point for the client\'s banks');
+ok(chapters.every(c => Array.isArray(c.questions)),
+  'every chapter has a questions array, empty or not — a bank arriving needs no code change');
+const pending = chapters.filter(c => !endoHasQuiz(c)).length;
+// Not an assertion: this number is meant to fall as the client sends banks.
+console.log('  \x1b[33m·\x1b[0m ' + pending + ' of 13 chapter banks still pending from the client');
+const gateView = liftBlock(ENDO, 'function renderEndoGateAssessment', 'endoscopy.js');
+ok(/endoHasQuiz\(m\)/.test(gateView),
+  'the Knowledge view checks for a bank before rendering a quiz (a 0-question quiz would otherwise "pass" 0 of 0)');
+ok(gateView.indexOf('endoHasQuiz') < gateView.indexOf('endo-gate-questions'),
+  'that check short-circuits BEFORE any question markup or Submit button is built');
+
+console.log('\n14. #1073 — Scripts and Endoscopy each own a leader tab, and left Foundations');
+ok(/function renderHEndoscopy/.test(ENDO), 'endoscopy.js owns renderHEndoscopy()');
+ok(/function renderHScripts/.test(SCR), 'scripts-module.js owns renderHScripts()');
+ok(!/endoscopyCellHTML/.test(FND) && !/scriptsCellHTML/.test(FND),
+  'the Foundations Training table no longer renders either column — the client\'s actual complaint');
+ok(!/<th>Scripts<\/th>|<th>Endoscopy<\/th>/.test(FND),
+  'the Scripts and Endoscopy column headers are gone from renderHTraining');
+['h-scripts', 'h-endoscopy', 'a-scripts', 'a-endoscopy'].forEach(v => {
+  ok(new RegExp('id="' + v + '"').test(HTML), 'index.html has the ' + v + ' view container');
+  ok(new RegExp("'" + v + "'").test(UI), 'ui-views.js registers and dispatches ' + v);
+});
+ok(/data-view="h-endoscopy"/.test(HTML) && /data-view="a-endoscopy"/.test(HTML),
+  'the Endoscopy nav item exists in both the facility and the network portal');
+ok(/data-view="h-scripts"/.test(HTML) && /data-view="a-scripts"/.test(HTML),
+  'the Scripts nav item exists in both the facility and the network portal');
+// Assign-by-name only: no belt trigger, no facility-wide rollout, no "All N".
+const endoTab = liftBlock(ENDO, 'function renderHEndoscopy', 'endoscopy.js');
+ok(!/All \d+|assignAll/.test(endoTab),
+  'the Endoscopy tab offers no bulk "assign everyone" control — assignment stays one named person at a time');
 
 console.log('\n' + (failed === 0
   ? '\x1b[32mAll ' + passed + ' assertions passed.\x1b[0m\n'

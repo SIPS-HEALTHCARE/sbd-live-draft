@@ -736,7 +736,7 @@ function renderHView(view){
     return;
   }
   if(view==='h-scoreboard' && !scoreboardAllowed()){ toast('The scoreboard is unavailable while it is being updated.','warn'); view='h-dashboard'; }
-  ['h-dashboard','h-staff','h-profile','h-milestones','h-posschool','h-training','h-instruments','h-checklists','h-preceptor','h-scoreboard','h-schedule','h-attendance','h-reports','h-assessments','h-progression','h-observations','h-observationreviews','h-guide','h-settings','h-david'].forEach(v=>{
+  ['h-dashboard','h-staff','h-profile','h-milestones','h-posschool','h-training','h-instruments','h-scripts','h-endoscopy','h-checklists','h-preceptor','h-scoreboard','h-schedule','h-attendance','h-reports','h-assessments','h-progression','h-observations','h-observationreviews','h-guide','h-settings','h-david'].forEach(v=>{
     const el=document.getElementById(v);
     if(el){ el.classList.add('hidden'); el.classList.remove('fade-in'); }
   });
@@ -770,6 +770,10 @@ function renderHView(view){
     'h-posschool':()=>renderHPosSchool(),
     'h-training':()=>{ if(typeof renderHTraining==='function') renderHTraining(); },
     'h-instruments':()=>{ if(typeof renderHInstruments==='function') renderHInstruments(); },
+    // #1073: Scripts and Endoscopy each own a leader tab now, so neither is
+    // assigned from inside Foundations any more.
+    'h-scripts':()=>{ if(typeof renderHScripts==='function') renderHScripts(); },
+    'h-endoscopy':()=>{ if(typeof renderHEndoscopy==='function') renderHEndoscopy(); },
     'h-checklists':()=>renderHChecklists(),
     'h-preceptor':()=>{ if(typeof renderHPreceptor==='function') renderHPreceptor(); },
     'h-scoreboard':()=>renderHScoreboard(),
@@ -809,7 +813,7 @@ function renderAView(view){
     }
   }
   if(view==='a-scoreboard' && !scoreboardAllowed()){ toast('The scoreboard is unavailable while it is being updated.','warn'); view='a-overview'; }
-  ['a-overview','a-leaderboard','a-allstaff','a-scoreboard','a-facilities','a-facility','a-schedule','a-registrations','a-assessments','a-progression','a-foundations','a-instruments','a-preceptor','a-upload','a-reports','a-david','a-daviddashboard','a-adminusers','a-rolemgmt','a-promoqueue','a-freeagents','a-placementreviews','a-observations','a-observationreviews','a-guide','a-settings','a-systems','a-systems-dashboard'].forEach(v=>{
+  ['a-overview','a-leaderboard','a-allstaff','a-scoreboard','a-facilities','a-facility','a-schedule','a-registrations','a-assessments','a-progression','a-foundations','a-instruments','a-scripts','a-endoscopy','a-preceptor','a-upload','a-reports','a-david','a-daviddashboard','a-adminusers','a-rolemgmt','a-promoqueue','a-freeagents','a-placementreviews','a-observations','a-observationreviews','a-guide','a-settings','a-systems','a-systems-dashboard'].forEach(v=>{
     const el=document.getElementById(v);
     if(el){ el.classList.add('hidden'); el.classList.remove('fade-in'); }
   });
@@ -829,6 +833,8 @@ function renderAView(view){
     'a-assessments':()=>{ _inProgressCache=null; renderAAssessments(); },'a-progression':renderAProgression,'a-upload':renderAUpload,
     'a-foundations':()=>{ if(typeof renderHTraining==='function') renderHTraining(); },
     'a-instruments':()=>{ if(typeof renderHInstruments==='function') renderHInstruments(); },
+    'a-scripts':()=>{ if(typeof renderHScripts==='function') renderHScripts(); },
+    'a-endoscopy':()=>{ if(typeof renderHEndoscopy==='function') renderHEndoscopy(); },
     'a-preceptor':()=>{ if(typeof renderHPreceptor==='function') renderHPreceptor(); },
     'a-reports':renderAReports,
     'a-david':renderADavidView,

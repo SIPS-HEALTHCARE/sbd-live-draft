@@ -199,7 +199,78 @@ function renderSScripts() {
   el.innerHTML = html;
 }
 
-// ── Leader: the assign screen (one column inside the existing Training table)
+// ── Leader: the Scripts tab (#1073) ─────────────────────────────────────────
+//
+// Scripts used to be assigned from one column inside the Foundations Training
+// table. The client asked (31 Aug) for its own side-panel tab so a leader never
+// enters Foundations to assign it. Same container-by-portal trick as
+// renderHTraining: h-scripts in the facility portal, a-scripts for network
+// admins. scriptsCellHTML() below still owns the per-person controls — this
+// screen only decides who is listed.
+function renderHScripts() {
+  const el = document.getElementById(ST.portal === 'admin' ? 'a-scripts' : 'h-scripts');
+  if (!el) return;
+  const u = ST.user;
+  // Same role scope as Foundations/Instruments (RLS Addendum v1.1 §6).
+  const isSystemWide = !!(u && ['master_admin', 'admin', 'staff_admin', 'assessor'].includes(u.role));
+  let scopeFacs = DB.facilities.filter(f => f.active !== false);
+  if (isSystemWide && u.role === 'staff_admin' && (u.assignedFids || []).length) {
+    scopeFacs = scopeFacs.filter(f => u.assignedFids.includes(f.id));
+  }
+  let staff;
+  if (isSystemWide) {
+    staff = DB.staff.filter(s => scopeFacs.some(f => f.id === s.fid));
+    const ff = ST._scriptsFacFilter || 'all';
+    if (ff !== 'all') staff = staff.filter(s => s.fid === ff);
+  } else {
+    staff = DB.staff.filter(s => s.fid === ST.hFid);
+  }
+  const rows = staff.map(s => ({ s, a: scriptsAssignment(s.id) }));
+  const assigned = rows.filter(r => r.a);
+  const done = assigned.filter(r => r.a.status === 'completed').length;
+
+  let html = '<div class="card mb16"><div class="card-hd"><div class="card-ttl">Scripts'
+    + (isSystemWide ? ' <span style="font-size:11px;color:#64748b;font-weight:500">(all facilities)</span>' : '')
+    + '</div></div><div class="card-body">';
+  html += '<p style="font-size:13px;color:#94a3b8;line-height:1.6;margin:0 0 12px">The communication scripts as a module of their own, for someone who has passed their belts but needs to refine their delivery. '
+    + 'Assign it by name &mdash; the scripts stay where they are inside the belt curriculum, this does not move them.</p>';
+  html += '<div style="background:rgba(148,163,184,.08);border:1px solid rgba(148,163,184,.25);border-radius:var(--r);padding:10px 14px;margin-bottom:14px;font-size:12px;color:#94a3b8">'
+    + 'Scripts are spoken language with no question bank, so there is nothing to auto-score: you mark the module complete once the delivery meets the approved language.</div>';
+  if (isSystemWide) {
+    html += '<div style="margin-bottom:14px"><select class="form-select" style="max-width:280px" onchange="ST._scriptsFacFilter=this.value;renderHScripts()">'
+      + '<option value="all"' + ((ST._scriptsFacFilter || 'all') === 'all' ? ' selected' : '') + '>All Facilities</option>'
+      + scopeFacs.slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+        .map(f => '<option value="' + f.id + '"' + (ST._scriptsFacFilter === f.id ? ' selected' : '') + '>' + f.name + '</option>').join('')
+      + '</select></div>';
+  }
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px">';
+  html += '<div class="stat-card-mini"><div class="stat-lbl">Assigned</div><div class="stat-val">' + assigned.length + '</div></div>';
+  html += '<div class="stat-card-mini"><div class="stat-lbl">Completed</div><div class="stat-val" style="color:#4ade80">' + done + '</div></div>';
+  html += '<div class="stat-card-mini"><div class="stat-lbl">Rate</div><div class="stat-val">' + (assigned.length ? Math.round(done / assigned.length * 100) : 0) + '%</div></div>';
+  html += '</div></div></div>';
+
+  html += '<div class="card mb16"><div class="card-hd"><div class="card-ttl">Staff</div></div>';
+  html += '<div class="card-body" style="padding:0"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Name</th>'
+    + (isSystemWide ? '<th>Facility</th>' : '') + '<th>Belt</th><th>Sections</th><th>Actions</th></tr></thead><tbody>';
+  rows.sort((a, b) => fullName(a.s).localeCompare(fullName(b.s)));
+  if (!rows.length) html += '<tr><td colspan="' + (isSystemWide ? 5 : 4) + '" style="text-align:center;color:#64748b;padding:18px">No staff in scope.</td></tr>';
+  rows.forEach(r => {
+    html += '<tr><td style="font-weight:600">' + fullName(r.s) + '</td>';
+    if (isSystemWide) {
+      html += '<td style="font-size:12px;color:#94a3b8">' + ((DB.facilities.find(f => f.id === r.s.fid) || {}).name || '—') + '</td>';
+    }
+    html += '<td><span class="bb bb-' + r.s.belt + '">' + r.s.belt + '</span></td>';
+    // What this person would actually get: White..their belt, the same cap
+    // scriptsBeltsWithContent() enforces on the staff-facing view.
+    const n = scriptsBeltsWithContent(r.s.belt).reduce((t, b) => t + scriptSectionsForBelt(b).length, 0);
+    html += '<td style="font-size:12px;color:#94a3b8">' + n + '</td>';
+    html += '<td style="white-space:nowrap">' + scriptsCellHTML(r.s.id) + '</td></tr>';
+  });
+  html += '</tbody></table></div></div></div>';
+  el.innerHTML = html;
+}
+
+// ── Leader: the per-person controls, rendered inside renderHScripts' table ──
 function scriptsCellHTML(staffId) {
   const a = scriptsAssignment(staffId);
   const canAssign = scriptsCanAssign();
@@ -247,7 +318,7 @@ function hDoAssignScripts(staffId) {
   const ok = assignScriptsModule(staffId, ST.user ? ST.user.name : 'Manager', trigger);
   closeModal();
   toast(ok ? 'Scripts module assigned' : 'Scripts already assigned — skipped', ok ? 'ok' : 'info');
-  if (typeof renderHTraining === 'function') renderHTraining();
+  renderHScripts();
 }
 
 function hToggleScriptsDone(staffId) {
@@ -256,7 +327,7 @@ function hToggleScriptsDone(staffId) {
   const next = a.status === 'completed' ? 'assigned' : 'completed';
   setScriptsStatus(staffId, next);
   toast(next === 'completed' ? 'Scripts module marked complete' : 'Scripts module reopened', 'ok');
-  if (typeof renderHTraining === 'function') renderHTraining();
+  renderHScripts();
 }
 
 function hUnassignScripts(staffId) {
@@ -272,5 +343,5 @@ function hUnassignScripts(staffId) {
     }
   } catch (e) { console.warn('[scripts] unassign sync', e); }
   toast('Scripts module unassigned', 'info');
-  if (typeof renderHTraining === 'function') renderHTraining();
+  renderHScripts();
 }

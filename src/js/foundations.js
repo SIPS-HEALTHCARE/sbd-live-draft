@@ -1379,20 +1379,16 @@ function renderHTraining(){
  
  // Staff table
  html+='<div class="card mb16"><div class="card-hd"><div class="card-ttl">Staff Training</div></div>';
- html+='<div class="card-body" style="padding:0"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Name</th>'+(isSystemWide?'<th>Facility</th>':'')+'<th>Belt</th><th>Modules</th><th>Scripts</th><th>Endoscopy</th><th>Actions</th></tr></thead><tbody>';
+ html+='<div class="card-body" style="padding:0"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Name</th>'+(isSystemWide?'<th>Facility</th>':'')+'<th>Belt</th><th>Modules</th><th>Actions</th></tr></thead><tbody>';
  rows.sort((a,b)=>fullName(a.s).localeCompare(fullName(b.s)));
  rows.forEach(r=>{
    html+='<tr><td style="font-weight:600">'+fullName(r.s)+'</td>';
    if(isSystemWide){const _fn=(DB.facilities.find(f=>f.id===r.s.fid)||{}).name||'—';html+='<td style="font-size:12px;color:#94a3b8">'+_fn+'</td>';}
    html+='<td><span class="bb bb-'+r.s.belt+'">'+r.s.belt+'</span></td>';
    html+='<td>'+(r.assigned>0?'<span class="'+(r.pct===100?'tc-ok':r.pct>0?'tc-warn':'tc-muted')+'">'+r.done+'/'+r.assigned+'</span>':'<span class="tc-muted">None</span>')+'</td>';
-   // T92: the standalone Scripts module, assigned from the same screen as the
-   // Foundations modules because the client asked for the assign surface he
-   // already knows. Its own file owns the cell's state and buttons.
-   html+='<td style="white-space:nowrap">'+((typeof scriptsCellHTML==='function')?scriptsCellHTML(r.s.id):'')+'</td>';
-   // T108: leader-assigned-only endoscopy modules, assigned from the same
-   // Training screen the client already uses (same reasoning as T92 Scripts).
-   html+='<td style="white-space:nowrap">'+((typeof endoscopyCellHTML==='function')?endoscopyCellHTML(r.s.id):'')+'</td>';
+   // #1073: the Scripts and Endoscopy columns that used to sit here are gone.
+   // Both are now their own side-panel tab (renderHScripts / renderHEndoscopy)
+   // because the client does not want to enter Foundations to assign them.
    html+='<td style="white-space:nowrap">';
    if(r.assigned>0) html+='<button class="btn btn-ghost btn-xs" onclick="hFndStaffDetail(\''+r.s.id+'\')">View</button> ';
    if(!isAssessor){

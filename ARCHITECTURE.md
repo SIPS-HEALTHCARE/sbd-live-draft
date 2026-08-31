@@ -43,8 +43,8 @@ src/js/api-supabase.js         (566 lines)   ← Supabase client: SB_AUTH, SB (C
 src/js/auth-password.js        (172 lines)   ← Password reset, forgot password, strength bar.
 src/js/ui-views.js          (14,432 lines)   ← ⚠️ MONOLITH. All view rendering, all portal logic. 294 functions.
 src/js/settings.js             (239 lines)   ← Account settings UI.
-src/js/scripts-module.js       (250 lines)   ← T92: Scripts as a standalone assignable module (§16B).
-src/js/endoscopy.js            (547 lines)   ← T108: Endoscopy modules, leader-assigned-only (§16C).
+src/js/scripts-module.js       (~330 lines)  ← T92: Scripts as a standalone assignable module (§16B).
+src/js/endoscopy.js            (~660 lines)  ← T108/#1073: 14 endoscopy modules, leader-assigned-only (§16C).
 src/js/onboarding.js           (312 lines)   ← Onboarding state, tour state, L3 study content helpers.
 src/js/auth-init.js          (2,141 lines)   ← L3 study system, tour system, guide views, section walkthroughs.
 src/components/DavidChat.js  (1,639 lines)   ← DAVID AI chat component (SSE, session persistence, markdown).
@@ -523,10 +523,13 @@ The communication scripts have **two surfaces over one copy of the content**.
   is awaited before `enterPortal`, and it is the only entry point). `renderSScripts()`
   re-checks the assignment itself. A leader's assignment appears after the staffer's next
   login, same as Foundations.
-- **Leader surface:** one **Scripts** column in the existing Training table
-  (`renderHTraining`, both `h-training` and `a-foundations`) → `scriptsCellHTML()`.
-  Assign/Mark done are leaders-only (assessors are refused client-side *and* by RLS);
-  Unassign is master_admin only, matching `hUnassignFnd`.
+- **Leader surface (#1073, 2026-09-01):** its own side-panel tab — `renderHScripts()`,
+  rendering into `h-scripts` (facility portal) or `a-scripts` (network portal). It used to
+  be one column inside the Foundations Training table; the client asked not to enter
+  Foundations to assign it, so that column is gone. `scriptsCellHTML()` still owns the
+  per-person controls, now rendered inside this tab's table. Assign/Mark done are
+  leaders-only (assessors are refused client-side *and* by RLS); Unassign is master_admin
+  only, matching `hUnassignFnd`.
 - **Completion is leader-confirmed**, carried by `assignment.status`
   (`assigned` ⇄ `completed`). Scripts are spoken language with no question bank.
 - **Verify:** `node scripts/verify-scripts-module.js`.
@@ -534,47 +537,70 @@ The communication scripts have **two surfaces over one copy of the content**.
 
 ---
 
-## 16C. Endoscopy modules — leader-assigned-only (T108)
+## 16C. Endoscopy modules — leader-assigned-only (T108, restructured by #1073)
 
 Endoscope reprocessing training. Unlike Foundations/Instruments, this is **not** a belt
 requirement and **not** a facility-wide rollout — a leader assigns it to one named person, and
 nobody else at that person's belt level ever sees it. No belt trigger, no onboarding "All 10"
 bundle.
 
-- **File:** `src/js/endoscopy.js`. `ENDOSCOPY_MODULES` (currently one module, `en-01`) is
-  **never** merged into `FOUNDATIONS_MODULES` and never iterated by `assignAllModules()` — that
-  separation is the whole mechanism the client asked for.
-- **Storage: rides `foundations_assignments`/`foundations_progress`** with `module_id='en-01'`
-  (no migration — the column is free text with no CHECK/FK, `UNIQUE(staff_id,module_id)` and RLS
-  already correct). `getFoundationsAssignments()` (foundations.js) filters the `en-` prefix out
-  (`ENDO_MODULE_PREFIX`, declared in foundations.js next to `SCRIPTS_MODULE_ID` for the same
-  load-order reason), so this can never turn the Foundations "N/10" convention into N/11.
-- **Content source:** `docs/curriculum/endoscopy/SIPS_Endoscopy_Module1_Reprocessing.docx` (the
-  client's Self-Study Manual) → `scripts/endoscopy-from-docx.py` writes the `sections`/
-  `sectionContent` arrays (13 chapters + a Quick Reference as section 14). The document has no
-  Word heading styles, so this is a separate converter from `foundations-from-docx.py`, importing
-  its shared table/callout renderers rather than copying them (Standards B6).
-- **3-gate model, deliberately not identical to Foundations:**
-  - **G1 Knowledge** — 14 auto-scored items (the 8 True/False + 6 fill-in-the-blank Final
-    Assessment questions, hand-authored — the converter never writes question banks). **Pass
-    requires all 14 correct**, not a percentage threshold: a fixed 8-item T/F bank at "7 of 8"
-    is guessable in ~28 attempts on average given the unlimited free retakes every F&I gate
-    allows; 100% closes that without a cooldown or session-limit mechanism. See
-    `docs/decisions/2026-08-28-t108-endoscopy-build.md`.
-  - **G2 Simulation** — no scenario bank exists in the content. Seeded pre-passed at assignment
-    time (`assignEndoModule`) and never shown; a one-line change if a bank arrives later.
-  - **G3 Observation** — the Preceptor Guide's Module 13 Competency Verification: 28 items in 5
-    groups, plus a 6th group "Written Answers" (the 4 short-answer Final Assessment questions
-    that can't be auto-marked; the leader-facing view shows the answer-key text as a hint, the
-    staff-facing view never does). Unlocks on **G1 alone** (`endoObsReady`) — no G2 requirement,
-    since G2 is a stand-in.
+- **File:** `src/js/endoscopy.js`. `ENDOSCOPY_MODULES` is **never** merged into
+  `FOUNDATIONS_MODULES` and never iterated by `assignAllModules()` — that separation is the
+  whole mechanism the client asked for.
+- **14 modules (#1073, 2026-09-01):** `en-01`…`en-13` are the thirteen chapters of the
+  Self-Study Manual, one module each; `en-14` is **Review & Competency Verification**, the
+  capstone the Preceptor Guide's own module 13 defines. The manual has thirteen chapters, not
+  fourteen — the fourteenth module is the capstone, not an invented chapter. Content lives in
+  five top-level constants (`ENDO_SECTIONS`, `ENDO_SECTION_CONTENT`, `ENDO_FINAL_QUESTIONS`,
+  `ENDO_COMPETENCY_ITEMS`, `ENDO_WRITTEN_ANSWERS`) and `ENDOSCOPY_MODULES` is **derived** from
+  them — one copy of the content, fourteen views over it.
+- **Storage: rides `foundations_assignments`/`foundations_progress`** with `module_id` in
+  `en-01`…`en-14` (no migration — the column is free text with no CHECK/FK,
+  `UNIQUE(staff_id,module_id)` and RLS already correct). `getFoundationsAssignments()`
+  (foundations.js) filters the `en-` prefix out (`ENDO_MODULE_PREFIX`), so this can never turn
+  the Foundations "N/10" convention into N/11.
+- **Content source:** `docs/curriculum/endoscopy/SIPS_Endoscopy_Module1_Reprocessing.docx` →
+  `scripts/endoscopy-from-docx.py` writes the `ENDO_SECTIONS`/`ENDO_SECTION_CONTENT` arrays
+  (13 chapters + Quick Reference as entry 14). The document has no Word heading styles, so
+  this is a separate converter from `foundations-from-docx.py`, importing its shared
+  table/callout renderers rather than copying them (Standards B6).
+- **Gate model, per module type:**
+  - **Chapters `en-01`…`en-13`** — Knowledge only. `questions: []` today: **no per-chapter
+    bank exists in either source document** (the manual's 49 KNOWLEDGE CHECK items are
+    self-attestation and unscorable; the Preceptor Guide's 24 `ASK:` prompts are oral, 0–2 per
+    chapter, and chapter 9 has none). The client is writing them. Drop a bank into
+    `ENDO_CHAPTER_QUESTIONS[i]` and that chapter's gate turns on with no other change. Until
+    then the gate renders a "questions being finalised" panel with no Submit button, and the
+    module cannot complete. **No observation list** — competency verification is one hands-on
+    sit-down over the whole workflow, so `_endoNewProgress()` seeds `g3` as an explicit
+    `na:true` pass and completion reduces to Knowledge alone. That survives the write because
+    `sbd_fi_progress_guard` resets `g3` on INSERT only for a **non-leader** actor, and this is
+    leader-assign-only.
+  - **Capstone `en-14`** — **G1 Knowledge:** the manual's 18-item Final Assessment, 14
+    auto-scored (8 True/False + 6 fill-in-the-blank). **Pass requires all 14 correct**, not a
+    percentage: a fixed 8-item T/F bank at "7 of 8" is guessable in ~28 attempts on average
+    given unlimited free retakes. **G2 Simulation:** no scenario bank exists; forced to a
+    not-applicable pass by the server for every `en-%` row since #720. **G3 Observation:** the
+    Preceptor Guide's 28 competency items in 5 groups, plus a 6th group "Written Answers" (the
+    4 short-answer questions that can't be auto-marked; the leader-facing view shows the
+    answer-key text as a hint, the staff-facing view never does). Unlocks on G1 alone
+    (`endoObsReady`).
+- **`endoHasQuiz()` / `endoHasObs()`** are the single test for which gates a module has. Every
+  renderer and the seed branch on these, never on the module id, so behaviour follows content.
+- **#720 (`20260901120000`):** `sbd_fi_progress_guard` force-passes `g2` for
+  `module_id like 'en-%'`, so `complete` reduces to `g1 && g3`. The `en-%` key means
+  `en-02`…`en-14` were covered the day they were added — no new migration for #1073.
 - **Staff surface:** nav item `s-nav-endoscopy` + view `s-endoscopy`, hidden by default and
-  revealed by `applyEndoscopyNavGate(staffId)` in `enterPortal`, same pattern as `s-nav-scripts`.
-- **Leader surface:** one **Endoscopy** column in the Training table (`renderHTraining`) →
-  `endoscopyCellHTML()`. Assign/Unassign follow the same role rules as every other F&I module
-  (`endoCanAssign()`: leaders yes, `staff_admin`/`assessor`/`staff_member` refused).
-- **Verify:** `node scripts/verify-endoscopy-module.js`.
-  Design note: `docs/decisions/2026-08-28-t108-endoscopy-build.md`.
+  revealed by `applyEndoscopyNavGate(staffId)` in `enterPortal`, same pattern as
+  `s-nav-scripts`. Lists every assigned module.
+- **Leader surface (#1073):** its own side-panel tab — `renderHEndoscopy()`, rendering into
+  `h-endoscopy` or `a-endoscopy`. It used to be one column in the Foundations Training table;
+  the client asked not to enter Foundations to assign it, so `endoscopyCellHTML()` is gone.
+  `hAssignEndoscopyModal` lists all 14 with the reading-only ones marked. Assign/Unassign
+  follow the same role rules as every other F&I module (`endoCanAssign()`).
+- **Verify:** `node scripts/verify-endoscopy-module.js` (79 assertions).
+  Design notes: `docs/decisions/2026-08-28-t108-endoscopy-build.md`,
+  `docs/decisions/2026-09-01-1073-scripts-endoscopy-tabs.md`.
 
 ---
 
