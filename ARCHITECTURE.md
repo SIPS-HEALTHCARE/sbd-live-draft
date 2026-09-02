@@ -223,6 +223,9 @@ and edited in Role Management (`renderARoleMgmt`, `ui-views.js`).
 
 **Convention for every facility list:** absent or empty means **system wide**. Revoking a grant
 drops its list with it, so a re-grant cannot inherit a scope nobody chose.
+**#1107 (T79b):** the card keeps `issue_pin` + its list equal to the `assessor` grant on every edit,
+but only while they were already equal before it — a PIN scope set on purpose to something else, or
+an edit of the PIN grant itself, is left alone (`_rmMirrorAssessorOntoPin`).
 
 **T79 reads are shared, writes are not.** `staff_select` admits *either* grant (a grant that can
 write but not read is half-shipped — RLS returns fewer rows silently and the candidate list just

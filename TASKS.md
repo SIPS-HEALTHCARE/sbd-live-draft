@@ -1764,6 +1764,25 @@ vocabulary these tasks are written in, including the SBD and SPD distinction tha
   **Not done, deliberately:** `staff_admin` / `educator` / `preceptor` still hold both
   permissions. See T79a.
 
+- [ ] **T79b** Granting Assessor also grants PIN issuing for the same facilities (#1107) · est 0.25d · High
+  Reported 2026-09-02. The Role Management card wrote `assessor` + `assessor_facilities` only;
+  `issue_pin` has been its own grant since T79 and `facility_admin` / `staff_member` are not in
+  the role list that gets PINs for free, so a new assessor in those roles could be assigned
+  assessments but not generate the PIN. Hit all four current assessors on 2026-09-01 (rows fixed by
+  hand the same day: acooper, ahenderson, kchaudhary 5 facilities each, sharris 8).
+  Not T79a: T79a narrows the role allow-lists; this only mirrors the card's assessor grant onto
+  `issue_pin`. Depth file: Sips Project/PIN-Grant-Sync-2026-09-02/PIN-GRANT-SYNC.txt (Sriman).
+  *Done when:* Granting Assessor with one facility gives `issue_pin` true with the same list;
+  adding a facility makes the PIN list follow; a hand-set different PIN scope survives an educator
+  edit; revoking Assessor removes the PIN grant; the test user gets a PIN from `sbd-assessor-pin`
+  for a listed facility and is refused outside it; served `ui-views.js` is v=227.
+  **Code-complete 2026-09-03** on `work/1107-pin-grant-sync`, client only, no DDL.
+  `rmSetCapability` (ui-views.js) now copies the assessor grant and list onto `issue_pin` /
+  `issue_pin_facilities` after every card edit, but only while the two were already equal before
+  the edit and the edit did not touch the PIN grant itself — so a deliberately different PIN scope
+  survives. Verify: `node scripts/verify-1107-pin-grant-sync.js` (9 cases, lifted from the
+  shipped code). Live check + before/after rows on the #1107 comment still to do after merge.
+
 - [ ] **T79a** Narrow the assessment role allow-lists onto the T79 grants · est 1d · Medium
   Split out of T79 on 2026-08-12. T79 made approving and PIN-generating independently *grantable*,
   but kept `ASSESSOR_ROLES` (sbd-assessor-pin), `allowedRoles` (sbd-record-assessment) and the
