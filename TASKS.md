@@ -603,6 +603,11 @@ persisted.
   of shipping a view, so this is catch-up debt.
   *Goal:* The guided tour covers the platform as it is today, for every role.
   *Done when:* Every sidebar `data-view` in `index.html` has a matching tour step for each role that can see it.
+  **Partial 2026-09-03** (#1108) on `work/1108-tour-steps-scripts-endoscopy`: the six Scripts and
+  Endoscopy views from #1073 (`a-`, `h-`, `s-` scripts and endoscopy) now have steps, eight
+  `NAV_REGISTRY` entries across admin, hospital, facility_admin and staff_member, each right after
+  SBD Instruments. `onboarding.js` is v=26, no DB change. Hidden staff tabs are dropped by
+  `tourStepVisible`. The other 11 missing views stay under this task.
 - [ ] **T42** Role Management portal-routing parity · est 1.0d
   A granted user should see the elevated tools in the app, not only the badge.
   *Goal:* A granted capability shows up as working tools in the app, not just a badge in Role Management.
@@ -1764,7 +1769,8 @@ vocabulary these tasks are written in, including the SBD and SPD distinction tha
   **Not done, deliberately:** `staff_admin` / `educator` / `preceptor` still hold both
   permissions. See T79a.
 
-- [ ] **T79b** Granting Assessor also grants PIN issuing for the same facilities (#1107) · est 0.25d · High
+- [x] **T79b** Granting Assessor also grants PIN issuing for the same facilities (#1107) · est 0.25d · High
+  **Done 2026-09-03**, shipped as PR #231. Live serves `ui-views.js?v=227` with the mirror.
   Reported 2026-09-02. The Role Management card wrote `assessor` + `assessor_facilities` only;
   `issue_pin` has been its own grant since T79 and `facility_admin` / `staff_member` are not in
   the role list that gets PINs for free, so a new assessor in those roles could be assigned
@@ -1776,7 +1782,7 @@ vocabulary these tasks are written in, including the SBD and SPD distinction tha
   adding a facility makes the PIN list follow; a hand-set different PIN scope survives an educator
   edit; revoking Assessor removes the PIN grant; the test user gets a PIN from `sbd-assessor-pin`
   for a listed facility and is refused outside it; served `ui-views.js` is v=227.
-  **Code-complete 2026-09-03** on `work/1107-pin-grant-sync`, client only, no DDL.
+  Client only, no DDL.
   `rmSetCapability` (ui-views.js) now copies the assessor grant and list onto `issue_pin` /
   `issue_pin_facilities` after every card edit, but only while the two were already equal before
   the edit and the edit did not touch the PIN grant itself — so a deliberately different PIN scope
