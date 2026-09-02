@@ -33,8 +33,8 @@ const root = path.join(__dirname, '..');
 const read = p => fs.readFileSync(path.join(root, p), 'utf8');
 const HTML = read('index.html');
 const UI = read('src/js/ui-views.js');
-const RLS = read('supabase/migrations/20260703233921_observations_facility_scoping_rls.sql');
-const T91 = read('supabase/migrations/20260807120000_t91_review_observations_assessor_facility_scope.sql');
+const RLS = read('supabase/migrations-archive/20260703233921_observations_facility_scoping_rls.sql');
+const T91 = read('supabase/migrations-archive/20260807120000_t91_review_observations_assessor_facility_scope.sql');
 
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { if(cond){ pass++; console.log('  \x1b[32m✓\x1b[0m ' + msg); }

@@ -1,6 +1,6 @@
 -- ============================================================================
 -- REVERT — Security sweep 2026-07-20  (manual rollback of the consolidated migration
---          supabase/migrations/20260720120000_security_sweep_2026_07_20.sql)
+--          supabase/migrations-archive/20260720120000_security_sweep_2026_07_20.sql)
 --
 -- ⚠⚠ DO NOT PLACE THIS FILE IN supabase/migrations/ ⚠⚠
 --   Every .sql there is auto-applied in timestamp order. A revert sitting next to the

@@ -38,8 +38,8 @@ const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
 const UI  = read('src/js/ui-views.js');
 const PIN = read('supabase/functions/sbd-assessor-pin/index.ts');
 const REC = read('supabase/functions/sbd-record-assessment/index.ts');
-const MIGDIR = path.join(root, 'supabase/migrations');
-const T79SQL = read('supabase/migrations/20260812120000_t79_split_assessment_grants.sql');
+const MIGDIR = path.join(root, 'supabase/migrations-archive');
+const T79SQL = read('supabase/migrations-archive/20260812120000_t79_split_assessment_grants.sql');
 
 /* The negative assertions below ("X does NOT reference Y") must read CODE, not prose. The whole
  * point of the comments in these files is that each one names the other grant to explain why it
