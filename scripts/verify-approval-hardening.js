@@ -21,8 +21,8 @@ const path = require('path');
 const root = path.join(__dirname, '..');
 const FN = fs.readFileSync(path.join(root, 'supabase/functions/sbd-approve-registration/index.ts'), 'utf8');
 const MAIL = fs.readFileSync(path.join(root, 'supabase/functions/sbd-send-emails/index.ts'), 'utf8');
-const M142 = fs.readFileSync(path.join(root, 'supabase/migrations/20260819234000_stranded_registration_alert.sql'), 'utf8');
-const M143 = fs.readFileSync(path.join(root, 'supabase/migrations/20260819234500_retire_dead_approval_code.sql'), 'utf8');
+const M142 = fs.readFileSync(path.join(root, 'supabase/migrations-archive/20260819225511_stranded_registration_alert.sql'), 'utf8');
+const M143 = fs.readFileSync(path.join(root, 'supabase/migrations-archive/20260819225523_retire_dead_approval_code.sql'), 'utf8');
 
 let passed = 0, failed = 0;
 function ok(cond, label, detail) {

@@ -2708,7 +2708,7 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Goal:* We know, and he knows, whether those functions can be called by someone who is not signed in.
   *Done when:* Each privileged function in the assessment module has been called from an unauthenticated client against production and the result recorded, and the answer has gone to him with the evidence.
 
-- [ ] **T111** Production schema is ahead of the migration record · est 0.5d · Medium
+- [x] **T111** Production schema is ahead of the migration record · est 0.5d · Medium · **Done 2026-09-03**
   Found here 2026-08-13 while verifying T37. `supabase_migrations.schema_migrations` ends at
   `20260807120000`, but changes dated after it are demonstrably applied: `staff.observation_pin`
   is dropped, the T79 grant split is live, and `staff.belt = 'None'` is accepted with 17 rows
@@ -2724,6 +2724,25 @@ already named above: **an ask next to an urgent one still needs its own row.**
   `20260819150000` (`sbd_account_audit`) are live on production, verified by reading the schema,
   but neither appears in `supabase_migrations.schema_migrations`, so the drift this entry tracks
   grew by two the same week it was written down.
+  **BASELINED 2026-09-03, ledger repaired the same day.** Sriman's 26 Aug
+  measurement stood: 252 recorded versions against 95 files, 158 with no file behind them, so a
+  fresh apply could not rebuild production. Fixed by the baseline route he offered:
+  `supabase/migrations/20260903120000_baseline_production_schema.sql` is a `db dump --linked` of
+  production plus three hand sections for what pg_dump cannot express (an unrecorded LOGIN role
+  `sbdops_readonly` and three role statement_timeouts; 95 REVOKEs of default anon/authenticated
+  grants that the 2026-07 sweeps removed; the five cron schedules). The 94 applied files moved to
+  `supabase/migrations-archive/` with a 252-row JSON export of the ledger, statements included, so
+  the 158 orphans' SQL is in git for the first time. Bucket A renamed `20260903130000` to sort
+  after the baseline. Verified by `db diff --linked --schema public` against a shadow database
+  built from the baseline alone: three runs, the last one empty apart from two functions and one
+  CHECK constraint the tool re-emits with byte-identical text. Six verify scripts re-pathed, all
+  pass. Decision doc `docs/decisions/2026-09-03-t111-schema-baseline.md`, branch
+  `work/721-schema-baseline`.
+  *Ledger repair, run 2026-09-03:* `migration repair --status applied 20260903120000`, then
+  `--status reverted` for all 252 old versions. Production ledger now holds exactly one row, the
+  baseline; `migration list` shows it applied and Bucket A (`20260903130000`) as the only
+  local-only version. Schema counts re-read afterwards, unchanged. `db push` is safe again and
+  would apply only Bucket A.
 
 
 - [ ] **T112** An abandoned assessment is recovered as a scored result, and floored to White · est 1d · **High**
@@ -3369,7 +3388,7 @@ already named above: **an ask next to an urgent one still needs its own row.**
   a shape change plus sixty written justifications, and it should be sized as such.
 
 - [ ] **T125** Bucket A: the #718 correction contradicts the client's own ruling on 112 · est 0d · **Critical**
-  **Blocked on one line from the client. Do not apply `20260827120000_718_bucket_a_unassessed_correction.sql`
+  **Blocked on one line from the client. Do not apply `20260903130000_718_bucket_a_unassessed_correction.sql` (was `20260827120000`, renamed under T111 to sort after the 2026-09-03 baseline)
   until it comes back.** Question posted on board 126, 2026-08-25.
   30 staff read White Belt with no evidence of any kind: no gate results, empty history, no
   confirmed placement review, all flagged `placement_needed`. That is the Add Staff form's default,
@@ -3421,7 +3440,7 @@ already named above: **an ask next to an urgent one still needs its own row.**
   confirmation writes an activity row, and the report's attribution is re-read against a fresh
   confirmation.
 
-- [ ] **T127** Migration ledger reconciled with production (board 129, #721) · **Reopened 2026-08-26**
+- [x] **T127** Migration ledger reconciled with production (board 129, #721) · **Reopened 2026-08-26 · Done 2026-09-03**
   **Closed too early.** The record side is clean, but the card cannot close: the repo holds **93
   migration files against 250 recorded versions**, so a fresh apply against an empty database still
   would not rebuild production. The ledger now tells the truth about what ran; it does not follow
@@ -3433,13 +3452,18 @@ already named above: **an ask next to an urgent one still needs its own row.**
   day: files renamed to match the recorded versions, and the ledger backfilled with the 50 versions
   verified live by schema probe rather than trusted from the record.
   Ledger now holds 250 rows ending `20260826120000`, with exactly one local-only migration left:
-  `20260827120000`, the Bucket A correction under T125, deliberately held.
+  `20260827120000`, the Bucket A correction under T125, deliberately held (renamed `20260903130000` on 2026-09-03, see T111).
   *Lesson kept:* the finding was posted to the client roughly an hour before the fix merged, so the
   note went out stale and needed a correction on the item. Check the merge state of a thing before
   reporting it as open. Then it was closed on the record fix alone, which is the same mistake in the
   other direction: verify the whole claim, not the half that was measured.
   *Done when:* a fresh apply from the repo reproduces production, or the gap between 93 files and
   250 versions is explained and recorded as deliberate.
+  **2026-09-03: done-when measured true, both halves.** See T111 for the baseline, the
+  shadow-database diff and what it found. The production ledger repair ran the same day and was
+  re-read before this box was ticked: one applied row (the baseline), Bucket A the only
+  local-only version. The 158-version gap is not explained away; it is gone, and its SQL is in
+  `supabase/migrations-archive/ledger-2026-09-03-pre-baseline.json`.
 
 - [ ] **T128** The account audit records intent, not outcome (board 890) · est 0.25d · **Medium**
   `sbd-set-account-active` (v4, live 2026-08-26) writes the `sbd_account_audit` row **before** it

@@ -217,7 +217,7 @@ console.log('\n11. DB guard: g2 is server-owned for en- modules, g1 protection i
 // own RE-RUN HAZARDS note describes this class), and the symptom is invisible until
 // a leader has already walked a real person through all 28 observation items.
 const MIG = (function () {
-  const dir = path.join(root, 'supabase/migrations');
+  const dir = path.join(root, 'supabase/migrations-archive');
   const f = fs.readdirSync(dir).filter(x => /_720_endoscopy_no_simulation_gate\.sql$/.test(x));
   ok(f.length === 1, 'the #720 endoscopy guard migration exists (found ' + f.length + ')');
   return f.length ? fs.readFileSync(path.join(dir, f[0]), 'utf8') : '';
