@@ -3219,7 +3219,7 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Goal:* The write that should have landed is named, with evidence, and whether anyone else is affected is known.
   *Done when:* One of the three hypotheses is confirmed from logs or data, the blast radius is counted, and the finding is on his board with the fix proposed as its own item.
 
-- [ ] **T119** Twelve deployed edge functions have no source in the repo · est 0.5d · **High**
+- [x] **T119** Twelve deployed edge functions have no source in the repo · est 0.5d · **High** · **Done 2026-09-03**
   Board #748, same family as T110 (#711) and T111 (#721). The deployed list carries twelve
   functions absent from `supabase/functions/`: nobody can review or redeploy them, two report
   a `/Users/iiggie/…` laptop path as entrypoint, and `sbd-matrix-seeder` — ordered deleted in
@@ -3258,6 +3258,16 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Done when:* the four kept-because-they-get-traffic functions (`sbd-auth`, `sbd-bulk-upload`,
   `sbd-ai-proxy`, `sync-user-claims`) are resolved — source checked in, or caller migrated and
   the function retired — with the per-function decision recorded in the PR.
+  **OUTCOME.** The four were retired 2026-08-26 (T121, PR #221) and the seven dead repo folders
+  deleted 2026-08-27 (PR #223). Sriman's follow-up on the card, `serve-app`, closed 2026-09-02/03:
+  the function was an unauthenticated `302` to a public bucket holding a 20 Mar bundled copy of
+  this app — misfiled above as another property's. Function deleted (404), bucket
+  `Belt Intelligence System` and its `index.html` deleted via the Storage API (SQL delete is
+  refused by `storage.protect_delete()`), and the twin bucket `sbd-app` deleted too — its only
+  object row was dangling with no bytes behind it. Source kept with a RETIRED header; addendum
+  in the T119 decision doc. Storage now holds only the private SIPS `reports` bucket. Branch
+  `work/748-retire-serve-app`. Left to the user: the dashboard invocation-log check for any
+  external link to `serve-app`.
 
 - [ ] **T120** Audit every `verify_jwt=false` function: which ones really check who is calling · est 0.5d · **High**
   Board #749, natural next step after T110. Nobody re-checked edge-fn auth since the 18 Jul
