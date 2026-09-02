@@ -17917,6 +17917,20 @@ function selectRoleMgmt(sid){ ROLEMGMT_SEL=sid; renderARoleMgmt(); }
 function _rmUserFor(staffId){ return (DB.users||[]).find(u=>u.sid===staffId) || null; }
 // T79: staff-record capability rows are meaningless for an account with no staff row.
 function _rmHasStaffRow(s){ return !(s && s._noStaff); }
+// #1107: granting Assessor on the card wrote assessor + assessor_facilities only, so an assessor
+// in a role outside T79_PIN_ROLES (facility_admin, staff_member) could be assigned assessments
+// but never generate the PIN. All four live assessors hit this on 2026-09-01. The card now keeps
+// issue_pin (+ its list) equal to the assessor grant — grant, revoke, add or remove a facility —
+// but ONLY while the two were already equal before the edit. A PIN scope set on purpose to
+// something else, or an edit that touches the PIN grant itself, is left alone. Client only: the
+// server gate (sbd_can_issue_pin / sbd-assessor-pin) is unchanged and still decides.
+function _rmPinKey(c){ return JSON.stringify([c.issue_pin===true,(c.issue_pin_facilities||[]).map(String).sort()]); }
+function _rmAssessorKey(c){ return JSON.stringify([c.assessor===true,(c.assessor_facilities||[]).map(String).sort()]); }
+function _rmMirrorAssessorOntoPin(caps, pinBefore, pinInSync){
+  if(!pinInSync || _rmPinKey(caps)!==pinBefore) return;   // diverged on purpose, or this edit IS the PIN edit
+  caps.issue_pin=caps.assessor;
+  caps.issue_pin_facilities=(caps.assessor_facilities||[]).slice();   // normalised below: non-true / [] are dropped
+}
 // #73 v1.1: master-admin capability write. Reads the person's current capabilities, applies a
 // mutation, and persists via the role-checked RPC (SB.setUserCapabilities). Optimistic with rollback.
 async function rmSetCapability(staffId, mutate){
@@ -17924,7 +17938,9 @@ async function rmSetCapability(staffId, mutate){
   const u=_rmUserFor(staffId);
   if(!u || !u.authUid){ toast('This person has no login account to grant capabilities to.','err'); return; }
   const caps = JSON.parse(JSON.stringify(u.capabilities||{}));
+  const pinBefore=_rmPinKey(caps), pinInSync=pinBefore===_rmAssessorKey(caps);
   mutate(caps);
+  _rmMirrorAssessorOntoPin(caps, pinBefore, pinInSync);
   if(Array.isArray(caps.educator_facilities) && caps.educator_facilities.length===0) delete caps.educator_facilities;
   // #77: an empty list must not persist. Both the client helper and sbd_is_assessor(p_fid) read
   // an empty array as system wide, so leaving [] behind would look like a scope that is not one.
