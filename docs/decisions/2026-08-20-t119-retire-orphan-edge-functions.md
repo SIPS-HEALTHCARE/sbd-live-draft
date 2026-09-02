@@ -137,3 +137,26 @@ git clean -n supabase/functions/   # then git clean -f to drop the downloaded ar
   (currently "delete the deployed function from the Supabase dashboard to fully
   undeploy") to record the deletion date.
 - Tick T119 pass 1 with the post-delete `functions list` output as evidence.
+
+## Addendum (2026-09-03): `serve-app` was SBD's, not another property's
+
+The "observed deployed list" section above filed `serve-app` under other SIPS properties.
+That was wrong. Sriman flagged it on #748 (26 and 28 Aug): the function was an
+unauthenticated `302` to `storage/v1/object/public/Belt Intelligence System/index.html`, a
+public bucket holding one 845 KB bundled copy of **this** app (page title "SBD Belt
+Intelligence Platform | SIPS Healthcare Solutions"), last modified 2026-03-20. Five months
+stale, reachable by anyone with the link, no source in the repo.
+
+- No caller in `src/`, `index.html`, or `supabase/functions/`. No storage policy referenced
+  the bucket. Invocation logs (dashboard-only) not checked from an agent session.
+- **2026-09-02:** `supabase functions delete serve-app` — verified `404` by unauth curl,
+  `sbd-sync-user-claims` still `401`. Deployed source (v16) saved with a RETIRED header at
+  `supabase/functions/serve-app/index.ts`; the storage HTML saved outside the repo.
+- **2026-09-03:** bucket `Belt Intelligence System` and its object deleted via
+  `supabase storage rm ss:///... -r --experimental --yes`. Direct SQL delete is refused by
+  `storage.protect_delete()`; the Storage API is the only path. Public URL now `400`.
+- **2026-09-03, same session:** bucket `sbd-app` (public, same date) also deleted. Its one
+  `storage.objects` row for `index.html` was a dangling record — the backend answered
+  `NoSuchKey`, so no bytes existed and nothing was backed up. Same `storage rm` path.
+- **Left as found:** bucket `reports` (private, one SIPS PDF) is not SBD's. Storage now
+  holds only that bucket.
