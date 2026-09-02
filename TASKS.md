@@ -2680,6 +2680,14 @@ already named above: **an ask next to an urgent one still needs its own row.**
   Verify: `node scripts/verify-endoscopy-module.js` (36 assertions). Not yet: pushed/PR'd, or
   QA'd against a live Supabase session (deferred — creating a test assignment against production
   is exactly what the CRITICAL DIRECTIVE in CLAUDE.md forbids doing via automation).
+  **Data follow-up (#1109), 2026-09-03** on `work/1109-en01-g3-fix`: Jake Jacobs' en-01 row was
+  assigned 28 Aug, before #1073 made reading chapters seed g3 as a not-applicable pass, so it
+  still carried an open observation gate no screen can close (the leader panel renders nothing
+  for a reading chapter). `scripts/1109-en01-g3-fix.sql`: one service-role UPDATE setting g3 to
+  the #1073 seed shape on every non-capstone en- row whose g3 is not pass (exactly 1 row today),
+  en-14 untouched, no DDL, no code change. Same mechanics as the #720 §2 backfill.
+  **APPLIED to prod 2026-09-03**: UPDATE returned exactly 1 row (en-01, staff c280aa16); post-checks
+  0 non-capstone en- rows with g3 not pass, en-14 g3 still open, en-01 assignment still 'assigned'.
 
 - [ ] **T109** Manually added staff default to White, which is a decision nobody made · est 1d · **High**
   Asked for in the daily brief of 2026-08-13, Priority 4. Adding someone by hand offers White Belt
