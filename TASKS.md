@@ -2708,7 +2708,7 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Goal:* We know, and he knows, whether those functions can be called by someone who is not signed in.
   *Done when:* Each privileged function in the assessment module has been called from an unauthenticated client against production and the result recorded, and the answer has gone to him with the evidence.
 
-- [ ] **T111** Production schema is ahead of the migration record · est 0.5d · Medium
+- [x] **T111** Production schema is ahead of the migration record · est 0.5d · Medium · **Done 2026-09-03**
   Found here 2026-08-13 while verifying T37. `supabase_migrations.schema_migrations` ends at
   `20260807120000`, but changes dated after it are demonstrably applied: `staff.observation_pin`
   is dropped, the T79 grant split is live, and `staff.belt = 'None'` is accepted with 17 rows
@@ -2724,7 +2724,7 @@ already named above: **an ask next to an urgent one still needs its own row.**
   `20260819150000` (`sbd_account_audit`) are live on production, verified by reading the schema,
   but neither appears in `supabase_migrations.schema_migrations`, so the drift this entry tracks
   grew by two the same week it was written down.
-  **BASELINED 2026-09-03, repo side complete, production ledger repair pending.** Sriman's 26 Aug
+  **BASELINED 2026-09-03, ledger repaired the same day.** Sriman's 26 Aug
   measurement stood: 252 recorded versions against 95 files, 158 with no file behind them, so a
   fresh apply could not rebuild production. Fixed by the baseline route he offered:
   `supabase/migrations/20260903120000_baseline_production_schema.sql` is a `db dump --linked` of
@@ -2738,11 +2738,11 @@ already named above: **an ask next to an urgent one still needs its own row.**
   CHECK constraint the tool re-emits with byte-identical text. Six verify scripts re-pathed, all
   pass. Decision doc `docs/decisions/2026-09-03-t111-schema-baseline.md`, branch
   `work/721-schema-baseline`.
-  *Left, and why the box stays open:* the production ledger still lists the 252 old versions and
-  not the baseline. Runbook in the decision doc: `migration repair --status reverted` for all 252,
-  `--status applied 20260903120000`, then `migration list` should show only Bucket A local-only.
-  Ledger table only, no schema change. **Do not `db push` before that repair runs** — it would try
-  to apply the baseline against production.
+  *Ledger repair, run 2026-09-03:* `migration repair --status applied 20260903120000`, then
+  `--status reverted` for all 252 old versions. Production ledger now holds exactly one row, the
+  baseline; `migration list` shows it applied and Bucket A (`20260903130000`) as the only
+  local-only version. Schema counts re-read afterwards, unchanged. `db push` is safe again and
+  would apply only Bucket A.
 
 
 - [ ] **T112** An abandoned assessment is recovered as a scored result, and floored to White · est 1d · **High**
@@ -3440,7 +3440,7 @@ already named above: **an ask next to an urgent one still needs its own row.**
   confirmation writes an activity row, and the report's attribution is re-read against a fresh
   confirmation.
 
-- [ ] **T127** Migration ledger reconciled with production (board 129, #721) · **Reopened 2026-08-26**
+- [x] **T127** Migration ledger reconciled with production (board 129, #721) · **Reopened 2026-08-26 · Done 2026-09-03**
   **Closed too early.** The record side is clean, but the card cannot close: the repo holds **93
   migration files against 250 recorded versions**, so a fresh apply against an empty database still
   would not rebuild production. The ledger now tells the truth about what ran; it does not follow
@@ -3459,10 +3459,11 @@ already named above: **an ask next to an urgent one still needs its own row.**
   other direction: verify the whole claim, not the half that was measured.
   *Done when:* a fresh apply from the repo reproduces production, or the gap between 93 files and
   250 versions is explained and recorded as deliberate.
-  **2026-09-03: first half of the done-when now measured true** — see T111 for the baseline, the
-  shadow-database diff and what it found. Closes once the production ledger repair in the T111
-  decision doc has run and `migration list` shows the baseline applied. Not ticked before then,
-  for the reason this entry itself records.
+  **2026-09-03: done-when measured true, both halves.** See T111 for the baseline, the
+  shadow-database diff and what it found. The production ledger repair ran the same day and was
+  re-read before this box was ticked: one applied row (the baseline), Bucket A the only
+  local-only version. The 158-version gap is not explained away; it is gone, and its SQL is in
+  `supabase/migrations-archive/ledger-2026-09-03-pre-baseline.json`.
 
 - [ ] **T128** The account audit records intent, not outcome (board 890) · est 0.25d · **Medium**
   `sbd-set-account-active` (v4, live 2026-08-26) writes the `sbd_account_audit` row **before** it

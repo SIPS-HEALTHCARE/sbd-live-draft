@@ -112,7 +112,7 @@ Also checked: the six verify scripts that read migration files by path were re-p
 readdir pattern). No secrets in the file beyond the publishable anon key already in the
 frontend; every JWT in it was decoded and carries `role: anon`.
 
-## Production ledger repair — NOT YET RUN, needs a go
+## Production ledger repair — RUN 2026-09-03
 
 The repo side above changes nothing in production. To make `supabase migration list` and
 `db push` agree with the new layout, the ledger has to be repaired once:
@@ -127,10 +127,17 @@ supabase migration repair --status applied --linked 20260903120000
 supabase migration list --linked
 ```
 
-This touches only `supabase_migrations.schema_migrations`, never the schema. Until it runs,
-`supabase migration list` shows 252 remote-only versions and one local-only baseline, and a
-`db push` would try to apply the baseline against production — **do not push before the
-repair.** Bucket A's version change needs no repair: it was never applied.
+This touches only `supabase_migrations.schema_migrations`, never the schema. Bucket A's version
+change needs no repair: it was never applied.
+
+**Outcome (2026-09-03):** before, 252 rows ending `20260901120000`. `--status applied
+20260903120000` first, then `--status reverted` for all 252 (the first attempt passed the
+252 versions as one argument — zsh does not word-split an unquoted variable — and the CLI
+rejected it cleanly with "invalid version number"; `${=V}` fixed it). After: the ledger holds
+exactly one row, `20260903120000 baseline_production_schema`, and `supabase migration list`
+shows it applied with `20260903130000` (Bucket A) as the only local-only version. Schema
+counts re-read after the repair and unchanged: 109 tables, 262 policies, 82 user functions,
+5 cron jobs. `db push` is safe again and would apply only Bucket A.
 
 ## Done-when, re-read
 
@@ -138,5 +145,4 @@ repair.** Bucket A's version change needs no repair: it was never applied.
    is exactly `[baseline]`, which is the whole applied state.
 2. A fresh apply of the repo reproduces the live schema — yes, measured above.
 
-Neither box is ticked in TASKS.md until the ledger repair has run: T127 was closed once on a
-half-measured claim, and this is the other half.
+Both boxes ticked in TASKS.md on 2026-09-03, after the repair ran and was re-read, not before.
