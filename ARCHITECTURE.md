@@ -41,6 +41,7 @@ src/js/logic.js                (201 lines)   ← Belt system constants, points e
 src/js/utils.js                (177 lines)   ← Helpers: staffOf(), getFac(), getStaff(), fullName(), date fns, Security.
 src/js/api-supabase.js         (566 lines)   ← Supabase client: SB_AUTH, SB (CRUD), sbFetch(), data mappers.
 src/js/auth-password.js        (172 lines)   ← Password reset, forgot password, strength bar.
+src/js/mfa.js                 (~190 lines)   ← T33: admin TOTP MFA (enroll/challenge/verify, raw GoTrue REST). doLogin() gates admin-tier roles on aal2 before hydration.
 src/js/ui-views.js          (14,432 lines)   ← ⚠️ MONOLITH. All view rendering, all portal logic. 294 functions.
 src/js/settings.js             (239 lines)   ← Account settings UI.
 src/js/scripts-module.js       (~330 lines)  ← T92: Scripts as a standalone assignable module (§16B).
@@ -193,6 +194,14 @@ Every table uses RLS. Access is controlled via JWT claims:
 - `system_admin` → scoped to facilities in their `system_id`
 - `staff_member` → scoped to their own `staff_id`
 - `sips_admin` → **matches no role branch anywhere.** Reach comes only from `capabilities` (§8A).
+
+**T33 MFA gate (migration `20260812130000`):** admin-tier roles (`master_admin`,
+`staff_admin`, `admin`, `master`, `sips_admin`, `system_admin`) additionally need an
+**aal2** JWT (password + verified TOTP) — a `RESTRICTIVE` `sbd_mfa_gate` policy on every
+belt-platform table returns nothing to a password-only admin session. `sbd_portal_users`
+keeps an own-row SELECT exception so login can learn the role before the challenge. The
+same predicate is inlined in every role-gated edge function; the admin-tier list exists in
+4 places asserted identical by `node scripts/verify-t33-security-tail.js`.
 
 ---
 
@@ -398,6 +407,9 @@ DAVID is an AI assistant integrated into the admin portal.
 1. User enters email/password
 2. doLogin() → SB_AUTH.signIn(email, password)
 3. On success: SB_SESSION set, stored in localStorage
+3a. T33: if role is admin-tier → MFA.ensureAal2() (TOTP enroll or challenge; the
+    verified session replaces SB_SESSION at aal2) — BEFORE hydration, because the
+    sbd_mfa_gate RLS policies return nothing to an aal1 admin
 4. Fetch user profile: SB.getUserProfile(userId)
 5. Map profile: mapUserFromBackend()
 6. Set ST.user = mapped profile
