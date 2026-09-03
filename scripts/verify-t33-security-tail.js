@@ -9,7 +9,7 @@
  * ONE LIST, MANY COPIES. The admin-tier role list ("which roles must hold an
  * aal2 session") exists in:
  *     src/js/mfa.js (MFA.ADMIN_ROLES)                                 client
- *     supabase/migrations/20260812130000_..._gate.sql                 SQL ×2
+ *     supabase/migrations/20260904120000_..._gate.sql                 SQL ×2
  *     MFA_ADMIN_ROLES inlined in 15 edge functions (#47: the deploy
  *     pipeline cannot resolve ../_shared imports)                     server
  * If any copy drifts, one surface stops requiring MFA for a role the others
@@ -81,8 +81,8 @@ ok(/signOut/.test(UI.slice(gateIdx, gateIdx + 600)),
 ok(/src\/js\/mfa\.js\?v=\d+/.test(HTML), 'index.html loads mfa.js with a cache-bust param');
 
 /* ── 3. Migration (pieces 1+3, database side) ─────────────────────────────── */
-section('3. Migration 20260812130000');
-const SQL = read('supabase/migrations/20260812130000_t33_admin_mfa_aal2_gate.sql');
+section('3. Migration 20260904120000');
+const SQL = read('supabase/migrations/20260904120000_t33_admin_mfa_aal2_gate.sql');
 ok(/create or replace function public\.sbd_mfa_satisfied/.test(SQL), 'defines sbd_mfa_satisfied()');
 ok(/security definer set search_path = public/.test(SQL), 'predicate is definer with pinned search_path');
 ok(/aal'?,\s*'aal1'\)\s*=\s*'aal2'/.test(SQL.replace(/\s+/g, ' ')), 'predicate keys on the JWT aal claim');
