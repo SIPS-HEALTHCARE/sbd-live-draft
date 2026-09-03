@@ -3,7 +3,7 @@
 **Living document.** This is the single record of what has been built and what is left.
 It is not regenerated. It is edited in place.
 
-**Last updated:** 2026-08-26
+**Last updated:** 2026-09-03
 **Audit basis:** 2026-07-25, verified against the live project and the live code.
 **History basis:** 2026-07-31, the complete client conversation from 22 May to 31 July read end
 to end including every attachment. See `docs/DOMAIN_GLOSSARY.md` for the vocabulary this ledger
@@ -3420,36 +3420,31 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Flag:* this was scoped as content into existing tables. The rationale half is not content, it is
   a shape change plus sixty written justifications, and it should be sized as such.
 
-- [ ] **T125** Bucket A: the #718 correction contradicts the client's own ruling on 112 · est 0d · **Critical**
-  **Blocked on one line from the client. Do not apply `20260903130000_718_bucket_a_unassessed_correction.sql` (was `20260827120000`, renamed under T111 to sort after the 2026-09-03 baseline)
-  until it comes back.** Question posted on board 126, 2026-08-25.
-  30 staff read White Belt with no evidence of any kind: no gate results, empty history, no
-  confirmed placement review, all flagged `placement_needed`. That is the Add Staff form's default,
-  not a decision. Counted against the migration's own criteria rather than a description of them,
-  so the number is exactly what it would touch. Verified independently on the same criteria.
-  The migration sets `belt='None'` and `since=null` on those rows. The client's section 4 answer on
-  112 was **"touch nobody's belt value"**, and 112's own `why_it_matters` names this same population
-  ("56 of 92 staff sit at White and 28 of those are still flagged as needing placement", and that 28
-  is today's 30). So the ruling and the correction point opposite ways.
-  **The two populations do not overlap and that is what settles it.** The 28 already at No Belt all
-  carry a history decision *and* a confirmed review, and none is flagged `placement_needed`. Those
-  are real assessor decisions and nothing proposed touches them. Bucket A is a separate 30 with no
-  evidence at all.
-  Confirmed not applied: Bucket A still 30 White, No Belt still 28, and the migration is the single
-  local-only row in the ledger after the T127 sync below.
-  **Update 2026-08-26, and the first point changes what a yes actually authorises.**
-  1. **The 30 are not one cohort.** 27 were already there before 13 August, which is the population
-     the client was shown; **3 were added after**, the last on 21 August 14:12. One of the three is
-     Barbara Rios, the same account still unexplained under 154. So a yes on 126 covers 27 he has
-     seen and 3 he has not. Say that when the answer comes rather than applying it blind.
-  2. **The bucket has stopped growing.** The last person added as White was on the 21st; everyone
-     since arrives as not yet certified. So this is a fixed backlog now, not a leak.
-  3. **The display half is live.** Production and the repo are byte identical on it, so a report
-     already reads an unassessed person correctly. Only the stored belt value is still at issue.
-  4. On attribution: the "56 of 92" line sits under **T109** in this ledger *and* on board item
-     112's own `why_it_matters`. Both are true; the citation above is to the board item.
-  *Done when:* the client answers yes or no on 126, the 27/3 split is put to him rather than assumed,
-  and the migration either runs or is withdrawn with the answer recorded against it.
+- [x] **T125** Bucket A: the #718 correction contradicts the client's own ruling on 112 · **Closed 2026-09-02**
+  **Ruling: not applied.** Shawn closed board item 126 in writing on 2026-09-02: the Bucket A
+  correction will not run. Iggie's answer on 112 was **"touch nobody's belt value"**, and that
+  ruling stands. The 30 staff at White Belt with no evidence stay White (30 live rows, `belt='White'`
+  with `placement_needed=true`, re-counted 2026-09-03).
+  `20260903130000_718_bucket_a_unassessed_correction.sql` moved to `supabase/migrations-archive/`
+  on 2026-09-03, contents untouched. `supabase/migrations/` now holds the baseline only, the
+  archive holds 97 files, and the prod ledger still holds the single baseline row `20260903120000`.
+  Nothing has ever run it.
+  **What the question was.** 30 staff read White Belt with no evidence of any kind: no gate
+  results, empty history, no confirmed placement review, all flagged `placement_needed`. That is the
+  Add Staff form's default, not a decision. The held migration would have set `belt='None'` and
+  `since=null` on exactly those rows. The 28 already at No Belt are a separate population: each
+  carries a history decision *and* a confirmed review, none is flagged `placement_needed`, and the
+  two sets do not overlap.
+  **The 27 plus 3 split, recorded for history.** The 30 were not one cohort. 27 were in place before
+  13 August, the population the client was shown on 112; 3 were added after, the last on 21 August
+  14:12, one of them Barbara Rios (still unexplained under 154). The ruling covers all 30 the same
+  way, so the split changes nothing now, but it is kept here because a yes would have covered 3
+  people the client had not seen.
+  The bucket stopped growing on 21 August; everyone since arrives as not yet certified. The display
+  half shipped earlier (#718 entry paths, PR #213), so a report already reads an unassessed person
+  correctly regardless of the stored value.
+  *Done when* was: the client answers on 126 and the migration either runs or is withdrawn with the
+  answer recorded against it. Answered no, withdrawn, recorded. Closed.
 
 - [ ] **T126** A belt decision leaves no usable record of who made it or when (board 944) · est 0.5d · **High**
   Re-measured 2026-08-26; the first draft of this entry undercounted and overclaimed, both corrected.
