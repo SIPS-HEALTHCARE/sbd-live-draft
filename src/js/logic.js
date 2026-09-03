@@ -42,10 +42,13 @@ const BELT_ORDER = ['White','Yellow','Green','Blue','Brown','Black'];
 // It still needs entries here or belt averages go NaN and cert labels print undefined.
 // Labels: beltLabel()/beltName() (utils.js) render 'None' as "No Belt" — use them, never
 // raw `${s.belt} Belt` templates, wherever the value can be a staff's current belt (#718).
-// Distribution charts iterate BELT_DIST so unbelted people are drawn, not dropped.
-const BELT_DIST = [...BELT_ORDER].reverse().concat('None'); // chart rows: Black first, unbelted last
-const BELT_CLR = {None:'#94a3b8',White:'#cbd5e1',Yellow:'#eab308',Green:'#22c55e',Blue:'#60a5fa',Brown:'#c2772a',Black:'#8b929e'};
-const BELT_BG  = {None:'#94a3b812',White:'#cbd5e118',Yellow:'#eab30815',Green:'#22c55e12',Blue:'#60a5fa12',Brown:'#c2772a15',Black:'#8b929e12'};
+// Distribution charts, count tables and belt filter chips iterate BELT_DISPLAY / BELT_DIST so
+// unbelted people are drawn (red, below White), not dropped (#1124). Render-side only: never
+// feed either list to beltIdx/nextBelt/calcPoints.
+const BELT_DISPLAY = ['None', ...BELT_ORDER];   // ascending: No Belt first, then White..Black
+const BELT_DIST = [...BELT_DISPLAY].reverse();  // chart rows: Black first, No Belt last
+const BELT_CLR = {None:'#ef4444',White:'#cbd5e1',Yellow:'#eab308',Green:'#22c55e',Blue:'#60a5fa',Brown:'#c2772a',Black:'#8b929e'};
+const BELT_BG  = {None:'#ef444412',White:'#cbd5e118',Yellow:'#eab30815',Green:'#22c55e12',Blue:'#60a5fa12',Brown:'#c2772a15',Black:'#8b929e12'};
 const BELT_CERT= {None:'Not Yet Certified',White:'Certified Operator I',Yellow:'Certified Operator II',Green:'Certified Operator III',Blue:'Certified Operator IV',Brown:'Certified Operator V',Black:'Master Operator'};
 const BELT_VAL = {None:0,White:1,Yellow:2,Green:3,Blue:4,Brown:5,Black:6};
 
