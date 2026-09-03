@@ -1,4 +1,4 @@
--- T33 verification — run AFTER applying 20260812130000_t33_admin_mfa_aal2_gate.sql
+-- T33 verification — run AFTER applying 20260904120000_t33_admin_mfa_aal2_gate.sql
 -- (which itself runs AFTER the frontend + edge-function deploys — see the deploy
 -- order in docs/decisions/2026-08-12-t33-admin-mfa-retention-interface-gate.md).
 --

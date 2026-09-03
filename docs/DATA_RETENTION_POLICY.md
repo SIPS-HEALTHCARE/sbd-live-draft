@@ -50,7 +50,7 @@ PINs) as scheduled jobs is tracked follow-up work, not claimed here.
 
 - Access to every category is role-scoped and enforced at the database (RLS), with
   admin-tier access additionally requiring multi-factor authentication (migration
-  `20260812130000`, T33).
+  `20260904120000`, T33).
 - **Subject requests** (correction, export, deletion) go to a SIPS master admin.
   Deletion requests are honored by deactivation plus anonymization of PII fields
   where the certification-evidence obligation permits; the account row itself is

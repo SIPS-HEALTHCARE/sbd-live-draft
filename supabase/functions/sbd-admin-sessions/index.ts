@@ -55,7 +55,7 @@ serve(async (req) => {
 
         // ── T33 admin MFA guard ─────────────────────────────────────────────────
         // Admin-tier JWTs must be aal2 (password + verified TOTP). Mirrors
-        // public.sbd_mfa_satisfied() (migration 20260812130000); inlined because the
+        // public.sbd_mfa_satisfied() (migration 20260904120000); inlined because the
         // deploy pipeline cannot resolve ../_shared imports (#47).
         // scripts/verify-t33-security-tail.js asserts every copy agrees.
         const MFA_ADMIN_ROLES = ['master_admin', 'staff_admin', 'admin', 'master', 'sips_admin', 'system_admin'];

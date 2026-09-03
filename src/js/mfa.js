@@ -6,7 +6,7 @@
 //
 // Raw GoTrue REST (this app has no supabase-js): /auth/v1/factors endpoints.
 // The ADMIN_ROLES list exists in four places that must agree: here, the migration
-// 20260812130000 (sbd_mfa_satisfied), and the MFA_ADMIN_ROLES block inlined in
+// 20260904120000 (sbd_mfa_satisfied), and the MFA_ADMIN_ROLES block inlined in
 // each role-gated edge function. scripts/verify-t33-security-tail.js asserts it.
 
 const MFA = {

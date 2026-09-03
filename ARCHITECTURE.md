@@ -195,7 +195,7 @@ Every table uses RLS. Access is controlled via JWT claims:
 - `staff_member` → scoped to their own `staff_id`
 - `sips_admin` → **matches no role branch anywhere.** Reach comes only from `capabilities` (§8A).
 
-**T33 MFA gate (migration `20260812130000`):** admin-tier roles (`master_admin`,
+**T33 MFA gate (migration `20260904120000`):** admin-tier roles (`master_admin`,
 `staff_admin`, `admin`, `master`, `sips_admin`, `system_admin`) additionally need an
 **aal2** JWT (password + verified TOTP) — a `RESTRICTIVE` `sbd_mfa_gate` policy on every
 belt-platform table returns nothing to a password-only admin session. `sbd_portal_users`
