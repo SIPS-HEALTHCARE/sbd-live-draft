@@ -83,6 +83,20 @@ async function doLogin(preAuthSession=null){
       throw new Error('This account has been deactivated. Please contact your administrator.');
     }
 
+    // T33: admin-tier accounts must hold an aal2 (TOTP-verified) session before
+    // any data loads — the sbd_mfa_gate restrictive RLS policies return nothing
+    // to an aal1 admin, so hydrating first would just paint empty screens.
+    // Covers both doors: fresh sign-in and restoreSessionOnLoad (a session that
+    // was aal2 when stored decodes as aal2 and skips the challenge).
+    if (window.MFA && MFA.roleRequiresMfa(userProfile.role)) {
+      if(btn){ btn.innerHTML = '<span class="spinner" style="border-width:2px;width:14px;height:14px;margin-right:6px;display:inline-block"></span> Verifying identity...'; }
+      const mfaOk = await MFA.ensureAal2();
+      if (!mfaOk) {
+        try { await SB_AUTH.signOut(); } catch(_){}
+        throw new Error('Multi-factor authentication is required for administrator accounts.');
+      }
+    }
+
     if(btn){ btn.innerHTML = '<span class="spinner" style="border-width:2px;width:14px;height:14px;margin-right:6px;display:inline-block"></span> Signing in...'; }
     
     // Map user profile BEFORE hydration so ST.user is set when initAppData's
