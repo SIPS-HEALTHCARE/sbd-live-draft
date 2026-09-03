@@ -985,11 +985,11 @@ adminStaffFilter.initFromUrl();
 // showFacility = true for multi-facility views (network / system-level)
 function adminFilterBar(showFacility, facList, onChangeFn){
   adminStaffFilter.syncToUrl();
-  const beltChips=['All',...BELT_ORDER].map(b=>`
+  const beltChips=['All',...BELT_DISPLAY].map(b=>`
     <div class="fchip ${adminStaffFilter.belt===b?'on':''}"
       style="${adminStaffFilter.belt===b?'border-color:'+BELT_CLR[b]+'!important;':''}"
       onclick="adminStaffFilter.belt='${b}';${onChangeFn}()">
-      ${b==='All'?'All Belts':`<span style="width:8px;height:8px;border-radius:50%;background:${BELT_CLR[b]};display:inline-block;margin-right:4px"></span>${b}`}
+      ${b==='All'?'All Belts':`<span style="width:8px;height:8px;border-radius:50%;background:${BELT_CLR[b]};display:inline-block;margin-right:4px"></span>${beltName(b)}`}
     </div>`).join('');
 
   const sortedFacs = facList ? [...facList].sort((a,b)=>(a.name||'').toLowerCase().localeCompare((b.name||'').toLowerCase())) : [];
@@ -3091,7 +3091,7 @@ function reviewFilterBar(onChangeFn){
   let facs = (DB.facilities||[]).filter(f=>f.active!==false);
   if(u && u.role==='staff_admin' && u.assignedFids && u.assignedFids.length) facs = facs.filter(f=>u.assignedFids.includes(f.id));
   facs = facs.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''));
-  const belts = ['All', ...BELT_ORDER];
+  const belts = ['All', ...BELT_DISPLAY];
   const active = reviewFilter.q || reviewFilter.fid!=='all' || reviewFilter.belt!=='All' || reviewFilter.sort!=='newest';
   const sel = "background:#0e1328;border:1px solid rgba(255,255,255,.1);border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:12.5px;font-family:'Poppins',sans-serif;cursor:pointer";
   return `
@@ -3108,7 +3108,7 @@ function reviewFilterBar(onChangeFn){
         ${[['newest','Newest first'],['name','Name A-Z'],['facility','By facility'],['score','Score high-low']].map(([v,l])=>`<option value="${v}" ${reviewFilter.sort===v?'selected':''}>${l}</option>`).join('')}
       </select>
       <div class="filter-bar" style="margin:0;flex-wrap:nowrap;overflow-x:auto;padding-bottom:0">
-        ${belts.map(b=>`<div class="fchip ${reviewFilter.belt===b?'on':''}" style="${reviewFilter.belt===b&&b!=='All'?'border-color:'+(BELT_CLR[b]||'#888')+'!important;':''}" onclick="reviewFilter.belt='${b}';${onChangeFn}()">${b}</div>`).join('')}
+        ${belts.map(b=>`<div class="fchip ${reviewFilter.belt===b?'on':''}" style="${reviewFilter.belt===b&&b!=='All'?'border-color:'+(BELT_CLR[b]||'#888')+'!important;':''}" onclick="reviewFilter.belt='${b}';${onChangeFn}()">${beltName(b)}</div>`).join('')}
       </div>
       ${active?`<button class="btn btn-ghost btn-xs" onclick="reviewFilter.reset();${onChangeFn}()" style="white-space:nowrap">Clear</button>`:''}
     </div>`;
@@ -6730,7 +6730,7 @@ function downloadStaffReport(staffId){
 }
 
 // Print-safe belt color lookup (hex values, not CSS vars)
-const BELT_CLR_PRINT = {None:'#64748b',White:'#94a3b8',Yellow:'#d97706',Green:'#16a34a',Blue:'#2563eb',Brown:'#92400e',Black:'#1e293b'};
+const BELT_CLR_PRINT = {None:'#dc2626',White:'#94a3b8',Yellow:'#d97706',Green:'#16a34a',Blue:'#2563eb',Brown:'#92400e',Black:'#1e293b'};
 
 
 // ============================================================ DOWNLOAD: LEVEL 2  --  FACILITY (Hospital Manager)
@@ -10713,7 +10713,7 @@ function renderHStaff(){
   document.getElementById('h-staff').innerHTML=`
     <div class="filter-bar">
       <div class="search-wrap"><div class="search-ico"><svg viewBox="0 0 18 18" fill="none" width="14" height="14"><circle cx="7.5" cy="7.5" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M12 12l3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div><input class="search-inp" placeholder="Search staff..." oninput="hSearch=this.value;renderHStaff()" value="${hSearch}"></div>
-      ${['All',...BELT_ORDER].map(b=>`<div class="fchip ${hBeltFilter===b?'on':''}" onclick="hBeltFilter='${b}';renderHStaff()">${b}</div>`).join('')}
+      ${['All',...BELT_DISPLAY].map(b=>`<div class="fchip ${hBeltFilter===b?'on':''}" onclick="hBeltFilter='${b}';renderHStaff()">${beltName(b)}</div>`).join('')}
       ${facAdmin?`<button class="btn btn-gold btn-sm" style="margin-left:auto" onclick="openAddStaffModal('${fid}')">${ICO.plus} Add Staff</button>`:''}
     </div>
     <div class="card">
@@ -13736,7 +13736,7 @@ function renderAAllStaff(){
   const filterBar=adminFilterBar(true, facList, 'renderAAllStaff');
 
   // Belt distribution counts from filtered pool
-  const beltCounts=['None',...BELT_ORDER].map(b=>({belt:b,count:st.filter(s=>s.belt===b).length}));
+  const beltCounts=BELT_DISPLAY.map(b=>({belt:b,count:st.filter(s=>s.belt===b).length}));
   const promoCount=st.filter(s=>s.promo).length;
 
   document.getElementById('a-allstaff').innerHTML=`
@@ -16393,7 +16393,7 @@ function downloadFacilityReport(fid){
   const st=staffOf(fid);
   const stats=facStats(fid);
   const grade=stats.greenPct>=90?'A':stats.greenPct>=75?'B':stats.greenPct>=60?'C+':stats.greenPct>=40?'C':'D';
-  const beltTbl=['None',...BELT_ORDER].map(b=>{const cnt=st.filter(s=>s.belt===b).length;return`<tr><td>${beltLabel(b)}</td><td>${BELT_CERT[b]}</td><td style="text-align:center">${cnt}</td><td style="text-align:center">${st.length?Math.round(cnt/st.length*100):0}%</td></tr>`}).join('');
+  const beltTbl=BELT_DISPLAY.map(b=>{const cnt=st.filter(s=>s.belt===b).length;return`<tr><td>${beltLabel(b)}</td><td>${BELT_CERT[b]}</td><td style="text-align:center">${cnt}</td><td style="text-align:center">${st.length?Math.round(cnt/st.length*100):0}%</td></tr>`}).join('');
   const promoReady=st.filter(s=>s.promo);
   const staffTbl=st.sort((a,b)=>beltIdx(b.belt)-beltIdx(a.belt)).map(s=>{
     try{
@@ -19717,7 +19717,7 @@ function renderASystemsDashboard(systemId) {
          <div class="card-hd"><div class="card-ttl">System Belt Distribution</div></div>
          <div class="card-body">
             <div id="sys-belt-dist-chart" style="height:200px;display:flex;align-items:flex-end;gap:12px;padding:20px 0;justify-content:center">
-               ${BELT_ORDER.map(b => {
+               ${BELT_DISPLAY.map(b => {
                  const systemStaff = DB.staff.filter(s => facilities.some(f => f.id === s.fid));
                  const count = systemStaff.filter(s => s.belt === b).length;
                  const pct = systemStaff.length ? Math.round((count / systemStaff.length) * 100) : 0;
@@ -19731,7 +19731,7 @@ function renderASystemsDashboard(systemId) {
                }).join('')}
             </div>
             <div style="display:flex;justify-content:center;gap:12px;margin-top:16px">
-               ${BELT_ORDER.map(b => `<div style="display:flex;align-items:center;gap:4px"><div style="width:6px;height:6px;border-radius:50%;background:${BELT_CLR[b]}"></div><span style="font-size:9px;color:var(--txt3)">${b}</span></div>`).join('')}
+               ${BELT_DISPLAY.map(b => `<div style="display:flex;align-items:center;gap:4px"><div style="width:6px;height:6px;border-radius:50%;background:${BELT_CLR[b]}"></div><span style="font-size:9px;color:var(--txt3)">${beltName(b)}</span></div>`).join('')}
             </div>
          </div>
        </div>
