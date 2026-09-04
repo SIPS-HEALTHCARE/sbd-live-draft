@@ -3,7 +3,7 @@
 **Living document.** This is the single record of what has been built and what is left.
 It is not regenerated. It is edited in place.
 
-**Last updated:** 2026-09-03
+**Last updated:** 2026-09-04
 **Audit basis:** 2026-07-25, verified against the live project and the live code.
 **History basis:** 2026-07-31, the complete client conversation from 22 May to 31 July read end
 to end including every attachment. See `docs/DOMAIN_GLOSSARY.md` for the vocabulary this ledger
@@ -2547,6 +2547,9 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Done when:* The responses are re-scored with the calibrated evaluator, the belts are
   recalculated from those scores, every original record is still readable, and the set of belts
   that actually change is reviewed by SIPS before anything is published.
+  **2026-09-04, not ticked.** Shawn reports Iggie ruled twice that no scores change. If that holds,
+  T101 is dead and our #632 (re-dated 2026-09-10) closes with it. Waiting on Shawn's confirmation,
+  asked 2026-09-04.
 
 - [ ] **T102** Move the belt determination server side · est 3d · Medium
   Simulation responses are already scored server side by `sbd-score-assessment`. The rest of the
@@ -2619,7 +2622,7 @@ already named above: **an ask next to an urgent one still needs its own row.**
   being able to switch the login off is the control. Deactivate and reactivate now sit on the
   staff profile banner.
 
-- [ ] **T92a** Scripts as a standalone module that gets assigned to a named person · est 1.5d · **High**
+- [x] **T92a** Scripts as a standalone module that gets assigned to a named person · est 1.5d · **High** · **Done, verified live 2026-09-04**
   Asked for in the client's daily brief of 2026-08-13, Priority 2. The content is already in the
   platform, 70 scripts on record, each carrying its script number, name, belt level, primary
   function, approved language, forbidden phrases and patient safety rationale. What it has no way
@@ -2654,8 +2657,10 @@ already named above: **an ask next to an urgent one still needs its own row.**
   migration FIRST, then frontend (v: api-supabase 65, foundations 20, scripts-module 3,
   auth-init 42), same window.** Verified: `node scripts/verify-scripts-module.js`, 41 assertions
   including the new storage-repoint section.
+  **Verified live 2026-09-04.** Shipped as the Scripts module (`scripts-module.js`, served at 21,078 bytes,
+  byte-identical to HEAD), assignable to a named person; `script_assignments` table live.
 
-- [ ] **T108** Endoscopy modules, assignable to named people from the first release · est 3d · **High**
+- [x] **T108** Endoscopy modules, assignable to named people from the first release · est 3d · **High** · **Done 2026-08-28 (#720), verified live 2026-09-04**
   Asked for in the daily brief of 2026-08-13, Priority 3. Endoscopy is not a belt requirement and
   not a facility-wide rollout, because not everyone in a department works endoscopy. The modules
   have to land only on the people a leader deliberately assigns them to, and the client is
@@ -2697,6 +2702,9 @@ already named above: **an ask next to an urgent one still needs its own row.**
   en-14 untouched, no DDL, no code change. Same mechanics as the #720 §2 backfill.
   **APPLIED to prod 2026-09-03**: UPDATE returned exactly 1 row (en-01, staff c280aa16); post-checks
   0 non-capstone en- rows with g3 not pass, en-14 g3 still open, en-01 assignment still 'assigned'.
+  **Verified live 2026-09-04.** `endoscopy.js` serving (102,361 bytes); 14 `en-` rows in
+  `foundations_progress`, all assigned 2026-08-28 and 2026-09-02: 14 chapters assigned to one named
+  person. Banks still empty (Iggie); g3 confirmation still open on en-14.
 
 - [ ] **T109** Manually added staff default to White, which is a decision nobody made · est 1d · **High**
   Asked for in the daily brief of 2026-08-13, Priority 4. Adding someone by hand offers White Belt
@@ -3022,7 +3030,7 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Goal:* One person, one staff record, with the most recent assessment standing.
   *Done when:* Each pair is down to one record carrying every assessment, assignment and history row from both, the retired ids are recorded here, and a duplicate cannot be created silently in the first place.
 
-- [ ] **T115** Approval emails a link the mailbox scanner spends before the person clicks · est 0.5d · **Critical**
+- [x] **T115** Approval emails a link the mailbox scanner spends before the person clicks · est 0.5d · **Critical** · **Shipped 2026-09-01 (#1070)**
   Reported by the client on 2026-08-18 as people being approved and then landing on a plain sign-in
   screen with no account they could get into. Two separate faults, both now measured rather than
   assumed.
@@ -3116,6 +3124,10 @@ already named above: **an ask next to an urgent one still needs its own row.**
   hospital's IT people to get the mail-scanner side corrected, and one new ask that is now T116.
   So the second Valan registration stays untouched and pending on his instruction, and the
   scanner conversation with the hospital is his to run, not ours.
+  **Ticked 2026-09-04, card #1070 closed 2026-09-01.** Live `auth-password.js` v=21 serves
+  `_recoveryTokenHash` (7), `token_hash` (5), `_showResetOverlay` (3), `otp_expired` (1);
+  `api-supabase.js` redeems by POST. One real hospital approval opened by a person is still to be
+  observed.
 
   **Superseded the same night:** the roster reconciliation above counted Blake Hansteen's two
   accounts; his nemours account was deleted by someone outside this session between 17:55 and
@@ -3225,7 +3237,7 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Done when:* An account's sign-in email is changed end to end on production, the person signs in
   on the new address, the old address no longer works, and no scanner can spend the change link.
 
-- [ ] **T117** No Belt appears everywhere a belt appears, red, sorted before White · est 2d · **High**
+- [x] **T117** No Belt appears everywhere a belt appears, red, sorted before White · est 2d · **High** · **Closed 2026-09-04 against T122**
   The client's board item 144, proposed for **27 August**, full write-up on his board's More
   details tab. The second half of work already finished: since 13 August the WRITE path is right,
   a No Belt decision lands on the person's record with the decider in history, but every
@@ -3246,6 +3258,7 @@ already named above: **an ask next to an urgent one still needs its own row.**
   accept it if the belt list turns out to be rendered in three places.
   *Goal:* A person holding No Belt is visible, filterable and selectable in every view a belt appears in, in red, before White.
   *Done when:* The distribution graph, bars, lists, filters and selectors all carry No Belt against the real backfilled records, suggestion and final belt never cross, and the client confirms on his board.
+  **Closed 2026-09-04 against T122.** Same job (board 144), delivered under T122.
 
 - [ ] **T118** Spike: why Nikkia's second sitting never reached the record · est 0.5d · **High**
   The client's board item 145, proposed for **21 August, tight on purpose because the logs that
@@ -3387,7 +3400,7 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Done when:* the client has given an explicit go, the function is deleted, and a re-probe returns
   404. **Not executed. Waiting on that go.**
 
-- [ ] **T122** No Belt on every surface (board 144): nine render sites, and the one-line fix is wrong · est 1d · **High**
+- [x] **T122** No Belt on every surface (board 144): nine render sites, and the one-line fix is wrong · est 1d · **High** · **Done 2026-09-03 (#1124, PR 234)**
   Board 144, answered into the 24 Aug EOD. The client sized it as five hardcoded render sites and
   asked what that actually costs. It is **nine**: seven distribution or table renders and two filter
   chip rows in `ui-views.js` (978, 3084, 10606, 10700, 13324, 13723, 14294, 15848, 16383), plus the
@@ -3403,6 +3416,10 @@ already named above: **an ask next to an urgent one still needs its own row.**
   `beltLabel()` helper, "not more sentinel values".
   *Done when:* bars and filter chips show No Belt in red at all nine sites, `nextBelt()` and
   `calcPoints()` are unchanged under test, and the 112 selector follows on the proven read side.
+  **Done 2026-09-03, PR #234 (`da18dc5`) on main.** `BELT_DISPLAY` list with None first, red, at the
+  nine render sites; `BELT_ORDER` and the progression maths untouched. Live `ui-views.js` v=229 and
+  `logic.js` byte-identical to main; None = 31 rows across 5 facilities. Board 144 marked done by
+  Shawn 2026-09-03.
 
 - [ ] **T123** Board 151 is not two assessment systems; it is one filter · est 0.5d · **Medium**
   Board 151 carries a read that the portal is split across two parallel assessment systems.
@@ -3476,6 +3493,11 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Done when:* `reviewed_by` is written on confirm, `confirmed_at` carries a real timestamp, a
   confirmation writes an activity row, and the report's attribution is re-read against a fresh
   confirmation.
+  **2026-09-04.** `placement_reviews.confirmed_by` is text; 100 of 105 rows populated, 5 distinct
+  values (Admin, D. Payne, Ignacio Zambrano II, J. Jacobs, Shan Harris), 0 look like ids. Names, not
+  accounts, so a decision still cannot be tied to a signed-in user. Card #1130 (activity row on
+  confirm, due 2026-09-16) covers the third part; the column itself needs a `reviewed_by` uuid or a
+  lookup, which is a separate call.
 
 - [x] **T127** Migration ledger reconciled with production (board 129, #721) · **Reopened 2026-08-26 · Done 2026-09-03**
   **Closed too early.** The record side is clean, but the card cannot close: the repo holds **93
@@ -3513,6 +3535,34 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Sound alternative:* keep the pre-write as an `attempted` row and stamp the outcome after, or
   write the row after the action and fail the call if the write fails. Either keeps fail-closed.
   *Done when:* a failed deactivation leaves no row claiming it succeeded.
+
+- [ ] **T129** Curriculum registry for Foundations and Instruments (board 134) · est 1d · **High** · due 2026-09-09
+  A registry that lists every module across Foundations, Instruments, Scripts, Endoscopy and
+  Preceptor in one place so grants and assignment read from one list. No table exists today:
+  `curriculum_modules` and `curriculum_access` checked live 2026-09-04, neither exists.
+  *Done when:* the registry table exists, is seeded from the constants, and the assignment panels
+  read it.
+
+- [ ] **T130** Read versus Take per module, with proof that Read writes nothing (board 137) · est 1d · **Medium** · due 2026-09-10 · our card #1123
+  A per-module switch between reading the material and sitting the gates.
+  *Done when:* Read mode renders the content and leaves `foundations_progress` and
+  `instrument_progress` untouched (row count and `updated_at` unchanged before and after), Take mode
+  behaves as today.
+
+- [ ] **T131** Finish 143, the token in the unbound function (board 156) · est 0.5d · **Medium** · due 2026-09-10
+  `handle_registration_alert` is bound to no trigger and `sbd_approve_registration` carries no
+  comment (per Shawn, not re-read by us on 2026-09-04); what "rotate the token" means is still open
+  with Shawn (asked 2026-09-03).
+  *Done when:* the unbound function is dropped or bound on purpose, the approve function carries a
+  comment naming its secret and its rotation date, and the answer on the token is written here.
+
+- [ ] **T132** Observation gate, remove the synthetic pass (board 148) · est 1d · **High** · due 2026-09-12 · our cards #1120 (spec review, 9/9) and #1121 (build, 9/12)
+  42 staff carry `cur_obs = pass` from the belt confirmation path (`ui-views.js:4654` sets `cur_comp`,
+  `cur_sim`, `cur_obs` to pass on confirm), not from an observation; 41 of the 42 are backed by a
+  `placement_reviews` row (checked live 2026-09-04). The gate must read a real observation record.
+  Nothing has run; Shawn's draft cleanup SQL used the wrong vocabulary and was withheld.
+  *Done when:* the confirm path stops writing `cur_obs`, a real observation writes it, the 42 are
+  re-derived from evidence and the count is stated here.
 
 ### Blocked, not on the critical path
 
@@ -3566,7 +3616,13 @@ already named above: **an ask next to an urgent one still needs its own row.**
 
 ## Totals
 
-**Updated 2026-08-17.** 66 items done, 59 open.
+**Updated 2026-09-04.** 79 items done, 66 open.
+
+**Ledger sync, 2026-09-04.** Shawn read this file on 9/3, saw T122 open and told the client board
+144 had not shipped. It had. Five entries were live but unticked and are now ticked with the evidence
+re-read live today: T92a, T108, T122, T117 (closed against T122) and T115. Four items on his board
+dated 9 to 12 September had no ledger entry at all and are now T129 to T132. T126 and T101 stay open
+with today's findings written in.
 
 **T60 and T113 are closed and were checked in production rather than taken from the merge.** Signup
 no longer collects a password at all; `registrations.password` is null on all 146 rows and held
