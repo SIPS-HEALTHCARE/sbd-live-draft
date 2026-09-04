@@ -8022,7 +8022,7 @@ function prcAssessorPinBtn(sid){
 function renderPrcGate2Reference(m){
  const lg=prcLevelGate(m.level);
  const sims=(lg&&lg.gate2&&lg.gate2.simulations)||[];
- let h='<div class="fnd-kc"><div style="font-size:16px;font-weight:700;color:#e2e8f0;margin-bottom:4px">Simulation (Assessor-Administered)</div><div style="font-size:12px;color:#94a3b8;margin-bottom:16px">These '+m.levelLabel+' simulations are scored by an assessor, not auto-graded here. Pass standard: '+prcSThresh(m)+'%. Use them to prepare.</div>'+prcPinHandshakeCard('Simulation');
+ let h='<div class="fnd-kc"><div style="font-size:16px;font-weight:700;color:#e2e8f0;margin-bottom:4px">Simulation (Assessor-Administered)</div><div style="font-size:12px;color:#94a3b8;margin-bottom:16px">These '+m.levelLabel+' simulations are scored by an assessor, not auto-graded here. Pass standard: '+prcSThresh(m)+'%. Use them to prepare.</div>';
  if(!sims.length){h+='<div style="background:rgba(148,163,184,.08);border:1px solid rgba(148,163,184,.25);border-radius:var(--r);padding:14px 16px;font-size:13px;color:#94a3b8">The '+m.levelLabel+' simulation set is administered directly by your assessor at the level capstone.</div>';}
  sims.forEach(sim=>{
    h+='<div class="fnd-section"><div class="fnd-section-title">Simulation '+sim.n+': '+Security.sanitize(sim.title||'')+'</div><div class="fnd-section-body" style="white-space:pre-wrap">'+Security.sanitize(sim.scenario||'')+'</div>';
