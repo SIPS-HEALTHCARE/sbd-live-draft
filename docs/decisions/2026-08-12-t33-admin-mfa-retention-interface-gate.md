@@ -60,6 +60,9 @@ session in `localStorage['sbd_session']`.
   `sbd_mfa_satisfied()`, `sbd_is_admin()` gains the aal2 gate, restrictive
   `sbd_mfa_gate` policies on all RLS-enabled `sbd_*`/`david_*`/belt-platform
   tables (other SIPS properties' tables — `bb_*`, `aip_*`, etc. — untouched).
+  Follow-up `20260904130000_t33_mfa_gate_extend_tables.sql` adds the families the
+  first loop skipped (Sriman's read-back, #623): `observation*`, `preceptor_*`,
+  `script_*`, `ps_*`, `user_onboarding`, `assistant_memory`.
 - 15 edge functions gain the inline guard (every role-gated function with
   privileged actions; service/cron/candidate-flow functions — sbd-log-activity,
   sbd-generate-belt-test, sbd-score-assessment, the email/reminder/anomaly

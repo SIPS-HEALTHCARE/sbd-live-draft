@@ -392,7 +392,7 @@ persisted.
   the data interface.
   *Goal:* The compliance one-pager can be signed off without an open item against it.
   *Done when:* Multi-factor is enforced on admin sign-in; the retention policy is written and stored; per-role interface restrictions are applied and read back.
-  *DEPLOYED 2026-09-04 (PR #236 merged, 15 edge fns deployed, migration 20260904120000 applied; catalog read-back: 51 restrictive gate policies on 48 tables, 0 belt tables ungated). Only the real-session read-back remains: one admin signs in, enrolls TOTP, confirms the portal loads.* TOTP MFA flow (`src/js/mfa.js`, gated in
+  *DEPLOYED 2026-09-04 (PR #236 merged, 15 edge fns deployed, migration 20260904120000 applied; catalog read-back: 51 restrictive gate policies on 48 tables). Sriman's live check found 12 belt tables the prefix loop skipped (observation*, preceptor_*, script_*, ps_*, user_onboarding) — follow-up migration `20260904130000_t33_mfa_gate_extend_tables.sql` covers them (+ assistant_memory); APPLIED 2026-09-04, read-back 64 gate policies on 61 tables, §4b = 0 rows. auth catalog 2026-09-04: 3 verified TOTP factors, 4 aal2 master_admin sessions — the TOTP flow has been used in prod; the human 'portal loads at aal2' confirmation is still owed.* TOTP MFA flow (`src/js/mfa.js`, gated in
   `doLogin` before hydration); retention policy at `docs/DATA_RETENTION_POLICY.md`; server
   enforcement = restrictive `sbd_mfa_gate` RLS on all belt tables + the same aal2 predicate
   inlined in 15 role-gated edge functions (migration `20260904120000`). **Deploy order is
