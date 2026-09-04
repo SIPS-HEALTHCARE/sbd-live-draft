@@ -641,11 +641,14 @@ function renderCards(list){
           const belt = pa.sbd || {};
           const sop  = pa.psop || {};
           const line = o => `<span class="platform-win"><span class="platform-win-lbl">This month</span> ${(o.q_mtd||0).toLocaleString()} Q &middot; ${(o.tok_mtd||0).toLocaleString()} tok</span><span class="platform-win"><span class="platform-win-lbl">To date</span> ${(o.q_all||0).toLocaleString()} Q &middot; ${(o.tok_all||0).toLocaleString()} tok</span>`;
+          // #1118: sum every app (not just sbd/psop) so the card totals reconcile with the hero MTD sum.
+          const cost = Object.values(pa).reduce((a,o)=>({mtd:a.mtd+(o.cost_mtd||0), all:a.all+(o.cost_all||0)}),{mtd:0,all:0});
           return `<div class="meta-item platform-split">
             <span class="meta-lbl">Usage by platform</span>
             <div class="platform-rows">
               <div class="platform-row"><span class="platform-name">Belt app</span><span class="platform-val">${line(belt)}</span></div>
               <div class="platform-row"><span class="platform-name">SOP tool</span><span class="platform-val">${line(sop)}</span></div>
+              <div class="platform-row"><span class="platform-name">Cost</span><span class="platform-val"><span class="platform-win"><span class="platform-win-lbl">This month</span> $${cost.mtd.toFixed(2)}</span><span class="platform-win"><span class="platform-win-lbl">To date</span> $${cost.all.toFixed(2)}</span></span></div>
             </div>
           </div>`;
         })()}
