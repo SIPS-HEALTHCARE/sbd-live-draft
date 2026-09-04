@@ -1,4 +1,5 @@
 -- T33 verification — run AFTER applying 20260904120000_t33_admin_mfa_aal2_gate.sql
+-- and its follow-up 20260904130000_t33_mfa_gate_extend_tables.sql
 -- (which itself runs AFTER the frontend + edge-function deploys — see the deploy
 -- order in docs/decisions/2026-08-12-t33-admin-mfa-retention-interface-gate.md).
 --
@@ -50,15 +51,21 @@ join pg_namespace n on n.oid = c.relnamespace
 where n.nspname = 'public' and c.relkind = 'r' and c.relrowsecurity
   and (c.relname like 'sbd\_%' or c.relname like 'david\_%'
        or c.relname like 'foundations\_%' or c.relname like 'instrument\_%'
+       or c.relname like 'observation%' or c.relname like 'preceptor\_%'
+       or c.relname like 'script\_%' or c.relname like 'ps\_%'
        or c.relname in ('facilities','staff','assessment_history','registrations',
                         'placement_reviews','hospital_systems','transfer_requests',
                         'practice_scores','practice_attempts','activity_log',
-                        'assessment_pin_attempts','staff_history'))
+                        'assessment_pin_attempts','staff_history',
+                        'schedule','attendance','promotion_approvals','user_profiles',
+                        'free_agents','facility_shifts','assessment_queue',
+                        'user_onboarding','assistant_memory'))
   and not exists (
     select 1 from pg_policy pol
     where pol.polrelid = c.oid and pol.polname like 'sbd_mfa_gate%');
 -- Expect: zero rows. Any row here is a belt table the gate loop missed
--- (e.g. created after 2026-08-12 — add it to the migration's list and re-run).
+-- (e.g. created after 2026-09-04 — add it to a follow-up migration's list, as
+-- 20260904130000 did for observation*/preceptor_*/script_*/ps_*/user_onboarding).
 
 -- ═══ 5. Real-session read-back (manual — needs a real admin sign-in) ═══════════
 -- a) Sign in at belt.sterilebydesign.ai as an admin WITHOUT completing the TOTP
