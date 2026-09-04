@@ -92,7 +92,7 @@ const MFA = {
 
       const ovl = document.createElement('div');
       ovl.id = 'mfa-overlay';
-      ovl.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(10,12,16,.85);display:flex;align-items:center;justify-content:center;padding:16px';
+      ovl.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(10,12,16,.85);display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto';
 
       const enrollBlock = mode !== 'enroll' ? '' : `
         <p style="margin:0 0 12px;color:#aab;font-size:.85rem;line-height:1.5">
@@ -108,7 +108,7 @@ const MFA = {
           Enter the 6-digit code from your authenticator app to finish signing in.</p>`;
 
       ovl.innerHTML = `
-        <div style="background:#161a22;border:1px solid #2a3040;border-radius:12px;max-width:380px;width:100%;padding:22px">
+        <div style="background:#161a22;border:1px solid #2a3040;border-radius:12px;max-width:380px;width:100%;padding:22px;margin:auto">
           <h3 style="margin:0 0 10px;color:#e8eaef;font-size:1.05rem">
             ${mode === 'enroll' ? 'Set up two-factor authentication' : 'Two-factor verification'}</h3>
           ${enrollBlock}${challengeBlock}
@@ -126,12 +126,20 @@ const MFA = {
         const qr = (totp && totp.qr_code) || '';
         if(qr.startsWith('data:')){
           const img = document.createElement('img');
-          img.src = qr; img.alt = 'TOTP QR code'; img.style.cssText = 'width:180px;height:180px';
+          img.src = qr; img.alt = 'TOTP QR code'; img.style.cssText = 'width:220px;height:220px';
           qrEl.appendChild(img);
         } else {
           qrEl.innerHTML = qr;
           const svg = qrEl.querySelector('svg');
-          if(svg){ svg.style.width = '180px'; svg.style.height = '180px'; }
+          if(svg){
+            // goqrsvg emits width/height but no viewBox; CSS sizing then clips
+            // instead of scaling and the QR loses its bottom-left finder. #1141
+            if(!svg.getAttribute('viewBox')){
+              const w = parseFloat(svg.getAttribute('width')) || 0, h = parseFloat(svg.getAttribute('height')) || 0;
+              if(w && h) svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+            }
+            svg.style.width = '220px'; svg.style.height = '220px';
+          }
         }
       }
 
