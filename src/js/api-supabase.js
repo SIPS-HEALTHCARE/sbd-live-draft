@@ -320,6 +320,10 @@ const SB = {
   getPendingRegistrations(){ return sbFetch('/rest/v1/registrations?status=eq.pending&select=*&order=requested_at.desc'); },
   submitRegistration(data){ return sbFetch('/rest/v1/registrations', { method:'POST', prefer:'return=minimal', body:data }); },
   approveRegistration(id, facilityName, systemId, assignRole){ return sbFetch('/functions/v1/sbd-approve-registration', { method:'POST', body:{registration_id:id, facility_name:facilityName, assign_system_id:systemId, assign_role:assignRole} }); },
+  // #1122: approved registrations with no auth account behind them (master admin only; the RPC returns nothing to anyone else).
+  getStrandedRegistrations(){ return sbFetch('/rest/v1/rpc/sbd_stranded_registrations', { method:'POST', body:{} }); },
+  // #1122: same edge function as approval, re-issue branch — creates the login + one fresh link + one email + one audit row.
+  reissueRegistrationLink(id, facilityId, assignRole){ return sbFetch('/functions/v1/sbd-approve-registration', { method:'POST', body:{action:'reissue_link', registration_id:id, facility_name:facilityId, assign_role:assignRole} }); },
   // Deactivate (active=false) / reactivate (active=true) a portal account. Bans
   // or unbans the auth user server-side so login truly stops; no data is deleted.
   setAccountActive(authUid, active, reason){ return sbFetch('/functions/v1/sbd-set-account-active', { method:'POST', body:{ auth_uid:authUid, active:active, reason:reason||null } }); },
