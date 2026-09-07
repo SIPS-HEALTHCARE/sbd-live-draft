@@ -36,6 +36,10 @@ const ICO = {
 
 // ============================================================ DATA
 const BELT_ORDER = ['White','Yellow','Green','Blue','Brown','Black'];
+// #1119: Blue is the leadership entry point (onboarding.js). Practice attempts by these
+// belts are tagged `leadership` at insert so reports can label/exclude them (Shawn board 138).
+const LEADERSHIP_BELTS = ['Blue','Brown','Black'];
+function isLeadershipBelt(b){ return LEADERSHIP_BELTS.includes(b); }
 // 'None' is the unbelted state (placement approved at No Belt — remediation path). It is
 // deliberately NOT in BELT_ORDER: beltIdx('None') = -1 makes nextBelt() = White and
 // calcPoints() award nothing, which is exactly the semantics of an unbelted person.

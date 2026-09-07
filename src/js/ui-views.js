@@ -9654,7 +9654,8 @@ function savePracticeScore(belt, mode, score, total) {
         belt, mode, score, total, pct,
         wrong_questions: wrong,
         source: 'practice_bank',
-        self_graded: true
+        self_graded: true,
+        leadership: isLeadershipBelt(s.belt) // #1119: current belt at attempt time
       }).catch(e => handleSyncError(e, 'Practice attempt log'));
     }
   } catch (e) { /* attempt logging is best-effort; never block the score save */ }
