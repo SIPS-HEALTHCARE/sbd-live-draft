@@ -13135,7 +13135,9 @@ function renderHAssessments(){
   const promoReady= st.filter(s=>s.promo);
   const psQueue   = [];
   st.forEach(s=>{[...PS_GREEN_TRACKS,...PS_BLUE_TRACKS].forEach(tid=>{if(['testing','observation'].includes(getTrackStatus(s,tid)))psQueue.push({s,tid});});});
-  const queueItems= DB.queue.filter(q=>{ const s=getStaff(q.sid); return s&&s.fid===fid; });
+  // #1147: scope by the row's own facility_id, exactly like aq_select does. Joining through the
+  // staff record's *current* fid dropped every row whose staff had since moved or been released.
+  const queueItems= DB.queue.filter(q=>q.fid===fid);
 
   document.getElementById('h-assessments').innerHTML=`
     <!-- Header -->
@@ -13191,6 +13193,25 @@ function renderHAssessments(){
     </div>`:''}
 
     ${renderAssessmentAuthBlock(DB.staff.filter(s => s.placementNeeded && s.fid === fid))}
+
+    <!-- #1147: the sbd_assessment_queue rows themselves (pending + approved), read-only for a
+         facility admin -- aq_update admits admins / assessors / approve_assessment only. -->
+    <div class="card mb16">
+      <div class="card-hd">
+        <div class="card-ttl">Assessment Requests</div>
+        <span class="pill ${queueItems.length?'p-warn':'p-muted'}">${queueItems.length} in queue</span>
+      </div>
+      ${queueItems.length?`<div style="overflow-x:auto"><table class="tbl tbl-static" style="min-width:560px">
+        <thead><tr><th>Staff Member</th><th>Assessment Type</th><th>Target Belt</th><th>Status</th><th>Requested</th></tr></thead>
+        <tbody>${queueItems.map(item=>{const s=getStaff(item.sid);return`<tr>
+          <td class="fw7">${s?fullName(s):'Unknown'}</td>
+          <td><span class="pill ${item.type==='Competency'?'p-blue':item.type==='Simulation'?'p-warn':'p-gold'}">${item.type}</span></td>
+          <td>${beltBadge(item.targetBelt)}</td>
+          <td><span class="pill ${item.status==='approved'?'p-ok':'p-warn'}">${item.status}</span></td>
+          <td style="font-size:11.5px;color:var(--txt3)">${item.date||'--'}</td>
+        </tr>`}).join('')}</tbody></table></div>`:
+      `<div class="empty-state"><div class="empty-ttl">No assessment requests</div><div class="empty-desc">Nothing pending or approved for this facility.</div></div>`}
+    </div>
 
     <!-- Assessment Queue Table -->
     <div class="card mb16">
