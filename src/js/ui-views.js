@@ -16491,6 +16491,8 @@ function renderARegistrations(){
   const byNewest=(a,b)=>String(b.requested_at||b.requestedAt||'').localeCompare(String(a.requested_at||a.requestedAt||''));
   const pending=DB.pendingRegs.filter(r=>r.status==='pending'&&hit(r)).sort(byNewest);
   const reviewed=DB.pendingRegs.filter(r=>r.status!=='pending'&&hit(r)).sort(byNewest);
+  // #1122: approved rows with no login behind them (master admin only; empty for everyone else).
+  const stranded=(DB.strandedRegs||[]).filter(hit);
   document.getElementById('a-registrations').innerHTML=`
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
       ${pageSearchBox('reg','renderARegistrations','Search facility, contact, email...')}
@@ -16527,6 +16529,29 @@ function renderARegistrations(){
         </tbody>
       </table>
     </div>`:'<div class="card mb16"><div class="empty-state"><div class="empty-ttl">No pending registrations</div><div class="empty-desc">All registration requests have been reviewed.</div></div></div>'}
+    ${stranded.length?`
+    <div class="card mb16">
+      <div class="card-hd"><div class="card-ttl">Approved Without an Account</div><span class="pill p-err">${stranded.length} need a link</span></div>
+      <div style="padding:0 16px 6px">
+        <div style="padding:10px 12px;background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.3);border-radius:var(--rs);margin:12px 0;font-size:12px;color:var(--txt2)">
+          These registrations read approved but no login exists behind them, so the welcome email they hold cannot work. Re-issue creates the login and sends one fresh set-password link. Nothing else changes: no facility is created, no staff record, no belt. One re-issue per registration every 10 minutes.
+        </div>
+      </div>
+      <div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table class="tbl tbl-static" style="min-width:560px">
+        <thead><tr><th>Facility</th><th>Contact</th><th class="hide-sm">Email</th><th class="hide-sm">Approved</th><th class="hide-sm">Last re-issue</th><th>Action</th></tr></thead>
+        <tbody>${stranded.map(r=>{
+          const coolingDown=r.last_reissued_at&&(Date.now()-new Date(r.last_reissued_at).getTime())<REISSUE_COOLDOWN_MS;
+          return `<tr>
+            <td class="fw7">${r.facility || 'Unknown'}</td>
+            <td style="font-size:12px">${r.name || 'Anonymous'}</td>
+            <td style="font-size:11.5px;color:var(--txt3)">${r.email}</td>
+            <td style="font-size:11.5px;color:var(--txt3)">${(r.reviewed_at || '').split('T')[0]}</td>
+            <td style="font-size:11.5px;color:var(--txt3)">${r.last_reissued_at?new Date(r.last_reissued_at).toLocaleString():'—'}</td>
+            <td><button class="btn btn-ok btn-xs" ${coolingDown?'disabled title="Re-issued less than 10 minutes ago"':''} onclick="openReissueRegModal('${r.id}')">${ICO.check} Re-issue link</button></td>
+          </tr>`;}).join('')}
+        </tbody>
+      </table>
+    </div>`:''}
     ${reviewed.length?`
     <div class="card">
       <div class="card-hd"><div class="card-ttl">Review History</div></div>
@@ -16776,6 +16801,65 @@ async function denyReg(rid){
   const pendingCnt=DB.pendingRegs.filter(x=>x.status==='pending').length;
   if(nb){nb.textContent=pendingCnt;nb.style.display=pendingCnt>0?'inline-block':'none';}
   toast(`Registration from ${facilityName} denied.`,'err');
+  renderARegistrations();
+}
+
+// ── #1122 (board 155): re-issue the approval link for one stranded registration ──────────
+// Mirrors REISSUE_COOLDOWN_MS in sbd-approve-registration; the server is the one that refuses.
+const REISSUE_COOLDOWN_MS = 10*60*1000;
+function openReissueRegModal(rid){
+  const r=(DB.strandedRegs||[]).find(x=>x.id===rid);
+  if(!r)return;
+  const facilityName = r.facility || 'Unknown Facility';
+  // The approve modal's choices (role, facility) were never stored on the row, so the master
+  // admin picks them again. Existing facilities only: a re-issue creates no facility.
+  const lc=s=>String(s||'').toLowerCase();
+  const guess=DB.facilities.find(f=>f.email&&lc(f.email)===lc(r.email))||DB.facilities.find(f=>lc(f.name)===lc(r.facility));
+  const facOptions=DB.facilities.filter(f=>f.active!==false).slice().sort((a,b)=>a.name.localeCompare(b.name))
+    .map(f=>`<option value="${f.id}" ${guess&&guess.id===f.id?'selected':''}>${f.name}${f.loc?` — ${f.loc}`:''}</option>`).join('');
+  const roles=[['staff_member','Staff Member (Tech/Free Agent)'],['hospital','Facility Admin (Manager/Leader)'],['facility_admin','Facility Admin (Department Supervisor)'],['system_admin','System Admin (Executive)']];
+  const roleOptions=roles.map(([v,l])=>`<option value="${v}" ${(r.requested_role||'staff_member')===v?'selected':''}>${l}</option>`).join('');
+  const html = `
+    <div style="font-size:14px;color:var(--txt3);margin-bottom:14px;line-height:1.5">
+      Creates the login for <strong style="color:var(--gold)">${r.email}</strong> and sends one fresh set-password link. No facility is created, no staff record, no belt.
+    </div>
+    <div style="margin-bottom:16px;background:var(--s2);border:1px solid var(--bdr);padding:14px;border-radius:var(--rs);">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.04em;color:var(--txt3);margin-bottom:3px">Requester</div>
+      <div style="font-size:15px;font-weight:600;color:var(--txt1);margin-bottom:10px">${r.name || 'Anonymous'}</div>
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.04em;color:var(--txt3);margin-bottom:3px">Registered Facility</div>
+      <div style="font-size:14px;font-weight:600;color:var(--txt1);">${facilityName}</div>
+    </div>
+    <label style="font-size:11px;text-transform:uppercase;letter-spacing:0.04em;color:var(--txt3)">Portal role</label>
+    <select id="reissue-role-select" class="form-input" style="width:100%;margin:4px 0 12px">${roleOptions}</select>
+    <label style="font-size:11px;text-transform:uppercase;letter-spacing:0.04em;color:var(--txt3)">Facility (existing)</label>
+    <select id="reissue-facility-select" class="form-input" style="width:100%;margin:4px 0 18px">${guess?'':'<option value="">-- pick a facility --</option>'}${facOptions}</select>
+    <div style="display:flex;gap:12px;">
+      <button class="btn btn-ghost" onclick="closeModal()" style="flex:1">Cancel</button>
+      <button class="btn btn-ok" id="btn-reissue-reg" onclick="reissueRegLink('${rid}')" style="flex:1">Re-issue Link</button>
+    </div>`;
+  openModal('Re-issue Approval Link', html, 'modal-md');
+}
+
+async function reissueRegLink(rid){
+  const r=(DB.strandedRegs||[]).find(x=>x.id===rid);
+  if(!r)return;
+  const fid=(document.getElementById('reissue-facility-select')||{}).value;
+  const role=(document.getElementById('reissue-role-select')||{}).value;
+  if(!fid){ toast('Pick a facility for this account.','err'); return; }
+  const btn=document.getElementById('btn-reissue-reg');
+  if(btn){ btn.disabled=true; btn.textContent='Sending...'; }
+  try{
+    const res=await SB.reissueRegistrationLink(rid, fid, role);
+    // The row now has a login, so it is no longer stranded; the audit row carries the timestamp.
+    r.last_reissued_at=(res&&res.reissued_at)||new Date().toISOString();
+    DB.strandedRegs=DB.strandedRegs.filter(x=>x.id!==rid);
+    closeModal();
+    toast(`Set-password link re-issued to ${r.email}.`,'ok');
+    if(IS_LIVE) setTimeout(()=>initAppData(), 1500); // the new portal row shows up under Users
+  }catch(e){
+    if(btn){ btn.disabled=false; btn.textContent='Re-issue Link'; }
+    toast(`<div style="font-weight:600;margin-bottom:2px">Re-issue refused</div><div style="font-size:13px;opacity:0.9">${e.message}</div>`,'err');
+  }
   renderARegistrations();
 }
 

@@ -2191,6 +2191,15 @@ async function initAppData(){
     if(typeof mapPlacementReviewFromBackend === 'function') window.DB.placementReviews = (reviews||[]).map(mapPlacementReviewFromBackend); else window.DB.placementReviews = reviews||[];
     if(typeof mapQueueFromBackend === 'function') window.DB.queue = (queue||[]).map(mapQueueFromBackend); else window.DB.queue = queue||[];
     window.DB.pendingRegs = registrations||[];
+    // #1122: approved registrations with no login behind them, for the Re-issue link control.
+    // Master admin only (the RPC returns nothing to anyone else) and non-blocking, like the
+    // sign-off requests below: a failure here must not stop sign-in.
+    window.DB.strandedRegs = [];
+    if(ST.user && ST.user.role==='master_admin' && typeof SB!=='undefined' && SB.getStrandedRegistrations){
+      SB.getStrandedRegistrations()
+        .then(rows=>{ window.DB.strandedRegs = rows||[]; if(ST.aView==='a-registrations' && typeof renderARegistrations==='function') renderARegistrations(); })
+        .catch(e=>console.error('stranded regs load err', e));
+    }
     // Position School sign-off requests. These only ever lived in memory before, so a
     // candidate's request vanished on refresh and never reached a leader. Loaded
     // separately and non-blocking: a failure here must not stop the rest of sign-in.
