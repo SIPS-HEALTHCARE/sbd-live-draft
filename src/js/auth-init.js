@@ -2074,7 +2074,7 @@ async function initAppData(){
   window.SBD_INITIALIZING = true;
   console.log('SBD Platform: Multi-table data hydration started...');
   try {
-    const [facs, staff, systems, users, reviews, queue, registrations, freeAgents, promotions, onboarding, beltTestResults, transfers, observations, obsChecklists, fndAssignments, fndProgress, instAssignments, instProgress, prcAssignments, prcProgress, prcModules, prcAccess, scrAssignments] = await Promise.race([
+    const [facs, staff, systems, users, reviews, queue, registrations, freeAgents, promotions, onboarding, beltTestResults, transfers, observations, obsChecklists, fndAssignments, fndProgress, instAssignments, instProgress, prcAssignments, prcProgress, prcModules, prcAccess, scrAssignments, currModules] = await Promise.race([
       Promise.all([
         SB.getFacilities().catch(e=>{ console.error('facs load err', e); return []; }),
         SB.getAllStaff().catch(e=>{ console.error('staff load err', e); return []; }),
@@ -2098,7 +2098,8 @@ async function initAppData(){
         (SB.getPreceptorProgress ? SB.getPreceptorProgress() : Promise.resolve([])).catch(e=>{ console.error('prc progress load err', e); return []; }),
         (SB.getPreceptorModules ? SB.getPreceptorModules() : Promise.resolve([])).catch(e=>{ console.error('prc modules load err', e); return []; }),
         (SB.getPreceptorAccess ? SB.getPreceptorAccess() : Promise.resolve([])).catch(e=>{ console.error('prc access load err', e); return []; }),
-        (SB.getScriptAssignments ? SB.getScriptAssignments() : Promise.resolve([])).catch(e=>{ console.error('scr assignments load err', e); return []; })
+        (SB.getScriptAssignments ? SB.getScriptAssignments() : Promise.resolve([])).catch(e=>{ console.error('scr assignments load err', e); return []; }),
+        (SB.getCurriculumModules ? SB.getCurriculumModules() : Promise.resolve([])).catch(e=>{ console.error('curriculum registry load err', e); return []; })
       ]),
       new Promise((_,rej)=>setTimeout(()=>rej(new Error('Initial data load timeout')), 20000))
     ]);
@@ -2123,6 +2124,9 @@ async function initAppData(){
     window.DB.preceptorAccess = (prcAccess||[]).map(r=>({ staffId:r.staff_id, state:r.state, grantedBy:r.granted_by, grantedAt:r.granted_at, requestedAt:r.requested_at, reason:r.reason, updatedAt:r.updated_at }));
     // SBD Scripts module (T92a): own assignment table, same row shape, no progress (no gates).
     window.DB.scriptAssignments = (scrAssignments||[]).map(a=>({ id:a.id, staffId:a.staff_id, moduleId:a.module_id, assignedBy:a.assigned_by, type:a.assignment_type||a.type, trigger:(a.trigger_event!=null?a.trigger_event:a.trigger), facilityId:a.facility_id||null, assignedDate:a.assigned_date, status:a.status }));
+    // #1148 curriculum registry: raw rows (module_id, curriculum, title, sequence, gate_shape, active).
+    // registryModules() in foundations.js joins them onto the constants; empty = fall back to constants.
+    window.DB.curriculumModules = currModules||[];
     const currentSystems = window.DB.hospitalSystems || [];
     const memoryOptimistic = currentSystems.filter(s => s.id && String(s.id).startsWith('sys-'));
     const storageOptimistic = JSON.parse(localStorage.getItem('sbd_optimistic_systems') || '[]');

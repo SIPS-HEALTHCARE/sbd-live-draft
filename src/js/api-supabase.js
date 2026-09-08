@@ -281,6 +281,8 @@ const SB = {
   deletePreceptorAssignment(staffId, moduleId){ return sbFetch(`/rest/v1/preceptor_assignments?staff_id=eq.${staffId}&module_id=eq.${encodeURIComponent(moduleId)}`, { method:'DELETE', prefer:'return=minimal' }); },
   // ── SBD Scripts module (T92a) — fourth assignment table, same matrix minus progress (no gates) ──
   getScriptAssignments(){ return sbFetch('/rest/v1/script_assignments?select=*'); },
+  // #1148: curriculum registry (board 134). Active rows only, in display order; read-only from the client.
+  getCurriculumModules(){ return sbFetch('/rest/v1/curriculum_modules?select=*&active=is.true&order=curriculum.asc,sequence.asc'); },
   createScriptAssignment(data){ return sbFetch('/rest/v1/script_assignments?on_conflict=staff_id,module_id', { method:'POST', prefer:'resolution=ignore-duplicates,return=minimal', body:data }); },
   updateScriptAssignmentStatus(staffId, moduleId, status){ return sbFetch(`/rest/v1/script_assignments?staff_id=eq.${staffId}&module_id=eq.${encodeURIComponent(moduleId)}`, { method:'PATCH', prefer:'return=minimal', body:{ status } }); },
   deleteScriptAssignment(staffId, moduleId){ return sbFetch(`/rest/v1/script_assignments?staff_id=eq.${staffId}&module_id=eq.${encodeURIComponent(moduleId)}`, { method:'DELETE', prefer:'return=minimal' }); },
@@ -450,6 +452,7 @@ function resetDB(){
   DB.preceptorProgress = [];
   DB.preceptorModules = [];
   DB.preceptorAccess = [];
+  DB.curriculumModules = [];
   console.log('SBD Platform: Global state reset.');
 }
 

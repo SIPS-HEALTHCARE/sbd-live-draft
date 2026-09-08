@@ -345,6 +345,8 @@ const INSTRUMENT_MODULES = [
  
 // ── Instruments Helpers (mirror Foundations pattern with different DB keys) ──
 function getInstrumentAssignments(sid){return (DB.instrumentAssignments||[]).filter(a=>a.staffId===sid);}
+// #1148: registry view of INSTRUMENT_MODULES (see registryModules in foundations.js).
+function instModules(){return registryModules('instruments',INSTRUMENT_MODULES);}
 function isInstModuleAssigned(sid,mid){return (DB.instrumentAssignments||[]).some(a=>a.staffId===sid&&a.moduleId===mid);}
 function getInstModuleGates(sid,mid){
  const p=(DB.instrumentProgress||[]).find(x=>x.staffId===sid&&x.moduleId===mid);
@@ -371,7 +373,7 @@ function assignInstModule(sid,mid,by,type,trigger){
  return true;
 }
 // Onboarding bulk-assign. Returns the count actually assigned (skips duplicates, 8.3).
-function assignAllInstModules(sid,by){let n=0;INSTRUMENT_MODULES.forEach(m=>{if(assignInstModule(sid,m.id,by,'onboarding',null))n++;});return n;}
+function assignAllInstModules(sid,by){let n=0;instModules().forEach(m=>{if(assignInstModule(sid,m.id,by,'onboarding',null))n++;});return n;}
 function saveInstGateScore(sid,mid,gate,score){
  if(!DB.instrumentProgress) DB.instrumentProgress=[];
  let p=DB.instrumentProgress.find(x=>x.staffId===sid&&x.moduleId===mid);
@@ -544,6 +546,7 @@ function renderHInstruments(){
  } else {
    staff=DB.staff.filter(s=>s.fid===ST.hFid);
  }
+ const mods=instModules();
  let totalA=0,totalC=0,staffWith=0;const rows=[];
  staff.forEach(s=>{const asgns=getInstrumentAssignments(s.id);const done=asgns.filter(a=>a.status==='completed').length;if(asgns.length>0){staffWith++;totalA+=asgns.length;totalC+=done;}rows.push({s,assigned:asgns.length,done,pct:asgns.length>0?Math.round(done/asgns.length*100):0});});
  let html='<div class="card mb16"><div class="card-hd"><div class="card-ttl">Instruments'+(isSystemWide?' <span style="font-size:11px;color:#64748b;font-weight:500">(all facilities)</span>':'')+'</div></div><div class="card-body"><p style="font-size:13px;color:#94a3b8;line-height:1.6;margin:0 0 16px">Assign instrument training by belt level for onboarding or targeted remediation. Each module requires three gates.</p>';
@@ -554,8 +557,8 @@ function renderHInstruments(){
  rows.forEach(r=>{html+='<tr><td style="font-weight:600">'+fullName(r.s)+'</td>'+(isSystemWide?'<td style="font-size:12px;color:#94a3b8">'+((DB.facilities.find(f=>f.id===r.s.fid)||{}).name||'—')+'</td>':'')+'<td><span class="bb bb-'+r.s.belt+'">'+r.s.belt+'</span></td><td>'+(r.assigned>0?'<span class="'+(r.pct===100?'tc-ok':r.pct>0?'tc-warn':'tc-muted')+'">'+r.done+'/'+r.assigned+'</span>':'<span class="tc-muted">None</span>')+'</td><td style="white-space:nowrap">';
  if(r.assigned>0) html+='<button class="btn btn-ghost btn-xs" onclick="hInstStaffDetail(\''+r.s.id+'\')">View</button> ';
  if(!isAssessor){
- if(r.assigned<4) html+='<button class="btn btn-gold btn-xs" onclick="hAssignInstModal(\''+r.s.id+'\')">Assign</button> ';
- if(r.assigned===0) html+='<button class="btn btn-blue btn-xs" onclick="hAssignAllInst(\''+r.s.id+'\')">All 4</button>';
+ if(r.assigned<mods.length) html+='<button class="btn btn-gold btn-xs" onclick="hAssignInstModal(\''+r.s.id+'\')">Assign</button> ';
+ if(r.assigned===0) html+='<button class="btn btn-blue btn-xs" onclick="hAssignAllInst(\''+r.s.id+'\')">All '+mods.length+'</button>';
  }
  html+='</td></tr>';});
  html+='</tbody></table></div></div></div>';el.innerHTML=html;
@@ -564,7 +567,7 @@ function hInstStaffDetail(sid){
  const s=getStaff(sid);if(!s)return;const el=document.getElementById(ST.portal==='admin'?'a-instruments':'h-instruments');if(!el)return;
  let html='<button class="btn btn-ghost btn-sm" onclick="renderHInstruments()" style="margin-bottom:12px">&larr; Back</button>';
  html+='<div class="card mb16"><div class="card-hd"><div class="card-ttl">'+fullName(s)+'</div><span class="bb bb-'+s.belt+'">'+s.belt+'</span></div><div class="card-body"><div style="font-size:13px;color:#94a3b8">'+s.role+'</div></div></div>';
- INSTRUMENT_MODULES.forEach(m=>{
+ instModules().forEach(m=>{
    if(!isInstModuleAssigned(s.id,m.id)) return;const gates=getInstModuleGates(s.id,m.id);
    const a=getInstrumentAssignments(s.id).find(x=>x.moduleId===m.id);
    html+='<div class="card mb16"><div class="card-hd" style="flex-wrap:wrap;gap:8px"><div style="display:flex;align-items:center;gap:8px"><div class="fnd-num'+(gates.complete?' fnd-num-done':'')+'">'+m.num+'</div><div class="card-ttl" style="font-size:14px;margin:0">'+m.title+'</div></div><div style="display:flex;gap:4px;align-items:center">'+fndGateBadge(gates.g1.status)+fndGateBadge(gates.g2.status)+fndGateBadge(gates.g3.status)+((ST.user&&ST.user.role==='master_admin')?'<button class="btn btn-ghost btn-xs" style="margin-left:8px;border-color:rgba(239,68,68,.4);color:#f87171" onclick="hUnassignInst(\''+s.id+'\',\''+m.id+'\')">Unassign</button>':'')+'</div></div><div class="card-body" style="padding-top:0">';
@@ -589,7 +592,7 @@ function hUnassignInst(sid,mid){
 }
 function hAssignInstModal(sid){
  if(ST.user&&(ST.user.role==='staff_admin'||ST.user.role==='assessor')){toast('Assessors cannot assign modules','err');return;}
- const s=getStaff(sid);if(!s)return;const existing=getInstrumentAssignments(s.id);const unassigned=INSTRUMENT_MODULES.filter(m=>!existing.some(a=>a.moduleId===m.id));
+ const s=getStaff(sid);if(!s)return;const existing=getInstrumentAssignments(s.id);const unassigned=instModules().filter(m=>!existing.some(a=>a.moduleId===m.id));
  if(!unassigned.length){toast('All modules assigned','info');return;}
  let html='<div style="margin-bottom:12px;font-size:13px;color:#94a3b8">Assign to <strong style="color:#e2e8f0">'+fullName(s)+'</strong>:</div>';
  // Audit trail (Addendum 7.1): capture the reason + trigger. Mirrors Foundations.
@@ -624,8 +627,8 @@ function hDoAssignInst(sid){
 function hAssignAllInst(sid){
  if(ST.user&&(ST.user.role==='staff_admin'||ST.user.role==='assessor')){toast('Assessors cannot assign modules','err');return;}
  const assigned=assignAllInstModules(sid,ST.user?ST.user.name:'Manager');
- const skipped=INSTRUMENT_MODULES.length-assigned;
- if(!assigned) toast('All 4 instrument modules already assigned','info');
+ const total=instModules().length,skipped=total-assigned;
+ if(!assigned) toast('All '+total+' instrument modules already assigned','info');
  else{ toast(assigned+' module'+(assigned>1?'s':'')+' assigned','ok'); if(skipped) toast(skipped+' already assigned — skipped','info'); }
  renderHInstruments();
 }

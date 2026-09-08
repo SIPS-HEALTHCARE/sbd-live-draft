@@ -186,6 +186,7 @@ Every view has this pattern:
 | `foundations_assignments` / `foundations_progress` | Foundations curriculum: one assignment + one 3-gate progress row per staff+module. RLS via `sbd_fi_leader_scope`. See §16A. (T92 briefly stored the Scripts assignment here as `module_id='scripts'`; migration `20260820120000` moved those rows to `script_assignments` — see §16B.) | `staff_id` → `staff`, `facility_id` → `facilities` |
 | `instrument_assignments` / `instrument_progress` | Instruments curriculum (mirror of Foundations, same 3-gate engine). RLS via `sbd_fi_leader_scope`. See §16A. | `staff_id` → `staff`, `facility_id` → `facilities` |
 | `script_assignments` | T92a: Scripts module assignment — fourth assignment table, same shape/RLS rule set as the other three, no progress table (no gates). One row per staff (module_id always `'scripts'` today). See §16B. | `staff_id` → `staff`, `facility_id` → `facilities` |
+| `curriculum_modules` | #1148 (board 134, T129): registry of all 44 modules across the five curricula — `module_id` PK, `curriculum`, `title`, `sequence`, `gate_shape`, `active`. Identity/order only; content stays in the `src/js` constants. Seeded by `scripts/curriculum-registry-seed.js` (migration `20260908140000`). Read: any authenticated. Write: `sbd_is_master_admin()`. See §16D. | — |
 
 ### Row Level Security (RLS)
 Every table uses RLS. Access is controlled via JWT claims:
@@ -617,6 +618,31 @@ bundle.
 - **Verify:** `node scripts/verify-endoscopy-module.js` (79 assertions).
   Design notes: `docs/decisions/2026-08-28-t108-endoscopy-build.md`,
   `docs/decisions/2026-09-01-1073-scripts-endoscopy-tabs.md`.
+
+---
+
+## 16D. Curriculum registry (#1148, board 134, T129)
+
+`curriculum_modules` lists every module of the five curricula in one table. It holds
+identity, order, gate shape and an `active` switch — never content. The constants stay the
+source of truth: `node scripts/curriculum-registry-seed.js` lifts them and prints the
+idempotent upsert that is the migration's seed block; `node scripts/verify-1148-curriculum-registry.js`
+fails when the two drift (44 rows: 10 Foundations, 4 Instruments, 1 Scripts, 14 Endoscopy,
+15 Preceptor).
+
+- **Hydration:** `SB.getCurriculumModules()` → `DB.curriculumModules` (raw rows, active only).
+- **Reader:** `registryModules(curriculum, constants)` (foundations.js) returns the active
+  rows in registry order, each joined onto its constant by id (so `observations`,
+  `questions`, `simulations` still come from code). Rows with no constant are dropped; an
+  empty registry falls back to the constant, so the screen is identical before the table
+  exists. `fndModules()` / `instModules()` wrap it.
+- **Switched so far:** Foundations and Instruments **leader panels only** (`renderHTraining`,
+  `hFndStaffDetail`, `hAssignFndModal`, `hAssignAllFnd`, `assignAllModules` and the
+  Instruments mirrors). Staff-side views, reporting, Scripts, Endoscopy and Preceptor still
+  read their constants — one curriculum at a time.
+- **Not the same thing as `preceptor_modules`:** that is Preceptor's per-level threshold table
+  from #78; nothing reads `DB.preceptorModules`. Left alone.
+- Design note: `docs/decisions/2026-09-08-1148-curriculum-registry.md`.
 
 ---
 
