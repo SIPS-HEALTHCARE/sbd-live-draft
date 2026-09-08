@@ -267,7 +267,7 @@ function assignEndoModule(staffId,moduleId,assignedBy,trigger){
 function _endoNewProgress(staffId,moduleId){
  const m=ENDOSCOPY_MODULES.find(x=>x.id===moduleId);
  const g3=endoHasObs(m)?{status:'open',items:[]}:{status:'pass',score:100,items:[],na:true};
- return {staffId,moduleId,g1:{status:'open',score:0,attempts:[]},g2:{status:'pass',score:100,attempts:[]},g3,complete:false};
+ return {staffId,moduleId,g1:{status:'open',score:0,attempts:[]},g2:{status:'pass',score:100,attempts:[],na:true},g3,complete:false};
 }
 
 // G1 pass rule (D1, reviewed 2026-08-28): ALL items correct, not a percentage
