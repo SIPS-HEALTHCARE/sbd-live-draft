@@ -817,6 +817,22 @@ const SCRIPTS_MODULE_ID = 'scripts';
 // filter is what keeps every Foundations "N/10" surface honest.
 const ENDO_MODULE_PREFIX = 'en-';
 function getFoundationsAssignments(staffId){return (DB.foundationsAssignments||[]).filter(a=>a.staffId===staffId&&a.moduleId!==SCRIPTS_MODULE_ID&&String(a.moduleId).indexOf(ENDO_MODULE_PREFIX)!==0);}
+// #1148 (board 134, T129): the curriculum registry, curriculum_modules, hydrated
+// into DB.curriculumModules at login. Returns one curriculum's active rows in
+// registry order, each joined onto its constant by id so content (sections,
+// banks, observation lists) still comes from code. A row with no constant behind
+// it is dropped: the registry can retitle, reorder or switch a module off, it
+// cannot add one without content. An empty registry (table not applied yet, RLS
+// miss, offline) falls back to the constant, so a leader's screen never changes.
+// Leader panels read this; staff-side views keep the constants until their turn.
+function registryModules(curriculum,constants){
+ const rows=(DB.curriculumModules||[]).filter(r=>r.curriculum===curriculum&&r.active!==false);
+ if(!rows.length) return constants;
+ return rows.slice().sort((a,b)=>a.sequence-b.sequence)
+  .map(r=>{const m=constants.find(x=>x.id===r.module_id);return m&&Object.assign({},m,{num:r.sequence,title:r.title});})
+  .filter(Boolean);
+}
+function fndModules(){return registryModules('foundations',FOUNDATIONS_MODULES);}
 function isModuleAssigned(staffId,moduleId){return (DB.foundationsAssignments||[]).some(a=>a.staffId===staffId&&a.moduleId===moduleId);}
 function getModuleGates(staffId,moduleId){
  const p=(DB.foundationsProgress||[]).find(x=>x.staffId===staffId&&x.moduleId===moduleId);
@@ -841,7 +857,7 @@ function assignModule(staffId,moduleId,assignedBy,type,trigger){
 }
 // Onboarding bulk-assign. Returns the count of modules actually assigned (skips
 // any already assigned, per 8.3) so the caller can report duplicates.
-function assignAllModules(staffId,assignedBy){let n=0;FOUNDATIONS_MODULES.forEach(m=>{if(assignModule(staffId,m.id,assignedBy,'onboarding',null))n++;});return n;}
+function assignAllModules(staffId,assignedBy){let n=0;fndModules().forEach(m=>{if(assignModule(staffId,m.id,assignedBy,'onboarding',null))n++;});return n;}
 function saveGateScore(staffId,moduleId,gate,score){
  if(!DB.foundationsProgress) DB.foundationsProgress=[];
  let p=DB.foundationsProgress.find(x=>x.staffId===staffId&&x.moduleId===moduleId);
@@ -1356,6 +1372,7 @@ function renderHTraining(){
  } else {
    staff=DB.staff.filter(s=>s.fid===ST.hFid);
  }
+ const mods=fndModules();
  let totalA=0,totalC=0,staffWith=0;
  const rows=[];
  staff.forEach(s=>{
@@ -1392,8 +1409,8 @@ function renderHTraining(){
    html+='<td style="white-space:nowrap">';
    if(r.assigned>0) html+='<button class="btn btn-ghost btn-xs" onclick="hFndStaffDetail(\''+r.s.id+'\')">View</button> ';
    if(!isAssessor){
-     if(r.assigned<10) html+='<button class="btn btn-gold btn-xs" onclick="hAssignFndModal(\''+r.s.id+'\')">Assign</button> ';
-     if(r.assigned===0) html+='<button class="btn btn-blue btn-xs" onclick="hAssignAllFnd(\''+r.s.id+'\')">All 10</button>';
+     if(r.assigned<mods.length) html+='<button class="btn btn-gold btn-xs" onclick="hAssignFndModal(\''+r.s.id+'\')">Assign</button> ';
+     if(r.assigned===0) html+='<button class="btn btn-blue btn-xs" onclick="hAssignAllFnd(\''+r.s.id+'\')">All '+mods.length+'</button>';
    }
    html+='</td></tr>';
  });
@@ -1412,7 +1429,7 @@ function hFndStaffDetail(staffId){
  html+='<div class="card mb16"><div class="card-hd"><div class="card-ttl">'+fullName(s)+'</div><span class="bb bb-'+s.belt+'">'+s.belt+'</span></div>';
  html+='<div class="card-body"><div style="font-size:13px;color:#94a3b8">'+s.role+'</div></div></div>';
  
- FOUNDATIONS_MODULES.forEach(m=>{
+ fndModules().forEach(m=>{
    if(!isModuleAssigned(s.id,m.id)) return;
    const gates=getModuleGates(s.id,m.id);
    const a=assignments.find(x=>x.moduleId===m.id);
@@ -1474,7 +1491,7 @@ function hAssignFndModal(staffId){
  if(ST.user&&(ST.user.role==='staff_admin'||ST.user.role==='assessor')){toast('Assessors cannot assign modules','err');return;}
  const s=getStaff(staffId);if(!s) return;
  const existing=getFoundationsAssignments(s.id);
- const unassigned=FOUNDATIONS_MODULES.filter(m=>!existing.some(a=>a.moduleId===m.id));
+ const unassigned=fndModules().filter(m=>!existing.some(a=>a.moduleId===m.id));
  if(!unassigned.length){toast('All modules assigned','info');return;}
  let html='<div style="margin-bottom:12px;font-size:13px;color:#94a3b8">Assign to <strong style="color:#e2e8f0">'+fullName(s)+'</strong>:</div>';
  // Audit trail (Addendum 7.1): capture why this was assigned. Onboarding needs
@@ -1516,8 +1533,8 @@ function hDoAssignFnd(staffId){
 function hAssignAllFnd(staffId){
  if(ST.user&&(ST.user.role==='staff_admin'||ST.user.role==='assessor')){toast('Assessors cannot assign modules','err');return;}
  const assigned=assignAllModules(staffId,ST.user?ST.user.name:'Manager');
- const skipped=FOUNDATIONS_MODULES.length-assigned;
- if(!assigned) toast('All 10 modules already assigned','info');
+ const total=fndModules().length,skipped=total-assigned;
+ if(!assigned) toast('All '+total+' modules already assigned','info');
  else{ toast(assigned+' module'+(assigned>1?'s':'')+' assigned','ok'); if(skipped) toast(skipped+' already assigned — skipped','info'); }
  renderHTraining();
 }

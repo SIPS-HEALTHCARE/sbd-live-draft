@@ -281,6 +281,8 @@ const SB = {
   deletePreceptorAssignment(staffId, moduleId){ return sbFetch(`/rest/v1/preceptor_assignments?staff_id=eq.${staffId}&module_id=eq.${encodeURIComponent(moduleId)}`, { method:'DELETE', prefer:'return=minimal' }); },
   // ── SBD Scripts module (T92a) — fourth assignment table, same matrix minus progress (no gates) ──
   getScriptAssignments(){ return sbFetch('/rest/v1/script_assignments?select=*'); },
+  // #1148: curriculum registry (board 134). Active rows only, in display order; read-only from the client.
+  getCurriculumModules(){ return sbFetch('/rest/v1/curriculum_modules?select=*&active=is.true&order=curriculum.asc,sequence.asc'); },
   createScriptAssignment(data){ return sbFetch('/rest/v1/script_assignments?on_conflict=staff_id,module_id', { method:'POST', prefer:'resolution=ignore-duplicates,return=minimal', body:data }); },
   updateScriptAssignmentStatus(staffId, moduleId, status){ return sbFetch(`/rest/v1/script_assignments?staff_id=eq.${staffId}&module_id=eq.${encodeURIComponent(moduleId)}`, { method:'PATCH', prefer:'return=minimal', body:{ status } }); },
   deleteScriptAssignment(staffId, moduleId){ return sbFetch(`/rest/v1/script_assignments?staff_id=eq.${staffId}&module_id=eq.${encodeURIComponent(moduleId)}`, { method:'DELETE', prefer:'return=minimal' }); },
@@ -320,6 +322,10 @@ const SB = {
   getPendingRegistrations(){ return sbFetch('/rest/v1/registrations?status=eq.pending&select=*&order=requested_at.desc'); },
   submitRegistration(data){ return sbFetch('/rest/v1/registrations', { method:'POST', prefer:'return=minimal', body:data }); },
   approveRegistration(id, facilityName, systemId, assignRole){ return sbFetch('/functions/v1/sbd-approve-registration', { method:'POST', body:{registration_id:id, facility_name:facilityName, assign_system_id:systemId, assign_role:assignRole} }); },
+  // #1122: approved registrations with no auth account behind them (master admin only; the RPC returns nothing to anyone else).
+  getStrandedRegistrations(){ return sbFetch('/rest/v1/rpc/sbd_stranded_registrations', { method:'POST', body:{} }); },
+  // #1122: same edge function as approval, re-issue branch — creates the login + one fresh link + one email + one audit row.
+  reissueRegistrationLink(id, facilityId, assignRole){ return sbFetch('/functions/v1/sbd-approve-registration', { method:'POST', body:{action:'reissue_link', registration_id:id, facility_name:facilityId, assign_role:assignRole} }); },
   // Deactivate (active=false) / reactivate (active=true) a portal account. Bans
   // or unbans the auth user server-side so login truly stops; no data is deleted.
   setAccountActive(authUid, active, reason){ return sbFetch('/functions/v1/sbd-set-account-active', { method:'POST', body:{ auth_uid:authUid, active:active, reason:reason||null } }); },
@@ -446,6 +452,7 @@ function resetDB(){
   DB.preceptorProgress = [];
   DB.preceptorModules = [];
   DB.preceptorAccess = [];
+  DB.curriculumModules = [];
   console.log('SBD Platform: Global state reset.');
 }
 

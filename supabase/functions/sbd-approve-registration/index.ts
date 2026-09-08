@@ -27,6 +27,14 @@ serve(async (req) => {
     let registrationApproved = false;      // status flipped pending -> approved
     let queuedEmailId: string | number | null = null;
     let registrationIdForRollback: string | null = null;
+    let httpStatus = 400;                  // #1122: 429 when a re-issue is inside its cooldown
+
+    // #1122 (board 155): one re-issue per registration per 10 minutes, measured from the
+    // last successful re-issue's audit row. Ten minutes matches the stranded alert's grace.
+    const REISSUE_COOLDOWN_MS = 10 * 60 * 1000;
+    // Roles a re-issue may hand out. Registration-facing roles only: a self-typed
+    // requested_role is anon-writable, and SIPS-internal roles never come from that form.
+    const REISSUE_ROLES = ['staff_member', 'hospital', 'facility_admin', 'system_admin'];
 
     try {
         supabaseAdmin = createClient(
@@ -38,7 +46,7 @@ serve(async (req) => {
         // Auth verification uses the admin client with getUser() to validate the JWT
         // (removed anon-key client — supabaseAdmin handles everything)
 
-        const { registration_id, facility_name, assign_system_id, assign_role } = await req.json();
+        const { registration_id, facility_name, assign_system_id, assign_role, action } = await req.json();
 
         if (!registration_id) {
             throw new Error('Registration ID missing');
@@ -86,6 +94,147 @@ serve(async (req) => {
 
         if (regError || !regData) {
             throw new Error('Registration not found');
+        }
+
+        // Shared by the approve path and the #1122 re-issue path: ONE place builds the link.
+        // Returns the URL, or null when GoTrue gave nothing back (logged, caller decides).
+        async function buildSetPasswordLink(email: string): Promise<string | null> {
+            const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+                type: 'recovery',
+                email
+            });
+            // NEVER put GoTrue's action_link in an email. It is a /auth/v1/verify URL and GoTrue
+            // consumes the token on the FIRST GET, by anyone. Hospital mailboxes run link
+            // scanners that GET every URL in a message within seconds of delivery, so the token
+            // is spent before the person clicks and they land on a bare sign-in page.
+            //
+            // Measured on 17 August rather than assumed. Milena Eremenko's link was issued at
+            // 19:33:35 and consumed at 19:33:45, ten seconds later, by an agent that was not her
+            // browser; a Microsoft scanner range then made a HEAD on the same path at 19:33:55;
+            // every attempt of hers after that returned "One-time token not found". The same
+            // shape appears for every nemours.org approval that night, and the workaround people
+            // found by themselves, re-registering on a personal address, is where the duplicate
+            // staff records in T114 come from.
+            //
+            // So the email carries the HASHED token on our own origin. Opening that URL renders
+            // a form and nothing else. The token is redeemed by a POST when the person presses
+            // the button, which a scanner never does.
+            const hashedToken = linkData?.properties?.hashed_token || null;
+            const link = hashedToken
+                ? `https://belt.sterilebydesign.ai/?set_password=1&token_hash=${encodeURIComponent(hashedToken)}`
+                : null;
+            if (linkError || !link) {
+                console.error('Set-password link generation failed:', linkError?.message || 'no hashed_token returned');
+            }
+            return link;
+        }
+
+        // ── #1122 (board 155): re-issue the approval link for ONE stranded registration ──
+        // A row that reads approved with no auth.users behind it (the 18 August shape, or an
+        // account deleted after approval) needs a human click per row. This is that click:
+        // it re-runs the account + link step for this one email and nothing else. No facility
+        // is created, no staff row, no belt. Master admin only. The person's role and facility
+        // were never stored on the registration (the approve modal chose them), so the caller
+        // passes them again and the same rules as the approve modal apply.
+        if (action === 'reissue_link') {
+            if (!['master_admin', 'admin'].includes(profile.role)) {
+                throw new Error('Only a master admin can re-issue an approval link.');
+            }
+            if (regData.status !== 'approved') {
+                throw new Error(`Registration is ${regData.status}, not approved — use Approve instead.`);
+            }
+            const accountRole = REISSUE_ROLES.includes(assign_role) ? assign_role : null;
+            if (!accountRole) throw new Error('Pick a portal role for this account.');
+            const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+            if (!uuidRe.test(String(facility_name || ''))) throw new Error('Pick an existing facility for this account.');
+            const { data: fac } = await supabaseAdmin.from('facilities').select('id').eq('id', facility_name).maybeSingle();
+            if (!fac) throw new Error('That facility no longer exists.');
+
+            // Rate limit: the audit row of the last SUCCESSFUL re-issue is the clock.
+            const since = new Date(Date.now() - REISSUE_COOLDOWN_MS).toISOString();
+            const { data: recent, error: recentErr } = await supabaseAdmin.from('sbd_account_audit')
+                .select('created_at')
+                .eq('action', 'registration_link_reissued')
+                .eq('detail->>registration_id', registration_id)
+                .gte('created_at', since)
+                .order('created_at', { ascending: false })
+                .limit(1);
+            if (recentErr) throw new Error('Could not read the re-issue history: ' + recentErr.message);
+            if (recent && recent.length) {
+                const waitMin = Math.max(1, Math.ceil((new Date(recent[0].created_at).getTime() + REISSUE_COOLDOWN_MS - Date.now()) / 60000));
+                httpStatus = 429;
+                throw new Error(`A link was re-issued for this registration less than 10 minutes ago. Try again in ${waitMin} min.`);
+            }
+
+            // Account. createUser is also the "does an account exist" check: GoTrue refuses a
+            // duplicate email, and a row WITH an account is not stranded — Forgot Password is
+            // the right tool there, not an admin-triggered recovery link.
+            const { data: authUser, error: authCreateError } = await supabaseAdmin.auth.admin.createUser({
+                email: regData.email,
+                password: 'Aa1!' + crypto.randomUUID(),
+                email_confirm: true,
+                user_metadata: { name: regData.name, role: accountRole }
+            });
+            if (authCreateError || !authUser?.user) {
+                const dup = authCreateError?.code === 'email_exists' || /already|exists|registered/i.test(authCreateError?.message || '');
+                throw new Error(dup
+                    ? 'An account already exists for this email, so there is nothing to re-issue. The person can use Forgot Password on the sign-in screen.'
+                    : `Failed to create auth user: ${authCreateError?.message || 'Unknown error'}`);
+            }
+            createdAuthUserId = authUser.user.id;
+
+            // Portal row. A row can survive here only with a null auth_uid (auth_uid cascades on
+            // delete), so an existing one gets re-pointed and a missing one is inserted.
+            const parts = (regData.name || '').trim().split(' ');
+            const initials = parts.length > 1 ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase() : (parts[0] || 'XX').substring(0, 2).toUpperCase();
+            const { data: existingRow } = await supabaseAdmin.from('sbd_portal_users').select('id').ilike('email', regData.email).maybeSingle();
+            const portalWrite = existingRow
+                ? supabaseAdmin.from('sbd_portal_users').update({ auth_uid: createdAuthUserId, active: true }).eq('id', existingRow.id)
+                : supabaseAdmin.from('sbd_portal_users').insert({
+                    auth_uid: createdAuthUserId, email: regData.email, name: regData.name || regData.email,
+                    role: accountRole, initials, facility_id: fac.id, active: true
+                });
+            const { error: portalErr } = await portalWrite;
+            if (portalErr) throw new Error('Failed to create user profile: ' + portalErr.message);
+            createdPortalRow = !existingRow;
+
+            // Link. Fatal here, unlike the approve path: the link IS the deliverable.
+            const link = await buildSetPasswordLink(regData.email);
+            if (!link) throw new Error('GoTrue returned no recovery token; nothing was sent.');
+
+            // One email, through the same queue and template as approval.
+            const { data: queuedRow, error: queueError } = await supabaseAdmin.from('sbd_email_queue').insert({
+                recipient_email: regData.email,
+                template: 'registration_approved',
+                subject: 'Welcome to Sterile by Design - Account Approved',
+                body_data: {
+                    contact_name: regData.name, name: parts[0] || '', facility_name: regData.facility || '',
+                    set_password_link: link, auth_created: true, role: accountRole, login_email: regData.email,
+                    reissued: true
+                },
+                status: 'pending', attempts: 0, created_at: new Date().toISOString()
+            }).select('id').single();
+            if (queueError) throw new Error('Could not queue the email: ' + queueError.message);
+            queuedEmailId = queuedRow?.id ?? null;
+
+            // One audit row: who re-issued, for whom, when. Written LAST so it only ever
+            // records a re-issue that fully happened; it is also the rate-limit clock above.
+            const { error: auditErr } = await supabaseAdmin.from('sbd_account_audit').insert({
+                action: 'registration_link_reissued',
+                actor_auth_uid: adminId,
+                actor_email: user.email || null,
+                actor_role: profile.role,
+                target_auth_uid: createdAuthUserId,
+                target_email: regData.email,
+                target_name: regData.name || null,
+                target_role: accountRole,
+                detail: { registration_id, facility_id: fac.id, email_queue_id: queuedEmailId }
+            });
+            if (auditErr) throw new Error('Re-issue aborted: could not write the audit record (' + auditErr.message + ')');
+
+            return new Response(JSON.stringify({
+                success: true, message: 'Approval link re-issued', user_id: createdAuthUserId, reissued_at: new Date().toISOString()
+            }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
 
         if (regData.status !== 'pending') {
@@ -163,33 +312,7 @@ serve(async (req) => {
             // Set-password link for the welcome email. Non-fatal on failure: the account
             // is fine, and the person can use Forgot Password on the sign-in screen — the
             // email template says so when no link is present.
-            const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
-                type: 'recovery',
-                email: regData.email
-            });
-            // NEVER put GoTrue's action_link in an email. It is a /auth/v1/verify URL and GoTrue
-            // consumes the token on the FIRST GET, by anyone. Hospital mailboxes run link
-            // scanners that GET every URL in a message within seconds of delivery, so the token
-            // is spent before the person clicks and they land on a bare sign-in page.
-            //
-            // Measured on 17 August rather than assumed. Milena Eremenko's link was issued at
-            // 19:33:35 and consumed at 19:33:45, ten seconds later, by an agent that was not her
-            // browser; a Microsoft scanner range then made a HEAD on the same path at 19:33:55;
-            // every attempt of hers after that returned "One-time token not found". The same
-            // shape appears for every nemours.org approval that night, and the workaround people
-            // found by themselves, re-registering on a personal address, is where the duplicate
-            // staff records in T114 come from.
-            //
-            // So the email carries the HASHED token on our own origin. Opening that URL renders
-            // a form and nothing else. The token is redeemed by a POST when the person presses
-            // the button, which a scanner never does.
-            const hashedToken = linkData?.properties?.hashed_token || null;
-            setPasswordLink = hashedToken
-                ? `https://belt.sterilebydesign.ai/?set_password=1&token_hash=${encodeURIComponent(hashedToken)}`
-                : null;
-            if (linkError || !setPasswordLink) {
-                console.error('Set-password link generation failed:', linkError?.message || 'no hashed_token returned');
-            }
+            setPasswordLink = await buildSetPasswordLink(regData.email);
         }
 
         console.log("Upserting portal user profile for:", newUserId);
@@ -365,7 +488,7 @@ serve(async (req) => {
             catch (e: any) { console.error('Rollback (facility) failed:', e?.message); }
         }
         return new Response(JSON.stringify({ error: err.message }), {
-            status: 400,
+            status: httpStatus,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
     }
