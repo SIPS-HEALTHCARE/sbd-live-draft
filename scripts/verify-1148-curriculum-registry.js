@@ -137,7 +137,9 @@ const API = read('src/js/api-supabase.js'), INIT = read('src/js/auth-init.js'), 
 ok(/getCurriculumModules\(\)\{ return sbFetch\('\/rest\/v1\/curriculum_modules\?select=\*&active=is\.true/.test(API), 'SB.getCurriculumModules fetches active rows');
 ok(/DB\.curriculumModules = \[\];/.test(API), 'resetDB clears DB.curriculumModules');
 ok(/SB\.getCurriculumModules \? SB\.getCurriculumModules\(\)/.test(INIT) && /window\.DB\.curriculumModules = currModules\|\|\[\];/.test(INIT), 'initAppData hydrates DB.curriculumModules (error → [] → constants fallback)');
-ok(/foundations\.js\?v=23/.test(HTML) && /instruments\.js\?v=15/.test(HTML) && /api-supabase\.js\?v=68/.test(HTML) && /auth-init\.js\?v=44/.test(HTML), 'cache-bust bumped on all four edited scripts');
+// Minimums, not exact pins: later issues bump these too (#1123 moved foundations/instruments/auth-init).
+const vOf = f => Number((HTML.match(new RegExp(f.replace('.', '\\.') + '\\?v=(\\d+)')) || [])[1] || 0);
+ok(vOf('foundations.js') >= 23 && vOf('instruments.js') >= 15 && vOf('api-supabase.js') >= 68 && vOf('auth-init.js') >= 44, 'cache-bust bumped on all four edited scripts');
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed\n');
 process.exit(failed ? 1 : 0);

@@ -793,7 +793,7 @@ const FOUNDATIONS_MODULES = [
 // in the background. Replaces the old demo saveDemoData() path.
 function _fndProgToBackend(p){return {staff_id:p.staffId,module_id:p.moduleId,g1:p.g1,g2:p.g2,g3:p.g3,complete:p.complete,updated_at:new Date().toISOString()};}
 function _fndSaveProgress(p){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.upsertFoundationsProgress){SB.upsertFoundationsProgress(_fndProgToBackend(p)).catch(e=>{if(typeof handleSyncError==='function')handleSyncError(e,'Foundations progress');else console.warn('[fnd] progress sync',e&&e.message);});}}catch(e){console.warn('[fnd] progress sync',e);}}
-function _fndSaveAssignment(a){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.createFoundationsAssignment){SB.createFoundationsAssignment({staff_id:a.staffId,module_id:a.moduleId,assigned_by:a.assignedBy||null,type:a.type,trigger:a.trigger,assignment_type:a.type,trigger_event:a.trigger,facility_id:a.facilityId||null,assigned_date:a.assignedDate,status:a.status}).catch(e=>{if(typeof handleSyncError==='function')handleSyncError(e,'Foundations assignment');else console.warn('[fnd] assignment sync',e&&e.message);});}}catch(e){console.warn('[fnd] assignment sync',e);}}
+function _fndSaveAssignment(a){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.createFoundationsAssignment){SB.createFoundationsAssignment({staff_id:a.staffId,module_id:a.moduleId,assigned_by:a.assignedBy||null,type:a.type,trigger:a.trigger,assignment_type:a.type,trigger_event:a.trigger,facility_id:a.facilityId||null,assigned_date:a.assignedDate,status:a.status,mode:a.mode||'take'}).catch(e=>{if(typeof handleSyncError==='function')handleSyncError(e,'Foundations assignment');else console.warn('[fnd] assignment sync',e&&e.message);});}}catch(e){console.warn('[fnd] assignment sync',e);}}
 function _fndSaveAssignmentStatus(staffId,moduleId,status){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.updateFoundationsAssignmentStatus){SB.updateFoundationsAssignmentStatus(staffId,moduleId,status).catch(e=>{if(typeof handleSyncError==='function')handleSyncError(e,'Foundations status');else console.warn('[fnd] status sync',e&&e.message);});}}catch(e){}}
 
 // ── Foundations 3-Gate Data Helpers ──
@@ -839,14 +839,61 @@ function getModuleGates(staffId,moduleId){
  return p||{g1:{status:'locked',score:0,attempts:[]},g2:{status:'locked',score:0,attempts:[]},g3:{status:'locked',items:[]},complete:false};
 }
 function isModuleComplete(staffId,moduleId){const p=getModuleGates(staffId,moduleId);return p.complete===true;}
+// ── #1123 (Shawn board 137): an assignment is 'take' (3-gate test, default) or
+// 'read' (no gates; the staffer confirms reading and the module completes).
+// The mode lives on the assignment row. Instruments reuses every helper here.
+function fiMode(v){return v==='read'?'read':'take';}
+function fndAssignmentMode(staffId,moduleId){const a=(DB.foundationsAssignments||[]).find(x=>x.staffId===staffId&&x.moduleId===moduleId);return fiMode(a&&a.mode);}
+// Same label endoscopy.js puts on a chapter without a bank, minus "for now":
+// there the gate is pending; here the leader chose no gate.
+const FI_READ_ONLY_LABEL='<span class="tc-muted" style="font-size:11px">&middot; reading only</span>';
+function fiModeSelectHTML(id){
+ return '<div style="margin-bottom:12px"><label style="display:block;font-size:12px;color:#94a3b8;margin-bottom:4px">Mode</label>'
+  +'<select id="'+id+'" class="form-select"><option value="take">Take the test (Knowledge, Simulation, Observation)</option>'
+  +'<option value="read">Read only (completes when they confirm reading)</option></select></div>';
+}
+function fiModeFromSelect(id){const el=document.getElementById(id);return fiMode(el&&el.value);}
+// The staffer's confirmation rides g1 (owner-writable through the server guard);
+// g2/g3 are pinned to a not-applicable pass by the guard for a read assignment,
+// mirrored here so the in-memory row matches what the next login hydrates.
+// The guard also mirrors `complete` onto assignment.status — staff cannot PATCH
+// the assignment row themselves (leader-only policy).
+function fiMarkRead(p,a,by){
+ const d=new Date().toISOString().slice(0,10);
+ p.g1={status:'pass',score:100,attempts:[],read:true,date:d,confirmedBy:by||null};
+ p.g2={status:'pass',score:100,attempts:[],na:true};
+ p.g3={status:'pass',score:100,items:[],na:true};
+ p.complete=true; if(a) a.status='completed';
+}
+// Staff-side confirm + the two read-mode fragments shared by both curricula.
+function confirmFndRead(moduleId){
+ const s=getStaff(ST.staffId);if(!s) return;
+ if(fndAssignmentMode(s.id,moduleId)!=='read'){toast('This module is assigned as a test','err');return;}
+ if(!DB.foundationsProgress) DB.foundationsProgress=[];
+ let p=DB.foundationsProgress.find(x=>x.staffId===s.id&&x.moduleId===moduleId);
+ if(!p){p={staffId:s.id,moduleId,g1:{status:'open',score:0,attempts:[]},g2:{status:'open',score:0,attempts:[]},g3:{status:'open',items:[]},complete:false};DB.foundationsProgress.push(p);}
+ fiMarkRead(p,(DB.foundationsAssignments||[]).find(x=>x.staffId===s.id&&x.moduleId===moduleId),fullName(s));
+ _fndSaveProgress(p);
+ toast('Reading confirmed — module complete','ok');
+ openFndModule(moduleId);
+}
+function fiReadConfirmHTML(gates,onclick){
+ if(gates.complete) return '<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--r);padding:12px 16px;margin-top:16px;font-size:13px;color:#4ade80;font-weight:600">Reading confirmed'+(gates.g1&&gates.g1.date?' &middot; '+gates.g1.date:'')+'</div>';
+ return '<div style="background:rgba(148,163,184,.08);border:1px solid rgba(148,163,184,.25);border-radius:var(--r);padding:14px 16px;margin-top:16px;font-size:12.5px;color:#94a3b8;line-height:1.6">This module is assigned as reading only. There is no test; it completes when you confirm you have read it.'
+  +'<button class="btn btn-gold btn-sm" style="display:block;margin-top:10px" onclick="'+onclick+'">I have read this module</button></div>';
+}
+// Leader-side line in place of the G1/G2/G3 row + observation checklist.
+function fiReadStatusHTML(gates){
+ return '<div style="font-size:12px;color:#94a3b8;margin-bottom:12px">Reading only &middot; '+(gates.complete?'<span class="tc-ok">Reading confirmed'+(gates.g1&&gates.g1.date?' '+gates.g1.date:'')+'</span>':'<span class="tc-warn">Not yet confirmed</span>')+'</div>';
+}
 // Returns true if a new assignment was created, false if it was skipped as a
 // duplicate (RLS Addendum 8.3 — a UNIQUE(staff_id,module_id) constraint backs
 // this; callers surface a toast when skips occur).
-function assignModule(staffId,moduleId,assignedBy,type,trigger){
+function assignModule(staffId,moduleId,assignedBy,type,trigger,mode){
  if(!DB.foundationsAssignments) DB.foundationsAssignments=[];
  if(DB.foundationsAssignments.find(a=>a.staffId===staffId&&a.moduleId===moduleId)) return false;
  const _s=(typeof getStaff==='function')?getStaff(staffId):(DB.staff||[]).find(x=>x.id===staffId);
- const _a={id:'fa-'+Date.now()+'-'+Math.random().toString(36).slice(2,6),staffId,moduleId,assignedBy,type:type||'remediation',trigger:trigger||null,facilityId:_s?_s.fid:null,assignedDate:new Date().toISOString().slice(0,10),status:'assigned'};
+ const _a={id:'fa-'+Date.now()+'-'+Math.random().toString(36).slice(2,6),staffId,moduleId,assignedBy,type:type||'remediation',trigger:trigger||null,facilityId:_s?_s.fid:null,assignedDate:new Date().toISOString().slice(0,10),status:'assigned',mode:fiMode(mode)};
  DB.foundationsAssignments.push(_a);
  // Init progress with 3 gates
  if(!DB.foundationsProgress) DB.foundationsProgress=[];
@@ -943,14 +990,17 @@ function renderSFoundations(){
    const assigned=isModuleAssigned(s.id,m.id);
    const gates=getModuleGates(s.id,m.id);
    const complete=gates.complete;
- 
+   const readMode=assigned&&fndAssignmentMode(s.id,m.id)==='read';
+
    html+='<div class="card mb16 fnd-card'+(assigned?' fnd-unlocked':' fnd-locked')+'">';
    html+='<div class="card-hd" style="flex-wrap:wrap;gap:8px"><div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1">';
    html+='<div class="fnd-num'+(complete?' fnd-num-done':'')+'">'+m.num+'</div>';
    html+='<div style="min-width:0"><div class="card-ttl" style="font-size:14px;margin:0">'+m.title+'</div>';
    html+='<div style="font-size:11px;color:#64748b;margin-top:2px">'+m.subtitle+'</div></div></div>';
  
-   if(assigned){
+   if(readMode){
+     html+='<div style="display:flex;gap:4px;align-items:center">'+(complete?fndGateBadge('pass'):'')+FI_READ_ONLY_LABEL+'</div>';
+   } else if(assigned){
      html+='<div style="display:flex;gap:4px;align-items:center" title="Gate 1: Knowledge | Gate 2: Simulation | Gate 3: Observation">';
      html+=fndGateBadge(gates.g1.status)+fndGateBadge(gates.g2.status)+fndGateBadge(gates.g3.status)+'<span style="margin-left:6px">'+fndPassChip(gates)+'</span>';
      html+='</div>';
@@ -961,7 +1011,10 @@ function renderSFoundations(){
    html+='<div class="card-body" style="padding-top:0">';
    html+='<p style="font-size:12.5px;color:#94a3b8;line-height:1.5;margin:0 0 8px">'+m.desc+'</p>';
  
-   if(assigned){
+   if(readMode){
+     html+='<div style="font-size:12px;color:#94a3b8;margin:10px 0">'+(complete?'<span class="tc-ok">Reading confirmed</span>':'Reading only &mdash; no test. Open the module and confirm once you have read it.')+'</div>';
+     html+='<button class="btn btn-gold btn-sm" style="margin-top:8px" onclick="openFndModule(\''+m.id+'\')">'+( complete?'Review':'Open Module')+'</button>';
+   } else if(assigned){
      // Gate status bar
      html+='<div style="display:flex;gap:12px;flex-wrap:wrap;margin:10px 0">';
      html+='<div class="fnd-gate-lbl">'+fndGateBadge(gates.g1.status)+'<span>Knowledge '+Math.min(fndGatePasses(gates.g1),FND_PASSES_REQUIRED)+'/'+FND_PASSES_REQUIRED+(gates.g1.score>0?' ('+gates.g1.score+'%)':'')+'</span></div>';
@@ -1056,7 +1109,14 @@ function renderFndModuleTab(m,s,gates,tab){
  html+='<div style="font-size:11px;color:#c49a20;font-weight:600;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">MODULE '+m.num+'</div>';
  html+='<div style="font-size:20px;font-weight:700;color:#e2e8f0">'+m.title+'</div>';
  html+='<div style="font-size:13px;color:#94a3b8;margin-top:2px">'+m.subtitle+'</div>';
+ // #1123: a read-mode assignment has no gates — no indicators, no gate tabs,
+ // content only, with the confirmation under it.
+ const readMode=fndAssignmentMode(s.id,m.id)==='read';
+ if(readMode) tab=ST._fndTab='content';
  // Gate indicators
+ if(readMode){
+   html+='<div style="margin:12px 0">'+FI_READ_ONLY_LABEL+'</div>';
+ } else {
  html+='<div style="display:flex;gap:14px;margin:12px 0">';
  html+='<div class="fnd-gate-lbl">'+fndGateBadge(gates.g1.status)+'<span>Knowledge '+Math.min(fndGatePasses(gates.g1),FND_PASSES_REQUIRED)+'/'+FND_PASSES_REQUIRED+'</span></div>';
  html+='<div class="fnd-gate-lbl">'+fndGateBadge(gates.g2.status)+'<span>Simulation '+Math.min(fndGatePasses(gates.g2),FND_PASSES_REQUIRED)+'/'+FND_PASSES_REQUIRED+'</span></div>';
@@ -1069,7 +1129,8 @@ function renderFndModuleTab(m,s,gates,tab){
  html+=tabBtn('gate2','Gate 2: Simulation',tab==='gate2');
  html+=tabBtn('gate3','Gate 3: Observation',tab==='gate3');
  html+='</div>';
- 
+ }
+
  if(tab==='content'){
    m.sections.forEach((sec,i)=>{
      var _num = (sec.match(/^\s*([0-9]+\.[0-9]+)/)||[])[1] || '';
@@ -1078,6 +1139,7 @@ function renderFndModuleTab(m,s,gates,tab){
      html+='<div class="fnd-section-head">'+(_num?'<span class="fnd-section-num">'+_num+'</span>':'')+'<span class="fnd-section-title">'+_ttl+'</span></div>';
      html+='<div class="fnd-section-body">'+fndFmtBody(m.sectionContent[i])+'</div></div>';
    });
+   if(readMode) html+=fiReadConfirmHTML(gates,"confirmFndRead('"+m.id+"')");
  } else if(tab==='gate1'){
    html+=renderFndGateAssessment(m,s,'g1',m.questions,'Knowledge Check','Select the best answer for each question. 80% required to pass.');
  } else if(tab==='gate2'){
@@ -1140,6 +1202,7 @@ function fiModuleSummary(mod, assignment, progress){
  let status; if(complete) status='complete'; else if(assignment) status='in_progress'; else status='not_assigned';
  const dates=[];
  (g1.attempts||[]).forEach(a=>{if(a&&a.date)dates.push(a.date);});
+ if(g1.read&&g1.date) dates.push(g1.date); // #1123 read-mode confirmation is the only activity
  (g2.attempts||[]).forEach(a=>{if(a&&a.date)dates.push(a.date);});
  (g3.items||[]).forEach(i=>{if(i&&i.date)dates.push(i.date);});
  dates.sort();
@@ -1436,23 +1499,29 @@ function hFndStaffDetail(staffId){
    html+='<div class="card mb16"><div class="card-hd" style="flex-wrap:wrap;gap:8px">';
    html+='<div style="display:flex;align-items:center;gap:8px"><div class="fnd-num'+(gates.complete?' fnd-num-done':'')+'">'+m.num+'</div>';
    html+='<div class="card-ttl" style="font-size:14px;margin:0">'+m.title+'</div></div>';
-   html+='<div style="display:flex;gap:4px;align-items:center">'+fndGateBadge(gates.g1.status)+fndGateBadge(gates.g2.status)+fndGateBadge(gates.g3.status);
-   html+='<span style="margin-left:6px">'+fndPassChip(gates)+'</span>';
+   const readMode=fndAssignmentMode(s.id,m.id)==='read';
+   html+='<div style="display:flex;gap:4px;align-items:center">';
+   if(readMode) html+=(gates.complete?fndGateBadge('pass'):'')+FI_READ_ONLY_LABEL;
+   else html+=fndGateBadge(gates.g1.status)+fndGateBadge(gates.g2.status)+fndGateBadge(gates.g3.status)+'<span style="margin-left:6px">'+fndPassChip(gates)+'</span>';
    // Unassign: RLS Addendum matrix -- delete assignments is Master Admin ONLY.
    if(ST.user&&ST.user.role==='master_admin') html+='<button class="btn btn-ghost btn-xs" style="margin-left:8px;border-color:rgba(239,68,68,.4);color:#f87171" onclick="hUnassignFnd(\''+s.id+'\',\''+m.id+'\')">Unassign</button>';
    html+='</div>';
    html+='</div><div class="card-body" style="padding-top:0">';
-   // Gate status
+   // Gate status (#1123: a read-mode assignment has none — one status line instead)
+   if(readMode) html+=fiReadStatusHTML(gates);
+   else {
    html+='<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;font-size:12px;color:#94a3b8">';
    html+='<span>G1: '+(gates.g1.status==='pass'?'<span class="tc-ok">'+gates.g1.score+'%</span>':'<span class="tc-muted">'+gates.g1.status+'</span>')+'</span>';
    html+='<span>G2: '+(gates.g2.status==='pass'?'<span class="tc-ok">'+gates.g2.score+'%</span>':'<span class="tc-muted">'+gates.g2.status+'</span>')+'</span>';
    html+='<span>G3: '+(gates.g3.status==='pass'?'<span class="tc-ok">Confirmed</span>':'<span class="tc-warn">Pending</span>')+'</span>';
    html+='</div>';
+   }
    // Audit trail (Addendum 7.1): who assigned this, when, why, and what triggered it.
    if(a){
      const _typeLbl=a.type==='onboarding'?'Onboarding':'Remediation';
      html+='<div style="font-size:11px;color:#64748b;margin-bottom:12px">Assigned by '+Security.sanitize(a.assignedBy||'—')+(a.assignedDate?' · '+Security.sanitize(a.assignedDate):'')+' · '+_typeLbl+(a.trigger?' · Trigger: '+Security.sanitize(a.trigger):'')+'</div>';
    }
+   if(readMode){html+='</div></div>';return;}
    // Gate 3 observation items (editable by manager). Rendered even after G3
    // passes so a mis-click can be un-confirmed — the revoke cascade (Addendum
    // 8.2) in markG3Item + the server trigger handle the revert.
@@ -1503,6 +1572,8 @@ function hAssignFndModal(staffId){
  html+='</select></div>';
  html+='<div id="fnd-trigger-wrap" style="margin-bottom:12px"><label style="display:block;font-size:12px;color:#94a3b8;margin-bottom:4px">Trigger event <span style="color:#64748b">(gate failure or incident reference, optional)</span></label>';
  html+='<input id="fnd-assign-trigger" type="text" class="form-input" placeholder="e.g. G2 fail 2026-07-01 or incident #123"></div>';
+ // #1123 (board 137): read or take, one choice for every module ticked below.
+ html+=fiModeSelectHTML('fnd-assign-mode');
  html+='<div style="max-height:300px;overflow-y:auto">';
  unassigned.forEach(m=>{
    html+='<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer;font-size:13px;color:#cbd5e1">';
@@ -1524,7 +1595,8 @@ function hDoAssignFnd(staffId){
  const trigEl=document.getElementById('fnd-assign-trigger');
  const trigger=(type==='remediation'&&trigEl&&trigEl.value.trim())?trigEl.value.trim():null;
  let assigned=0,skipped=0;
- cbs.forEach(cb=>{ if(assignModule(staffId,cb.value,nm,type,trigger)) assigned++; else skipped++; });
+ const mode=fiModeFromSelect('fnd-assign-mode');
+ cbs.forEach(cb=>{ if(assignModule(staffId,cb.value,nm,type,trigger,mode)) assigned++; else skipped++; });
  closeModal();
  if(assigned) toast(assigned+' module'+(assigned>1?'s':'')+' assigned','ok');
  if(skipped) toast(skipped+' already assigned — skipped','info');

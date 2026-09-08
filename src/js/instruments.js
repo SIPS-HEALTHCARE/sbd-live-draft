@@ -352,19 +352,32 @@ function getInstModuleGates(sid,mid){
  const p=(DB.instrumentProgress||[]).find(x=>x.staffId===sid&&x.moduleId===mid);
  return p||{g1:{status:'locked',score:0,attempts:[]},g2:{status:'locked',score:0,attempts:[]},g3:{status:'locked',items:[]},complete:false};
 }
+// #1123 read/take mode — helpers live in foundations.js (fiMode, fiMarkRead, FI_READ_ONLY_LABEL...).
+function instAssignmentMode(sid,mid){const a=(DB.instrumentAssignments||[]).find(x=>x.staffId===sid&&x.moduleId===mid);return fiMode(a&&a.mode);}
+function confirmInstRead(mid){
+ const s=getStaff(ST.staffId);if(!s) return;
+ if(instAssignmentMode(s.id,mid)!=='read'){toast('This module is assigned as a test','err');return;}
+ if(!DB.instrumentProgress) DB.instrumentProgress=[];
+ let p=DB.instrumentProgress.find(x=>x.staffId===s.id&&x.moduleId===mid);
+ if(!p){p={staffId:s.id,moduleId:mid,g1:{status:'open',score:0,attempts:[]},g2:{status:'open',score:0,attempts:[]},g3:{status:'open',items:[]},complete:false};DB.instrumentProgress.push(p);}
+ fiMarkRead(p,(DB.instrumentAssignments||[]).find(x=>x.staffId===s.id&&x.moduleId===mid),fullName(s));
+ _instSaveProgress(p);
+ toast('Reading confirmed — module complete','ok');
+ openInstModule(mid);
+}
 // ── Live persistence (#22/#26): mirror each in-memory write to Supabase ──
 function _instProgToBackend(p){return {staff_id:p.staffId,module_id:p.moduleId,g1:p.g1,g2:p.g2,g3:p.g3,complete:p.complete,updated_at:new Date().toISOString()};}
 function _instSaveProgress(p){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.upsertInstrumentProgress){SB.upsertInstrumentProgress(_instProgToBackend(p)).catch(e=>{if(typeof handleSyncError==='function')handleSyncError(e,'Instruments progress');else console.warn('[inst] progress sync',e&&e.message);});}}catch(e){console.warn('[inst] progress sync',e);}}
-function _instSaveAssignment(a){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.createInstrumentAssignment){SB.createInstrumentAssignment({staff_id:a.staffId,module_id:a.moduleId,assigned_by:a.assignedBy||null,type:a.type,trigger:a.trigger,assignment_type:a.type,trigger_event:a.trigger,facility_id:a.facilityId||null,assigned_date:a.assignedDate,status:a.status}).catch(e=>{if(typeof handleSyncError==='function')handleSyncError(e,'Instruments assignment');else console.warn('[inst] assignment sync',e&&e.message);});}}catch(e){console.warn('[inst] assignment sync',e);}}
+function _instSaveAssignment(a){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.createInstrumentAssignment){SB.createInstrumentAssignment({staff_id:a.staffId,module_id:a.moduleId,assigned_by:a.assignedBy||null,type:a.type,trigger:a.trigger,assignment_type:a.type,trigger_event:a.trigger,facility_id:a.facilityId||null,assigned_date:a.assignedDate,status:a.status,mode:a.mode||'take'}).catch(e=>{if(typeof handleSyncError==='function')handleSyncError(e,'Instruments assignment');else console.warn('[inst] assignment sync',e&&e.message);});}}catch(e){console.warn('[inst] assignment sync',e);}}
 function _instSaveAssignmentStatus(sid,mid,status){try{if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.updateInstrumentAssignmentStatus){SB.updateInstrumentAssignmentStatus(sid,mid,status).catch(e=>{if(typeof handleSyncError==='function')handleSyncError(e,'Instruments status');else console.warn('[inst] status sync',e&&e.message);});}}catch(e){}}
 
 // Returns true if a new assignment was created, false if skipped as a duplicate
 // (RLS Addendum 8.3). Mirrors foundations.js assignModule.
-function assignInstModule(sid,mid,by,type,trigger){
+function assignInstModule(sid,mid,by,type,trigger,mode){
  if(!DB.instrumentAssignments) DB.instrumentAssignments=[];
  if(DB.instrumentAssignments.find(a=>a.staffId===sid&&a.moduleId===mid)) return false;
  const _s=(typeof getStaff==='function')?getStaff(sid):(DB.staff||[]).find(x=>x.id===sid);
- const _a={id:'ia-'+Date.now()+'-'+Math.random().toString(36).slice(2,6),staffId:sid,moduleId:mid,assignedBy:by,type:type||'remediation',trigger:trigger||null,facilityId:_s?_s.fid:null,assignedDate:new Date().toISOString().slice(0,10),status:'assigned'};
+ const _a={id:'ia-'+Date.now()+'-'+Math.random().toString(36).slice(2,6),staffId:sid,moduleId:mid,assignedBy:by,type:type||'remediation',trigger:trigger||null,facilityId:_s?_s.fid:null,assignedDate:new Date().toISOString().slice(0,10),status:'assigned',mode:fiMode(mode)};
  DB.instrumentAssignments.push(_a);
  if(!DB.instrumentProgress) DB.instrumentProgress=[];
  let _p=DB.instrumentProgress.find(x=>x.staffId===sid&&x.moduleId===mid);
@@ -431,11 +444,14 @@ function renderSInstruments(){
  html+='</div></div>';
  INSTRUMENT_MODULES.forEach(m=>{
    const assigned=isInstModuleAssigned(s.id,m.id),gates=getInstModuleGates(s.id,m.id),complete=gates.complete;
+   const readMode=assigned&&instAssignmentMode(s.id,m.id)==='read';
    html+='<div class="card mb16 fnd-card'+(assigned?' fnd-unlocked':' fnd-locked')+'"><div class="card-hd" style="flex-wrap:wrap;gap:8px"><div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1"><div class="fnd-num'+(complete?' fnd-num-done':'')+'">'+m.num+'</div><div style="min-width:0"><div class="card-ttl" style="font-size:14px;margin:0">'+m.title+'</div><div style="font-size:11px;color:#64748b;margin-top:2px">'+m.subtitle+'</div></div></div>';
-   if(assigned){html+='<div style="display:flex;gap:4px;align-items:center" title="G1: Knowledge | G2: Simulation | G3: Observation">'+fndGateBadge(gates.g1.status)+fndGateBadge(gates.g2.status)+fndGateBadge(gates.g3.status)+'<span style="margin-left:6px">'+fndPassChip(gates)+'</span></div>';}
+   if(readMode){html+='<div style="display:flex;gap:4px;align-items:center">'+(complete?fndGateBadge('pass'):'')+FI_READ_ONLY_LABEL+'</div>';}
+   else if(assigned){html+='<div style="display:flex;gap:4px;align-items:center" title="G1: Knowledge | G2: Simulation | G3: Observation">'+fndGateBadge(gates.g1.status)+fndGateBadge(gates.g2.status)+fndGateBadge(gates.g3.status)+'<span style="margin-left:6px">'+fndPassChip(gates)+'</span></div>';}
    else{html+='<span class="pill p-muted" style="opacity:.5"><svg viewBox="0 0 14 14" width="11" height="11" fill="none" style="margin-right:3px;vertical-align:-1px"><rect x="1" y="5" width="12" height="8" rx="2" stroke="#64748b" stroke-width="1.3"/><path d="M4 5V4a3 3 0 016 0v1" stroke="#64748b" stroke-width="1.3" stroke-linecap="round"/></svg>Locked</span>';}
    html+='</div><div class="card-body" style="padding-top:0"><p style="font-size:12.5px;color:#94a3b8;line-height:1.5;margin:0 0 8px">'+m.desc+'</p>';
-   if(assigned){html+='<div style="display:flex;gap:12px;flex-wrap:wrap;margin:10px 0"><div class="fnd-gate-lbl">'+fndGateBadge(gates.g1.status)+'<span>Knowledge '+Math.min(fndGatePasses(gates.g1),FND_PASSES_REQUIRED)+'/'+FND_PASSES_REQUIRED+(gates.g1.score>0?' ('+gates.g1.score+'%)':'')+'</span></div><div class="fnd-gate-lbl">'+fndGateBadge(gates.g2.status)+'<span>Simulation '+Math.min(fndGatePasses(gates.g2),FND_PASSES_REQUIRED)+'/'+FND_PASSES_REQUIRED+(gates.g2.score>0?' ('+gates.g2.score+'%)':'')+'</span></div><div class="fnd-gate-lbl">'+fndGateBadge(gates.g3.status)+'<span>Observation'+(gates.g3.status==='pass'?' (Confirmed)':'')+'</span></div></div><button class="btn btn-gold btn-sm" style="margin-top:8px" onclick="openInstModule(\''+m.id+'\')">'+(complete?'Review':'Open Module')+'</button>';}
+   if(readMode){html+='<div style="font-size:12px;color:#94a3b8;margin:10px 0">'+(complete?'<span class="tc-ok">Reading confirmed</span>':'Reading only &mdash; no test. Open the module and confirm once you have read it.')+'</div><button class="btn btn-gold btn-sm" style="margin-top:8px" onclick="openInstModule(\''+m.id+'\')">'+(complete?'Review':'Open Module')+'</button>';}
+   else if(assigned){html+='<div style="display:flex;gap:12px;flex-wrap:wrap;margin:10px 0"><div class="fnd-gate-lbl">'+fndGateBadge(gates.g1.status)+'<span>Knowledge '+Math.min(fndGatePasses(gates.g1),FND_PASSES_REQUIRED)+'/'+FND_PASSES_REQUIRED+(gates.g1.score>0?' ('+gates.g1.score+'%)':'')+'</span></div><div class="fnd-gate-lbl">'+fndGateBadge(gates.g2.status)+'<span>Simulation '+Math.min(fndGatePasses(gates.g2),FND_PASSES_REQUIRED)+'/'+FND_PASSES_REQUIRED+(gates.g2.score>0?' ('+gates.g2.score+'%)':'')+'</span></div><div class="fnd-gate-lbl">'+fndGateBadge(gates.g3.status)+'<span>Observation'+(gates.g3.status==='pass'?' (Confirmed)':'')+'</span></div></div><button class="btn btn-gold btn-sm" style="margin-top:8px" onclick="openInstModule(\''+m.id+'\')">'+(complete?'Review':'Open Module')+'</button>';}
    else{html+='<div class="fnd-sections">';m.sections.forEach(sec=>{html+='<div class="fnd-sec-item" style="font-size:12px;color:#64748b;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04)">'+sec+'</div>';});html+='</div>';}
    html+='</div></div>';
  });
@@ -449,14 +465,20 @@ function openInstModule(mid){
  const gates=getInstModuleGates(s.id,m.id);
  ST._instTab=ST._instTab||'content';
  const el=document.getElementById('s-instruments');
+ // #1123: a read-mode assignment has no gates — no indicators, no gate tabs, content only.
+ const readMode=instAssignmentMode(s.id,m.id)==='read';
+ if(readMode) ST._instTab='content';
  const tab=ST._instTab;
  const tabBtn=(id,lbl,on)=>'<div class="tab'+(on?' on':'')+'" onclick="ST._instTab=\''+id+'\';openInstModule(\''+m.id+'\')">'+lbl+'</div>';
  let html='<div class="fnd-reader"><button class="btn btn-ghost btn-sm" onclick="renderSInstruments()" style="margin-bottom:12px">&larr; Back</button>';
  html+='<div style="font-size:11px;color:#c49a20;font-weight:600;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">'+m.belt.toUpperCase()+' BELT</div>';
  html+='<div style="font-size:20px;font-weight:700;color:#e2e8f0">'+m.title+'</div><div style="font-size:13px;color:#94a3b8;margin-top:2px">'+m.subtitle+'</div>';
+ if(readMode){html+='<div style="margin:12px 0">'+FI_READ_ONLY_LABEL+'</div>';}
+ else{
  html+='<div style="display:flex;gap:14px;margin:12px 0"><div class="fnd-gate-lbl">'+fndGateBadge(gates.g1.status)+'<span>Knowledge '+Math.min(fndGatePasses(gates.g1),FND_PASSES_REQUIRED)+'/'+FND_PASSES_REQUIRED+'</span></div><div class="fnd-gate-lbl">'+fndGateBadge(gates.g2.status)+'<span>Simulation '+Math.min(fndGatePasses(gates.g2),FND_PASSES_REQUIRED)+'/'+FND_PASSES_REQUIRED+'</span></div><div class="fnd-gate-lbl">'+fndGateBadge(gates.g3.status)+'<span>Observation</span></div></div>';
  html+='<div class="tab-bar" style="margin-bottom:16px">'+tabBtn('content','Instruments',tab==='content')+tabBtn('gate1','Gate 1',tab==='gate1')+tabBtn('gate2','Gate 2',tab==='gate2')+tabBtn('gate3','Gate 3',tab==='gate3')+'</div>';
- if(tab==='content'){m.sections.forEach((sec,i)=>{html+='<div class="fnd-section"><div class="fnd-section-title">'+sec+'</div><div class="fnd-section-body">'+m.sectionContent[i]+'</div></div>';});}
+ }
+ if(tab==='content'){m.sections.forEach((sec,i)=>{html+='<div class="fnd-section"><div class="fnd-section-title">'+sec+'</div><div class="fnd-section-body">'+m.sectionContent[i]+'</div></div>';});if(readMode)html+=fiReadConfirmHTML(gates,"confirmInstRead('"+m.id+"')");}
  else if(tab==='gate1'){html+=renderInstGate(m,s,'g1',m.questions,'Knowledge Check','Identify instruments, categories, functions, and inspection points. 80% required.');}
  else if(tab==='gate2'){html+=renderInstGate(m,s,'g2',m.simulations,'Simulation','Real-world instrument scenarios. 80% required.');}
  else if(tab==='gate3'){html+=renderInstG3(m,s,gates);}
@@ -570,10 +592,12 @@ function hInstStaffDetail(sid){
  instModules().forEach(m=>{
    if(!isInstModuleAssigned(s.id,m.id)) return;const gates=getInstModuleGates(s.id,m.id);
    const a=getInstrumentAssignments(s.id).find(x=>x.moduleId===m.id);
-   html+='<div class="card mb16"><div class="card-hd" style="flex-wrap:wrap;gap:8px"><div style="display:flex;align-items:center;gap:8px"><div class="fnd-num'+(gates.complete?' fnd-num-done':'')+'">'+m.num+'</div><div class="card-ttl" style="font-size:14px;margin:0">'+m.title+'</div></div><div style="display:flex;gap:4px;align-items:center">'+fndGateBadge(gates.g1.status)+fndGateBadge(gates.g2.status)+fndGateBadge(gates.g3.status)+((ST.user&&ST.user.role==='master_admin')?'<button class="btn btn-ghost btn-xs" style="margin-left:8px;border-color:rgba(239,68,68,.4);color:#f87171" onclick="hUnassignInst(\''+s.id+'\',\''+m.id+'\')">Unassign</button>':'')+'</div></div><div class="card-body" style="padding-top:0">';
-   html+='<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;font-size:12px;color:#94a3b8"><span>G1: '+(gates.g1.status==='pass'?'<span class="tc-ok">'+gates.g1.score+'%</span>':'<span class="tc-muted">'+gates.g1.status+'</span>')+'</span><span>G2: '+(gates.g2.status==='pass'?'<span class="tc-ok">'+gates.g2.score+'%</span>':'<span class="tc-muted">'+gates.g2.status+'</span>')+'</span><span>G3: '+(gates.g3.status==='pass'?'<span class="tc-ok">Confirmed</span>':'<span class="tc-warn">Pending</span>')+'</span></div>';
+   const readMode=instAssignmentMode(s.id,m.id)==='read';
+   html+='<div class="card mb16"><div class="card-hd" style="flex-wrap:wrap;gap:8px"><div style="display:flex;align-items:center;gap:8px"><div class="fnd-num'+(gates.complete?' fnd-num-done':'')+'">'+m.num+'</div><div class="card-ttl" style="font-size:14px;margin:0">'+m.title+'</div></div><div style="display:flex;gap:4px;align-items:center">'+(readMode?(gates.complete?fndGateBadge('pass'):'')+FI_READ_ONLY_LABEL:fndGateBadge(gates.g1.status)+fndGateBadge(gates.g2.status)+fndGateBadge(gates.g3.status))+((ST.user&&ST.user.role==='master_admin')?'<button class="btn btn-ghost btn-xs" style="margin-left:8px;border-color:rgba(239,68,68,.4);color:#f87171" onclick="hUnassignInst(\''+s.id+'\',\''+m.id+'\')">Unassign</button>':'')+'</div></div><div class="card-body" style="padding-top:0">';
+   html+=readMode?fiReadStatusHTML(gates):'<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;font-size:12px;color:#94a3b8"><span>G1: '+(gates.g1.status==='pass'?'<span class="tc-ok">'+gates.g1.score+'%</span>':'<span class="tc-muted">'+gates.g1.status+'</span>')+'</span><span>G2: '+(gates.g2.status==='pass'?'<span class="tc-ok">'+gates.g2.score+'%</span>':'<span class="tc-muted">'+gates.g2.status+'</span>')+'</span><span>G3: '+(gates.g3.status==='pass'?'<span class="tc-ok">Confirmed</span>':'<span class="tc-warn">Pending</span>')+'</span></div>';
    // Audit trail (Addendum 7.1): who assigned this, when, why, and what triggered it.
    if(a){ const _typeLbl=a.type==='onboarding'?'Onboarding':'Remediation'; html+='<div style="font-size:11px;color:#64748b;margin-bottom:12px">Assigned by '+Security.sanitize(a.assignedBy||'—')+(a.assignedDate?' · '+Security.sanitize(a.assignedDate):'')+' · '+_typeLbl+(a.trigger?' · Trigger: '+Security.sanitize(a.trigger):'')+'</div>'; }
+   if(readMode){html+='</div></div>';return;}
    // Rendered even after G3 passes so a mis-click can be un-confirmed (Addendum 8.2 revoke cascade).
    html+='<div style="font-size:12px;font-weight:600;color:#c49a20;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Gate 3: Confirm Observations</div>';
    m.observations.forEach(obs=>{const conf=gates.g3.items.find(i=>i.id===obs.id&&i.confirmed);html+='<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06)"><input type="checkbox" style="accent-color:#4ade80;flex-shrink:0" '+(conf?'checked':'')+' onchange="markInstG3Wrap(\''+s.id+'\',\''+m.id+'\',\''+obs.id+'\',this.checked)"><span style="font-size:12.5px;color:'+(conf?'#4ade80':'#94a3b8')+'">'+obs.text+'</span></div>';});
@@ -603,6 +627,7 @@ function hAssignInstModal(sid){
  html+='</select></div>';
  html+='<div id="inst-trigger-wrap" style="margin-bottom:12px"><label style="display:block;font-size:12px;color:#94a3b8;margin-bottom:4px">Trigger event <span style="color:#64748b">(gate failure or incident reference, optional)</span></label>';
  html+='<input id="inst-assign-trigger" type="text" class="form-input" placeholder="e.g. G2 fail 2026-07-01 or incident #123"></div>';
+ html+=fiModeSelectHTML('inst-assign-mode'); // #1123
  html+='<div style="max-height:300px;overflow-y:auto">';
  unassigned.forEach(m=>{html+='<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer;font-size:13px;color:#cbd5e1"><input type="checkbox" class="inst-assign-cb" value="'+m.id+'" style="accent-color:#c49a20"><span><strong>'+m.num+'.</strong> '+m.title+'</span></label>';});
  html+='</div><div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-ghost btn-sm" onclick="closeModal()">Cancel</button><button class="btn btn-gold btn-sm" onclick="hDoAssignInst(\''+s.id+'\')">Assign</button></div>';
@@ -618,7 +643,8 @@ function hDoAssignInst(sid){
  const trigEl=document.getElementById('inst-assign-trigger');
  const trigger=(type==='remediation'&&trigEl&&trigEl.value.trim())?trigEl.value.trim():null;
  let assigned=0,skipped=0;
- cbs.forEach(cb=>{ if(assignInstModule(sid,cb.value,nm,type,trigger)) assigned++; else skipped++; });
+ const mode=fiModeFromSelect('inst-assign-mode');
+ cbs.forEach(cb=>{ if(assignInstModule(sid,cb.value,nm,type,trigger,mode)) assigned++; else skipped++; });
  closeModal();
  if(assigned) toast(assigned+' module'+(assigned>1?'s':'')+' assigned','ok');
  if(skipped) toast(skipped+' already assigned — skipped','info');
