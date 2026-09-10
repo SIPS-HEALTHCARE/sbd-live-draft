@@ -75,7 +75,11 @@ where n.nspname = 'public' and c.relkind = 'r' and c.relrowsecurity
                         'assessment_pin_attempts','staff_history',
                         'schedule','attendance','promotion_approvals','user_profiles',
                         'free_agents','facility_shifts','assessment_queue',
-                        'user_onboarding','assistant_memory'))
+                        'user_onboarding','assistant_memory',
+  -- #1169: aip_* belongs to another SIPS property, but the belt app reads
+  -- aip_questions on every placement/belt test, so that ONE table is gated.
+  -- The rest of aip_* stays out deliberately — do not widen this to aip\_%.
+                        'aip_questions'))
   and not exists (
     select 1 from pg_policy pol
     where pol.polrelid = c.oid and pol.polname like 'sbd_mfa_gate%');
