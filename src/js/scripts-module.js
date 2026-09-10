@@ -85,6 +85,9 @@ function scriptsCanAssign() {
 function assignScriptsModule(staffId, assignedBy, trigger) {
   if (!DB.scriptAssignments) DB.scriptAssignments = [];
   if (scriptsAssignment(staffId)) return false;
+  // #1149: the Scripts curriculum must be granted on this person's profile
+  // (the RLS INSERT policy on script_assignments enforces it).
+  if (typeof caCanBeAssigned === 'function' && !caCanBeAssigned(staffId, 'scripts')) return false;
   const s = (typeof getStaff === 'function') ? getStaff(staffId) : null;
   const a = {
     id: 'sa-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
@@ -276,8 +279,11 @@ function scriptsCellHTML(staffId) {
   const canAssign = scriptsCanAssign();
   const isMaster = !!(ST.user && ST.user.role === 'master_admin');
   if (!a) {
+    // #1149: no Scripts grant, no Assign button — a reason in its place.
     return canAssign
-      ? '<button class="btn btn-ghost btn-xs" onclick="hAssignScriptsModal(\'' + staffId + '\')">Assign</button>'
+      ? (typeof caAssignControlHTML === 'function'
+          ? caAssignControlHTML(staffId, 'scripts', '<button class="btn btn-ghost btn-xs" onclick="hAssignScriptsModal(\'' + staffId + '\')">Assign</button>')
+          : '<button class="btn btn-ghost btn-xs" onclick="hAssignScriptsModal(\'' + staffId + '\')">Assign</button>')
       : '<span class="tc-muted">None</span>';
   }
   let h = '<span class="' + (a.status === 'completed' ? 'tc-ok' : 'tc-warn') + '" style="font-size:11.5px">'
@@ -297,6 +303,7 @@ function hAssignScriptsModal(staffId) {
   if (!scriptsCanAssign()) { toast('Assessors cannot assign modules', 'err'); return; }
   const s = getStaff(staffId); if (!s) return;
   if (isScriptsAssigned(staffId)) { toast('Scripts already assigned', 'info'); return; }
+  if (typeof caCanBeAssigned === 'function' && !caCanBeAssigned(staffId, 'scripts')) { caDenyToast(staffId, 'scripts'); return; } // #1149
   const belts = scriptsBeltsWithContent(s.belt);
   const total = belts.reduce((n, b) => n + scriptSectionsForBelt(b).length, 0);
   let html = '<div style="margin-bottom:12px;font-size:13px;color:var(--txt2)">Assign the <strong style="color:var(--txt)">Scripts</strong> module to <strong style="color:var(--txt)">' + fullName(s) + '</strong>.</div>';
@@ -313,6 +320,8 @@ function hAssignScriptsModal(staffId) {
 
 function hDoAssignScripts(staffId) {
   if (!scriptsCanAssign()) { toast('Assessors cannot assign modules', 'err'); return; }
+  // #1149: re-check on submit — access can be revoked while this modal is open.
+  if (typeof caCanBeAssigned === 'function' && !caCanBeAssigned(staffId, 'scripts')) { caDenyToast(staffId, 'scripts'); closeModal(); return; }
   const el = document.getElementById('scripts-assign-trigger');
   const trigger = (el && el.value.trim()) ? el.value.trim() : null;
   const ok = assignScriptsModule(staffId, ST.user ? ST.user.name : 'Manager', trigger);

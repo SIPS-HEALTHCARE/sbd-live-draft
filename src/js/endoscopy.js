@@ -232,6 +232,10 @@ function endoCanAssign(){
 function assignEndoModule(staffId,moduleId,assignedBy,trigger){
  if(!DB.foundationsAssignments) DB.foundationsAssignments=[];
  if(DB.foundationsAssignments.find(a=>a.staffId===staffId&&a.moduleId===moduleId)) return false;
+ // #1149: endoscopy is granted separately from Foundations even though both ride
+ // foundations_assignments — sbd_has_curriculum_access() resolves the curriculum
+ // per row through the #1148 registry, and so does caCanAssignModule().
+ if(typeof caCanAssignModule==='function'&&!caCanAssignModule(staffId,moduleId)) return false;
  const s=(typeof getStaff==='function')?getStaff(staffId):(DB.staff||[]).find(x=>x.id===staffId);
  const a={id:'ea-'+Date.now()+'-'+Math.random().toString(36).slice(2,6),staffId,moduleId,assignedBy,type:'remediation',trigger:trigger||null,facilityId:s?s.fid:null,assignedDate:new Date().toISOString().slice(0,10),status:'assigned'};
  DB.foundationsAssignments.push(a);
@@ -619,7 +623,8 @@ function renderHEndoscopy(){
    html+='<td>'+(r.assigned>0?'<span class="'+(pct===100?'tc-ok':pct>0?'tc-warn':'tc-muted')+'">'+r.done+'/'+r.assigned+'</span>':'<span class="tc-muted">None</span>')+'</td>';
    html+='<td style="white-space:nowrap">';
    if(r.assigned>0) html+='<button class="btn btn-ghost btn-xs" onclick="hEndoStaffDetail(\''+r.s.id+'\')">View</button> ';
-   if(canAssign&&r.assigned<ENDOSCOPY_MODULES.length) html+='<button class="btn btn-gold btn-xs" onclick="hAssignEndoscopyModal(\''+r.s.id+'\')">Assign</button>';
+   // #1149: no Endoscopy grant, no Assign button — a reason in its place.
+   if(canAssign&&r.assigned<ENDOSCOPY_MODULES.length) html+=(typeof caAssignControlHTML==='function'?caAssignControlHTML(r.s.id,'endoscopy','<button class="btn btn-gold btn-xs" onclick="hAssignEndoscopyModal(\''+r.s.id+'\')">Assign</button>'):'<button class="btn btn-gold btn-xs" onclick="hAssignEndoscopyModal(\''+r.s.id+'\')">Assign</button>');
    if(!canAssign&&!r.assigned) html+='<span class="tc-muted">None</span>';
    html+='</td></tr>';
  });
@@ -631,6 +636,7 @@ function renderHEndoscopy(){
 function hAssignEndoscopyModal(staffId){
  if(!endoCanAssign()){toast('Assessors cannot assign modules','err');return;}
  const s=getStaff(staffId);if(!s) return;
+ if(typeof caCanBeAssigned==='function'&&!caCanBeAssigned(s.id,'endoscopy')){caDenyToast(s.id,'endoscopy');return;} // #1149
  const existing=getEndoAssignments(s.id);
  const unassigned=ENDOSCOPY_MODULES.filter(m=>!existing.some(a=>a.moduleId===m.id));
  if(!unassigned.length){toast('All endoscopy modules already assigned','info');return;}
@@ -653,6 +659,7 @@ function hDoAssignEndoscopy(staffId){
  if(!endoCanAssign()){toast('Assessors cannot assign modules','err');return;}
  const cbs=document.querySelectorAll('.endo-assign-cb:checked');
  if(!cbs.length){toast('Select at least one module','err');return;}
+ if(typeof caCanBeAssigned==='function'&&!caCanBeAssigned(staffId,'endoscopy')){caDenyToast(staffId,'endoscopy');closeModal();return;} // #1149
  const nm=ST.user?ST.user.name:'Manager';
  const trigEl=document.getElementById('endo-assign-trigger');
  const trigger=(trigEl&&trigEl.value.trim())?trigEl.value.trim():null;

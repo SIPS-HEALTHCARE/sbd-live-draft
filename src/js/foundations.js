@@ -892,6 +892,10 @@ function fiReadStatusHTML(gates){
 function assignModule(staffId,moduleId,assignedBy,type,trigger,mode){
  if(!DB.foundationsAssignments) DB.foundationsAssignments=[];
  if(DB.foundationsAssignments.find(a=>a.staffId===staffId&&a.moduleId===moduleId)) return false;
+ // #1149: the curriculum must be granted on this person's profile. Every Foundations
+ // and Endoscopy path routes through here, so this is the one place it belongs; the
+ // RLS INSERT policy is what actually enforces it (migration 20260911130000).
+ if(typeof caCanAssignModule==='function'&&!caCanAssignModule(staffId,moduleId)) return false;
  const _s=(typeof getStaff==='function')?getStaff(staffId):(DB.staff||[]).find(x=>x.id===staffId);
  const _a={id:'fa-'+Date.now()+'-'+Math.random().toString(36).slice(2,6),staffId,moduleId,assignedBy,type:type||'remediation',trigger:trigger||null,facilityId:_s?_s.fid:null,assignedDate:new Date().toISOString().slice(0,10),status:'assigned',mode:fiMode(mode)};
  DB.foundationsAssignments.push(_a);
@@ -1472,8 +1476,10 @@ function renderHTraining(){
    html+='<td style="white-space:nowrap">';
    if(r.assigned>0) html+='<button class="btn btn-ghost btn-xs" onclick="hFndStaffDetail(\''+r.s.id+'\')">View</button> ';
    if(!isAssessor){
-     if(r.assigned<mods.length) html+='<button class="btn btn-gold btn-xs" onclick="hAssignFndModal(\''+r.s.id+'\')">Assign</button> ';
-     if(r.assigned===0) html+='<button class="btn btn-blue btn-xs" onclick="hAssignAllFnd(\''+r.s.id+'\')">All '+mods.length+'</button>';
+     // #1149: no Foundations grant, no Assign button — a reason in its place.
+     const _caOK=(typeof caCanBeAssigned!=='function')||caCanBeAssigned(r.s.id,'foundations');
+     if(r.assigned<mods.length) html+=(typeof caAssignControlHTML==='function'?caAssignControlHTML(r.s.id,'foundations','<button class="btn btn-gold btn-xs" onclick="hAssignFndModal(\''+r.s.id+'\')">Assign</button>'):'<button class="btn btn-gold btn-xs" onclick="hAssignFndModal(\''+r.s.id+'\')">Assign</button>')+' ';
+     if(r.assigned===0&&_caOK) html+='<button class="btn btn-blue btn-xs" onclick="hAssignAllFnd(\''+r.s.id+'\')">All '+mods.length+'</button>';
    }
    html+='</td></tr>';
  });
@@ -1559,6 +1565,8 @@ function hUnassignFnd(staffId,moduleId){
 function hAssignFndModal(staffId){
  if(ST.user&&(ST.user.role==='staff_admin'||ST.user.role==='assessor')){toast('Assessors cannot assign modules','err');return;}
  const s=getStaff(staffId);if(!s) return;
+ // #1149: refuse before the checkbox list, not after the insert fails.
+ if(typeof caCanBeAssigned==='function'&&!caCanBeAssigned(s.id,'foundations')){caDenyToast(s.id,'foundations');return;}
  const existing=getFoundationsAssignments(s.id);
  const unassigned=fndModules().filter(m=>!existing.some(a=>a.moduleId===m.id));
  if(!unassigned.length){toast('All modules assigned','info');return;}
@@ -1589,6 +1597,9 @@ function hDoAssignFnd(staffId){
  if(ST.user&&(ST.user.role==='staff_admin'||ST.user.role==='assessor')){toast('Assessors cannot assign modules','err');return;}
  const cbs=document.querySelectorAll('.fnd-assign-cb:checked');
  if(!cbs.length){toast('Select at least one','err');return;}
+ // #1149: re-check on submit — access can be revoked while this modal is open, and
+ // "already assigned — skipped" would be the wrong reason to report.
+ if(typeof caCanBeAssigned==='function'&&!caCanBeAssigned(staffId,'foundations')){caDenyToast(staffId,'foundations');closeModal();return;}
  const nm=ST.user?ST.user.name:'Manager';
  const typeEl=document.getElementById('fnd-assign-type');
  const type=(typeEl&&typeEl.value==='onboarding')?'onboarding':'remediation';
@@ -1604,6 +1615,7 @@ function hDoAssignFnd(staffId){
 }
 function hAssignAllFnd(staffId){
  if(ST.user&&(ST.user.role==='staff_admin'||ST.user.role==='assessor')){toast('Assessors cannot assign modules','err');return;}
+ if(typeof caCanBeAssigned==='function'&&!caCanBeAssigned(staffId,'foundations')){caDenyToast(staffId,'foundations');return;} // #1149
  const assigned=assignAllModules(staffId,ST.user?ST.user.name:'Manager');
  const total=fndModules().length,skipped=total-assigned;
  if(!assigned) toast('All '+total+' modules already assigned','info');

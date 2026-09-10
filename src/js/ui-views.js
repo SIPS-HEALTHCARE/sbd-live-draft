@@ -11109,6 +11109,7 @@ function renderHProfile(sid,context){
         ${profileAcctToggleBtn(s, context)}
         ${context==='admin'&&(ST.user&&ST.user.role==='master_admin')?`<button class="btn btn-err btn-sm" onclick="releaseToFreeAgent('${s.id}')" title="Release staff member to Free Agent Registry" style="margin-left:auto"><svg width="13" height="13" viewBox="0 0 18 18" fill="none"><path d="M12 14H15a1 1 0 001-1V5a1 1 0 00-1-1H12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M9 12l3-3-3-3M12 9H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Release</button>`:''}
         ${(ST.user&&ST.user.role==='master_admin'&&typeof prcAccessControlHTML==='function')?`<div style="flex-basis:100%;display:flex;justify-content:flex-end;margin-top:2px">${prcAccessControlHTML(s.id,context)}</div>`:''}
+        ${(typeof caAccessControlHTML==='function')?`<div style="flex-basis:100%;display:flex;justify-content:flex-end;margin-top:4px">${caAccessControlHTML(s.id,context)}</div>`:''}
       </div>
     </div>
     <div class="g2 mb16">

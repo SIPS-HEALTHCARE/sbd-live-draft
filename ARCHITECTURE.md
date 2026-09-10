@@ -188,6 +188,7 @@ Every view has this pattern:
 | `instrument_assignments` / `instrument_progress` | Instruments curriculum (mirror of Foundations, same 3-gate engine). RLS via `sbd_fi_leader_scope`. See §16A. | `staff_id` → `staff`, `facility_id` → `facilities` |
 | `script_assignments` | T92a: Scripts module assignment — fourth assignment table, same shape/RLS rule set as the other three, no progress table (no gates). One row per staff (module_id always `'scripts'` today). See §16B. | `staff_id` → `staff`, `facility_id` → `facilities` |
 | `curriculum_modules` | #1148 (board 134, T129): registry of all 44 modules across the five curricula — `module_id` PK, `curriculum`, `title`, `sequence`, `gate_shape`, `active`. Identity/order only; content stays in the `src/js` constants. Seeded by `scripts/curriculum-registry-seed.js` (migration `20260908140000`). Read: any authenticated. Write: `sbd_is_master_admin()`. See §16D. | — |
+| `curriculum_access` | **#1149 (board 11 Sep, T133):** which curricula a staff member may be **assigned** — one row per (`staff_id`, `curriculum`) with `granted_by`/`granted_at`; no row = not granted, revoke **deletes** the row. Granted from the staff profile. Enforced in the INSERT policies of the three assignment tables via `sbd_has_curriculum_access()`, which resolves module → curriculum through `curriculum_modules`. `preceptor` is deliberately not a legal value (see `preceptor_access`). Migration `20260911130000`. See §16E. | — |
 
 ### Row Level Security (RLS)
 Every table uses RLS. Access is controlled via JWT claims:
@@ -666,6 +667,47 @@ fails when the two drift (44 rows: 10 Foundations, 4 Instruments, 1 Scripts, 14 
 - **Not the same thing as `preceptor_modules`:** that is Preceptor's per-level threshold table
   from #78; nothing reads `DB.preceptorModules`. Left alone.
 - Design note: `docs/decisions/2026-09-08-1148-curriculum-registry.md`.
+
+---
+
+## 16E. Curriculum access grant (#1149, board 11 Sep, T133)
+
+`curriculum_access` records **which curricula a person may be assigned**. Before this, the
+only server gate on an assignment was `sbd_fi_can_manage_assignments(staff_id)` — "may *you*
+assign to this person", never "may this person hold this curriculum".
+
+- **Grain:** one row per (`staff_id`, `curriculum`) = granted. No row = not granted. Revoke
+  **deletes** the row — there is no `revoked` tri-state as in `preceptor_access`, because this
+  gate is on *assigning*: revoking touches neither existing assignments nor their progress.
+- **Four curricula only:** `foundations`, `instruments`, `scripts`, `endoscopy`, held by a
+  CHECK constraint. **Preceptor is not here** — decision 9 (9/8) keeps preceptor access in
+  `preceptor_access` with its own control and its own apply/approve queue.
+- **The gate is the RLS policy.** `sbd_has_curriculum_access(target_staff, module_id)` is
+  ANDed into `fnd_assign_insert`, `inst_assign_insert` and `scr_assign_insert`. It resolves
+  module → curriculum **through the #1148 registry**, which is how `foundations_assignments`
+  — carrying Foundations *and* Endoscopy (`en-%`) rows — is gated correctly per row with no
+  `module_id` lists in SQL. UPDATE/DELETE are left ungated: revoking access must not strand a
+  leader with a row they can no longer close out.
+- **Fail-open, twice.** A module the registry does not list passes the SQL gate (an unseeded
+  registry must never freeze assignment, same fallback `registryModules()` takes). On the
+  client, `DB.curriculumAccess` is `null` — not `[]` — when the fetch fails, and `caLoaded()`
+  reads that as "we do not know", so a bad fetch cannot hide every leader's Assign button.
+- **⚠️ The migration backfills before it swaps the policies**, and the order is load-bearing.
+  Deny-by-default with no backfill would stop every leader from assigning anything the moment
+  it lands, including the new-hire rollout through `hAssignAllFnd`/`assignAllModules`. §4 of
+  the migration grants every (staff, curriculum) pair that **already** holds an assignment,
+  stamped `granted_by = '#1149 backfill'` with the earliest assigned date.
+- **File:** `src/js/curriculum-access.js` (Standards B7 — `ui-views.js` references exactly one
+  name from it, `caAccessControlHTML`, in `renderHProfile`). Helpers: `caCurricula()` (reads
+  the registry), `caCurriculumOf()`, `caCanBeAssigned()`, `caCanAssignModule()`,
+  `caAssignControlHTML()` (the panels' Assign button wrapper), `caSetAccess()`.
+- **Chokepoints:** the refusal sits in the one assign function each curriculum routes
+  through — `assignModule` (foundations.js, covers Endoscopy too), `assignInstModule`,
+  `assignScriptsModule`, `assignEndoModule` — plus a loud refusal in the two bulk paths and a
+  "No access" hint in each of the four leader panels.
+- **Verify:** `node scripts/verify-1149-curriculum-access.js`,
+  `supabase/verify/1149_curriculum_access_check.sql`.
+  Design note: `docs/decisions/2026-09-11-1149-curriculum-access-grant.md`.
 
 ---
 
