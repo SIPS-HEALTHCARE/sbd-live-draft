@@ -13239,6 +13239,10 @@ function renderHAssessments(){
       `<div class="empty-state"><div class="empty-ttl">No assessment requests</div><div class="empty-desc">Nothing pending or approved for this facility.</div></div>`}
     </div>
 
+    <!-- #1180: assessment sittings for this facility (read-only). Filled async by
+         renderLeaderSessionsPanel() from the sbd-leader-sessions edge function. -->
+    <div id="h-sittings-panel" class="mb16"></div>
+
     <!-- Assessment Queue Table -->
     <div class="card mb16">
       <div class="card-hd">
@@ -13297,6 +13301,69 @@ function renderHAssessments(){
 
   // Wire up openRecordModal for this facility\'s staff when no sid provided
   // (reuse existing logic -- ST.curFid is already set to hFid for facility admins)
+
+  // #1180 -- populate the sittings list asynchronously (own fetch, own refresh).
+  renderLeaderSessionsPanel();
+}
+
+// ── #1180 Assessment sittings (leader, read-only) ──
+// Board 151's PIN half: the leader who issued the PIN can now see what came of it --
+// staff name, module, status, started/completed. Every status, because a completed or
+// expired sitting is the only thing there is to see once a candidate is done.
+// Data comes from sbd-leader-sessions (facility_admin / hospital, own facility only);
+// sbd_assessment_sessions is unreadable from the browser. Read-only: no PIN values, no
+// re-issue, no decide. Same cache-and-manual-refresh shape as renderInProgressPanel,
+// since renderHAssessments re-runs on unrelated re-renders.
+let _leaderSessionsCache = null;
+async function renderLeaderSessionsPanel(forceFetch){
+  const panel = document.getElementById('h-sittings-panel');
+  if(!panel) return;
+  const header = (bodyHtml, count) => `
+    <div class="card">
+      <div class="card-hd">
+        <div class="card-ttl">Assessment Sittings</div>
+        <span class="pill ${count>0?'p-blue':'p-muted'}">${count} session${count===1?'':'s'}</span>
+        <button class="btn btn-ghost btn-xs" style="margin-left:auto;white-space:nowrap" onclick="renderLeaderSessionsPanel(true)">&#8635; Refresh</button>
+      </div>
+      ${bodyHtml}
+    </div>`;
+  const when = iso => iso ? new Date(iso).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '--';
+  const paint = (sessions) => {
+    if(!sessions.length){
+      panel.innerHTML = header('<div class="empty-state"><div class="empty-ttl">No assessment sittings</div><div class="empty-desc">Sittings authorized for this facility will appear here.</div></div>', 0);
+      return;
+    }
+    const pill = st => st==='completed'?'p-ok':st==='active'?'p-blue':st==='revoked'?'p-err':'p-muted';
+    const rows = sessions.map(s => `<tr>
+        <td class="fw7">${esc0(s.staff_name)}</td>
+        <td><span class="pill ${s.assessment_type==='belt'?'p-gold':'p-purple'}">${esc0(s.module)}</span></td>
+        <td><span class="pill ${pill(s.status)}">${esc0(s.status)}</span></td>
+        <td style="font-size:11.5px;color:var(--txt3);white-space:nowrap">${when(s.started_at)}</td>
+        <td style="font-size:11.5px;color:var(--txt3);white-space:nowrap">${when(s.completed_at)}</td>
+      </tr>`).join('');
+    panel.innerHTML = header(`
+      <div style="overflow-x:auto">
+        <table class="tbl tbl-static" style="min-width:560px">
+          <thead><tr><th>Staff Member</th><th>Module</th><th>Status</th><th>Started</th><th>Completed</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`, sessions.length);
+  };
+
+  if(!forceFetch && _leaderSessionsCache !== null){ paint(_leaderSessionsCache); return; }
+  if(typeof IS_LIVE==='undefined' || !IS_LIVE){
+    panel.innerHTML = header('<div class="empty-state"><div class="empty-desc">Live sitting data requires live mode.</div></div>', 0);
+    return;
+  }
+  panel.innerHTML = header('<div class="empty-state"><div class="empty-desc">Loading sittings&hellip;</div></div>', 0);
+  try {
+    const res = await SB.getLeaderSessions();
+    _leaderSessionsCache = (res && res.sessions) || [];
+  } catch(e){
+    panel.innerHTML = header(`<div class="empty-state"><div class="empty-ttl">Couldn&rsquo;t load sittings</div><div class="empty-desc">${esc0(e.message||'Request failed')}</div></div>`, 0);
+    return;
+  }
+  paint(_leaderSessionsCache);
 }
 function renderHProgression(){
   const el=document.getElementById('h-progression');

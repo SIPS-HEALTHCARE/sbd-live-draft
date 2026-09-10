@@ -417,6 +417,10 @@ const SB = {
   // #21 admin in-progress tracker. Admin-gated service-role read; the function
   // scopes results to the caller's facilities (master_admin sees all).
   getInProgressAssessments(){ return sbFetch('/functions/v1/sbd-admin-sessions', { method:'POST', body:{} }); },
+  // #1180 leader-side read of the same table: facility_admin / hospital only, scoped to their
+  // own facility, every status (not just active). Separate function so sbd-admin-sessions and
+  // its three admin roles stay untouched.
+  getLeaderSessions(){ return sbFetch('/functions/v1/sbd-leader-sessions', { method:'POST', body:{} }); },
   notifyPlacementEvent(type, data){ return sbFetch('/functions/v1/sbd-emails', { method:'POST', body:{ type, data } }); }
 };
 if (typeof window !== 'undefined') {
