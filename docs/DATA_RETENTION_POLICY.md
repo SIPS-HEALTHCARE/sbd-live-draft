@@ -58,6 +58,8 @@ PINs) as scheduled jobs is tracked follow-up work, not claimed here.
 - **MFA break-glass:** an administrator who loses their authenticator is restored
   by a master admin deleting their factor row in the Supabase dashboard
   (Authentication → Users → factors), after identity verification out-of-band.
+  Since #1144 an administrator can also sign in with an emailed code instead of
+  the authenticator, so a lost phone alone no longer needs break-glass.
 
 ## 5. Exceptions
 

@@ -104,6 +104,43 @@ ok(/sbd_mfa_gate_select on public\.sbd_portal_users/.test(SQL)
 ok(!/sbd_mfa_gate on public\.sbd_portal_users/.test(SQL),
    'the generic FOR ALL gate is NOT applied to sbd_portal_users (it would break login)');
 
+/* ── 3b. #1144 email second door (migration 20260910120000) ──────────────── */
+section('3b. #1144 email second door — migration 20260910120000');
+const SQL2 = read('supabase/migrations/20260910120000_1144_mfa_email_code.sql');
+ok(/create table if not exists public\.sbd_mfa_email_codes/.test(SQL2), 'defines sbd_mfa_email_codes');
+ok(/primary key \(auth_uid, session_id\)/.test(SQL2), 'table is keyed (indexed) on auth_uid + session_id');
+ok(/alter table public\.sbd_mfa_email_codes enable row level security/.test(SQL2)
+   && /revoke all on table public\.sbd_mfa_email_codes from authenticated/.test(SQL2)
+   && /grant all on table public\.sbd_mfa_email_codes to service_role/.test(SQL2),
+   'table is RLS-on, revoked from authenticated, service_role only');
+ok(!/create policy [^;]* on public\.sbd_mfa_email_codes/.test(SQL2), 'no policy on the table (predicate reads it as definer; a gate would recurse)');
+ok(/create or replace function public\.sbd_mfa_satisfied/.test(SQL2), 'redefines sbd_mfa_satisfied()');
+ok(/language sql stable security definer set search_path = public/.test(SQL2), 'predicate v2 stays STABLE, definer, pinned search_path');
+const predBody = SQL2.slice(SQL2.indexOf('function public.sbd_mfa_satisfied'), SQL2.indexOf('$$;', SQL2.indexOf('function public.sbd_mfa_satisfied')));
+ok(/from public\.sbd_mfa_email_codes c/.test(predBody) && /c\.auth_uid = auth\.uid\(\)/.test(predBody)
+   && /c\.session_id::text = auth\.jwt\(\)->>'session_id'/.test(predBody) && /c\.verified_until > now\(\)/.test(predBody),
+   'email leg is bound to auth.uid() AND the JWT session_id, inside the verified window');
+ok(/aal'?,\s*'aal1'\)\s*=\s*'aal2'/.test(predBody.replace(/\s+/g, ' ')), 'aal2 leg is still first (TOTP users unchanged)');
+ok(!/sipsconsults/.test(predBody), 'the three hardcoded emails are gone from the admin test');
+const sqlLists2 = [...predBody.matchAll(/in \(([^)]*'master_admin'[^)]*)\)/g)]
+  .map(m => (m[1].match(/'[^']+'/g) || []).map(s => s.slice(1, -1)));
+ok(sqlLists2.length === 2 && sqlLists2.every(sameSet), 'both role lists in predicate v2 match the canonical list');
+
+section('3c. #1144 sbd-mfa-email — the ONE aal1-reachable admin surface');
+const EMAILFN = read('supabase/functions/sbd-mfa-email/index.ts');
+ok(sameSet(listFrom(EMAILFN, /MFA_ADMIN_ROLES = \[([^\]]+)\]/)), 'sbd-mfa-email MFA_ADMIN_ROLES matches the canonical list');
+ok(!/mfaDenied\(/.test(EMAILFN), 'sbd-mfa-email does NOT carry the aal2 guard (it is the exemption)');
+ok(/MFA_ADMIN_ROLES\.includes\(String\(profile\.role/.test(EMAILFN), 'sbd-mfa-email refuses non-admin-tier callers');
+ok(/from\('sbd_email_queue'\)\s*\.insert/.test(EMAILFN.replace(/\s+/g, ' ')) && /template: 'mfa_email_code'/.test(EMAILFN),
+   'codes go out through sbd_email_queue (retries re-send the same row)');
+ok(/bcrypt\.hashSync\(plain\)/.test(EMAILFN) && !/code_hash: plain/.test(EMAILFN), 'the code is hashed at rest');
+ok(/MAX_FAILED_ATTEMPTS = 5/.test(EMAILFN) && /LOCKOUT_DURATION_MINUTES = 15/.test(EMAILFN), '#60 lockout numbers (5 / 15)');
+ok(/mfa_email_code:/.test(read('supabase/functions/sbd-send-emails/index.ts')), 'sbd-send-emails renders the mfa_email_code template');
+ok(/sbd-mfa-email/.test(MFAJS) && /'status'/.test(MFAJS) && /'send_code'/.test(MFAJS) && /'verify_code'/.test(MFAJS),
+   'mfa.js drives status → send_code → verify_code');
+ok(MFAJS.indexOf("_emailFetch('status')") < MFAJS.indexOf('_listTotpFactors();', MFAJS.indexOf('async ensureAal2')),
+   'ensureAal2 checks the email status BEFORE touching TOTP (reload keeps the session_id)');
+
 /* ── 4. Edge-function guards (piece 1, server side) ───────────────────────── */
 section('4. Edge-function guards (15 copies must agree)');
 const GUARDED = [
