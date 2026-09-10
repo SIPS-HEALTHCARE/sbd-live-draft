@@ -31,8 +31,12 @@ body{background:var(--bg);color:var(--txt);-webkit-text-size-adjust:100%}
 .ico svg{display:block}
 
 /* ── LOGIN ── */
-.boot-spinner{width:28px;height:28px;border:2px solid rgba(196,154,32,.25);border-top-color:var(--gold);border-radius:50%;animation:boot-spin .8s linear infinite}
+.boot-inner{display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center;padding:20px}
+.boot-spinner{width:44px;height:44px;border:3px solid rgba(196,154,32,.25);border-top-color:var(--gold);border-radius:50%;animation:boot-spin .8s linear infinite}
 @keyframes boot-spin{to{transform:rotate(360deg)}}
+.boot-text{font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--txt3,#a8b2d1)}
+.boot-retry{opacity:0;visibility:hidden;font-size:12.5px;color:var(--gold,#c49a20);cursor:pointer;text-decoration:underline;animation:boot-retry-in .2s linear 10s forwards}
+@keyframes boot-retry-in{to{opacity:1;visibility:visible}}
 #login{min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;padding:20px}
 #pending-screen{min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;padding:20px}
 .lg-bg{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,0.016) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.016) 1px,transparent 1px);background-size:40px 40px}

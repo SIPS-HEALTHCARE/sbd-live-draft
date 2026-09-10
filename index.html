@@ -11,8 +11,11 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,300&display=swap" rel="stylesheet">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- defer: both are only touched after login (mkChart / marked.parse), so a slow or
+       blocked CDN must not hold the boot screen up. Deferred scripts still run before
+       DOMContentLoaded, which is when restoreSessionOnLoad starts. -->
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
   <!-- CACHE BUSTING META TAGS -->
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -20,7 +23,7 @@
   <meta http-equiv="Expires" content="0">
 
   <!-- MODULAR CSS -->
-  <link rel="stylesheet" href="src/css/index.css?v=29">
+  <link rel="stylesheet" href="src/css/index.css?v=30">
   <link rel="stylesheet" href="src/css/foundations.css?v=5">
 </head>
 <body>
@@ -28,7 +31,12 @@
   <div id="sbd-root">
     <!-- BOOTSTRAP SPINNER (shown until restoreSessionOnLoad decides what to render) -->
     <div id="boot-screen" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--s0,#0b0e14);z-index:9999">
-      <div class="boot-spinner" aria-label="Loading"></div>
+      <div class="boot-inner">
+        <div class="boot-spinner" aria-label="Loading"></div>
+        <div class="boot-text">Loading</div>
+        <!-- CSS reveals this at 10s (no JS: the scripts that would run it may be what is stalled) -->
+        <div class="boot-retry" onclick="location.reload()">Still loading, tap to retry</div>
+      </div>
     </div>
     <!-- LOGIN OVERLAY -->
     <div id="login" class="hidden">
@@ -774,7 +782,7 @@
 
   <script src="src/js/logic.js?v=32"></script>
   <script src="src/js/utils.js?v=29"></script>
-  <script src="src/js/api-supabase.js?v=69"></script>
+  <script src="src/js/api-supabase.js?v=70"></script>
   <script src="src/js/auth-password.js?v=21"></script>
   <script src="src/js/mfa.js?v=3"></script>
   <script src="src/js/activity.js?v=1"></script>
