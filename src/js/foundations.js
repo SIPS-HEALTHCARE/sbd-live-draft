@@ -945,8 +945,8 @@ function markG3Item(staffId,moduleId,itemId,confirmed,confirmedBy){
  const m=FOUNDATIONS_MODULES.find(x=>x.id===moduleId);
  if(m){
    const allDone=m.observations.every(o=>p.g3.items.some(i=>i.id===o.id&&i.confirmed));
-   if(allDone){p.g3.status='pass';p.g3.score=100;}
-   else if(p.g3.status==='pass'){p.g3.status='open';p.g3.score=0;}
+   if(allDone){p.g3.status='pass';}
+   else if(p.g3.status==='pass'){p.g3.status='open';}
  }
  const a=(DB.foundationsAssignments||[]).find(x=>x.staffId===staffId&&x.moduleId===moduleId);
  if(fndGatePasses(p.g1)>=FND_PASSES_REQUIRED&&fndGatePasses(p.g2)>=FND_PASSES_REQUIRED&&p.g3.status==='pass'){
@@ -1196,7 +1196,7 @@ function fndPassChip(gates){
 function fiModuleSummary(mod, assignment, progress){
  const g1=(progress&&progress.g1)||{status:'locked',score:0,attempts:[]};
  const g2=(progress&&progress.g2)||{status:'locked',score:0,attempts:[]};
- const g3=(progress&&progress.g3)||{status:'locked',score:0,items:[]};
+ const g3=(progress&&progress.g3)||{status:'locked',items:[]};
  const complete=!!((progress&&progress.complete)||(assignment&&assignment.status==='completed'));
  // 'In Progress' is DERIVED — it is never stored as a value (assigned & !complete).
  let status; if(complete) status='complete'; else if(assignment) status='in_progress'; else status='not_assigned';
@@ -1219,7 +1219,7 @@ function fiModuleSummary(mod, assignment, progress){
   gates:{
    knowledge:  {status:g1.status, score:g1.score||0, passes:fndGatePasses(g1)},
    simulation: {status:g2.status, score:g2.score||0, passes:fndGatePasses(g2)},
-   observation:{status:g3.status, score:g3.score||0}
+   observation:{status:g3.status, score:(g3.score==null?null:g3.score)}
   },
   passesRequired: FND_PASSES_REQUIRED,
   assignedDate: assignment?(assignment.assignedDate||null):null,

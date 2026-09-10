@@ -311,8 +311,8 @@ function markEndoG3Item(staffId,moduleId,itemId,confirmed,confirmedBy){
  if(m){
    const all=m.observations.concat(m.writtenAnswers.map(w=>({id:w.id})));
    const allDone=all.every(o=>p.g3.items.some(i=>i.id===o.id&&i.confirmed));
-   if(allDone){p.g3.status='pass';p.g3.score=100;}
-   else if(p.g3.status==='pass'){p.g3.status='open';p.g3.score=0;}
+   if(allDone){p.g3.status='pass';}
+   else if(p.g3.status==='pass'){p.g3.status='open';}
  }
  const a=(DB.foundationsAssignments||[]).find(x=>x.staffId===staffId&&x.moduleId===moduleId);
  if(endoGatePassed(p.g1)&&p.g3.status==='pass'){

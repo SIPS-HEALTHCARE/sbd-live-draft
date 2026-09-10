@@ -7573,7 +7573,7 @@ function prcModuleSummary(m, assignment, gates){
   gates:{
    knowledge:  {status:g1.status, score:g1.score||0, passes:kPasses},
    simulation: {status:g2.status, score:g2.score||0},
-   observation:{status:g3.status, score:g3.score||0}
+   observation:{status:g3.status, score:(g3.score==null?null:g3.score)}
   },
   assignedDate: assignment?(assignment.assignedDate||null):null,
   lastActivityDate, completedDateApprox
@@ -7835,8 +7835,8 @@ function markPrcG3Item(sid,mid,itemId,confirmed,by){
  // Revoke cascade (mirrors Foundations 8.2): unchecking reverts G3 pass -> open
  // and a previously complete module reverts to in-progress.
  const allDone=prcObsItems(m).every(o=>p.g3.items.some(i=>i.id===o.id&&i.confirmed));
- if(allDone){p.g3.status='pass';p.g3.score=100;}
- else if(p.g3.status==='pass'){p.g3.status='open';p.g3.score=0;}
+ if(allDone){p.g3.status='pass';}
+ else if(p.g3.status==='pass'){p.g3.status='open';}
  const a=(DB.preceptorAssignments||[]).find(x=>x.staffId===sid&&x.moduleId===mid);
  if(prcGatePasses(p.g1,thr)>=FND_PASSES_REQUIRED&&p.g3.status==='pass'){
    p.complete=true; if(a)a.status='completed';

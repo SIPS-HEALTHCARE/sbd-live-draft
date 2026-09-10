@@ -89,7 +89,11 @@ api.hAssignInstModal(STAFF.id);
 ok(lastHTML.includes('id="inst-assign-mode"'), 'inst picker offers read/take');
 
 // 5. wiring: cache-busts bumped, migration carries both tables + guard blocks
-ok(/foundations\.js\?v=24/.test(HTML) && /instruments\.js\?v=16/.test(HTML) && /auth-init\.js\?v=45/.test(HTML), 'cache-busters bumped');
+// Cache-busters only ever go up. Pinning the exact number turned this into a
+// landmine for every later edit of the same file (#1121 tripped it), so assert
+// the floor #1123 shipped instead.
+const vAtLeast = (file, min) => { const m = HTML.match(new RegExp(file.replace('.', '\\.') + '\\?v=(\\d+)')); return !!m && +m[1] >= min; };
+ok(vAtLeast('foundations.js', 24) && vAtLeast('instruments.js', 16) && vAtLeast('auth-init.js', 45), 'cache-busters bumped');
 ok(/alter table public\.foundations_assignments\s+add column if not exists mode/.test(MIG) && /alter table public\.instrument_assignments\s+add column if not exists mode/.test(MIG), 'migration adds mode to both tables');
 ok(MIG.includes("if v_mode = 'read' then") && MIG.includes("new.module_id like 'en-%'") && MIG.includes('set status = v_status'), 'guard: read pin, en-% kept, status mirror');
 
