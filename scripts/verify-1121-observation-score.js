@@ -131,9 +131,15 @@ ok(!/observation:\{status:g3\.status,\s*score:g3\.score\|\|0\}/.test(FND + PRC),
   'neither summary re-fabricates a 0 for an untouched observation gate');
 
 // ── 6. Wiring: cache-busters bumped, or the fix never reaches a browser ────
-ok(/foundations\.js\?v=25/.test(HTML), 'foundations cache-buster bumped to 25');
-ok(/instruments\.js\?v=17/.test(HTML), 'instruments cache-buster bumped to 17');
-ok(/preceptor\.js\?v=11/.test(HTML), 'preceptor cache-buster bumped to 11');
-ok(/endoscopy\.js\?v=4/.test(HTML), 'endoscopy cache-buster bumped to 4');
+// At or PAST #1121's number: every later task bumps these too (Standards §3), and
+// an exact-equality assertion here would fail the moment any of them ships.
+function bumpedTo(file, floor) {
+  const m = HTML.match(new RegExp(file.replace('.', '\\.') + '\\?v=(\\d+)'));
+  return !!m && Number(m[1]) >= floor;
+}
+ok(bumpedTo('foundations.js', 25), 'foundations cache-buster is at or past 25');
+ok(bumpedTo('instruments.js', 17), 'instruments cache-buster is at or past 17');
+ok(bumpedTo('preceptor.js', 11), 'preceptor cache-buster is at or past 11');
+ok(bumpedTo('endoscopy.js', 4), 'endoscopy cache-buster is at or past 4');
 
 console.log('verify-1121-observation-score: ' + n + ' assertions passed');

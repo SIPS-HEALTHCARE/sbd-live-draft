@@ -2074,7 +2074,7 @@ async function initAppData(){
   window.SBD_INITIALIZING = true;
   console.log('SBD Platform: Multi-table data hydration started...');
   try {
-    const [facs, staff, systems, users, reviews, queue, registrations, freeAgents, promotions, onboarding, beltTestResults, transfers, observations, obsChecklists, fndAssignments, fndProgress, instAssignments, instProgress, prcAssignments, prcProgress, prcModules, prcAccess, scrAssignments, currModules] = await Promise.race([
+    const [facs, staff, systems, users, reviews, queue, registrations, freeAgents, promotions, onboarding, beltTestResults, transfers, observations, obsChecklists, fndAssignments, fndProgress, instAssignments, instProgress, prcAssignments, prcProgress, prcModules, prcAccess, scrAssignments, currModules, currAccess] = await Promise.race([
       Promise.all([
         SB.getFacilities().catch(e=>{ console.error('facs load err', e); return []; }),
         SB.getAllStaff().catch(e=>{ console.error('staff load err', e); return []; }),
@@ -2099,7 +2099,10 @@ async function initAppData(){
         (SB.getPreceptorModules ? SB.getPreceptorModules() : Promise.resolve([])).catch(e=>{ console.error('prc modules load err', e); return []; }),
         (SB.getPreceptorAccess ? SB.getPreceptorAccess() : Promise.resolve([])).catch(e=>{ console.error('prc access load err', e); return []; }),
         (SB.getScriptAssignments ? SB.getScriptAssignments() : Promise.resolve([])).catch(e=>{ console.error('scr assignments load err', e); return []; }),
-        (SB.getCurriculumModules ? SB.getCurriculumModules() : Promise.resolve([])).catch(e=>{ console.error('curriculum registry load err', e); return []; })
+        (SB.getCurriculumModules ? SB.getCurriculumModules() : Promise.resolve([])).catch(e=>{ console.error('curriculum registry load err', e); return []; }),
+        // #1149: null (not []) on failure — the helpers treat null as "we do not know" and
+        // fail OPEN, so a fetch error can never hide every leader's Assign button.
+        (SB.getCurriculumAccess ? SB.getCurriculumAccess() : Promise.resolve(null)).catch(e=>{ console.error('curriculum access load err', e); return null; })
       ]),
       new Promise((_,rej)=>setTimeout(()=>rej(new Error('Initial data load timeout')), 20000))
     ]);
@@ -2127,6 +2130,11 @@ async function initAppData(){
     // #1148 curriculum registry: raw rows (module_id, curriculum, title, sequence, gate_shape, active).
     // registryModules() in foundations.js joins them onto the constants; empty = fall back to constants.
     window.DB.curriculumModules = currModules||[];
+    // #1149 curriculum access grant (board 11 Sep, T133): one row per (staff, curriculum) the
+    // person may be assigned. NULL is kept as null on purpose — see curriculum-access.js caLoaded().
+    window.DB.curriculumAccess = Array.isArray(currAccess)
+      ? currAccess.map(r=>({ staffId:r.staff_id, curriculum:r.curriculum, grantedBy:r.granted_by, grantedAt:r.granted_at }))
+      : null;
     const currentSystems = window.DB.hospitalSystems || [];
     const memoryOptimistic = currentSystems.filter(s => s.id && String(s.id).startsWith('sys-'));
     const storageOptimistic = JSON.parse(localStorage.getItem('sbd_optimistic_systems') || '[]');

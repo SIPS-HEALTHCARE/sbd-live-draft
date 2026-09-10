@@ -297,6 +297,11 @@ const SB = {
   // ── SBD Preceptor Certification (#78 Ph3) — master-admin access control (RLS: read own-or-leader, write master-admin only) ──
   getPreceptorAccess(){ return sbFetch('/rest/v1/preceptor_access?select=*'); },
   upsertPreceptorAccess(row){ return sbFetch('/rest/v1/preceptor_access?on_conflict=staff_id', { method:'POST', prefer:'resolution=merge-duplicates,return=minimal', body:row }); },
+  // ── #1149 curriculum access grant (board 11 Sep, T133) — which curricula a person may be assigned.
+  // RLS: read own-or-leader, write sbd_fi_can_manage_assignments(staff_id). Revoke is a DELETE, not a state flip.
+  getCurriculumAccess(){ return sbFetch('/rest/v1/curriculum_access?select=*'); },
+  upsertCurriculumAccess(row){ return sbFetch('/rest/v1/curriculum_access?on_conflict=staff_id,curriculum', { method:'POST', prefer:'resolution=merge-duplicates,return=minimal', body:row }); },
+  deleteCurriculumAccess(staffId, curriculum){ return sbFetch(`/rest/v1/curriculum_access?staff_id=eq.${staffId}&curriculum=eq.${encodeURIComponent(curriculum)}`, { method:'DELETE', prefer:'return=minimal' }); },
   // ── User Profiles ──
   getUserProfile(userId){ return sbFetch(`/rest/v1/sbd_portal_users?auth_uid=eq.${userId}&select=*`); },
   getAllAdminProfiles(){ return sbFetch('/rest/v1/sbd_portal_users?select=*&order=name.asc'); },

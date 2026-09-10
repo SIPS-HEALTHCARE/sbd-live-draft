@@ -3564,6 +3564,25 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Done when:* the confirm path stops writing `cur_obs`, a real observation writes it, the 42 are
   re-derived from evidence and the count is stated here.
 
+- [ ] **T133** Curriculum access grant on the staff profile (board 11 Sep) · est 1d · **Medium** · due 2026-09-11 · our card #1149
+  Nothing records which curricula a person may be *assigned*: the only server gate is
+  `sbd_fi_can_manage_assignments(staff_id)`, which asks whether the leader may assign, never
+  whether the staffer may hold that curriculum. Iggie's decision 9 (9/8) leaves the two grant
+  screens alone, so this goes on the staff profile and preceptor access stays in
+  `preceptor_access`. Depends on T129 (#1148 registry, applied 2026-09-08), which supplies the
+  curriculum list and the module → curriculum lookup.
+  Built as `curriculum_access`, one row per (staff, curriculum) with grantor and time, gated in
+  the INSERT policies of the three assignment tables. Deny-by-default would have stopped the
+  live new-hire rollout on day one, so the migration backfills every already-assigned pair
+  before swapping the policies.
+  **Migration `20260911130000` applied to prod 2026-09-11 and ledger-recorded (10 rows).** The
+  backfill created **70 grants**, exactly the 70 already-assigned pairs counted before the run:
+  35 foundations, 33 instruments, 1 scripts, 1 endoscopy. Read back live: all three INSERT
+  policies carry the gate, a granted staffer passes their own curriculum, the same staffer is
+  refused an endoscopy module they were not granted (both ride `foundations_assignments`), an
+  ungranted staffer is refused, and an off-registry module id still passes.
+  *Still owed:* the frontend merge, and a human granting one curriculum from a real profile.
+
 ### Blocked, not on the critical path
 
 - [x] **T49** Strip and rotate the PSOP credentials, gate the public page

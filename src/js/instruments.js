@@ -376,6 +376,8 @@ function _instSaveAssignmentStatus(sid,mid,status){try{if(typeof IS_LIVE!=='unde
 function assignInstModule(sid,mid,by,type,trigger,mode){
  if(!DB.instrumentAssignments) DB.instrumentAssignments=[];
  if(DB.instrumentAssignments.find(a=>a.staffId===sid&&a.moduleId===mid)) return false;
+ // #1149: the curriculum must be granted on this person's profile (RLS enforces it).
+ if(typeof caCanAssignModule==='function'&&!caCanAssignModule(sid,mid)) return false;
  const _s=(typeof getStaff==='function')?getStaff(sid):(DB.staff||[]).find(x=>x.id===sid);
  const _a={id:'ia-'+Date.now()+'-'+Math.random().toString(36).slice(2,6),staffId:sid,moduleId:mid,assignedBy:by,type:type||'remediation',trigger:trigger||null,facilityId:_s?_s.fid:null,assignedDate:new Date().toISOString().slice(0,10),status:'assigned',mode:fiMode(mode)};
  DB.instrumentAssignments.push(_a);
@@ -579,8 +581,10 @@ function renderHInstruments(){
  rows.forEach(r=>{html+='<tr><td style="font-weight:600">'+fullName(r.s)+'</td>'+(isSystemWide?'<td style="font-size:12px;color:#94a3b8">'+((DB.facilities.find(f=>f.id===r.s.fid)||{}).name||'—')+'</td>':'')+'<td><span class="bb bb-'+r.s.belt+'">'+r.s.belt+'</span></td><td>'+(r.assigned>0?'<span class="'+(r.pct===100?'tc-ok':r.pct>0?'tc-warn':'tc-muted')+'">'+r.done+'/'+r.assigned+'</span>':'<span class="tc-muted">None</span>')+'</td><td style="white-space:nowrap">';
  if(r.assigned>0) html+='<button class="btn btn-ghost btn-xs" onclick="hInstStaffDetail(\''+r.s.id+'\')">View</button> ';
  if(!isAssessor){
- if(r.assigned<mods.length) html+='<button class="btn btn-gold btn-xs" onclick="hAssignInstModal(\''+r.s.id+'\')">Assign</button> ';
- if(r.assigned===0) html+='<button class="btn btn-blue btn-xs" onclick="hAssignAllInst(\''+r.s.id+'\')">All '+mods.length+'</button>';
+ // #1149: no Instruments grant, no Assign button — a reason in its place.
+ const _caOK=(typeof caCanBeAssigned!=='function')||caCanBeAssigned(r.s.id,'instruments');
+ if(r.assigned<mods.length) html+=(typeof caAssignControlHTML==='function'?caAssignControlHTML(r.s.id,'instruments','<button class="btn btn-gold btn-xs" onclick="hAssignInstModal(\''+r.s.id+'\')">Assign</button>'):'<button class="btn btn-gold btn-xs" onclick="hAssignInstModal(\''+r.s.id+'\')">Assign</button>')+' ';
+ if(r.assigned===0&&_caOK) html+='<button class="btn btn-blue btn-xs" onclick="hAssignAllInst(\''+r.s.id+'\')">All '+mods.length+'</button>';
  }
  html+='</td></tr>';});
  html+='</tbody></table></div></div></div>';el.innerHTML=html;
@@ -616,7 +620,9 @@ function hUnassignInst(sid,mid){
 }
 function hAssignInstModal(sid){
  if(ST.user&&(ST.user.role==='staff_admin'||ST.user.role==='assessor')){toast('Assessors cannot assign modules','err');return;}
- const s=getStaff(sid);if(!s)return;const existing=getInstrumentAssignments(s.id);const unassigned=instModules().filter(m=>!existing.some(a=>a.moduleId===m.id));
+ const s=getStaff(sid);if(!s)return;
+ if(typeof caCanBeAssigned==='function'&&!caCanBeAssigned(s.id,'instruments')){caDenyToast(s.id,'instruments');return;} // #1149
+ const existing=getInstrumentAssignments(s.id);const unassigned=instModules().filter(m=>!existing.some(a=>a.moduleId===m.id));
  if(!unassigned.length){toast('All modules assigned','info');return;}
  let html='<div style="margin-bottom:12px;font-size:13px;color:#94a3b8">Assign to <strong style="color:#e2e8f0">'+fullName(s)+'</strong>:</div>';
  // Audit trail (Addendum 7.1): capture the reason + trigger. Mirrors Foundations.
@@ -637,6 +643,7 @@ function hDoAssignInst(sid){
  if(ST.user&&(ST.user.role==='staff_admin'||ST.user.role==='assessor')){toast('Assessors cannot assign modules','err');return;}
  const cbs=document.querySelectorAll('.inst-assign-cb:checked');
  if(!cbs.length){toast('Select at least one','err');return;}
+ if(typeof caCanBeAssigned==='function'&&!caCanBeAssigned(sid,'instruments')){caDenyToast(sid,'instruments');closeModal();return;} // #1149
  const nm=ST.user?ST.user.name:'Manager';
  const typeEl=document.getElementById('inst-assign-type');
  const type=(typeEl&&typeEl.value==='onboarding')?'onboarding':'remediation';
@@ -652,6 +659,7 @@ function hDoAssignInst(sid){
 }
 function hAssignAllInst(sid){
  if(ST.user&&(ST.user.role==='staff_admin'||ST.user.role==='assessor')){toast('Assessors cannot assign modules','err');return;}
+ if(typeof caCanBeAssigned==='function'&&!caCanBeAssigned(sid,'instruments')){caDenyToast(sid,'instruments');return;} // #1149
  const assigned=assignAllInstModules(sid,ST.user?ST.user.name:'Manager');
  const total=instModules().length,skipped=total-assigned;
  if(!assigned) toast('All '+total+' instrument modules already assigned','info');
