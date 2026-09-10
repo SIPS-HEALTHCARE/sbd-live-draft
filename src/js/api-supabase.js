@@ -4,6 +4,11 @@ const SB_API_URL = 'https://mhijaqahbceuahfzezbh.supabase.co';
 const SB_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1oaWphcWFoYmNldWFoZnplemJoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4MDkwNzksImV4cCI6MjA4OTM4NTA3OX0.GZcvOFxm4uNdTFPnq-rfwHaMVhWbIJWY7QMYToPa7mQ';
 let SB_SESSION = null;
 
+// Every network wait in this file races this. Without it a stalled request hangs
+// forever -- on the boot path (restoreSession -> refreshSession) that is the blank
+// dark page users report on weak phone connections.
+const sbTimeout = (ms=12000) => new Promise((_,rej)=>setTimeout(()=>rej(new Error('Request timed out')),ms));
+
 // ── Authenticated fetch helper ──
 async function sbFetch(path, opts={}, retryCount=0){
   // Check if token is expired or close to expiring (within 2 minutes)
@@ -25,7 +30,7 @@ async function sbFetch(path, opts={}, retryCount=0){
   if (!path.startsWith('/functions/')) {
     headers['Prefer'] = opts.prefer || 'return=representation';
   }
-  const _timeout = new Promise((_,rej)=>setTimeout(()=>rej(new Error('Request timed out')),12000));
+  const _timeout = sbTimeout();
   try {
     const res = await Promise.race([
       fetch(SB_API_URL+path, {
@@ -77,11 +82,14 @@ const SB_AUTH = {
   async _doRefreshSession() {
     if (!SB_SESSION || !SB_SESSION.refresh_token) return false;
     try {
-      const res = await fetch(`${SB_API_URL}/auth/v1/token?grant_type=refresh_token`, {
-        method: 'POST',
-        headers: { 'apikey': SB_ANON_KEY, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: SB_SESSION.refresh_token })
-      });
+      const res = await Promise.race([
+        fetch(`${SB_API_URL}/auth/v1/token?grant_type=refresh_token`, {
+          method: 'POST',
+          headers: { 'apikey': SB_ANON_KEY, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: SB_SESSION.refresh_token })
+        }),
+        sbTimeout()
+      ]);
       const data = await res.json();
       if (data.error) throw new Error(data.error_description || data.error);
 
