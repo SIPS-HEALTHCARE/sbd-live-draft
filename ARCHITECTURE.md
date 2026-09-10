@@ -41,7 +41,7 @@ src/js/logic.js                (201 lines)   ← Belt system constants, points e
 src/js/utils.js                (177 lines)   ← Helpers: staffOf(), getFac(), getStaff(), fullName(), date fns, Security.
 src/js/api-supabase.js         (566 lines)   ← Supabase client: SB_AUTH, SB (CRUD), sbFetch(), data mappers.
 src/js/auth-password.js        (172 lines)   ← Password reset, forgot password, strength bar.
-src/js/mfa.js                 (~190 lines)   ← T33: admin TOTP MFA (enroll/challenge/verify, raw GoTrue REST). doLogin() gates admin-tier roles on aal2 before hydration.
+src/js/mfa.js                 (~290 lines)   ← T33: admin TOTP MFA (enroll/challenge/verify, raw GoTrue REST) + #1144 emailed-code second door via sbd-mfa-email. doLogin() gates admin-tier roles before hydration.
 src/js/ui-views.js          (14,432 lines)   ← ⚠️ MONOLITH. All view rendering, all portal logic. 294 functions.
 src/js/settings.js             (239 lines)   ← Account settings UI.
 src/js/scripts-module.js       (~330 lines)  ← T92: Scripts as a standalone assignable module (§16B).
@@ -175,6 +175,7 @@ Every view has this pattern:
 | `placement_reviews` | Placement assessment reviews | `staff_id` → `staff`, `fid` → `facilities` |
 | `hospital_systems` | Multi-facility groupings | — |
 | `sbd_free_agents` | Released/unassigned staff | — |
+| `sbd_mfa_email_codes` | **#1144:** one row per admin auth session (`auth_uid`, JWT `session_id`); pending emailed code (bcrypt) + `verified_until` read by `sbd_mfa_satisfied()`. Service role only. | `auth_uid` → `auth.users` |
 | `david_chat_sessions` | DAVID AI conversation history | `user_id` → `auth.users` |
 | `david_facility_access` | Per-facility DAVID AI access control | `facility_id` → `facilities` |
 | `david_usage_logs` | AI usage metering (tokens + ground-truth cost). **`source` col (#14):** `'chat'` = David chat, `'assessment'` = grading. Chat readers filter `source='chat'`. | `facility_id` → `facilities`, `user_id` → `auth.users` |
@@ -204,6 +205,12 @@ belt-platform table returns nothing to a password-only admin session. `sbd_porta
 keeps an own-row SELECT exception so login can learn the role before the challenge. The
 same predicate is inlined in every role-gated edge function; the admin-tier list exists in
 4 places asserted identical by `node scripts/verify-t33-security-tail.js`.
+**#1144 email second door (migration `20260910120000`):** the predicate also passes an
+aal1 admin whose JWT `session_id` has an unexpired `verified_until` row in
+`sbd_mfa_email_codes` (written only by `sbd-mfa-email`, 12 h window, RLS on with zero
+policies — never gate this table, the predicate reads it). ⚠️ The 15 inlined edge-function
+guards still test `aal === 'aal2'` only, so an email-verified admin reads tables but is
+refused by those functions until they are extended (open decision on #1144).
 
 ---
 
@@ -271,7 +278,8 @@ Located in `supabase/functions/`. Each is a Deno serverless function.
 | `sbd-release-to-free-agent` | Release a staff member to the free agent pool | `releaseToFreeAgent()` |
 | `sbd-assign-free-agent` | Assign a free agent to a new facility | `executeFreeAgentAssign()` |
 | `bulk-upload-staff` | CSV bulk staff import | `processBulkUpload()` |
-| `sbd-emails` / `sbd-send-emails` | Email notifications | Various triggers |
+| `sbd-emails` / `sbd-send-emails` | Email notifications (template `mfa_email_code` added by #1144) | Various triggers |
+| `sbd-mfa-email` | **#1144:** emailed second factor for admin sign-in — `status` / `send_code` / `verify_code`. The ONE admin surface reachable at aal1; writes `sbd_mfa_email_codes`, mails through `sbd_email_queue`. Design note `docs/decisions/2026-09-10-1144-email-mfa-second-factor.md`. | `MFA.ensureAal2()` (mfa.js) |
 | `sbd-assessment-notifications` | 🗑️ **RETIRED (2026-08-14)** — was deployed with `verify_jwt=false` and no auth check in code, so anyone could queue fake "assessment approved" emails and probe staff ids (200 vs 404). No caller existed: no DB trigger/webhook, no frontend reference (approval mail goes through `sbd-emails`). Kept in repo as an inert reference: the handler now returns 410 unconditionally, so an accidental redeploy cannot reopen the hole. Run `supabase functions delete sbd-assessment-notifications` to undeploy the live copy. | Zero callers — retired |
 | `david-grade-assessment` | 🗑️ **RETIRED (#61)** — was an orphaned AIP open-ended grader duplicating `sbd-score-assessment`. Removed from repo; delete the deployed function from the Supabase dashboard to fully undeploy. | Zero callers — retired |
 | `sbd-matrix-seeder` | 🗑️ **RETIRED (#61)** — was a policy hazard that seeded fake auth users/facilities (`test-sbd.com`, hardcoded password) and remained deployed with `verify_jwt=false`. Removed from repo + local `scripts/seed-30-agents.js`. **Deployed function must still be deleted from the Supabase dashboard to fully undeploy.** | Zero callers — retired |
@@ -411,7 +419,11 @@ DAVID is an AI assistant integrated into the admin portal.
 3. On success: SB_SESSION set, stored in localStorage
 3a. T33: if role is admin-tier → MFA.ensureAal2() (TOTP enroll or challenge; the
     verified session replaces SB_SESSION at aal2) — BEFORE hydration, because the
-    sbd_mfa_gate RLS policies return nothing to an aal1 admin
+    sbd_mfa_gate RLS policies return nothing to an aal1 admin.
+    #1144: ensureAal2 first asks sbd-mfa-email `status` (a reload keeps the JWT
+    session_id, so an emailed-code verification from earlier today still stands);
+    the modal offers "Email me a code instead" → send_code → verify_code, and the
+    session stays aal1 — the sbd_mfa_email_codes row is the proof.
 4. Fetch user profile: SB.getUserProfile(userId)
 5. Map profile: mapUserFromBackend()
 6. Set ST.user = mapped profile
