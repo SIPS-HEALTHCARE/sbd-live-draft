@@ -19,6 +19,19 @@ join pg_namespace n on n.oid = p.pronamespace
 where n.nspname = 'public' and p.proname = 'sbd_mfa_satisfied';
 -- Expect exactly one row.
 
+\echo '=== 1b. #1144 email second door: predicate has the email leg, allowlist gone, table locked down ==='
+select p.prosrc like '%sbd_mfa_email_codes%' as has_email_leg,      -- expect t
+       p.prosrc like '%sipsconsults%'        as still_has_allowlist  -- expect f
+from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public' and p.proname = 'sbd_mfa_satisfied';
+select c.relrowsecurity as rls_on,                                   -- expect t
+       (select count(*) from pg_policy where polrelid = c.oid) as policy_count  -- expect 0
+from pg_class c join pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'public' and c.relname = 'sbd_mfa_email_codes';
+select grantee, privilege_type from information_schema.role_table_grants
+where table_schema = 'public' and table_name = 'sbd_mfa_email_codes' order by grantee;
+-- Expect: service_role (and the owner) only. 'anon'/'authenticated' must NOT appear.
+
 \echo '=== 2. sbd_mfa_satisfied is not executable by anon or public ==='
 select p.proname, pg_get_userbyid(acl.grantee) as grantee, acl.privilege_type
 from pg_proc p
@@ -49,6 +62,9 @@ select c.relname as ungated_table
 from pg_class c
 join pg_namespace n on n.oid = c.relnamespace
 where n.nspname = 'public' and c.relkind = 'r' and c.relrowsecurity
+  -- #1144: sbd_mfa_email_codes is READ BY the predicate, so it must not carry the
+  -- gate (it would recurse). RLS on, zero policies, service_role only — §1b checks it.
+  and c.relname <> 'sbd_mfa_email_codes'
   and (c.relname like 'sbd\_%' or c.relname like 'david\_%'
        or c.relname like 'foundations\_%' or c.relname like 'instrument\_%'
        or c.relname like 'observation%' or c.relname like 'preceptor\_%'
