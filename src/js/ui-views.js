@@ -10151,7 +10151,7 @@ function renderSStudy() {
     ${typeof beltTestEntryCard==='function' ? beltTestEntryCard(s, nxt) : ''}
     <div style="display:flex;gap:4px;overflow-x:auto;padding-bottom:4px;margin-bottom:16px;-webkit-overflow-scrolling:touch">
       ${tabBtn('curriculum','Full Curriculum')}
-      ${tabBtn('scripts','Scripts to Master')}
+      ${tabBtn('scripts','SPD Language')}
       ${tabBtn('observation','Observation Ready')}
       ${tabBtn('practice','Practice Tests')}
     </div>
