@@ -417,8 +417,8 @@ function markInstG3Item(sid,mid,itemId,confirmed,by){
  const m=INSTRUMENT_MODULES.find(x=>x.id===mid);
  if(m){
    const allDone=m.observations.every(o=>p.g3.items.some(i=>i.id===o.id&&i.confirmed));
-   if(allDone){p.g3.status='pass';p.g3.score=100;}
-   else if(p.g3.status==='pass'){p.g3.status='open';p.g3.score=0;}
+   if(allDone){p.g3.status='pass';}
+   else if(p.g3.status==='pass'){p.g3.status='open';}
  }
  const a=(DB.instrumentAssignments||[]).find(x=>x.staffId===sid&&x.moduleId===mid);
  if(fndGatePasses(p.g1)>=FND_PASSES_REQUIRED&&fndGatePasses(p.g2)>=FND_PASSES_REQUIRED&&p.g3.status==='pass'){
