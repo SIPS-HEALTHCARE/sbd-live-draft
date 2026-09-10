@@ -7713,11 +7713,36 @@ function startPSPracticeTest(trackId, mode) {
     startTime: Date.now(), complete: false
   };
   savePSState();
-  // Navigate to PS study view
   window._psPracticeOpen = true;
+  // #1196: the track-detail modal stayed open over the practice view, and from the leader/admin
+  // portals the nav below rendered into #s-posschool, hidden inside the hidden staff portal.
+  closeModal();
+  if (!psPracticeInStaffPortal()) { renderPSPractice(); return; }
+  // Navigate to PS study view
   const navEl = document.querySelector('#s-portal .nav-item[data-view=s-posschool]');
   if (navEl) sNav(navEl, 's-posschool', 'Position School');
   else renderSPosSchool();
+}
+
+// #1196: anybody with access takes the test from wherever they are. The staff portal keeps its
+// own view; every other portal hosts the same practice view in the modal, so a leader who is
+// also a candidate stays on her own screen and nothing targets the staff portal nav.
+function psPracticeInStaffPortal() {
+  const sp = document.getElementById('s-portal');
+  return !!sp && !sp.classList.contains('hidden');
+}
+
+function renderPSPractice() {
+  if (psPracticeInStaffPortal()) { renderSPosSchool(); return; }
+  const ps = PS_PRACTICE_STATE;
+  if (!ps.active && !ps.complete) { closeModal(); return; }
+  let host = document.getElementById('ps-practice-host');
+  if (!host) {
+    const track = PS_TRACKS[ps.trackId];
+    openModal((track ? track.name : 'Position School') + ' \u2013 Practice', '<div id="ps-practice-host"></div>', 'modal-lg');
+    host = document.getElementById('ps-practice-host');
+  }
+  renderPSPracticeView(host);
 }
 
 function submitPSAnswer(correct) {
@@ -7733,14 +7758,14 @@ function submitPSAnswer(correct) {
     savePSPracticeScore(ps.trackId, ps.mode, ps.score, ps.questions.length);
   }
   savePSState();
-  renderSPosSchool();
+  renderPSPractice();
 }
 
 function resetPSPractice() {
   PS_PRACTICE_STATE = { active: false, trackId: null, mode: null, questions: [], current: 0, answers: [], score: 0, startTime: null, complete: false };
   savePSState();
   window._psPracticeOpen = false;
-  renderSPosSchool();
+  renderPSPractice();
 }
 
 function savePSPracticeScore(trackId, mode, score, total) {
