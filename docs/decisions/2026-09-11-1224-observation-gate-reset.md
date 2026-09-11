@@ -106,6 +106,20 @@ so the correction and the code are momentarily out of step there. **Open questio
 Shawn:** should the override path drop `cur_obs` too? Assertion 12 of
 `verify-1224-observation-gate.js` pins the current behaviour so the decision stays visible.
 
+## Applied
+
+Migration `20260912120000` applied to prod **2026-09-11** and ledger-recorded. Read back live:
+
+| check | expected | actual |
+|---|---|---|
+| `staff` still at `cur_obs='pass'` | 2 | **2** |
+| `staff_obs_gate_backup_1224` rows | 40 | **40** |
+| backed-up rows now `cur_obs is null` | 40 | **40** |
+| ...by belt | White 20 / Yellow 7 / Green 10 / Brown 3 | **same** |
+| ...still `cur_comp='pass'` and `cur_sim='pass'` | 40 | **40** |
+| ...non-White, i.e. now window-locked | 20 | **20** |
+| backup table RLS on, zero policies | yes / 0 | **yes / 0** |
+
 ## Rollback
 
 The migration snapshots the pre-state into `public.staff_obs_gate_backup_1224` inside the

@@ -345,6 +345,25 @@ New hires take a placement assessment to determine starting belt. This is a mult
 4. Creates a `placement_review` for admin approval
 5. Admin reviews and confirms or adjusts the recommended belt
 
+**#1224 (board 148, ledger T132) — a placement grandfathers TWO gates, not three.**
+`confirmPlacement()` writes `cur_comp` and `cur_sim` to `'pass'` because the placement
+assessment *is* those two components (knowledge + simulation, scored, blended against the
+belt floors, assessor-signed — the `placement_reviews` row is the evidence). It writes
+**nothing** for `cur_obs`: no observer, no checklist, no `observations` row exists in that
+flow, so a pass there was a gate with nothing behind it (42 prod rows; migration
+`20260912120000` cleared the 40 with no observation evidence, snapshot in
+`staff_obs_gate_backup_1224`). `cur_obs` is *absent* from the PATCH, not null, so a genuine
+earlier pass survives. ⚠️ Consequence on purpose: `getWindowStatus()` gate-locks the
+next-belt window until all three current-belt gates pass, so a newly placed **Yellow+**
+staffer reads "Complete current belt assessments first" until observed (White is exempt).
+The only writers of `cur_obs` are now `submitAssessment()` with type `Observation` and
+target belt = current belt, and the promotion that lifts `nxt_obs` into `cur_obs` — the
+candidate observation console (`requestObservation` → `confirmObservation`) is a *next*-belt
+gate by design and writes `nxt_obs`. `submitBeltOverride()` still writes all three on a
+promotion: deliberately out of scope, open with Shawn. Verify:
+`node scripts/verify-1224-observation-gate.js`. Decision:
+`docs/decisions/2026-09-11-1224-observation-gate-reset.md`.
+
 ### Dynamic Belt Test (Track A4) — per-gate (added 2026-07-17)
 
 The proctored belt test for the two **written** gates. **Observation is separate**
