@@ -3556,12 +3556,47 @@ already named above: **an ask next to an urgent one still needs its own row.**
   *Done when:* the unbound function is dropped or bound on purpose, the approve function carries a
   comment naming its secret and its rotation date, and the answer on the token is written here.
 
-- [ ] **T132** Observation gate, remove the synthetic pass (board 148) · est 1d · **High** · due 2026-09-12 · our cards #1120 (spec review, 9/9) and #1121 (build, 9/12)
+- [ ] **T132** Observation gate, remove the synthetic pass (board 148) · est 1d · **High** · due 2026-09-12 · our cards #1120 (spec review, 9/9), #1121 (score, shipped) and #1224 (this, the gate reset)
   42 staff carry `cur_obs = pass` from the belt confirmation path (`ui-views.js:4654` sets `cur_comp`,
   `cur_sim`, `cur_obs` to pass on confirm), not from an observation; 41 of the 42 are backed by a
   `placement_reviews` row (checked live 2026-09-04). The gate must read a real observation record.
-  Nothing has run; Shawn's draft cleanup SQL used the wrong vocabulary and was withheld.
-  *Done when:* the confirm path stops writing `cur_obs`, a real observation writes it, the 42 are
+  Shawn's draft cleanup SQL used the wrong vocabulary and was withheld.
+  **#1224 built 2026-09-11.** `confirmPlacement` now grandfathers **two** gates, not three.
+  Competency and Simulation stay because the placement assessment *is* those two components,
+  scored and assessor-signed — the `placement_reviews` row is the evidence. Observation goes
+  because nothing in that flow observes anybody. `cur_obs` is absent from the PATCH rather than
+  nulled, so a genuine earlier pass survives. A real observation still lands through the Record
+  Assessment modal (type Observation, target belt = current belt → `submitAssessment` → `cur.o`)
+  and through the promotion that lifts `nxt_obs` into `cur_obs`.
+  **Counted live 2026-09-11:** `select count(*) from staff where cur_obs='pass'` → **42**; of those,
+  **40** have no observation evidence of any kind and are what migration `20260912120000` clears;
+  **2** carry an `Observation` history entry (one also an `observations` row — #1109's test account)
+  and are left for a human. 40 is Shawn's number exactly. Context for the gap: prod holds 3
+  `observations` rows and **zero** approved ones — no belt observation has ever been confirmed end
+  to end — and **zero** of the 42 have a non-`na` G3 pass in foundations/instrument/preceptor
+  progress, so the issue's "41 of them" premise does not hold; 41 is the `Placement` history count.
+  Evidence rule, fail-safe: any `observations` row in any status, or any history `type` matching
+  `%observ%`, keeps a row out of the clear.
+  **Accepted consequence:** of the 40, 20 are White (exempt from the window gate-lock, no change)
+  and 20 are not (7 Yellow, 10 Green, 3 Brown) and now read "Complete current belt assessments
+  first" until an assessor records a real observation. Those 20 need the Record Assessment path,
+  not the candidate observation console — that console is a *next*-belt gate by design and writes
+  `nxt_obs`.
+  **Migration `20260912120000` APPLIED to prod 2026-09-11 and ledger-recorded.** Read back live:
+  `cur_obs='pass'` is now **2** (the two evidence-bearing rows, untouched), the backup table holds
+  **40** rows, all **40** read `cur_obs is null` — White 20, Yellow 7, Green 10, Brown 3 — all 40
+  still read `cur_comp='pass'` and `cur_sim='pass'` (untouched by design), **20** are non-White and
+  therefore now window-locked, and `staff_obs_gate_backup_1224` has RLS on with zero policies.
+  Migration wraps that rollback snapshot and asserts its own count of 40 before commit; the undo
+  statement is in its header. Frontend at `ui-views.js?v=239`. Verify:
+  `node scripts/verify-1224-observation-gate.js` (18) + `scripts/verify-no-belt-placement.js`.
+  Design note `docs/decisions/2026-09-11-1224-observation-gate-reset.md`.
+  *Open with Shawn:* `submitBeltOverride` (~`ui-views.js:11036`) writes `cur_obs='pass'` the same
+  way on a promotion; board 148 scopes only the confirm path and an override is a deliberate,
+  reason-gated, audited decision, so it is left alone. 1 of the 40 came from an override.
+  *Still owed:* the frontend merge, and a human confirming one placement and reading Observation as
+  pending. Keep `staff_obs_gate_backup_1224` until that read-back is done, then drop it.
+  *Done when:* the confirm path stops writing `cur_obs`, a real observation writes it, the rows are
   re-derived from evidence and the count is stated here.
 
 - [ ] **T133** Curriculum access grant on the staff profile (board 11 Sep) · est 1d · **Medium** · due 2026-09-11 · our card #1149
