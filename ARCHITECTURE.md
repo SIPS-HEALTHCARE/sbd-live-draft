@@ -544,10 +544,18 @@ The communication scripts have **two surfaces over one copy of the content**.
 - **Where the scripts live (unchanged):** sections inside `FULL_CURRICULUM_DATA.belts[belt]`
   (`ui-views.js` ~8199). They keep rendering inside the belt content — Study & Practice →
   Full Curriculum, and its Scripts tab. **Nothing was moved.**
+- **Display name is "SPD Language" (#1181 tab, #1223 the rest).** Every user-visible label,
+  tour step, card title and learner-guide section heading reads *SPD Language*; the 70
+  individual `SCRIPT N | …` items keep their numbers, because the question banks and
+  self-assessment checklists cite them by number. `SCRIPTS_MODULE_ID`, the `scripts` routing
+  key, `data-view` names and every internal identifier are untouched.
 - **File:** `src/js/scripts-module.js`. `scriptSectionsForBelt(belt)` is the single definition
-  of "which curriculum sections are the scripts" (title matches `/script|approved
-  language|forbidden language/i`); the Study & Practice Scripts tab calls it too, so there is
-  one definition, not two.
+  of "which curriculum sections are the scripts" (title matches `/script|spd
+  language|approved language|forbidden language/i`); the Study & Practice SPD Language tab
+  calls it too, so there is one definition, not two. ⚠️ **This regex is load-bearing against
+  the curriculum titles** — #1223 retitled all ten sections to "SPD LANGUAGE", so dropping
+  that alternative empties every belt tab and the whole assigned module.
+  `node scripts/verify-scripts-module.js` fails the moment a belt stops yielding sections.
 - **Storage (T92a, migration `20260820120000`):** its own `script_assignments` table —
   the fourth assignment table, same shape as foundations/instruments/preceptor, hydrated
   into `DB.scriptAssignments` (auth-init.js). Same RLS rule set (leaders write via

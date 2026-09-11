@@ -37,7 +37,12 @@
 
 // Titles that name script content in the belt curriculum. Covers every belt:
 // White S5+S6, Yellow S4, Green S4, Blue S4-S8, Brown S4, Black S4.
-const SCRIPTS_TITLE_RE = /script|approved language|forbidden language/i;
+//
+// #1223: those section titles now read "SPD LANGUAGE", so 'spd language' is the
+// alternative that actually matches today's curriculum — without it every belt
+// yields zero sections and this whole module renders empty. 'script' is kept as
+// the back-stop for any title that still carries the old wording.
+const SCRIPTS_TITLE_RE = /script|spd language|approved language|forbidden language/i;
 
 // The single definition of "which curriculum sections are the scripts".
 // Reads the live curriculum — never a copy of it.
@@ -149,12 +154,12 @@ function renderSScripts() {
     // Reachable if a saved sessionStorage view routes straight here after the
     // module was unassigned. Same re-check pattern as the assessor consoles.
     el.innerHTML = '<div class="empty-state"><div class="empty-ttl">Not Assigned</div>'
-      + '<div class="empty-desc">The Scripts module is not currently assigned to you. Your scripts are always available inside Study &amp; Practice.</div></div>';
+      + '<div class="empty-desc">The SPD Language module is not currently assigned to you. Your SPD Language content is always available inside Study &amp; Practice.</div></div>';
     return;
   }
 
   const belts = scriptsBeltsWithContent(s.belt);
-  if (!belts.length) { el.innerHTML = '<div class="empty-state"><div class="empty-ttl">No script content found</div></div>'; return; }
+  if (!belts.length) { el.innerHTML = '<div class="empty-state"><div class="empty-ttl">No SPD Language content found</div></div>'; return; }
   if (!window._scriptsBelt || belts.indexOf(window._scriptsBelt) === -1) {
     window._scriptsBelt = belts.indexOf(s.belt) !== -1 ? s.belt : belts[0];
   }
@@ -163,12 +168,12 @@ function renderSScripts() {
   const done = a.status === 'completed';
   const sane = (v) => (typeof Security !== 'undefined' && Security.sanitize) ? Security.sanitize(v) : v;
 
-  let html = '<div class="card mb16"><div class="card-hd"><div class="card-ttl">Scripts</div>'
+  let html = '<div class="card mb16"><div class="card-hd"><div class="card-ttl">SPD Language</div>'
     + '<span class="pill ' + (done ? 'p-ok' : 'p-gold') + '">' + (done ? 'Completed' : 'In Progress') + '</span></div>'
     + '<div class="card-body">'
-    + '<p style="font-size:13px;color:var(--txt2);line-height:1.6;margin:0 0 10px">Your leader assigned the scripts on their own so you can work over just this part. '
+    + '<p style="font-size:13px;color:var(--txt2);line-height:1.6;margin:0 0 10px">Your leader assigned SPD Language on its own so you can work over just this part. '
     + 'Deliver every script from memory with the exact approved language, and know why each forbidden phrase fails. '
-    + 'These are the same scripts that sit inside your belt curriculum — nothing here replaces that.</p>'
+    + 'This is the same content that sits inside your belt curriculum — nothing here replaces that.</p>'
     + '<div style="font-size:11px;color:var(--txt3)">Assigned by ' + sane(a.assignedBy || '—')
     + (a.assignedDate ? ' &middot; ' + sane(a.assignedDate) : '')
     + (a.trigger ? ' &middot; ' + sane(a.trigger) : '') + '</div>'
@@ -232,13 +237,13 @@ function renderHScripts() {
   const assigned = rows.filter(r => r.a);
   const done = assigned.filter(r => r.a.status === 'completed').length;
 
-  let html = '<div class="card mb16"><div class="card-hd"><div class="card-ttl">Scripts'
+  let html = '<div class="card mb16"><div class="card-hd"><div class="card-ttl">SPD Language'
     + (isSystemWide ? ' <span style="font-size:11px;color:#64748b;font-weight:500">(all facilities)</span>' : '')
     + '</div></div><div class="card-body">';
-  html += '<p style="font-size:13px;color:#94a3b8;line-height:1.6;margin:0 0 12px">The communication scripts as a module of their own, for someone who has passed their belts but needs to refine their delivery. '
-    + 'Assign it by name &mdash; the scripts stay where they are inside the belt curriculum, this does not move them.</p>';
+  html += '<p style="font-size:13px;color:#94a3b8;line-height:1.6;margin:0 0 12px">The communication standard as a module of its own, for someone who has passed their belts but needs to refine their delivery. '
+    + 'Assign it by name &mdash; the content stays where it is inside the belt curriculum, this does not move it.</p>';
   html += '<div style="background:rgba(148,163,184,.08);border:1px solid rgba(148,163,184,.25);border-radius:var(--r);padding:10px 14px;margin-bottom:14px;font-size:12px;color:#94a3b8">'
-    + 'Scripts are spoken language with no question bank, so there is nothing to auto-score: you mark the module complete once the delivery meets the approved language.</div>';
+    + 'SPD Language is spoken delivery with no question bank, so there is nothing to auto-score: you mark the module complete once the delivery meets the approved language.</div>';
   if (isSystemWide) {
     html += '<div style="margin-bottom:14px"><select class="form-select" style="max-width:280px" onchange="ST._scriptsFacFilter=this.value;renderHScripts()">'
       + '<option value="all"' + ((ST._scriptsFacFilter || 'all') === 'all' ? ' selected' : '') + '>All Facilities</option>'
@@ -302,20 +307,20 @@ function scriptsCellHTML(staffId) {
 function hAssignScriptsModal(staffId) {
   if (!scriptsCanAssign()) { toast('Assessors cannot assign modules', 'err'); return; }
   const s = getStaff(staffId); if (!s) return;
-  if (isScriptsAssigned(staffId)) { toast('Scripts already assigned', 'info'); return; }
+  if (isScriptsAssigned(staffId)) { toast('SPD Language already assigned', 'info'); return; }
   if (typeof caCanBeAssigned === 'function' && !caCanBeAssigned(staffId, 'scripts')) { caDenyToast(staffId, 'scripts'); return; } // #1149
   const belts = scriptsBeltsWithContent(s.belt);
   const total = belts.reduce((n, b) => n + scriptSectionsForBelt(b).length, 0);
-  let html = '<div style="margin-bottom:12px;font-size:13px;color:var(--txt2)">Assign the <strong style="color:var(--txt)">Scripts</strong> module to <strong style="color:var(--txt)">' + fullName(s) + '</strong>.</div>';
-  html += '<div style="font-size:12px;color:var(--txt3);line-height:1.6;margin-bottom:14px">A Scripts tab appears for this person only, carrying the ' + total
-    + ' script sections from White through ' + s.belt + ' Belt — the belts they have reached. '
-    + 'The scripts stay in place inside the belt curriculum — this does not move them.</div>';
+  let html = '<div style="margin-bottom:12px;font-size:13px;color:var(--txt2)">Assign the <strong style="color:var(--txt)">SPD Language</strong> module to <strong style="color:var(--txt)">' + fullName(s) + '</strong>.</div>';
+  html += '<div style="font-size:12px;color:var(--txt3);line-height:1.6;margin-bottom:14px">An SPD Language tab appears for this person only, carrying the ' + total
+    + ' sections from White through ' + s.belt + ' Belt — the belts they have reached. '
+    + 'The content stays in place inside the belt curriculum — this does not move it.</div>';
   html += '<div style="margin-bottom:12px"><label style="display:block;font-size:12px;color:var(--txt2);margin-bottom:4px">Reason <span style="color:var(--txt3)">(what prompted this, optional)</span></label>';
   html += '<input id="scripts-assign-trigger" type="text" class="form-input" placeholder="e.g. OR phone script drift, observed 2026-08-05"></div>';
   html += '<div style="display:flex;gap:8px;justify-content:flex-end">';
   html += '<button class="btn btn-ghost btn-sm" onclick="closeModal()">Cancel</button>';
   html += '<button class="btn btn-gold btn-sm" onclick="hDoAssignScripts(\'' + s.id + '\')">Assign</button></div>';
-  openModal('Assign Scripts', html, 'modal-sm');
+  openModal('Assign SPD Language', html, 'modal-sm');
 }
 
 function hDoAssignScripts(staffId) {
@@ -326,7 +331,7 @@ function hDoAssignScripts(staffId) {
   const trigger = (el && el.value.trim()) ? el.value.trim() : null;
   const ok = assignScriptsModule(staffId, ST.user ? ST.user.name : 'Manager', trigger);
   closeModal();
-  toast(ok ? 'Scripts module assigned' : 'Scripts already assigned — skipped', ok ? 'ok' : 'info');
+  toast(ok ? 'SPD Language module assigned' : 'SPD Language already assigned — skipped', ok ? 'ok' : 'info');
   renderHScripts();
 }
 
@@ -335,13 +340,13 @@ function hToggleScriptsDone(staffId) {
   const a = scriptsAssignment(staffId); if (!a) return;
   const next = a.status === 'completed' ? 'assigned' : 'completed';
   setScriptsStatus(staffId, next);
-  toast(next === 'completed' ? 'Scripts module marked complete' : 'Scripts module reopened', 'ok');
+  toast(next === 'completed' ? 'SPD Language module marked complete' : 'SPD Language module reopened', 'ok');
   renderHScripts();
 }
 
 function hUnassignScripts(staffId) {
   if (!(ST.user && ST.user.role === 'master_admin')) { toast('Only the Master Admin can unassign modules', 'err'); return; }
-  if (!confirm('Unassign the Scripts module? The staff member loses the tab; their scripts stay available inside Study & Practice.')) return;
+  if (!confirm('Unassign the SPD Language module? The staff member loses the tab; the content stays available inside Study & Practice.')) return;
   DB.scriptAssignments = (DB.scriptAssignments || [])
     .filter(a => !(a.staffId === staffId && a.moduleId === SCRIPTS_MODULE_ID));
   try {
@@ -351,6 +356,6 @@ function hUnassignScripts(staffId) {
       });
     }
   } catch (e) { console.warn('[scripts] unassign sync', e); }
-  toast('Scripts module unassigned', 'info');
+  toast('SPD Language module unassigned', 'info');
   renderHScripts();
 }
