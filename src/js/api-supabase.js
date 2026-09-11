@@ -279,6 +279,12 @@ const SB = {
   upsertInstrumentProgress(row){ return sbFetch('/rest/v1/instrument_progress?on_conflict=staff_id,module_id', { method:'POST', prefer:'resolution=merge-duplicates,return=minimal', body:row }); },
   updateInstrumentAssignmentStatus(staffId, moduleId, status){ return sbFetch(`/rest/v1/instrument_assignments?staff_id=eq.${staffId}&module_id=eq.${encodeURIComponent(moduleId)}`, { method:'PATCH', prefer:'return=minimal', body:{ status } }); },
   deleteInstrumentAssignment(staffId, moduleId){ return sbFetch(`/rest/v1/instrument_assignments?staff_id=eq.${staffId}&module_id=eq.${encodeURIComponent(moduleId)}`, { method:'DELETE', prefer:'return=minimal' }); },
+  // ── #1208 (board 164): typed answers on a module gate ──
+  // Append-only (the table has no UPDATE/DELETE policy), one POST for the whole
+  // attempt's non-empty answers. Both curricula route through fiSaveSimAnswers()
+  // in foundations.js; there is no read method here — the assessor surface that
+  // needs one is #1209.
+  logGateResponses(rows){ return sbFetch('/rest/v1/module_gate_responses', { method:'POST', prefer:'return=minimal', body:rows }); },
   // ── SBD Preceptor Certification (#78 Ph1) — mirrors the Foundations/Instruments matrix, table prefix swapped ──
   getPreceptorModules(){ return sbFetch('/rest/v1/preceptor_modules?select=*&order=seq.asc'); },
   getPreceptorAssignments(){ return sbFetch('/rest/v1/preceptor_assignments?select=*'); },

@@ -511,7 +511,8 @@ function renderInstGate(m,s,gk,items,title,desc){
  else if(retake&&gateDone){h+='<div style="background:rgba(196,154,32,.08);border:1px solid rgba(196,154,32,.25);border-radius:var(--r);padding:10px 14px;margin-bottom:16px;font-size:12px;color:#94a3b8">Practice retake &mdash; your completed gate and best score ('+g.score+'%) are kept even if you score lower.</div>';}
  else if(passes>0){h+='<div style="background:rgba(196,154,32,.08);border:1px solid rgba(196,154,32,.25);border-radius:var(--r);padding:10px 14px;margin-bottom:16px;font-size:12px;color:#94a3b8"><b style="color:#fbbf24">Pass '+passes+' of '+FND_PASSES_REQUIRED+'.</b> Take the test again with a fresh set of questions &mdash; every score of 80% or higher counts as a pass. Your best score ('+g.score+'%) is kept.</div>';}
  const qk=gk==='g1'?'q':'s';
- order.forEach((origIdx,qi)=>{const item=items[origIdx];h+='<div class="fnd-q" data-qi="'+qi+'"><div class="fnd-q-text">'+(qi+1)+'. '+(item[qk]||item.q||item.s)+'</div>';item.opts.forEach((opt,oi)=>{h+='<label class="fnd-q-opt"><input type="radio" name="inst-'+gk+'-'+m.id+'-'+qi+'" value="'+oi+'"'+(locked?' disabled':'')+'><span class="fnd-q-lbl">'+opt+'</span></label>';});h+='</div>';});
+ // #1208: the typed box on G2 comes from foundations.js — one definition, both curricula (Standards B6).
+ order.forEach((origIdx,qi)=>{const item=items[origIdx];h+='<div class="fnd-q" data-qi="'+qi+'"><div class="fnd-q-text">'+(qi+1)+'. '+(item[qk]||item.q||item.s)+'</div>';item.opts.forEach((opt,oi)=>{h+='<label class="fnd-q-opt"><input type="radio" name="inst-'+gk+'-'+m.id+'-'+qi+'" value="'+oi+'"'+(locked?' disabled':'')+'><span class="fnd-q-lbl">'+opt+'</span></label>';});if(gk==='g2')h+=fiSimAnswerHTML('inst',m.id,qi,locked);h+='</div>';});
  if(!locked) h+='<button class="btn btn-gold" style="margin-top:16px;width:100%" onclick="submitInstGate(\''+m.id+'\',\''+gk+'\')">Submit</button>';
  h+='<div id="inst-gate-result"></div></div>';return h;
 }
@@ -530,7 +531,12 @@ function submitInstGate(mid,gk){
  delete INST_GATE_RETAKE[m.id+gk];
  let correct=0;
  order.forEach((origIdx,qi)=>{const sel=document.querySelector('input[name="inst-'+gk+'-'+m.id+'-'+qi+'"]:checked');if(sel&&parseInt(sel.value)===items[origIdx].ans) correct++;});
- const score=Math.round((correct/order.length)*100);saveInstGateScore(s.id,m.id,gk,score);
+ const score=Math.round((correct/order.length)*100);const _p=saveInstGateScore(s.id,m.id,gk,score);
+ // #1208: same two helpers Foundations uses — append after the save so attempt_no
+ // matches the g2.attempts[] position, never awaited (a failed insert must not
+ // cost a graded attempt).
+ fiSaveSimAnswers('inst',s.id,m.id,gk,order,items,((_p&&_p[gk]&&_p[gk].attempts)||[]).length);
+ fiLockSimAnswers('inst',m.id,order);
  order.forEach((origIdx,qi)=>{const item=items[origIdx];const opts=document.querySelectorAll('input[name="inst-'+gk+'-'+m.id+'-'+qi+'"]');opts.forEach((opt,oi)=>{const lbl=opt.closest('.fnd-q-opt');if(!lbl)return;opt.disabled=true;if(oi===item.ans)lbl.classList.add('fnd-q-correct');else if(opt.checked&&oi!==item.ans)lbl.classList.add('fnd-q-wrong');});});
  const rEl=document.getElementById('inst-gate-result');const gateLabel=gk==='g1'?'Knowledge':'Simulation';
  if(rEl){if(score>=80){const _g2=getInstModuleGates(s.id,m.id);const _n=Math.min(fndGatePasses(_g2[gk]),FND_PASSES_REQUIRED);const _done=_n>=FND_PASSES_REQUIRED;const _obsNow=_done&&fndObsReady(_g2)&&_g2.g3.status!=='pass';rEl.innerHTML='<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--r);padding:14px 16px;text-align:center;margin-top:12px"><div style="font-size:24px;font-weight:700;color:#4ade80">'+score+'%</div><div style="font-size:13px;color:#4ade80;font-weight:600;margin:4px 0">'+(_done?gateLabel+' Gate Complete &mdash; '+_n+' of '+FND_PASSES_REQUIRED+' passes':gateLabel+' pass '+_n+' of '+FND_PASSES_REQUIRED)+'</div><div style="font-size:12px;color:#94a3b8">'+correct+' of '+order.length+' correct.'+(_done?(_obsNow?' Observation is now unlocked.':''):' Take it again with a fresh set of questions; 80%+ counts as a pass.')+'</div>'+(_done?'':'<button class="btn btn-gold btn-sm" style="margin-top:8px" onclick="openInstModule(\''+mid+'\')">Take Again (fresh questions)</button>')+'</div>';toast(_done?gateLabel+' gate complete ('+_n+'/'+FND_PASSES_REQUIRED+')':gateLabel+' pass '+_n+' of '+FND_PASSES_REQUIRED,'ok');}
