@@ -4630,8 +4630,27 @@ async function confirmPlacement(prId){
   const s = getStaff(pr.staffId);
   // No Belt: nothing was certified, so no earn date and no grandfathered gates. The person
   // stays unbelted on the remediation path and earns White through the normal gate climb.
-  // A normal placement grandfathers the current-belt gates so the assessment window opens;
-  // otherwise getWindowStatus() locks the next-belt climb.
+  //
+  // #1224 (board 148, ledger T132) — a placement grandfathers TWO of the three current-belt
+  // gates, not three. The rule is "a gate is only written by a real confirmation of that
+  // gate":
+  //   • Competency and Simulation STAY. The placement assessment is exactly those two
+  //     components — knowledge questions and simulation scenarios, scored, blended against
+  //     the belt floors and signed off by the assessor confirming right here. The
+  //     placement_reviews row IS the evidence, so writing them is truthful.
+  //   • Observation GOES. Nothing in the placement flow observes anybody on the floor;
+  //     there is no checklist, no observer, no `observations` row. Writing cur_obs='pass'
+  //     here invented a passed gate with nothing behind it (42 prod rows, of which 40 had
+  //     no observation evidence of any kind — corrected by migration 20260912120000).
+  // The real writers of cur_obs stay untouched: submitAssessment() with type Observation
+  // and target belt === current belt (~line 16456), and the promotion that lifts a
+  // confirmed nxt_obs into cur_obs.
+  //
+  // ⚠️ Consequence, on purpose: getWindowStatus() (logic.js) gate-locks the next-belt
+  // window until all three current-belt gates pass, so a newly placed Yellow+ staffer now
+  // reads "Complete current belt assessments first" until their observation is recorded.
+  // White is exempt (the engine short-circuits on it), so the routine new-hire path is
+  // unaffected. That lock is the point: the window used to open on a gate nobody ran.
   const histEntry = s ? {
     dt: confirmedAt,
     type: 'Placement',
@@ -4651,7 +4670,9 @@ async function confirmPlacement(prId){
       if(s){
         const staffBody = {belt: noBelt ? 'None' : chosenBelt, placement_needed: false,
                            history: [histEntry, ...(s.history||[])]};
-        if(!noBelt) Object.assign(staffBody, {since: confirmedAt, cur_comp:'pass', cur_sim:'pass', cur_obs:'pass'});
+        // cur_obs is deliberately absent, not null: the PATCH must not clear an observation
+        // this candidate genuinely passed before the review was confirmed (#1224).
+        if(!noBelt) Object.assign(staffBody, {since: confirmedAt, cur_comp:'pass', cur_sim:'pass'});
         await sbFetch(`/rest/v1/staff?id=eq.${s.id}`, {method:'PATCH', body: staffBody});
       }
       await sbFetch(`/rest/v1/placement_reviews?id=eq.${pr.id}`, {
@@ -4679,7 +4700,9 @@ async function confirmPlacement(prId){
     s.placementNeeded = false;
     if(!noBelt){
       s.since = confirmedAt;
-      s.cur = {c:'pass', s:'pass', o:'pass'};
+      // Mirrors the PATCH above: C and S are grandfathered, O is left exactly as it was
+      // (normally null — pending — but a real observation pass survives) (#1224).
+      s.cur = Object.assign({c:null, s:null, o:null}, s.cur, {c:'pass', s:'pass'});
     }
     if(!s.history) s.history = [];
     s.history.unshift(histEntry);

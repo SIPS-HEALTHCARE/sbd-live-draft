@@ -67,7 +67,10 @@ function build(isLive, sbFetchImpl){
   assert.strictEqual(pr2.confirmedBelt, 'Green');
   assert.strictEqual(pr2.status, 'confirmed');
   assert.strictEqual(s2.belt, 'Green');
-  assert.deepStrictEqual(s2.cur, { c: 'pass', s: 'pass', o: 'pass' }, 'placement still grandfathers current gates');
+  // #1224: two gates, not three. Placement administers knowledge + simulation, so C and S
+  // are evidence-backed; nothing in the flow observes anybody, so O stays pending.
+  assert.deepStrictEqual(s2.cur, { c: 'pass', s: 'pass', o: null },
+    'placement grandfathers Competency and Simulation, and leaves Observation pending (#1224)');
   assert(s2.since, 'belt earn date set');
 
   // ── case 3: assessor overrides a suggested belt to No Belt → adjusted ──────
@@ -77,6 +80,14 @@ function build(isLive, sbFetchImpl){
   await a.confirmPlacement('pr3');
   assert.strictEqual(a.ctx.DB.placementReviews[2].status, 'adjusted');
   assert.strictEqual(a.ctx.staff['s3'].belt, 'None');
+
+  // ── case 3b (#1224): a genuine earlier observation pass survives the confirm ──
+  a.ctx.staff['s3b'] = { id: 's3b', belt: 'White', placementNeeded: true, cur: { c: null, s: null, o: 'pass' } };
+  a.ctx.DB.placementReviews.push({ id: 'pr3b', staffId: 's3b', staffName: 'Prior Obs', tentativeBelt: 'Yellow', status: 'pending' });
+  a.ctx.els['pr-belt-pr3b'] = { value: 'Yellow' };
+  await a.confirmPlacement('pr3b');
+  assert.deepStrictEqual(a.ctx.staff['s3b'].cur, { c: 'pass', s: 'pass', o: 'pass' },
+    'confirm spreads the existing gates: it never clears an observation someone actually passed');
 
   // ── case 4 (T106): live write rejected → nothing commits, no success state ─
   const b = build(true, () => Promise.reject(new Error('new row for relation "staff" violates check constraint "staff_belt_check"')));
@@ -112,6 +123,19 @@ function build(isLive, sbFetchImpl){
   assert.strictEqual(rBody.status, 'confirmed');
   assert.strictEqual(rBody.confirmed_by, 'Iggie');
   assert(c.ctx.toasts.some(t => t.type === 'ok'), 'success toast after both writes land');
+
+  // ── case 6 (#1224): a normal belt on the live path writes two gates, not three ──
+  const d = build(true);
+  d.ctx.staff['s6'] = { id: 's6', belt: 'White', placementNeeded: true };
+  d.ctx.DB.placementReviews.push({ id: 'pr6', staffId: 's6', staffName: 'Gate Case', tentativeBelt: 'Green', status: 'pending' });
+  d.ctx.els['pr-belt-pr6'] = { value: 'Green' };
+  await d.confirmPlacement('pr6');
+  const dBody = d.ctx.patches[0].opts.body;
+  assert.strictEqual(dBody.cur_comp, 'pass', 'Competency is grandfathered — the placement measured it');
+  assert.strictEqual(dBody.cur_sim, 'pass', 'Simulation is grandfathered — the placement measured it');
+  assert(!('cur_obs' in dBody),
+    'cur_obs is ABSENT from the PATCH, not null: nothing observed anybody, and an earlier real pass must survive (#1224)');
+  assert(dBody.since, 'belt earn date still written');
 
   console.log('verify-no-belt-placement: all assertions passed');
 })().catch(e => { console.error(e); process.exit(1); });
