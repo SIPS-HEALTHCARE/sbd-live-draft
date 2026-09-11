@@ -22,7 +22,7 @@
 // The four gated curricula, in display order. MUST match the CHECK constraint on
 // curriculum_access.curriculum and the list inside sbd_has_curriculum_access().
 const CA_CURRICULA = ['foundations', 'instruments', 'scripts', 'endoscopy'];
-const CA_LABELS = { foundations: 'Foundations', instruments: 'Instruments', scripts: 'SPD Language', endoscopy: 'Endoscopy' };
+const CA_LABELS = { foundations: 'Foundations', instruments: 'Instruments', scripts: 'SBD Language', endoscopy: 'Endoscopy' };
 
 // ── Reading the registry (#1148) ─────────────────────────────────────────────
 // The control lists the curricula the registry actually knows about, so it has no
