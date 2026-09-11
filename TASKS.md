@@ -3627,12 +3627,27 @@ already named above: **an ask next to an urgent one still needs its own row.**
   with a wrong bearer → `403 {"error":"Unauthorized"}` (id 54259). That is the accepted/refused
   pair the closing comment needs, and it also confirms the Vault value and the deployed
   `WEBHOOK_SECRET` still agree.
-  *Still owed:* **step 3, the rotation itself** (`vault.update_secret` → `supabase secrets set
-  WEBHOOK_SECRET` → redeploy `sbd-emails`) — not done, it changes a live credential and was not in
-  the go-ahead. Until it runs, the value now in Vault is the same one that sat in `pg_proc`, so
-  anyone who read it before today still holds a working token. Re-run the two pings after rotating
-  to reproduce the 200/403 pair. Also owed: the closing comment on #1225, and Shawn's answer on
-  whether a real welcome email should exist at all.
+  **Step 3, the rotation, DONE 2026-09-12** — Shawn rotated both halves by hand, Vault secret and
+  the `WEBHOOK_SECRET` edge-function env, in one pass. Verified without either value being read:
+  `sha256` of the Vault value and the digest `supabase secrets list` prints for `WEBHOOK_SECRET`
+  are the same string and both moved, `29f271f1db707e…` → `91ffdc003f2ba2c348d9acff8105124a74e08220330168813a65ea876a779c33`.
+  `supabase secrets list` prints a plain sha256 of the value, which is why the two can be compared
+  at all; digests are safe to record here, the values are not.
+  **Step 4, the proof, DONE 2026-09-12 18:45 UTC** — again with no account created, two
+  `net.http_post` calls on `type:'ping_1225_*'`, a payload that matches no branch in `sbd-emails`
+  and queues nothing. New value from Vault → **200** `{"success":true,"ignored":true,"reason":"unmatched trigger"}`
+  (`net._http_response` id 54262). **Old value → 403** `{"error":"Unauthorized"}` (id 54263). The
+  old value was taken straight out of the baseline file by the shell, never typed or printed.
+  No redeploy of `sbd-emails` was needed: it picked up the new env on the next invocation, which the
+  200 proves.
+  **The literal at `20260903120000_baseline_production_schema.sql:1723` and `:1746` is now inert.**
+  It stays in git — history cannot be un-published and rewriting it is not worth it — but it no
+  longer opens anything. That file is a baseline of an existing prod and is never replayed; if it
+  ever were, it would recreate `handle_welcome_email` with the dead literal and undo this card, so
+  a future baseline must be re-cut from the live schema, not edited from this one.
+  *Still owed:* the closing comment on #1225 (migration `20260912150000`, test at 2026-09-12 18:45
+  UTC), and Shawn's answer on whether a real welcome email should exist at all — `sbd-emails` still
+  has no `auth.users` branch, so the trigger fires into an unmatched payload on every signup.
 
 - [ ] **T132** Observation gate, remove the synthetic pass (board 148) · est 1d · **High** · due 2026-09-12 · our cards #1120 (spec review, 9/9), #1121 (score, shipped) and #1224 (this, the gate reset)
   42 staff carry `cur_obs = pass` from the belt confirmation path (`ui-views.js:4654` sets `cur_comp`,
