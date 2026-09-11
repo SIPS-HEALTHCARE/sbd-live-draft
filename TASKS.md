@@ -3549,12 +3549,90 @@ already named above: **an ask next to an urgent one still needs its own row.**
   `instrument_progress` untouched (row count and `updated_at` unchanged before and after), Take mode
   behaves as today.
 
-- [ ] **T131** Finish 143, the token in the unbound function (board 156) · est 0.5d · **Medium** · due 2026-09-10
+- [ ] **T131** Finish 143, the token in the unbound function (board 156) · est 0.5d · **Medium** · due 2026-09-12 · our card #1225
   `handle_registration_alert` is bound to no trigger and `sbd_approve_registration` carries no
   comment (per Shawn, not re-read by us on 2026-09-04); what "rotate the token" means is still open
   with Shawn (asked 2026-09-03).
   *Done when:* the unbound function is dropped or bound on purpose, the approve function carries a
   comment naming its secret and its rotation date, and the answer on the token is written here.
+
+  **#1225 built 2026-09-12, migration `20260912150000`.** Read live before writing it:
+  `handle_welcome_email` and `handle_registration_alert` have **byte-identical bodies**
+  (`md5 3f94a074052f14de8745212a9b7fd06b`) and **both** inline the same `Bearer <literal>` for
+  `sbd-emails`. Only `handle_welcome_email` is bound — `on_auth_user_created` on `auth.users`,
+  `tgenabled 'O'`; the single trigger on `public.registrations` is
+  `sbd_registrations_clear_password` → `sbd_clear_registration_password`, so
+  `handle_registration_alert` is bound to nothing, as 143 said. That answers T131's first clause:
+  it is **dropped**, not bound, because after a rotation it would sit on a stale copy of the secret
+  forever. The two approval functions already carry their 2026-09-10 NOT IN USE comments and are
+  dropped rather than re-commented — `to_regclass` says neither `sbd_pending_registrations` nor
+  `sbd_facilities` exists, so every call raises `undefined_table`; EXECUTE is `service_role` only,
+  `anon` and `authenticated` cannot reach them.
+  The secret moves to **Vault** (`vault.decrypted_secrets`, secret name `sbd_emails_webhook_secret`),
+  read at call time by the SECURITY DEFINER function, which is owned by `postgres` and `postgres`
+  holds SELECT on that view (checked live). Not a GUC: `current_setting` is readable by every role
+  and shows up in `pg_settings`, which is the same exposure in a new place. The edge function side
+  needed no change — `sbd-emails/index.ts:151` already reads `WEBHOOK_SECRET` from env and fails
+  closed. **The trigger fails OPEN on purpose**: it runs inside the `auth.users` insert, so a
+  missing vault row logs a `WARNING` and lets the signup through. A failed signup is worse than a
+  missed notification.
+  **🔴 The card's proof step cannot be met as written, and the reason matters.** `sbd-emails` has
+  **no branch for `INSERT` on `auth.users`** — confirmed in the repo *and* in the deployed v14,
+  downloaded and read on 2026-09-12 (its only branches are `placement_started`,
+  `placement_completed`, `registration_denied`, and `INSERT` on `registrations`). Every signup
+  since this trigger existed has posted and received `200 {ignored:true,"reason":"unmatched
+  trigger"}`. `select distinct template from sbd_email_queue` confirms it: **no `welcome` template
+  has ever been queued**, and none exists in `sbd-send-emails`. So "a welcome email arrives on a
+  fresh signup" has never been true and this card does not make it true. The provable equivalent,
+  and what the closing comment should state: after rotation the trigger's call is **accepted (200)**
+  and the same call with the old value is **refused (403)**, read from `net._http_response`. Whether
+  a real welcome email should exist is a product question for Shawn, not this card.
+  `public.sbd_trigger_email_send` also inlines a `Bearer` literal — it is the project **anon key**,
+  which is public (it ships in `index.html`). Out of scope here, recorded so the next sweep does not
+  re-raise it.
+  **Proven on prod first, twice, both inside `begin; … rollback;` — prod untouched, re-read after
+  (`vault.secrets` 0 rows, 3 dead functions present, `handle_welcome_email` md5 unchanged):**
+  migration + `supabase/verify/1225_webhook_secret_check.sql` ran clean, and the rollback
+  `scripts/sql-rollback/1225_WEBHOOK_SECRET_VAULT_REVERT.sql` restored all 3 functions with no
+  inline literal and `handle_registration_alert` still unbound. The read-back was also shown to
+  **fail** against the unfixed state (`2 of the trigger functions still inline a bearer literal`).
+  **Apply order on prod — the vault row must exist BEFORE the migration, or the first signup after
+  it gets a warning and no post:**
+  1. Seed the vault row with the **current** value (no rotation yet, so this pair is a behaviour
+     no-op that proves the plumbing): `select vault.create_secret('<current>',
+     'sbd_emails_webhook_secret', '…');`
+  2. Apply `20260912150000` and run the read-back.
+  3. Rotate, both halves, in this order: `vault.update_secret(<id>, '<new>')`, then
+     `supabase secrets set WEBHOOK_SECRET='<new>'`, then redeploy `sbd-emails`. Between the two the
+     trigger's post is refused 403 — costs nothing today (see above), keep it short anyway.
+  4. Prove: create one account, read its `net._http_response` row for a 200; replay the same post
+     with the old value and read the 403.
+  `supabase db push` is still blocked on this project by the remote-only `20260910223142`, so apply
+  with `db query -f` and insert the ledger row in the same transaction, exactly as #1228 and #1208
+  did. **No secret value appears in any file, commit or comment.**
+  **Steps 1 and 2 APPLIED to prod 2026-09-12 and ledger-recorded** (`20260912150000` /
+  `1225_webhook_secret_vault`), vault seed + migration + ledger row + read-back all in one
+  transaction. The seed never handled the value in the open: `vault.create_secret()` took it
+  straight from `substring(prosrc from 'Bearer ([A-Za-z0-9_]+)')` inside the same statement, so it
+  moved from `pg_proc` to Vault without being typed, printed or logged. Read back live, standalone:
+  `supabase/verify/1225_webhook_secret_check.sql` passes all 5 checks — the secret appears in **0**
+  function bodies in `public`, `handle_welcome_email` is a SECURITY DEFINER Vault reader
+  (`prosrc` md5 `3f94a074…` → `e65b14b6…`), the vault row decrypts non-empty,
+  `on_auth_user_created` is still bound to `auth.users` and enabled (`tgenabled 'O'`), and **0** of
+  the 3 retired functions remain.
+  **Live token path proven without creating an account** — no fake row went into `auth.users`.
+  Two `net.http_post` calls to `sbd-emails` carrying `type:'ping_1225_*'`, which matches no branch
+  and therefore queues nothing: with the bearer read from Vault → `200
+  {"success":true,"ignored":true,"reason":"unmatched trigger"}` (`net._http_response` id 54258);
+  with a wrong bearer → `403 {"error":"Unauthorized"}` (id 54259). That is the accepted/refused
+  pair the closing comment needs, and it also confirms the Vault value and the deployed
+  `WEBHOOK_SECRET` still agree.
+  *Still owed:* **step 3, the rotation itself** (`vault.update_secret` → `supabase secrets set
+  WEBHOOK_SECRET` → redeploy `sbd-emails`) — not done, it changes a live credential and was not in
+  the go-ahead. Until it runs, the value now in Vault is the same one that sat in `pg_proc`, so
+  anyone who read it before today still holds a working token. Re-run the two pings after rotating
+  to reproduce the 200/403 pair. Also owed: the closing comment on #1225, and Shawn's answer on
+  whether a real welcome email should exist at all.
 
 - [ ] **T132** Observation gate, remove the synthetic pass (board 148) · est 1d · **High** · due 2026-09-12 · our cards #1120 (spec review, 9/9), #1121 (score, shipped) and #1224 (this, the gate reset)
   42 staff carry `cur_obs = pass` from the belt confirmation path (`ui-views.js:4654` sets `cur_comp`,
