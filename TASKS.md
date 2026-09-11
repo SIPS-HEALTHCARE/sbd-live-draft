@@ -3618,6 +3618,46 @@ already named above: **an ask next to an urgent one still needs its own row.**
   ungranted staffer is refused, and an off-registry module id still passes.
   *Still owed:* the frontend merge, and a human granting one curriculum from a real profile.
 
+- [ ] **T134** Close the open RLS on `aip_question_responses` and `aip_assessment_attempts` · est 0.25d · **High** · our card #1228
+  Found in Hameem's #1208 findings check (2026-09-11, section `u_rls`) and read live the same day:
+  both tables carry two PERMISSIVE policies TO public — `SELECT USING (true)` and
+  `INSERT WITH CHECK (true)` — with `ALL` granted to `anon` and `authenticated` and no
+  `sbd_mfa_gate`. Anyone holding the anon key could read either table and insert into it. #1169
+  (11 Sep) gated the sibling `aip_questions` and stopped there.
+  Migration `20260912130000` drops the four public policies, adds one admin SELECT policy per
+  table on the existing `sbd_is_system_admin()` (master_admin / staff_admin / system_admin /
+  admin — all 11 holders carry `auth_uid`), adds the RESTRICTIVE `sbd_mfa_gate` from #1169, then
+  revokes everything from `anon` and `authenticated` and grants `SELECT` back. The card named
+  INSERT/UPDATE/DELETE; the grant audit also found **TRUNCATE** held by both roles, and TRUNCATE
+  is not subject to RLS, so any signed-in user could have wiped either table — same class, same
+  two tables, closed in the same pass. SELECT stays granted on purpose so an anon request returns
+  zero rows rather than a permission error.
+  No write policy, because no write path exists through these tables: all **8** prod functions
+  that name either one are SECURITY DEFINER owned by `postgres` (`aip_generate_quiz`,
+  `aip_generate_weak_spot_quiz`, `aip_get_candidate_analytics`, `aip_get_weak_areas`,
+  `aip_start_proctored_session`, `aip_submit_quiz` ×3), and the belt frontend and every edge
+  function reference the tables **zero** times. Live rows when read: **0** responses, **1**
+  attempt. No deploy-order constraint.
+  Proven first inside `begin; … rollback;` — migration plus read-back ran clean, prod untouched —
+  and the read-back was shown to fail against the unfixed state
+  (`2 policies on aip_question_responses still read true`).
+  **Migration `20260912130000` APPLIED to prod 2026-09-11 and ledger-recorded.** Read back live:
+  `supabase/verify/1228_aip_rls_check.sql` passes on both tables (RLS on, zero policies reading
+  `true`, the four public policies gone, admin SELECT present, `sbd_mfa_gate` present and
+  RESTRICTIVE, `anon`/`authenticated` holding SELECT and nothing else). Role probes, each in a
+  rolled-back transaction so nothing was written: **anon** sees **0** attempt rows and **0**
+  response rows (the table holds 1 attempt — it is the policy filtering, not an empty table) and
+  its insert is refused `42501 permission denied for table aip_assessment_attempts`; a
+  **system_admin at aal2** reads **1**; the *same* admin at **aal1** reads **0**; a
+  **staff_member at aal2** reads **0**.
+  Rollback statement is in the migration header. `supabase db push` is blocked on this project by
+  the remote-only `20260910223142` (`item_156_comment_dead_registration_functions`, no local file
+  — someone else's branch), so the migration was applied with `db query -f` and its ledger row
+  inserted in the same transaction. Do not "repair" that entry to unblock push.
+  *Not in this card:* whether `anon` should still hold EXECUTE on those AIP RPCs — a function-grant
+  question, separate call. #1208 must not write staff answers through these tables.
+  *Still owed:* the closing comment on #1228 stating the migration id and the read-back.
+
 ### Blocked, not on the critical path
 
 - [x] **T49** Strip and rotate the PSOP credentials, gate the public page
