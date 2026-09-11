@@ -188,6 +188,7 @@ Every view has this pattern:
 | `instrument_assignments` / `instrument_progress` | Instruments curriculum (mirror of Foundations, same 3-gate engine). RLS via `sbd_fi_leader_scope`. See §16A. | `staff_id` → `staff`, `facility_id` → `facilities` |
 | `script_assignments` | T92a: Scripts module assignment — fourth assignment table, same shape/RLS rule set as the other three, no progress table (no gates). One row per staff (module_id always `'scripts'` today). See §16B. | `staff_id` → `staff`, `facility_id` → `facilities` |
 | `curriculum_modules` | #1148 (board 134, T129): registry of all 44 modules across the five curricula — `module_id` PK, `curriculum`, `title`, `sequence`, `gate_shape`, `active`. Identity/order only; content stays in the `src/js` constants. Seeded by `scripts/curriculum-registry-seed.js` (migration `20260908140000`). Read: any authenticated. Write: `sbd_is_master_admin()`. See §16D. | — |
+| `module_gate_responses` | **#1208 (board 164):** the typed answer on a module simulation gate — one row per scenario a candidate wrote something for, per attempt (`staff_id`, `module_id`, `gate`, `question_ref`, `question_text`, `attempt_no`, `answer_text`). Written by `submitFndGate`/`submitInstGate` through the shared `fiSaveSimAnswers()` in foundations.js. **Append-only to clients** — no UPDATE/DELETE policy, `authenticated` holds only `select, insert`, `anon` revoked. Read own-or-`sbd_fi_leader_scope`. Deliberately NOT `aip_question_responses` (retired AIP schema, #61/#1228). Scoring + the assessor review surface are #1209. Migration `20260912140000`. See §16F. | — |
 | `curriculum_access` | **#1149 (board 11 Sep, T133):** which curricula a staff member may be **assigned** — one row per (`staff_id`, `curriculum`) with `granted_by`/`granted_at`; no row = not granted, revoke **deletes** the row. Granted from the staff profile. Enforced in the INSERT policies of the three assignment tables via `sbd_has_curriculum_access()`, which resolves module → curriculum through `curriculum_modules`. `preceptor` is deliberately not a legal value (see `preceptor_access`). Migration `20260911130000`. See §16E. | — |
 
 ### Row Level Security (RLS)
@@ -735,6 +736,39 @@ assign to this person", never "may this person hold this curriculum".
 - **Verify:** `node scripts/verify-1149-curriculum-access.js`,
   `supabase/verify/1149_curriculum_access_check.sql`.
   Design note: `docs/decisions/2026-09-11-1149-curriculum-access-grant.md`.
+
+---
+
+## 16F. Typed response on the simulation gate (#1208, board 164)
+
+The F&I **G2 Simulation** gate is multiple choice. #1208 adds one **optional** typed box under
+each drawn scenario so a candidate can say *why*, and appends what they write to
+`module_gate_responses`.
+
+- **Input and storage only.** Submit is never blocked, the score stays purely MCQ, and no gate
+  already in flight changes cost. Scoring, the assessor review surface and any
+  `is_correct`/review columns are **#1209 (board 167)**.
+- **Both curricula, no first module.** `fiSimAnswerHTML()` / `fiSaveSimAnswers()` /
+  `fiLockSimAnswers()` live in `foundations.js` (it loads first, same reasoning as
+  `SCRIPTS_MODULE_ID` and the #1123 `fiMode` helpers); `instruments.js` calls them from
+  `renderInstGate`/`submitInstGate` rather than keeping a second copy (Standards B6). The
+  `'fnd'`/`'inst'` prefix argument keeps the two sets of element ids apart. Preceptor G2 is
+  assessor-scored and Endoscopy `en-14` G2 is a server-pinned not-applicable pass (#720) —
+  neither reaches this code.
+- **The write is best-effort**, fired after `saveGateScore`/`saveInstGateScore` so `attempt_no`
+  matches the position in the progress row's `g2.attempts[]`, and never awaited: a failed insert
+  logs through `handleSyncError` and cannot cost someone a graded attempt. Only non-empty boxes
+  produce rows (`SB.logGateResponses`, one POST per attempt).
+- **⚠️ `question_ref` is the scenario's index in the in-code bank** (`sim-3`), and the banks live
+  in `src/js`. Reordering `m.simulations` orphans every stored ref — which is why
+  `question_text` stores the prompt as the candidate saw it. The text is the record; the ref is
+  the convenience.
+- **NOT `aip_question_responses`**, which board 164 names: its `attempt_id`/`question_id` are
+  NOT NULL FKs into a dormant pre-hire AIP schema whose grader was retired in #61 and whose RLS
+  was `USING (true)` in prod until #1228.
+- **Verify:** `node scripts/verify-1208-typed-response.js`,
+  `supabase/verify/1208_gate_responses_check.sql`.
+  Design note: `docs/decisions/2026-09-12-1208-simulation-typed-response.md`.
 
 ---
 

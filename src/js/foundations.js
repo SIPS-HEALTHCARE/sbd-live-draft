@@ -1177,6 +1177,74 @@ function fndPassChip(gates){
  const c=n=>n>=FND_PASSES_REQUIRED?'#4ade80':'#94a3b8';
  return '<span style="font-size:10.5px;font-weight:700;white-space:nowrap"><span style="color:'+c(k)+'">K '+k+'/'+FND_PASSES_REQUIRED+'</span> <span style="color:'+c(s2)+'">S '+s2+'/'+FND_PASSES_REQUIRED+'</span></span>';
 }
+// ── #1208 (Shawn board 164): typed answer on the simulation gate ─────────────
+// G2 is multiple choice; these add one OPTIONAL box under each drawn scenario so
+// a candidate can say why they chose what they chose. Input and storage only:
+// Submit is never blocked, the score stays purely MCQ, and no gate already in
+// flight changes cost. Scoring and the assessor review surface are #1209
+// (board 167), which adds its own columns to the table.
+//
+// Foundations and Instruments share these two functions — instruments.js calls
+// them from renderInstGate/submitInstGate instead of keeping a second copy
+// (Standards B6). They live here because foundations.js loads first, same
+// reasoning as SCRIPTS_MODULE_ID and the fiMode/#1123 helpers above.
+//
+// NOT aip_question_responses (which board 164 names): its attempt_id/question_id
+// are NOT NULL FKs into a dormant pre-hire AIP schema whose grader was retired in
+// #61. See docs/decisions/2026-09-12-1208-simulation-typed-response.md.
+const FI_SIM_ANSWER_MAX=2000;
+// `prefix` is 'fnd' or 'inst' — the same discriminator each renderer already uses
+// for its radio-group names, so the two curricula can never collide in the DOM.
+function fiSimAnswerId(prefix,moduleId,qi){return prefix+'-sim-ans-'+moduleId+'-'+qi;}
+function fiSimAnswerHTML(prefix,moduleId,qi,locked){
+ const id=fiSimAnswerId(prefix,moduleId,qi);
+ return '<div class="fi-sim-answer" style="margin-top:10px">'
+  +'<label for="'+id+'" style="display:block;font-size:11.5px;color:#64748b;margin-bottom:4px">Explain your reasoning <span style="color:#475569">(optional)</span></label>'
+  +'<textarea id="'+id+'" class="form-textarea" rows="3" maxlength="'+FI_SIM_ANSWER_MAX+'"'+(locked?' disabled':'')
+  +' style="font-size:12.5px;line-height:1.5" placeholder="What would you do, and why?"></textarea></div>';
+}
+// Collects the non-empty boxes for the attempt just submitted and appends them.
+// Best-effort by design: the insert is fired and not awaited, so a failed write
+// logs through handleSyncError and the gate still scores and saves exactly as it
+// did before this shipped. Returns how many rows were queued (0 = nothing typed).
+function fiSaveSimAnswers(prefix,staffId,moduleId,gateKey,order,items,attemptNo){
+ if(gateKey!=='g2') return 0;   // the box only renders on the simulation gate
+ const rows=[];
+ order.forEach((origIdx,qi)=>{
+   const el=document.getElementById(fiSimAnswerId(prefix,moduleId,qi));
+   const txt=(el&&el.value||'').trim();
+   if(!txt) return;
+   const item=items[origIdx]||{};
+   rows.push({
+     staff_id:staffId,
+     module_id:moduleId,
+     gate:'g2',
+     // The bank index is the only stable handle a scenario has (they carry no
+     // id), and the banks live in src/js — so question_text carries the prompt
+     // as the candidate actually saw it and the ref is the convenience.
+     question_ref:'sim-'+origIdx,
+     question_text:String(item.s||item.q||'').slice(0,FI_SIM_ANSWER_MAX),
+     attempt_no:attemptNo||null,
+     answer_text:txt.slice(0,FI_SIM_ANSWER_MAX)
+   });
+ });
+ if(!rows.length) return 0;
+ try{
+   if(typeof IS_LIVE!=='undefined'&&IS_LIVE&&typeof SB!=='undefined'&&SB.logGateResponses){
+     SB.logGateResponses(rows).catch(e=>{
+       if(typeof handleSyncError==='function') handleSyncError(e,'Simulation response');
+       else console.warn('[fi] gate response sync',e&&e.message);
+     });
+   }
+ }catch(e){console.warn('[fi] gate response sync',e);}
+ return rows.length;
+}
+// Disable the boxes once an attempt is graded, so the submitted text reads as
+// final next to the already-disabled radios. Called by both submit paths.
+function fiLockSimAnswers(prefix,moduleId,order){
+ order.forEach((_,qi)=>{const el=document.getElementById(fiSimAnswerId(prefix,moduleId,qi));if(el)el.disabled=true;});
+}
+
 // ── F&I Reporting Helpers (Ph.2a) ────────────────────────────────────────────
 // Pure, READ-ONLY aggregation over the in-memory F&I arrays. No writes, no DB
 // calls, no DOM — safe to call from any report/dashboard path (Ph.2b/2c wire
@@ -1339,6 +1407,7 @@ function renderFndGateAssessment(m,s,gateKey,items,title,desc){
    item.opts.forEach((opt,oi)=>{
      h+='<label class="fnd-q-opt"><input type="radio" name="fnd-'+gateKey+'-'+m.id+'-'+qi+'" value="'+oi+'"'+(locked?' disabled':'')+'><span class="fnd-q-lbl">'+opt+'</span></label>';
    });
+   if(gateKey==='g2') h+=fiSimAnswerHTML('fnd',m.id,qi,locked); // #1208
    h+='</div>';
  });
  h+='</div>';
@@ -1390,7 +1459,12 @@ function submitFndGate(moduleId,gateKey){
    if(sel&&parseInt(sel.value)===items[origIdx].ans) correct++;
  });
  const score=Math.round((correct/order.length)*100);
- saveGateScore(s.id,m.id,gateKey,score);
+ const _p=saveGateScore(s.id,m.id,gateKey,score);
+ // #1208: append whatever they typed, tagged with the attempt saveGateScore just
+ // pushed. After the save so attempt_no matches the g2.attempts[] position, and
+ // not awaited so a failed insert can never cost someone a graded attempt.
+ fiSaveSimAnswers('fnd',s.id,m.id,gateKey,order,items,((_p&&_p[gateKey]&&_p[gateKey].attempts)||[]).length);
+ fiLockSimAnswers('fnd',m.id,order);
  const passed=score>=80;
  const gateLabel=gateKey==='g1'?'Knowledge':'Simulation';
  // Highlight answers
